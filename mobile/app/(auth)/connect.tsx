@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { AuthService } from '@/services/auth';
@@ -29,7 +29,7 @@ export default function ConnectScreen() {
       const authService = new AuthService(url);
       const response = await authService.setup({ username, password });
 
-      if (response.user_id) {
+      if (response.already_setup || response.user_id) {
         await setServerUrl(url);
         router.replace('/(auth)/login');
       } else {
@@ -89,12 +89,13 @@ export default function ConnectScreen() {
           />
         </View>
 
-        <View
+        <TouchableOpacity
           style={[styles.button, isLoading && styles.buttonDisabled]}
-          onTouchEnd={isLoading ? undefined : handleSetup}
+          onPress={handleSetup}
+          disabled={isLoading}
         >
           <Text style={styles.buttonText}>{isLoading ? 'Setting up...' : 'Setup'}</Text>
-        </View>
+        </TouchableOpacity>
       </View>
     </View>
   );

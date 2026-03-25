@@ -1,4 +1,4 @@
-# Agentic AI Super App
+# Helm — Agentic AI Super App
 
 An independent, open-source React Native (Expo) mobile app — a universal agentic AI frontend that dynamically renders rich native UI components connected to any service via APIs. WeChat/Alipay super app model but AI-native.
 
@@ -19,10 +19,6 @@ An independent, open-source React Native (Expo) mobile app — a universal agent
 
 **Build order:** Backend → Protocol → Frontend.
 
-## Codebase Map
-
-For detailed architecture, file purposes, data flow, and navigation guides, see [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md).
-
 ## Blueprint Spec Documents
 
 Detailed production specifications live in `docs/Agentic AI Super App — Project Hub/Blueprint — Production Spec Documents/`:
@@ -41,107 +37,193 @@ Helm/
 ├── backend/
 │   ├── pyproject.toml          # Dependencies + pytest config
 │   ├── alembic.ini
-│   ├── alembic/
-│   │   └── versions/           # DB migrations
+│   ├── alembic/                # DB migrations
 │   ├── app/
-│   │   ├── main.py             # FastAPI app, lifespan, middleware
-│   │   ├── config.py           # Settings (pydantic-settings)
-│   │   ├── database.py         # SQLAlchemy async engine + session
-│   │   ├── dependencies.py     # get_current_user, get_db
-│   │   ├── models/             # SQLAlchemy ORM models
+│   │   ├── main.py             # FastAPI app factory, router registration, MCP mount
+│   │   ├── config.py           # Pydantic Settings (.env support)
+│   │   ├── database.py         # SQLAlchemy async engine + aiosqlite
+│   │   ├── dependencies.py     # DI: get_current_user, get_db, get_token
+│   │   ├── models/             # ORM models (User, Session, CalendarEvent, Workflow, Device, ChatMessage, AgentConfig)
+│   │   ├── routers/            # FastAPI routers (auth, modules, chat, calendar, notifications, agent_config, workflows, websocket)
 │   │   ├── schemas/            # Pydantic request/response schemas
-│   │   ├── routers/            # FastAPI routers (auth, calendar, chat, etc.)
-│   │   ├── services/           # Business logic (auth, agent_proxy, ws_manager, workflow_engine)
-│   │   ├── mcp/                # MCP server (FastMCP) + tool implementations
-│   │   └── utils/              # security.py (JWT, bcrypt)
-│   └── tests/
-│       ├── conftest.py         # Shared fixtures (in-memory DB, auth_client)
-│       ├── test_auth.py
-│       ├── test_calendar.py
-│       ├── test_notifications.py
-│       └── test_workflows.py
+│   │   ├── services/           # Business logic (auth, agent_proxy, websocket_manager, workflow_engine)
+│   │   ├── mcp/                # MCP server (FastMCP) — tools.py + server.py
+│   │   └── utils/              # JWT, security, encryption
+│   └── tests/                  # pytest suite (32 tests passing)
+├── mobile/                     # Expo / React Native
+│   ├── app/
+│   │   ├── _layout.tsx         # Root layout — auth gate, redirects unauthenticated → /(auth)/connect
+│   │   ├── index.tsx           # Splash/redirect screen
+│   │   ├── (auth)/
+│   │   │   ├── _layout.tsx     # Auth stack (no header)
+│   │   │   ├── connect.tsx     # Server URL + first-user setup screen
+│   │   │   └── login.tsx       # Login screen
+│   │   └── (tabs)/
+│   │       ├── _layout.tsx     # Tab bar — HARDCODED tabs (not dynamic yet)
+│   │       ├── chat.tsx        # Chat screen (WebSocket + API)
+│   │       ├── calendar.tsx    # Calendar screen (API-driven)
+│   │       ├── forms.tsx       # STUB — renders placeholder text only
+│   │       ├── alerts.tsx      # Alerts/notifications screen
+│   │       ├── modules.tsx     # Modules screen
+│   │       └── settings.tsx    # Settings + logout
+│   └── src/
+│       ├── components/         # UI components (alerts, calendar, chat, common, forms, sdui, settings)
+│       ├── services/
+│       │   ├── api.ts          # ApiClient class — all REST calls, 401 auto-logout
+│       │   ├── auth.ts         # AuthService — setup, login, logout
+│       │   └── websocket.ts    # WebSocketService — ReconnectingWebSocket wrapper
+│       ├── stores/
+│       │   ├── authStore.ts    # Zustand — token, serverUrl, user; persisted via SecureStore/localStorage
+│       │   ├── settingsStore.ts# Zustand — theme, agent config, navigation mode
+│       │   └── uiStore.ts      # Zustand — error banner state
+│       ├── theme/colors.ts     # Design system — colors, spacing, typography
+│       ├── types/
+│       │   ├── api.ts          # All API request/response TypeScript types
+│       │   ├── navigation.ts   # Navigation param types
+│       │   └── sdui.ts         # SDUI JSON schema types
+│       └── utils/
+│           ├── storage.ts      # Platform-aware: SecureStore (native) / localStorage (web)
+│           └── validation.ts   # Input validation helpers
+├── tests/
+│   └── e2e.spec.ts             # Playwright E2E — 7 tests (4 backend API, 2 frontend, 1 integration)
+├── playwright.config.ts        # Playwright config — starts backend (port 8000) + Expo web (port 8082)
 └── docs/
-    └── Agentic AI Super App — Project Hub/
-        └── Blueprint — Production Spec Documents/
-            ├── Backend Spec — Python FastAPI Server.md
-            ├── Frontend Spec — iOS App (React Native Expo).md
-            └── Protocol Spec — Communication Layer.md
+    └── CODEBASE_MAP.md         # Detailed architecture map (auto-generated)
 ```
 
-## Commands
+## Running the Project
 
-### Frontend
-npx expo start              # Dev server with hot reload
-npx expo start --ios        # iOS simulator (requires Mac)
-npx expo start --android    # Android emulator
+```bash
+# Backend
+cd backend && .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 
-### Backend
-cd backend && uvicorn main:app --reload   # FastAPI dev server
-pytest                                     # Run backend tests
+# Frontend (web)
+cd mobile && npx expo start --web --port 8082
 
-### Build
-eas build --platform ios    # Production iOS build (Mac required)
+# Backend tests
+cd backend && .venv/bin/pytest
 
-## Coding Conventions
+# E2E tests (requires both servers running or uses webServer config)
+npx playwright test
+```
 
-- TypeScript strict mode for all frontend code
-- Python type hints everywhere on backend (PydanticAI style)
-- Functional components only — no class components in React Native
-- Named exports, no default exports
-- Small, focused files — one component per file, one route per file
-- Meaningful variable and function names — code should read like prose
-- Keep functions short. If a function needs a comment explaining what it does, it should be split into smaller functions with descriptive names.
+## API Endpoints Summary
 
-## Code Quality Rules — NON-NEGOTIABLE
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | /health | No | Health check → `{status, version}` |
+| GET | /auth/status | No | Setup status → `{setup_complete, server_name, version}` |
+| POST | /auth/setup | No | Create first user (409 if already done) |
+| POST | /auth/login | No | Login → `{session_token, expires_at, user_id}` |
+| POST | /auth/logout | Yes | Invalidate session |
+| GET | /auth/me | Yes | Current user info |
+| GET | /api/calendar/events | Yes | Query params: start_date, end_date |
+| POST | /api/calendar/events | Yes | Create event |
+| PUT | /api/calendar/events/{id} | Yes | Update event |
+| DELETE | /api/calendar/events/{id} | Yes | Delete event |
+| GET | /api/chat/messages | Yes | Chat history |
+| POST | /api/chat/messages | Yes | Send message |
+| GET | /api/notifications | Yes | List notifications |
+| GET | /api/modules | Yes | Module list |
+| GET | /api/devices/config | Yes | Tab bar config (not wired to frontend yet) |
+| WS | /ws | Yes (token query param) | AG-UI WebSocket |
+| * | /mcp | Yes (Bearer) | MCP server (Streamable HTTP) |
 
-### Elegant Code, Not Patches
+## Authentication Flow
 
-- **Root cause fixes only.** When something breaks, find WHY it broke. Never apply surface-level patches that mask the real issue. If a fix doesn't address the root cause, it's not a fix — it's technical debt.
-- **No garbage patches.** Do not add workarounds, hacks, or "temporary" fixes that pile up. Every change should make the codebase cleaner, not messier. If a fix makes you write `// TODO: fix this properly later`, stop and fix it properly now.
-- **Understand before changing.** Before modifying any code, understand the full context — what it does, why it exists, what depends on it. Never change code you don't understand.
-- **One fix, one concern.** Each fix should address exactly one issue. Do not bundle unrelated changes together.
+```
+User enters server URL + credentials → connect.tsx
+→ POST /auth/setup (409 if already setup — treated as success, redirect to login)
+→ Saved to SecureStore (native) or localStorage (web)
+→ POST /auth/login → session_token
+→ Token stored in authStore + SecureStore
+→ ApiClient sends: Authorization: Bearer <token>
+→ WebSocket connects with: ?token=<token>
+→ Backend validates via get_session_by_token()
+```
 
-### Bug Handling — Reproduce → Fix → Verify Loop
+## MCP Server
 
-When encountering ANY bug or unexpected behavior, follow this exact loop:
+- Mounted at `http://localhost:8000/mcp` via FastMCP (Streamable HTTP)
+- Authentication: `Authorization: Bearer <session_token>`
+- **Status: mounted but currently returns Internal Server Error at startup** (see `try/except` in main.py — error is swallowed silently)
+- Tools exposed: `helm_read_calendar`, `helm_create_event`, `helm_update_event`, `helm_delete_event`, `helm_send_notification`, `helm_get_chat_history`, `helm_send_chat_message`, `helm_get_form_data`, `helm_update_module_state`
+- To connect an AI agent: point it at `http://localhost:8000/mcp` with a bearer token
 
-1. **REPRODUCE** — Write a failing test or create a minimal reproduction that demonstrates the bug. If you cannot reproduce it, try harder — check edge cases, race conditions, input variations, environment differences. Do NOT skip to fixing. A bug you can't reproduce is a bug you can't verify you fixed.
+## WebSocket Protocol (AG-UI)
 
-2. **DIAGNOSE** — Gather evidence. Read error messages, check logs, trace the execution path. Compare against working cases ("why does X work but Y doesn't?"). Identify the actual root cause, not just the symptom. Use diagnostic commands, not guesses.
+```
+# Client → Backend
+{"type": "chat", "data": {"message": "...", "conversation_id": "default"}}
 
-3. **FIX** — Address the root cause. The fix should be elegant and minimal — change only what needs to change. If the fix requires restructuring, restructure. Do not patch around the problem.
+# Backend → Client
+{"type": "token", "data": {"content": "..."}}
+{"type": "tool_call_start", "data": {"tool": "..."}}
+{"type": "tool_call_complete", "data": {"result": ...}}
+{"type": "chat_complete", "data": {"message_id": "..."}}
+{"type": "module_state_update", "module": "calendar", "state": {<SDUI JSON>}}
+```
 
-4. **VERIFY** — Run the reproduction from Step 1. The bug must be gone. Run the full test suite. No regressions. **If the fix doesn't work or introduces new issues, REVERT IT COMPLETELY.** Do not keep a failed fix and pile another fix on top of it. Revert to the clean state, re-diagnose with the new information you learned, and try a different approach. Never stack failed attempts hoping the combination works.
+## SDUI Rendering
 
-5. **DOCUMENT** — When the fix is confirmed working, document: (a) what the root cause was, (b) why this specific fix resolves it, and (c) why it works (the reasoning, not just "it fixed it"). Add this to the commit message and/or code comments. Future developers (and future Claude) need to understand the WHY.
+Backend sends module state via WebSocket:
+```json
+{"type": "module_state_update", "module": "calendar", "state": {
+  "type": "calendar",
+  "id": "...",
+  "props": { ... }
+}}
+```
+Frontend `SDUIRenderer` switches on `type` → renders native component. User interactions call `onAction(action, data)` → sent back to backend.
 
-6. **PREVENT** — If applicable, add a test that would catch this class of bug in the future. Update documentation if the bug reveals a non-obvious behavior.
+## Key Patterns & Gotchas
 
-This loop is mandatory. Never skip steps. Never declare a bug fixed without verification. Never keep failed fixes in the codebase.
+- **TouchableOpacity vs View on web**: Use `TouchableOpacity` with `onPress` + `disabled` for all buttons. `View` with `onTouchEnd` does NOT fire on web mouse clicks.
+- **TouchableOpacity renders as generic element on web**: `getByRole('button')` won't find it in Playwright. Use `getByText('Button Label')` instead.
+- **auth/setup 409 = already setup**: Don't throw — return `{ already_setup: true }` and redirect to login. Already handled in `auth.ts`.
+- **Storage is platform-aware**: `utils/storage.ts` uses `SecureStore` on native, `localStorage` on web. Never import SecureStore directly.
+- **Tabs are hardcoded**: `app/(tabs)/_layout.tsx` has fixed tabs. Backend has `/api/devices/config` with `tab_bar_modules` but the frontend does NOT read it yet — tabs cannot be changed from the backend.
+- **forms.tsx is a stub**: Renders placeholder text only. No logic implemented.
+- **Default test credentials**: username `testuser`, password `testpass123` (pre-filled in connect.tsx for dev).
+- **Playwright selectors**: When there are multiple elements with the same text (e.g. "Sign In" title + button), use `.last()` for the button — it's always the last match.
 
-### Testing
+## Current Status & Known Issues
 
-- Write tests FIRST when fixing bugs (the failing test IS the reproduction)
-- Every new feature needs tests — unit tests at minimum, integration tests for API boundaries
-- Tests must be meaningful — assert the RIGHT value, not just that something returned
-- Run the full test suite before committing. No broken tests in main.
+| Area | Status | Notes |
+|------|--------|-------|
+| Backend API | Working | 32 pytest tests passing |
+| Auth flow (web) | Working | connect → setup → login → chat |
+| Chat (WebSocket) | Working | Streaming tokens, tool calls |
+| Calendar screen | Working | Fetches events from `/api/calendar/events` |
+| Forms screen | Stub | Placeholder text only, no functionality |
+| MCP server | Broken | Mounts with try/except but returns 500 at runtime |
+| Dynamic tabs | Not wired | Backend has config endpoint, frontend ignores it |
+| E2E tests | 7/7 passing | Run with `npx playwright test` |
 
-### Code Review Checklist (Self-Check Before Committing)
+## Development Workflow
 
-- [ ] Does this change address the root cause, not a symptom?
-- [ ] Could this break anything else? Check downstream dependencies.
-- [ ] Are there tests covering the change?
-- [ ] Is the code readable without comments? If not, refactor.
-- [ ] Is there any duplicated logic that should be extracted?
-- [ ] Are error cases handled gracefully?
-- [ ] Does the change follow existing patterns in the codebase?
+- Run backend: `cd backend && .venv/bin/python -m uvicorn app.main:app --reload --port 8000`
+- Run frontend: `cd mobile && npx expo start --web --port 8082`
+- Run all E2E tests: `npx playwright test` (from project root)
+- Run backend tests: `cd backend && .venv/bin/pytest`
+- View test report: `npx playwright show-report`
 
-## Documentation Rules
+## Code Style
 
-- Every new module/component gets a brief docstring or header comment explaining PURPOSE (why it exists), not just what it does
+- TypeScript strict mode on frontend
+- All async operations use `async/await` (no `.then()` chains)
+- Zustand for all global state — no React Context
+- zod for runtime validation at system boundaries
+- Backend: async SQLAlchemy everywhere, never sync
+- All DB models extend `Base` + `TimestampMixin` (`created_at`, `updated_at`)
+- FastAPI dependency injection via `Depends()` for db and auth
+
+## When Writing Code
+
+- Always write comments explaining PURPOSE (why it exists), not just what it does
 - Update this CLAUDE.md when project structure changes, new commands are added, or new conventions are established
 - Keep a CHANGELOG.md updated with every significant change
-- When making architectural decisions, document the WHY in a comment or doc — future you needs to know the reasoning
+- When making architectural decisions, document the WHY in a comment or doc
 
 ## Important Rules
 
@@ -152,12 +234,10 @@ This loop is mandatory. Never skip steps. Never declare a bug fixed without veri
 - No hardcoded secrets, API keys, or URLs — use environment variables
 - When in doubt, check the Blueprint specs in the project docs before making architectural decisions
 
-## Known Patterns & Gotchas
-
-<!-- Add patterns and gotchas as you discover them during development -->
-(empty — update as the project grows)
-
 ## Common Mistakes to Avoid
 
-<!-- Claude: when you make a mistake and get corrected, add it here so you don't repeat it -->
-(empty — update as patterns emerge)
+- Do NOT use `View` + `onTouchEnd` for buttons — use `TouchableOpacity` + `onPress` (web compatibility)
+- Do NOT use `getByRole('button')` in Playwright for React Native Web — use `getByText()`
+- Do NOT throw on 409 from `/auth/setup` — treat it as success and redirect to login
+- Do NOT import `SecureStore` directly — always go through `utils/storage.ts`
+- Do NOT assume tabs are dynamic — they are hardcoded in `(tabs)/_layout.tsx` until that feature is built

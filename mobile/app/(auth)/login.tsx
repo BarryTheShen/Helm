@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { AuthService } from '@/services/auth';
@@ -76,12 +76,13 @@ export default function LoginScreen() {
           />
         </View>
 
-        <View
+        <TouchableOpacity
           style={[styles.button, isLoading && styles.buttonDisabled]}
-          onTouchEnd={isLoading ? undefined : handleLogin}
+          onPress={handleLogin}
+          disabled={isLoading}
         >
           <Text style={styles.buttonText}>{isLoading ? 'Signing in...' : 'Sign In'}</Text>
-        </View>
+        </TouchableOpacity>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Connected to: {serverUrl}</Text>

@@ -62,46 +62,64 @@ test.describe('Backend API Tests', () => {
 test.describe('Frontend Tests', () => {
   test('frontend loads and shows connect screen', async ({ page }) => {
     await page.goto(FRONTEND_URL);
-
-    // Wait for React to render
+    await page.evaluate(() => localStorage.clear());
+    await page.goto(FRONTEND_URL);
     await page.waitForTimeout(2000);
 
-    // Check if the page has content
-    const content = await page.textContent('body');
-    expect(content).toBeTruthy();
-
-    // Look for "Helm" or "Welcome" text
-    const hasWelcome = await page.getByText(/Welcome to Helm|Helm|Connect/i).count();
+    const hasWelcome = await page.getByText(/Welcome to Helm/i).count();
     expect(hasWelcome).toBeGreaterThan(0);
+
+    const setupButton = page.getByText('Setup', { exact: true });
+    await expect(setupButton).toBeVisible({ timeout: 5000 });
   });
 
   test('can navigate to connect screen', async ({ page }) => {
     await page.goto(FRONTEND_URL);
+    await page.evaluate(() => localStorage.clear());
+    await page.goto(FRONTEND_URL);
     await page.waitForTimeout(2000);
 
-    // Should show server URL input
-    const serverInput = page.getByPlaceholder(/server|localhost|http/i);
+    const serverInput = page.getByPlaceholder(/localhost/i).first();
     await expect(serverInput).toBeVisible({ timeout: 5000 });
   });
 });
 
 test.describe('Integration Tests', () => {
   test('full auth flow: connect -> setup -> login', async ({ page }) => {
+    // Clear stored auth to force connect screen
+    await page.goto(FRONTEND_URL);
+    await page.evaluate(() => localStorage.clear());
     await page.goto(FRONTEND_URL);
     await page.waitForTimeout(2000);
 
-    // Step 1: Connect to server
-    const serverInput = page.getByPlaceholder(/server|localhost|http/i);
+    // Step 1: Fill the setup form
+    const serverInput = page.getByPlaceholder(/localhost/i).first();
     await serverInput.fill(BACKEND_URL);
 
-    const connectButton = page.getByRole('button', { name: /connect/i });
-    await connectButton.click();
-
-    await page.waitForTimeout(1000);
-
-    // Step 2: Should redirect to login or show login form
-    // (Setup may already be done, so we look for login elements)
     const usernameInput = page.getByPlaceholder(/username/i);
-    await expect(usernameInput).toBeVisible({ timeout: 5000 });
+    await usernameInput.fill('testuser');
+
+    const passwordInput = page.getByPlaceholder(/password/i);
+    await passwordInput.fill('testpass123');
+
+    const setupButton = page.getByText('Setup', { exact: true });
+    await setupButton.click();
+
+    // After setup (or 409 already-setup), router navigates to login
+    await expect(page).toHaveURL(/login/, { timeout: 5000 });
+
+    // Step 2: Login
+    const loginUsernameInput = page.getByPlaceholder(/username/i);
+    await expect(loginUsernameInput).toBeVisible({ timeout: 5000 });
+    await loginUsernameInput.fill('testuser');
+
+    const loginPasswordInput = page.getByPlaceholder(/password/i);
+    await loginPasswordInput.fill('testpass123');
+
+    const signInButton = page.getByText('Sign In', { exact: true }).last();
+    await signInButton.click();
+
+    // Step 3: Should land on main app
+    await expect(page).toHaveURL(/chat/, { timeout: 8000 });
   });
 });

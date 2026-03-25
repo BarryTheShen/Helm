@@ -7,12 +7,16 @@ export class AuthService {
     this.baseUrl = baseUrl;
   }
 
-  async setup(data: SetupRequest): Promise<SetupResponse> {
-    const response = await fetch(`${data.server_url}/auth/setup`, {
+  async setup(data: SetupRequest): Promise<SetupResponse & { already_setup?: boolean }> {
+    const response = await fetch(`${this.baseUrl}/auth/setup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
+
+    if (response.status === 409) {
+      return { user_id: '', message: 'Already setup', already_setup: true };
+    }
 
     if (!response.ok) {
       throw new Error(`Setup failed: ${response.statusText}`);

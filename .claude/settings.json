@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:8000/api/calendar/events -H 'Authorization: Bearer invalid')",
+      "Bash(curl -s http://localhost:8000/mcp)",
+      "Bash(curl -s http://localhost:8000/mcp/sse)",
+      "Bash(curl -s -X POST http://localhost:8000/auth/login -H 'Content-Type: application/json' -d '{\"\"\"\"username\"\"\"\":\"\"\"\"testuser\"\"\"\",\"\"\"\"password\"\"\"\":\"\"\"\"testpass123\"\"\"\",\"\"\"\"device_id\"\"\"\":\"\"\"\"test\"\"\"\",\"\"\"\"device_name\"\"\"\":\"\"\"\"test\"\"\"\"}')",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(pip install:*)",
+      "Bash(python3 -m venv --version)",
+      "Read(//home/barry/**)",
+      "Bash(uv add:*)"
+    ]
+  }
+}

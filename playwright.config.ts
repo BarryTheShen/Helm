@@ -24,5 +24,11 @@ export default defineConfig({
       reuseExistingServer: true,
       timeout: 120 * 1000,
     },
+    {
+      command: 'cd mobile && npx expo start --web --port 8082 --no-dev-client',
+      url: 'http://localhost:8082',
+      reuseExistingServer: true,
+      timeout: 120 * 1000,
+    },
   ],
 });
