@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Alert, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { AuthService } from '@/services/auth';
@@ -7,7 +7,7 @@ import { colors, spacing, typography } from '@/theme/colors';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { serverUrl, setToken } = useAuthStore();
+  const { serverUrl, setToken, setUser } = useAuthStore();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -35,6 +35,7 @@ export default function LoginScreen() {
       });
 
       await setToken(response.session_token);
+      await setUser({ id: response.user_id, username: response.username, email: '', created_at: '' });
       router.replace('/(tabs)/chat');
     } catch (error) {
       Alert.alert('Error', error instanceof Error ? error.message : 'Login failed');
@@ -76,12 +77,13 @@ export default function LoginScreen() {
           />
         </View>
 
-        <View
+        <Pressable
           style={[styles.button, isLoading && styles.buttonDisabled]}
-          onTouchEnd={isLoading ? undefined : handleLogin}
+          onPress={isLoading ? undefined : handleLogin}
+          disabled={isLoading}
         >
           <Text style={styles.buttonText}>{isLoading ? 'Signing in...' : 'Sign In'}</Text>
-        </View>
+        </Pressable>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Connected to: {serverUrl}</Text>

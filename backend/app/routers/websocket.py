@@ -29,6 +29,7 @@ async def websocket_endpoint(websocket: WebSocket):
     user_id = await _authenticate_ws(token)
 
     if user_id is None:
+        await websocket.accept()
         await websocket.close(code=4001, reason="Unauthorized")
         return
 

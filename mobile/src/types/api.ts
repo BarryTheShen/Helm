@@ -28,6 +28,7 @@ export interface LoginResponse {
   session_token: string;
   expires_at: string;
   user_id: string;
+  username: string;
 }
 
 export interface RefreshResponse {
@@ -59,10 +60,11 @@ export interface CalendarEvent {
 
 export interface Notification {
   id: string;
-  user_id: string;
   title: string;
-  body: string;
-  type: string;
+  message: string;
+  severity: string;
+  is_read: boolean;
+  actions: Array<Record<string, unknown>> | null;
   created_at: string;
 }
 

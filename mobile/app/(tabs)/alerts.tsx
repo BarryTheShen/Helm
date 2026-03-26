@@ -17,7 +17,7 @@ export default function AlertsScreen() {
 
   useEffect(() => {
     loadNotifications();
-  }, []);
+  }, [token, serverUrl]);
 
   const loadNotifications = async () => {
     if (!token || !serverUrl) return;
@@ -56,7 +56,7 @@ export default function AlertsScreen() {
           notifications.map((notification) => (
             <Card key={notification.id} style={styles.notificationCard}>
               <Text style={styles.notificationTitle}>{notification.title}</Text>
-              <Text style={styles.notificationBody}>{notification.body}</Text>
+              <Text style={styles.notificationBody}>{notification.message}</Text>
               <Text style={styles.notificationTime}>
                 {format(new Date(notification.created_at), 'MMM d, h:mm a')}
               </Text>

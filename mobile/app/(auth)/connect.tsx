@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Alert, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { AuthService } from '@/services/auth';
@@ -36,7 +36,14 @@ export default function ConnectScreen() {
         Alert.alert('Error', 'Setup failed');
       }
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to setup');
+      const msg = error instanceof Error ? error.message : 'Failed to setup';
+      // 409 Conflict means server is already set up — save server URL and go to login
+      if (msg.includes('409') || msg.toLowerCase().includes('conflict') || msg.toLowerCase().includes('already set up')) {
+        await setServerUrl(url);
+        router.replace('/(auth)/login');
+      } else {
+        Alert.alert('Error', msg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -89,11 +96,19 @@ export default function ConnectScreen() {
           />
         </View>
 
-        <View
+        <Pressable
           style={[styles.button, isLoading && styles.buttonDisabled]}
-          onTouchEnd={isLoading ? undefined : handleSetup}
+          onPress={isLoading ? undefined : handleSetup}
+          disabled={isLoading}
         >
           <Text style={styles.buttonText}>{isLoading ? 'Setting up...' : 'Setup'}</Text>
+        </Pressable>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Already have an account?</Text>
+          <Text style={styles.link} onPress={() => router.push('/(auth)/login')}>
+            Sign In
+          </Text>
         </View>
       </View>
     </View>
@@ -152,5 +167,20 @@ const styles = StyleSheet.create({
   buttonText: {
     ...typography.headline,
     color: '#FFFFFF',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: spacing.lg,
+    gap: spacing.xs,
+  },
+  footerText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  link: {
+    ...typography.caption,
+    color: colors.primary,
   },
 });

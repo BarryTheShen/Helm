@@ -27,6 +27,7 @@ export default function ChatScreen() {
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocketService | null>(null);
   const apiRef = useRef<ApiClient | null>(null);
+  const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
     if (!token || !serverUrl) return;
@@ -62,45 +63,58 @@ export default function ChatScreen() {
     };
   }, [token, serverUrl]);
 
+  const scrollToBottom = () => {
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+  };
+
   const loadHistory = async () => {
     if (!apiRef.current) return;
 
     try {
       const history = await apiRef.current.getChatHistory();
-      setMessages(history);
+      // API returns newest-first (DESC). Reverse so oldest appears at top of chat.
+      setMessages([...history].reverse());
+      scrollToBottom();
     } catch (error) {
       showError('Failed to load chat history');
     }
   };
 
   const handleWebSocketMessage = (message: any) => {
-    if (message.type === 'token') {
-      setIsTyping(false);
+    if (message.type === 'chat_start') {
+      setIsTyping(true);
+    } else if (message.type === 'chat_token') {
       setMessages((prev) => {
         const last = prev[prev.length - 1];
         if (last && last.role === 'assistant') {
           return [
             ...prev.slice(0, -1),
-            { ...last, content: last.content + message.data.token },
+            { ...last, content: last.content + message.token },
           ];
         }
         return [
           ...prev,
           {
-            id: Date.now().toString(),
-            conversation_id: message.data.conversation_id || 'default',
+            id: message.message_id || Date.now().toString(),
+            conversation_id: 'default',
             role: 'assistant',
-            content: message.data.token,
+            content: message.token,
             created_at: new Date().toISOString(),
           },
         ];
       });
-    } else if (message.type === 'tool_call_start') {
-      // Show tool call indicator
-      console.log('Tool call started:', message.data);
-    } else if (message.type === 'tool_call_complete') {
-      // Show tool call result
-      console.log('Tool call completed:', message.data);
+      scrollToBottom();
+    } else if (message.type === 'chat_complete') {
+      setIsTyping(false);
+      scrollToBottom();
+    } else if (message.type === 'chat_error') {
+      setIsTyping(false);
+      showError(message.message || 'Chat error');
+    } else if (message.type === 'tool_result') {
+      // Tool was executed — the follow-up LLM response will render the result in text
+      setIsTyping(true);
+    } else if (message.type === 'tool_error') {
+      console.warn('Tool error:', message.tool, message.message);
     }
   };
 
@@ -117,13 +131,12 @@ export default function ChatScreen() {
 
     setMessages((prev) => [...prev, userMessage]);
     setIsTyping(true);
+    scrollToBottom();
 
     wsRef.current.send({
-      type: 'chat',
-      data: {
-        message: input.trim(),
-        conversation_id: 'default',
-      },
+      type: 'chat_message',
+      content: input.trim(),
+      conversation_id: 'default',
     });
 
     setInput('');
@@ -157,10 +170,12 @@ export default function ChatScreen() {
       )}
 
       <FlatList
+        ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messageList}
+        onContentSizeChange={scrollToBottom}
         inverted={false}
       />
 

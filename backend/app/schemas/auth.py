@@ -24,6 +24,7 @@ class LoginResponse(BaseModel):
     session_token: str
     expires_at: datetime
     user_id: str
+    username: str
 
 
 class RefreshResponse(BaseModel):

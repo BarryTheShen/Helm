@@ -1,5 +1,5 @@
 import sys
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,9 +17,31 @@ logger.add(sys.stderr, level="INFO", colorize=True, format="<green>{time:HH:mm:s
 async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.server_name} v{settings.server_version}")
     await start_scheduler()
-    yield
-    await stop_scheduler()
-    logger.info("Helm backend stopped")
+
+    # Start the MCP StreamableHTTP session manager.
+    # FastAPI does not invoke sub-app lifespans when using app.mount(), so we
+    # must manually enter the session manager's context here.  Without this the
+    # task-group is never initialised and every MCP request returns 500.
+    _mcp_session_cm = None
+    try:
+        from app.mcp.server import mcp  # noqa: PLC0415
+        sm = mcp.session_manager  # None until streamable_http_app() has been called
+        if sm is not None:
+            _mcp_session_cm = sm.run()
+            await _mcp_session_cm.__aenter__()
+            logger.info("MCP session manager started")
+    except Exception as exc:
+        logger.warning(f"MCP session manager not started: {exc}")
+        _mcp_session_cm = None
+
+    try:
+        yield
+    finally:
+        if _mcp_session_cm is not None:
+            with suppress(Exception):
+                await _mcp_session_cm.__aexit__(None, None, None)
+        await stop_scheduler()
+        logger.info("Helm backend stopped")
 
 
 app = FastAPI(

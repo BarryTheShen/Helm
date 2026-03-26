@@ -55,7 +55,7 @@ async def read_calendar(
                 "description": e.description,
                 "color": e.color,
                 "location": e.location,
-                "all_day": e.all_day,
+                "all_day": e.is_all_day,
             }
             for e in events
         ]

@@ -18,7 +18,7 @@ export default function CalendarScreen() {
 
   useEffect(() => {
     loadEvents();
-  }, []);
+  }, [token, serverUrl]);
 
   const loadEvents = async () => {
     if (!token || !serverUrl) return;

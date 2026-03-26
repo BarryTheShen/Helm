@@ -82,10 +82,11 @@ export class ApiClient {
   // Calendar
   async getCalendarEvents(start?: string, end?: string): Promise<CalendarEvent[]> {
     const params = new URLSearchParams();
-    if (start) params.append('start', start);
-    if (end) params.append('end', end);
+    if (start) params.append('start_date', start);
+    if (end) params.append('end_date', end);
     const query = params.toString() ? `?${params.toString()}` : '';
-    return this.request<CalendarEvent[]>(`/api/calendar/events${query}`);
+    const res = await this.request<{events: CalendarEvent[]}>(`/api/calendar/events${query}`);
+    return res.events;
   }
 
   async createCalendarEvent(event: Partial<CalendarEvent>): Promise<CalendarEvent> {
@@ -108,20 +109,21 @@ export class ApiClient {
 
   // Notifications
   async getNotifications(): Promise<Notification[]> {
-    return this.request<Notification[]>('/api/notifications');
+    const res = await this.request<{notifications: Notification[], unread_count: number}>('/api/notifications');
+    return res.notifications;
   }
 
-  async deleteNotification(id: string): Promise<void> {
-    return this.request<void>(`/api/notifications/${id}`, { method: 'DELETE' });
+  async markNotificationRead(id: string): Promise<void> {
+    return this.request<void>(`/api/notifications/${id}/read`, { method: 'POST' });
   }
 
   // Agent config
   async getAgentConfig(): Promise<AgentConfig> {
-    return this.request<AgentConfig>('/api/agent');
+    return this.request<AgentConfig>('/api/agent/config');
   }
 
   async updateAgentConfig(config: Partial<AgentConfig>): Promise<AgentConfig> {
-    return this.request<AgentConfig>('/api/agent', {
+    return this.request<AgentConfig>('/api/agent/config', {
       method: 'PUT',
       body: JSON.stringify(config),
     });
@@ -158,10 +160,11 @@ export class ApiClient {
   // Chat history
   async getChatHistory(conversationId?: string): Promise<ChatMessage[]> {
     const query = conversationId ? `?conversation_id=${conversationId}` : '';
-    return this.request<ChatMessage[]>(`/api/chat${query}`);
+    const res = await this.request<{messages: ChatMessage[], has_more: boolean}>(`/api/chat/history${query}`);
+    return res.messages;
   }
 
   async deleteConversation(conversationId: string): Promise<void> {
-    return this.request<void>(`/api/chat/${conversationId}`, { method: 'DELETE' });
+    return this.request<void>(`/api/chat/history`, { method: 'DELETE' });
   }
 }

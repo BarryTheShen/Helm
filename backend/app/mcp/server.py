@@ -4,7 +4,12 @@ Mounted at /mcp on the FastAPI app.
 Authentication: Bearer token in Authorization header.
 """
 
+import contextvars
+import json
+
+from loguru import logger
 from mcp.server.fastmcp import FastMCP
+from sqlalchemy import select
 
 from app.mcp.tools import (
     create_event,
@@ -19,7 +24,6 @@ from app.mcp.tools import (
 )
 
 # MCP context var for user_id (set per-request by auth middleware)
-import contextvars
 _current_user_id: contextvars.ContextVar[str] = contextvars.ContextVar("_current_user_id", default="")
 
 
@@ -27,7 +31,69 @@ def get_current_user_id() -> str:
     return _current_user_id.get()
 
 
-mcp = FastMCP("Helm")
+class _MCPAuthMiddleware:
+    """ASGI middleware that validates Bearer session tokens before forwarding to MCP.
+
+    FastAPI Depends() does not apply to mounted ASGI sub-apps, so we must
+    handle auth at the ASGI level here.  A valid session token is required on
+    every request; the resolved user_id is stored in _current_user_id so
+    MCP tool handlers can retrieve it without extra DB calls.
+    """
+
+    def __init__(self, app) -> None:
+        self._app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] not in ("http", "websocket"):
+            await self._app(scope, receive, send)
+            return
+
+        headers = {k.lower(): v for k, v in scope.get("headers", [])}
+        auth_header = headers.get(b"authorization", b"").decode()
+        token = auth_header.removeprefix("Bearer ").strip()
+
+        user_id = await self._resolve_user_id(token) if token else None
+
+        if not user_id:
+            logger.warning("MCP request rejected: missing or invalid Bearer token")
+            await self._send_401(scope, receive, send)
+            return
+
+        # Stamp context var so tool handlers can call get_current_user_id()
+        _current_user_id.set(user_id)
+        await self._app(scope, receive, send)
+
+    @staticmethod
+    async def _resolve_user_id(token: str) -> str | None:
+        """Validate *token* against the sessions table; return user_id or None."""
+        from app.database import AsyncSessionLocal
+        from app.services.auth import get_session_by_token
+
+        try:
+            async with AsyncSessionLocal() as db:
+                session = await get_session_by_token(db, token)
+                return str(session.user_id) if session else None
+        except Exception as exc:  # noqa: BLE001
+            logger.error(f"MCP token validation error: {exc}")
+            return None
+
+    @staticmethod
+    async def _send_401(scope, receive, send) -> None:
+        if scope["type"] == "http":
+            body = json.dumps({"detail": "Not authenticated"}).encode()
+            await send({
+                "type": "http.response.start",
+                "status": 401,
+                "headers": [
+                    [b"content-type", b"application/json"],
+                    [b"www-authenticate", b"Bearer"],
+                    [b"content-length", str(len(body)).encode()],
+                ],
+            })
+            await send({"type": "http.response.body", "body": body})
+
+
+mcp = FastMCP("Helm", streamable_http_path="/")
 
 
 @mcp.tool()
@@ -126,5 +192,5 @@ async def helm_get_form_data(form_id: str = "") -> dict:
 
 
 def get_mcp_asgi_app():
-    """Return the MCP ASGI app for mounting into FastAPI."""
-    return mcp.streamable_http_app
+    """Return the MCP ASGI app (wrapped with auth middleware) for mounting into FastAPI."""
+    return _MCPAuthMiddleware(mcp.streamable_http_app())

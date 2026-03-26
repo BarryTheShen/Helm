@@ -60,6 +60,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
         session_token=session.token,
         expires_at=session.expires_at,
         user_id=str(user.id),
+        username=user.username,
     )
 
 

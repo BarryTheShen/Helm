@@ -49,8 +49,10 @@ export const alertPropsSchema = z.object({
 });
 
 // WebSocket message validation
+// .passthrough() preserves extra fields (token, message_id, message, content, etc.)
+// that the backend sends alongside 'type'. Without it, Zod strips them.
 export const wsMessageSchema = z.object({
   type: z.string(),
-  data: z.any(),
+  data: z.any().optional(),
   timestamp: z.string().optional(),
-});
+}).passthrough();
