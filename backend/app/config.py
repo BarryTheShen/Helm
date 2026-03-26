@@ -35,12 +35,11 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-4o"
     # OpenRouter (recommended — works in all regions, has free models)
-    # Use a chat-tuned model, NOT a pure reasoning model (e.g. stepfun/step-3.5-flash:free).
-    # Reasoning-only models return empty content when the tools parameter is included,
-    # which breaks the streaming chat handler.  arcee trinity handles tool calling reliably.
+    # Both standard chat models and reasoning/thinking models are supported.
+    # Override per-user via DB agent_config, or set OPENROUTER_MODEL in .env.
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    openrouter_model: str = "arcee-ai/trinity-large-preview:free"
+    openrouter_model: str = "stepfun/step-3.5-flash:free"
 
     # MCP
     mcp_path: str = "/mcp"

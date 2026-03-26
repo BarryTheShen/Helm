@@ -2,11 +2,12 @@
 
 ## Tier 1: TLDR
 
-Helm has three "intelligence" systems beyond basic CRUD:
+Helm has four "intelligence" systems beyond basic CRUD:
 
 1. **AI Agent Proxy** — Connects to any OpenAI-compatible LLM (GPT-4o, Claude, local models). Streams responses in real-time and can call tools (calendar, notifications, etc.) mid-conversation.
 2. **MCP Server** — Exposes Helm's tools to external AI agents via the MCP standard protocol. Any MCP-compatible agent can read/write calendar, send notifications, etc.
 3. **Workflow Engine** — Simple automation: "When X happens → do Y". Supports cron schedules and event triggers. Runs automatically via APScheduler.
+4. **Standalone PydanticAI Agent** (`agent/`) — An independent **developer/admin** agent. Runs outside the backend. Connects to Helm's MCP server over HTTP and can read/write the React Native frontend source code. Three modes: `--web` (pydantic-ai's built-in browser UI), REPL, one-shot. Not the same agent as the Agent Proxy — these are completely separate systems.
 
 ---
 
@@ -17,7 +18,7 @@ Helm has three "intelligence" systems beyond basic CRUD:
 The Agent Proxy (`backend/app/services/agent_proxy.py`) is the bridge between the user and the LLM:
 
 ```
-User → WebSocket → Agent Proxy → OpenAI API (streaming) → WebSocket → User
+User → WebSocket → Agent Proxy → OpenAI API (streaming) → We$bSocket → User
                         ↓ (tool calls)
                    MCP Tools → DB/WebSocket
 ```
@@ -67,6 +68,91 @@ The MCP (Model Context Protocol) server is a separate sub-application mounted at
 **Architecture note:** The actual tool logic lives in `backend/app/mcp/tools.py` and is shared between the Agent Proxy (internal calls) and the MCP Server (external calls). This means the same code handles both internal LLM tool calls and external agent tool calls.
 
 **Authentication:** The MCP ASGI app is wrapped in `_MCPAuthMiddleware` (in `backend/app/mcp/server.py`). Every request must include `Authorization: Bearer <token>`. The middleware validates the token, looks up the session, and sets `_current_user_id` for the request context. Unauthenticated requests return 401.
+
+### Standalone PydanticAI Agent (`agent/`)
+
+The `agent/` directory at the repo root contains a **completely independent** external agent that connects to Helm's MCP server and can also edit the React Native frontend source code.
+
+**Location:** `agent/helm_agent.py`
+**README:** `agent/README.md`
+
+#### Three run modes
+
+| Mode | Command | Description |
+|------|---------|-------------|
+| **Web UI** | `python helm_agent.py --web` | Browser chat at `http://localhost:7860` with token streaming |
+| **REPL** | `python helm_agent.py` | Interactive terminal, remembers conversation history |
+| **One-shot** | `python helm_agent.py "task"` | Single task, prints result, exits |
+
+```bash
+source backend/.venv/bin/activate   # reuses backend venv — no extra installs
+cd agent
+
+python helm_agent.py --web              # → http://localhost:7860
+python helm_agent.py --web --port 8080  # custom port
+python helm_agent.py                    # interactive REPL
+python helm_agent.py "What's on my calendar this week?"
+```
+
+#### Required `.env` variables
+
+| Variable | How to get it |
+|----------|---------------|
+| `HELM_SESSION_TOKEN` | `POST /auth/login` → copy `session_token` |
+| `OPENROUTER_API_KEY` | https://openrouter.ai/keys (free tier works) |
+
+#### Changing the model
+
+The agent uses OpenRouter as its LLM provider. The model is set by `OPENROUTER_MODEL` in `Helm/.env`:
+
+```bash
+# In Helm/.env — add or edit this line:
+OPENROUTER_MODEL=anthropic/claude-3.5-sonnet    # recommended
+# OPENROUTER_MODEL=openai/gpt-4o
+# OPENROUTER_MODEL=stepfun/step-3.5-flash:free    # current default (free)
+# OPENROUTER_MODEL=meta-llama/llama-3.1-70b-instruct
+```
+
+If `OPENROUTER_MODEL` is not set, the default in `helm_agent.py` is `stepfun/step-3.5-flash:free`. Override in `Helm/.env` for a smarter or different model.
+
+Both standard chat models and reasoning/thinking models (e.g. `stepfun`, `qwen3`, `liquid/lfm-thinking`) are supported — pydantic-ai handles `delta.reasoning` transparently.
+
+Browse available models and their free tier status at: https://openrouter.ai/models
+
+#### What the agent can do
+
+- Connect to the Helm MCP server (all 9 tools) via HTTP + Bearer token
+- Read any file inside `mobile/` (the React Native frontend)
+- Write / overwrite any file inside `mobile/` to programmatically edit the frontend
+- List files in any `mobile/` subdirectory
+- Hold a multi-turn conversation with history (REPL + web modes)
+
+#### Architecture
+
+```
+agent/helm_agent.py (no backend imports)
+  ├── Three modes: --web (pydantic-ai built-in web UI), REPL, one-shot
+  ├── _build_agent()  — shared agent factory used by all modes
+  ├── _SYSTEM_PROMPT  — shared system prompt string
+  ├── MCPServerStreamableHTTP → Helm /mcp (9 Helm MCP tools)
+  └── Local filesystem tools (path-validated to mobile/ only)
+        read_frontend_file(relative_path)
+        write_frontend_file(relative_path, content)
+        list_frontend_files(subdirectory)
+```
+
+#### Web UI details
+
+The `--web` mode uses `pydantic_ai.ui._web.create_web_app(agent)` — pydantic-ai's official built-in Starlette app:
+- Serves the official `@pydantic/ai-chat-ui` React frontend from CDN
+- Cached locally in `~/.cache/pydantic-ai/web-ui/` after first download
+- MCP and tool connections are managed per-request by pydantic-ai's `Agent.iter()`
+- API under `/api`, UI at `/`; run with uvicorn
+- No custom HTML, no FastAPI, no SSE plumbing — all handled by pydantic-ai
+
+#### Security
+
+`write_frontend_file()` resolves the path against `_MOBILE_ROOT` before any I/O. Absolute paths and `../` traversal attempts (e.g. `../../backend/app/config.py`) raise `ValueError` and are never written.
 
 ### Workflow Engine
 
@@ -233,3 +319,52 @@ auth_client (function-scoped) → client + setup user + login + Bearer header
 5. **No workflow execution history/logs** — Only `run_count` and `last_run_at` are tracked. No record of what happened or if it failed.
 
 6. **E2E tests minimal** — Playwright test exists but the test file content wasn't read. The test infrastructure is set up but may not have comprehensive coverage.
+
+### Standalone Agent — Complete Detail
+
+#### File layout
+
+```
+agent/
+├── helm_agent.py   — entire agent: config, tools, web UI, REPL, one-shot entrypoint
+└── README.md       — setup guide, run commands, architecture diagram
+```
+
+No `requirements.txt` needed — the agent reuses `backend/.venv` which already has `pydantic-ai`, `uvicorn`, `starlette`, `mcp`, and `python-dotenv`.
+
+#### Key functions / sections
+
+| Symbol | Purpose |
+|--------|---------|
+| `_safe_mobile_path(rel)` | Path validation — resolves + checks against `_MOBILE_ROOT`. Called by all filesystem tools. |
+| `read_frontend_file(rel)` | Tool: reads a file in `mobile/` |
+| `write_frontend_file(rel, content)` | Tool: writes/overwrites a file in `mobile/` |
+| `list_frontend_files(subdir)` | Tool: recursive file listing in `mobile/` |
+| `_build_agent()` | Factory: creates a configured `pydantic_ai.Agent` with MCP + filesystem tools. Shared by all three run modes. |
+| `_SYSTEM_PROMPT` | Constant: the agent's system prompt |
+| `_run_web(host, port)` | Calls `create_web_app(agent)` and runs with `uvicorn.run()`. Synchronous — uvicorn owns the event loop. |
+| `run_agent(task)` | One-shot: `async with agent:` then `agent.run(task)`, prints result |
+| `interactive_repl()` | REPL: `async with agent:` multi-turn loop with history |
+| Entry point | `if __name__ == "__main__":` — `--web` calls `_run_web()`, else `asyncio.run()` |
+
+#### Web UI (pydantic-ai built-in)
+
+Uses `pydantic_ai.ui._web.create_web_app(agent)` which returns a Starlette ASGI app:
+- Serves pydantic-ai's official `@pydantic/ai-chat-ui` React frontend
+- Fetched from CDN on first launch, cached at `~/.cache/pydantic-ai/web-ui/{version}.html`
+- API endpoints under `/api` (standard pydantic-ai web API)
+- MCP and tool connections established per-request inside `Agent.iter()` — no separate lifecycle needed
+- Served by uvicorn — uvicorn creates and owns the asyncio event loop (`uvicorn.run()` called directly)
+
+#### Model configuration (every detail)
+
+The model is resolved in this order:
+1. `OPENROUTER_MODEL` env var if set (in `Helm/.env`)
+2. Hardcoded default in `helm_agent.py`: `stepfun/step-3.5-flash:free`
+
+To change it permanently, set in `Helm/.env`:
+```bash
+OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
+```
+
+The agent always uses **OpenRouter** as the provider (base URL: `https://openrouter.ai/api/v1`). It uses `OpenAIChatModel` from pydantic-ai with an `OpenAIProvider` pointing at OpenRouter — so any model available on OpenRouter works. The model string format is `provider/model-name` as shown at https://openrouter.ai/models.

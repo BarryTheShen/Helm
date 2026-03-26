@@ -131,9 +131,9 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
   - `access_token_expire_hours`: 24
   - `refresh_token_expire_days`: 30
   - `openai_api_key`, `openai_base_url`, `openai_model`: AI provider config (fallback, used if no OpenRouter key set)
-  - `openrouter_api_key`, `openrouter_base_url`, `openrouter_model`: OpenRouter config (takes precedence over `openai_*` in `agent_proxy.py`). Default model: `arcee-ai/trinity-large-preview:free`
+  - `openrouter_api_key`, `openrouter_base_url`, `openrouter_model`: OpenRouter config (takes precedence over `openai_*` in `agent_proxy.py`). Default model: `stepfun/step-3.5-flash:free`
   - `mcp_path`: "/mcp"
-- **Important:** Do NOT use a pure reasoning model (e.g. `stepfun/step-3.5-flash:free`, `qwen3-*`, `liquid/lfm-thinking`) as the default. Reasoning-only models return empty `delta.content` — all output is in `delta.reasoning` — and produce **zero output** when the `tools` parameter is included. Use a chat-tuned model.
+- Reasoning/thinking models (stepfun, DeepSeek-R1, qwen3-thinking, etc.) are fully supported. `agent_proxy.py` reads `delta.reasoning` as a fallback when `delta.content` is empty.
 
 #### `app/database.py` — Async Database Engine
 - Creates SQLAlchemy async engine from config
@@ -335,7 +335,7 @@ SECRET_KEY=your-production-secret-key-here
 # OpenRouter (recommended — free models available)
 OPENROUTER_API_KEY=sk-or-v1-...
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=arcee-ai/trinity-large-preview:free
+OPENROUTER_MODEL=stepfun/step-3.5-flash:free
 
 # OpenAI (fallback if OpenRouter not set)
 # OPENAI_API_KEY=sk-...

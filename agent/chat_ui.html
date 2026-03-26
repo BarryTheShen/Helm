@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Helm Agent</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3244;
+      --text: #e2e8f0;
+      --text-muted: #8892aa;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --user-bg: #1e3a5f;
+      --assistant-bg: #1a1d27;
+      --error: #f87171;
+      --thinking: #a78bfa;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    header .model-badge {
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--surface2);
+      padding: 2px 8px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+    }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .msg {
+      display: flex;
+      flex-direction: column;
+      max-width: 800px;
+      width: 100%;
+    }
+
+    .msg.user {
+      align-self: flex-end;
+      align-items: flex-end;
+    }
+
+    .msg.assistant {
+      align-self: flex-start;
+      align-items: flex-start;
+    }
+
+    .msg-role {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .msg-bubble {
+      padding: 12px 16px;
+      border-radius: 12px;
+      line-height: 1.6;
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-width: 100%;
+    }
+
+    .msg.user .msg-bubble {
+      background: var(--user-bg);
+      border: 1px solid #2a4a7f;
+    }
+
+    .msg.assistant .msg-bubble {
+      background: var(--assistant-bg);
+      border: 1px solid var(--border);
+    }
+
+    .msg.error .msg-bubble {
+      background: #2d1515;
+      border: 1px solid #7f2a2a;
+      color: var(--error);
+    }
+
+    .thinking-block {
+      font-size: 12px;
+      color: var(--thinking);
+      background: #1a1530;
+      border: 1px solid #3a2a6a;
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin-bottom: 8px;
+      max-width: 100%;
+      font-style: italic;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .thinking-label {
+      font-style: normal;
+      font-weight: 600;
+      display: block;
+      margin-bottom: 4px;
+      color: #c4a8ff;
+    }
+
+    .tool-block {
+      font-size: 12px;
+      background: #0d1f1a;
+      border: 1px solid #1a4a3a;
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin-bottom: 8px;
+      max-width: 100%;
+    }
+
+    .tool-block summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: #4ade80;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      list-style: none;
+      user-select: none;
+    }
+
+    .tool-block summary::-webkit-details-marker { display: none; }
+
+    .tool-block summary::before {
+      content: '▶';
+      font-size: 10px;
+      transition: transform 0.15s;
+    }
+
+    .tool-block[open] summary::before { transform: rotate(90deg); }
+
+    .tool-name { color: #86efac; }
+    .tool-status { font-size: 11px; color: #6b7280; margin-left: auto; }
+    .tool-status.done { color: #4ade80; }
+    .tool-status.error { color: #f87171; }
+
+    .tool-body {
+      margin-top: 8px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 11px;
+      color: #94a3b8;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .tool-result {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid #1a4a3a;
+      color: #64748b;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 11px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+
+    .cursor {
+      display: inline-block;
+      width: 8px;
+      height: 14px;
+      background: var(--accent);
+      animation: blink 1s step-end infinite;
+      vertical-align: text-bottom;
+      margin-left: 2px;
+    }
+
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+    .status-bar {
+      height: 2px;
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    .status-bar.streaming {
+      background: linear-gradient(90deg, var(--accent) 0%, #a78bfa 50%, var(--accent) 100%);
+      background-size: 200%;
+      animation: shimmer 1.5s linear infinite;
+    }
+
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    #input-area {
+      padding: 16px 20px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    #input-form {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    #user-input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-size: 14px;
+      resize: none;
+      min-height: 42px;
+      max-height: 160px;
+      outline: none;
+      line-height: 1.5;
+      font-family: inherit;
+      transition: border-color 0.15s;
+    }
+
+    #user-input:focus {
+      border-color: var(--accent);
+    }
+
+    #user-input::placeholder { color: var(--text-muted); }
+
+    #send-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+      height: 42px;
+      white-space: nowrap;
+    }
+
+    #send-btn:hover:not(:disabled) { background: var(--accent-hover); }
+    #send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--text-muted);
+    }
+
+    .empty-state svg { opacity: 0.3; }
+    .empty-state h2 { font-size: 18px; font-weight: 600; color: var(--text); }
+    .empty-state p { font-size: 13px; text-align: center; max-width: 320px; }
+  </style>
+</head>
+<body>
+  <header>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2">
+      <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+      <path d="M2 17l10 5 10-5"/>
+      <path d="M2 12l10 5 10-5"/>
+    </svg>
+    <h1>Helm Agent</h1>
+    <span class="model-badge" id="model-label">loading…</span>
+  </header>
+  <div class="status-bar" id="status-bar"></div>
+  <div id="messages">
+    <div class="empty-state" id="empty-state">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+      <h2>Helm Agent</h2>
+      <p>Ask me anything about your Helm app — calendar, chat, notifications, or frontend code.</p>
+    </div>
+  </div>
+  <div id="input-area">
+    <form id="input-form">
+      <textarea
+        id="user-input"
+        placeholder="Message Helm Agent…"
+        rows="1"
+        autocomplete="off"
+      ></textarea>
+      <button type="submit" id="send-btn">Send</button>
+    </form>
+  </div>
+
+  <script>
+      // ── State ──────────────────────────────────────────────────────────────────
+    /** @type {Array<{id: string, role: 'user'|'assistant', text: string}>} */
+    const conversationHistory = [];
+    let isStreaming = false;
+    let msgCounter = 0;
+    // Track tool blocks per assistant turn — reset on each new message
+    let currentToolBlocks = {};
+
+    function uid() {
+      return `${Date.now()}-${++msgCounter}-${Math.random().toString(36).slice(2, 7)}`;
+    }
+
+    // ── DOM helpers ────────────────────────────────────────────────────────────
+    const messagesEl = document.getElementById('messages');
+    const emptyState = document.getElementById('empty-state');
+    const sendBtn = document.getElementById('send-btn');
+    const inputEl = document.getElementById('user-input');
+    const statusBar = document.getElementById('status-bar');
+    const modelLabel = document.getElementById('model-label');
+
+    function setStreaming(on) {
+      isStreaming = on;
+      sendBtn.disabled = on;
+      statusBar.classList.toggle('streaming', on);
+    }
+
+    function scrollToBottom() {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function hideEmptyState() {
+      emptyState.style.display = 'none';
+    }
+
+    /**
+     * Append a message element and return { bubble, thinkingEl } for live updates.
+     */
+    function appendMessage(role, text = '', withCursor = false) {
+      hideEmptyState();
+      const div = document.createElement('div');
+      div.className = `msg ${role}`;
+      div.innerHTML = `
+        <div class="msg-role">${role === 'user' ? 'You' : 'Helm Agent'}</div>
+        <div class="msg-bubble"></div>
+      `;
+      const bubble = div.querySelector('.msg-bubble');
+      bubble.textContent = text;
+      if (withCursor) {
+        const cur = document.createElement('span');
+        cur.className = 'cursor';
+        bubble.appendChild(cur);
+      }
+      messagesEl.appendChild(div);
+      scrollToBottom();
+      return { el: div, bubble };
+    }
+
+    function appendThinking(bubble) {
+      const block = document.createElement('div');
+      block.className = 'thinking-block';
+      block.innerHTML = '<span class="thinking-label">Thinking…</span><span class="thinking-text"></span>';
+      bubble.parentElement.insertBefore(block, bubble);
+      return block.querySelector('.thinking-text');
+    }
+
+    /** Track open tool-call blocks keyed by tool_call_id */
+    const toolBlocks = {};
+
+    function getOrCreateToolBlock(bubble, toolCallId, toolName) {
+      if (toolBlocks[toolCallId]) return toolBlocks[toolCallId];
+
+      const details = document.createElement('details');
+      details.className = 'tool-block';
+      details.open = false;
+      details.innerHTML = `
+        <summary>
+          🔧 <span class="tool-name">${toolName}</span>
+          <span class="tool-status" id="ts-${toolCallId}">calling…</span>
+        </summary>
+        <div class="tool-body" id="tb-${toolCallId}"></div>
+        <div class="tool-result" id="tr-${toolCallId}" style="display:none"></div>
+      `;
+      bubble.parentElement.insertBefore(details, bubble);
+      toolBlocks[toolCallId] = {
+        details,
+        statusEl: details.querySelector(`#ts-${toolCallId}`),
+        bodyEl: details.querySelector(`#tb-${toolCallId}`),
+        resultEl: details.querySelector(`#tr-${toolCallId}`),
+        inputText: '',
+      };
+      return toolBlocks[toolCallId];
+    }
+
+    // ── Load model info ────────────────────────────────────────────────────────
+    fetch('/api/configure')
+      .then(r => r.json())
+      .then(cfg => {
+        const models = cfg.models ?? cfg.Models ?? [];
+        if (models.length > 0) {
+          modelLabel.textContent = models[0].name ?? models[0].id ?? 'unknown';
+        } else {
+          modelLabel.textContent = 'connected';
+        }
+      })
+      .catch(() => { modelLabel.textContent = 'offline'; });
+
+    // ── Auto-resize textarea ───────────────────────────────────────────────────
+    inputEl.addEventListener('input', () => {
+      inputEl.style.height = 'auto';
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + 'px';
+    });
+
+    inputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('input-form').requestSubmit();
+      }
+    });
+
+    // ── Send message ───────────────────────────────────────────────────────────
+    document.getElementById('input-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const text = inputEl.value.trim();
+      if (!text || isStreaming) return;
+
+      inputEl.value = '';
+      inputEl.style.height = 'auto';
+      setStreaming(true);
+
+      // Add user message to display and history
+      const userMsgId = uid();
+      appendMessage('user', text);
+      conversationHistory.push({ id: userMsgId, role: 'user', text });
+
+      // Prepare the assistant reply area with streaming cursor
+      const { el: assistantEl, bubble } = appendMessage('assistant', '', true);
+      let assistantText = '';
+      let thinkingEl = null;
+      let thinkingText = '';
+      let activeTextId = null;
+      let activeReasoningId = null;
+      const assistantMsgId = uid();
+      const cursor = bubble.querySelector('.cursor');
+      // Reset per-turn tool block tracking
+      currentToolBlocks = {};
+
+      // Build Vercel AI messages array from full history
+      const messages = conversationHistory.map(m => ({
+        id: m.id,
+        role: m.role,
+        parts: [{ type: 'text', text: m.text }],
+      }));
+
+      const body = {
+        trigger: 'submit-message',
+        id: uid(),
+        messages,
+      };
+
+      try {
+        const resp = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        if (!resp.ok) {
+          const errText = await resp.text();
+          throw new Error(`HTTP ${resp.status}: ${errText}`);
+        }
+
+        // Parse SSE stream: each event is "data: {json}\n\n"
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // Split on double newline (SSE event boundary)
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() ?? '';
+
+          for (const part of parts) {
+            const line = part.trim();
+            if (!line.startsWith('data:')) continue;
+            const jsonStr = line.slice(5).trim();
+            if (!jsonStr || jsonStr === '[DONE]') continue;
+
+            let chunk;
+            try { chunk = JSON.parse(jsonStr); } catch { continue; }
+
+            const type = chunk.type;
+
+            if (type === 'text-start') {
+              activeTextId = chunk.id;
+            } else if (type === 'text-delta') {
+              if (activeTextId === chunk.id || chunk.id) {
+                assistantText += chunk.delta ?? '';
+                bubble.textContent = assistantText;
+                if (cursor) bubble.appendChild(cursor);
+                scrollToBottom();
+              }
+            } else if (type === 'text-end') {
+              activeTextId = null;
+            } else if (type === 'reasoning-start') {
+              activeReasoningId = chunk.id;
+              thinkingEl = appendThinking(bubble);
+            } else if (type === 'reasoning-delta') {
+              if (thinkingEl) {
+                thinkingText += chunk.delta ?? '';
+                thinkingEl.textContent = thinkingText;
+                scrollToBottom();
+              }
+            } else if (type === 'reasoning-end') {
+              activeReasoningId = null;
+            } else if (type === 'tool-input-start') {
+              // A new tool call is starting
+              const toolCallId = chunk.toolCallId;
+              const toolName = chunk.toolName ?? 'unknown';
+              const tb = getOrCreateToolBlock(bubble, toolCallId, toolName);
+              currentToolBlocks[toolCallId] = tb;
+              scrollToBottom();
+            } else if (type === 'tool-input-delta') {
+              const tb = currentToolBlocks[chunk.toolCallId];
+              if (tb) {
+                tb.inputText += chunk.inputTextDelta ?? '';
+                tb.bodyEl.textContent = tb.inputText;
+              }
+            } else if (type === 'tool-input-available') {
+              // Full input available (streaming complete or non-streaming)
+              const toolCallId = chunk.toolCallId;
+              const toolName = chunk.toolName ?? 'unknown';
+              let tb = currentToolBlocks[toolCallId];
+              if (!tb) {
+                tb = getOrCreateToolBlock(bubble, toolCallId, toolName);
+                currentToolBlocks[toolCallId] = tb;
+              }
+              try {
+                tb.bodyEl.textContent = JSON.stringify(chunk.input, null, 2);
+              } catch {
+                tb.bodyEl.textContent = String(chunk.input ?? '');
+              }
+              scrollToBottom();
+            } else if (type === 'tool-output-available') {
+              const tb = currentToolBlocks[chunk.toolCallId];
+              if (tb) {
+                tb.statusEl.textContent = '✓ done';
+                tb.statusEl.classList.add('done');
+                tb.resultEl.style.display = '';
+                try {
+                  tb.resultEl.textContent = JSON.stringify(chunk.output, null, 2);
+                } catch {
+                  tb.resultEl.textContent = String(chunk.output ?? '');
+                }
+                scrollToBottom();
+              }
+            } else if (type === 'tool-input-error' || type === 'tool-output-error') {
+              const tb = currentToolBlocks[chunk.toolCallId];
+              if (tb) {
+                tb.statusEl.textContent = '✗ error';
+                tb.statusEl.classList.add('error');
+                tb.resultEl.style.display = '';
+                tb.resultEl.textContent = chunk.error_text ?? chunk.errorText ?? 'Unknown error';
+                tb.details.open = true;
+              }
+            } else if (type === 'error') {
+              throw new Error(chunk.error_text ?? chunk.message ?? JSON.stringify(chunk));
+            } else if (type === 'finish' || type === 'done') {
+              // done
+            }
+          }
+        }
+
+        // Remove cursor, finalize
+        if (cursor) cursor.remove();
+        if (!assistantText) {
+          bubble.textContent = '(no response)';
+        }
+
+        // Store completed assistant message in history
+        conversationHistory.push({ id: assistantMsgId, role: 'assistant', text: assistantText });
+
+      } catch (err) {
+        if (cursor) cursor.remove();
+        assistantEl.className = 'msg error';
+        bubble.textContent = `Error: ${err.message}`;
+        // Remove failed assistant msg from would-be history (it never got added)
+      }
+
+      setStreaming(false);
+      scrollToBottom();
+    });
+  </script>
+</body>
+</html>

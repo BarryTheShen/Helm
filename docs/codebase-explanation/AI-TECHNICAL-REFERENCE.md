@@ -19,6 +19,7 @@ Helm is a self-hosted AI super app with three layers:
 **To run backend:** `cd backend && uvicorn app.main:app --reload`
 **To run frontend:** `cd mobile && npx expo start`
 **To run tests:** `cd backend && pytest`
+**To run standalone agent:** `source backend/.venv/bin/activate && cd agent && python helm_agent.py`
 
 ---
 
@@ -45,8 +46,7 @@ Helm is a self-hosted AI super app with three layers:
 ### Frontend (`mobile/`)
 
 | Need to change... | Edit this file | Notes |
-|-------------------|---------------|-------|
-| Auth guard / routing | `app/_layout.tsx` | Redirects based on token presence |
+|-------------------|---------------|-------|| Auth guard / routing | `app/_layout.tsx` | Redirects based on token presence |
 | Auth screens | `app/(auth)/connect.tsx`, `app/(auth)/login.tsx` | |
 | Tab screens | `app/(tabs)/{screen}.tsx` | 6 tabs: chat, modules, calendar, forms, alerts, settings |
 | Tab bar config | `app/(tabs)/_layout.tsx` | Tab icons, labels, colors |
@@ -64,6 +64,15 @@ Helm is a self-hosted AI super app with three layers:
 | SDUI types | `src/types/sdui.ts` | Component type definitions |
 | Validation schemas | `src/utils/validation.ts` | Zod schemas |
 | Secure storage | `src/utils/storage.ts` | Platform-aware (SecureStore/localStorage) |
+
+### Standalone Agent (`agent/`)
+
+| Need to change... | Edit this file | Notes |
+|-------------------|---------------|-------|
+| Agent entry point / REPL | `agent/helm_agent.py` | Self-contained, no backend imports |
+| Filesystem tool logic | `agent/helm_agent.py` (`read_frontend_file`, `write_frontend_file`, `list_frontend_files`) | Path-validated to `mobile/` |
+| System prompt | `agent/helm_agent.py` (`system_prompt=` in `run_agent()` + `interactive_repl()`) | |
+| Agent docs | `agent/README.md` | |
 
 ---
 
@@ -199,7 +208,7 @@ All user-owned tables have `user_id` FK to `users.id`
 
 ### Backend Issues
 
-9. **API key stored as plaintext** — `AgentConfig.api_key_encrypted` is stored without encryption. `config.encryption_key` exists but isn't used.
+9. ~~**API key stored as plaintext**~~ — **FIXED.** `AgentConfig.api_key_encrypted` is encrypted with Fernet in `routers/agent_config.py` and decrypted in `services/agent_proxy.py`.  Requires `ENCRYPTION_KEY` in `.env`.
 
 10. **Refresh token creates broken session** — `routers/auth.py` refresh endpoint sets `device_id=None`, breaking device tracking.
 
@@ -209,7 +218,7 @@ All user-owned tables have `user_id` FK to `users.id`
 
 ### Model Selection Gotcha
 
-13. **Do NOT use pure reasoning models** — Models like `stepfun/step-3.5-flash:free`, `qwen3-*`, `liquid/lfm-thinking` are reasoning-only: their `delta.content` is always empty string (all output in `delta.reasoning`), and they produce **zero output** when `tools` parameter is included. Always use a chat-tuned model. The current default is `arcee-ai/trinity-large-preview:free`.
+13. **Reasoning model streaming fixed** (was a bug) — The raw SSE loop in `agent_proxy.py` previously only read `delta.content`, so reasoning/thinking models (stepfun, DeepSeek-R1, QwQ, qwen3-thinking, etc.) produced zero output. Fixed: `agent_proxy.py` now falls back to `delta.get("reasoning")`. pydantic-ai (used by the standalone agent) handles this transparently and always worked. Default model is now `stepfun/step-3.5-flash:free`.
 
 ---
 
@@ -324,10 +333,10 @@ SECRET_KEY=change-this-to-random-string
 # OpenRouter (recommended — free tier available, 100+ models)
 OPENROUTER_API_KEY=sk-or-v1-...       # Required for AI chat
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=arcee-ai/trinity-large-preview:free
+OPENROUTER_MODEL=stepfun/step-3.5-flash:free
 
-# IMPORTANT: Do NOT use pure reasoning models. They return empty content
-# when tools are enabled (stepfun, qwen3:thinking, liquid/lfm-thinking, etc.)
+# Both chat-tuned and reasoning/thinking models work.
+# agent_proxy.py reads delta.reasoning as a fallback when delta.content is empty.
 
 # OpenAI fallback (used only if openrouter_api_key is empty)
 # OPENAI_API_KEY=sk-...

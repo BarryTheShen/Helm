@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { ApiClient } from '@/services/api';
@@ -8,6 +8,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { colors, spacing, typography } from '@/theme/colors';
 import type { CalendarEvent } from '@/types/api';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { useFocusEffect } from 'expo-router';
 
 export default function CalendarScreen() {
   const { token, serverUrl, logout } = useAuthStore();
@@ -16,9 +17,11 @@ export default function CalendarScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [view, setView] = useState<'month' | 'day'>('month');
 
-  useEffect(() => {
-    loadEvents();
-  }, [token, serverUrl]);
+  useFocusEffect(
+    useCallback(() => {
+      loadEvents();
+    }, [token, serverUrl])
+  );
 
   const loadEvents = async () => {
     if (!token || !serverUrl) return;

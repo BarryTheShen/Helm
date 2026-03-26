@@ -257,8 +257,11 @@ async def _stream_one_turn(
                 if fr:
                     finish_reason = fr
 
-                # Regular content tokens — stream immediately to client
-                token = delta.get("content") or ""
+                # Regular content tokens — stream immediately to client.
+                # Reasoning/thinking models (stepfun, DeepSeek-R1, QwQ, etc.) emit
+                # tokens in delta.reasoning rather than delta.content.  pydantic-ai
+                # handles this transparently; our raw SSE loop must do so explicitly.
+                token = delta.get("content") or delta.get("reasoning") or ""
                 if token:
                     content += token
                     await manager.send(user_id, {

@@ -112,10 +112,50 @@ npx expo start
 
 | Key | Action |
 |-----|--------|
-| `i` | Open in iOS Simulator (Mac only) |
-| `a` | Open in Android Emulator |
-| `w` | Open in browser (limited) |
-| Scan QR | Open in Expo Go on a real device |
+| `i` | Open in iOS Simulator (Mac only — requires Xcode) |
+| `a` | Open in Android Emulator (requires Android Studio) |
+| `w` | Open in browser (limited native API support) |
+| Scan QR | Open in Expo Go on a real iPhone/Android |
+
+### Running on a real device with Expo Go
+
+The QR code that appears in the terminal is for the **Expo Go** app — a free sandbox app from Expo that runs your React Native code without needing a full build.
+
+1. Install **Expo Go** from the App Store (iOS) or Play Store (Android)
+2. Make sure your phone is on the **same Wi-Fi** as your development machine
+3. iOS: scan the QR from the Camera app
+   Android: scan from within the Expo Go app's "Scan QR code" screen
+4. The app will load and hot-reload on every file save
+
+**If the QR doesn't work / network issues:**
+```bash
+# Force tunnel mode (works even on different networks, uses ngrok internally)
+npx expo start --tunnel
+
+# Or set the URL explicitly to your machine's IP:
+EXPO_PUBLIC_API_URL=http://192.168.1.X:8000 npx expo start
+```
+
+The Connect screen inside the app needs your backend URL:
+- Real device on Wi-Fi: `http://YOUR_MACHINE_IP:8000`
+- iOS Simulator (same Mac): `http://localhost:8000`
+- Android Emulator: `http://10.0.2.2:8000`
+
+### Running in an iOS Simulator (Mac only)
+
+iOS Simulator requires a Mac with **Xcode** installed:
+1. Install Xcode from the Mac App Store
+2. Run `sudo xcode-select --install`
+3. With Expo running, press `i` — Simulator opens automatically
+
+**Linux development:** The iOS Simulator is Mac-only. On Linux, use the Android emulator or a real device via Expo Go. The app works in the web browser too (`w` key) for basic iteration, though some native APIs (SecureStore, etc.) fall back to localStorage.
+
+### Running in an Android Emulator (Linux/Mac/Windows)
+
+1. Install **Android Studio** from https://developer.android.com/studio
+2. Create a virtual device (AVD) — any recent Pixel profile works
+3. Start the emulator from Android Studio or `emulator -avd <name>`
+4. With Expo running, press `a`
 
 ### Build for production
 
@@ -124,6 +164,66 @@ npx expo start
 npm install -g eas-cli
 eas build --platform ios
 ```
+
+## Standalone PydanticAI Agent (`agent/`)
+
+A fully independent external agent that controls Helm via MCP and can also edit the frontend source code.  It requires no backend imports — just HTTP + file I/O.
+
+### One-time setup
+
+No extra installs needed — reuse the backend venv (pydantic-ai 1.70+ is already installed):
+
+```bash
+source backend/.venv/bin/activate
+```
+
+Add to `Helm/.env`:
+
+```bash
+# From POST /auth/login → session_token
+HELM_SESSION_TOKEN=eyJ...
+
+# From https://openrouter.ai/keys (free tier works)
+OPENROUTER_API_KEY=sk-or-v1-...
+
+# Optional overrides:
+HELM_MCP_URL=http://localhost:8000/mcp/   # default
+OPENROUTER_MODEL=stepfun/step-3.5-flash:free  # default; reasoning/thinking models also work
+```
+
+### Run
+
+```bash
+# Make sure the Helm backend is running first (must serve /mcp/)
+cd agent
+
+# Web UI — browser chat at http://localhost:7860:
+python helm_agent.py --web
+python helm_agent.py --web --port 8080   # custom port
+
+# Interactive terminal REPL:
+python helm_agent.py
+
+# One-shot mode:
+python helm_agent.py "Send a notification: title='Hello', message='Agent works', severity=info"
+python helm_agent.py "What calendar events do I have this week?"
+python helm_agent.py "List all files in mobile/app/(tabs)/"
+python helm_agent.py "Read mobile/app/(tabs)/chat.tsx and summarise it"
+```
+
+Set `AGENT_WEB_PORT=8080` in `.env` to change the default web port.
+
+### What the agent can do
+
+| Capability | How |
+|-----------|-----|
+| Read/write calendar events | Helm MCP tool `helm_read_calendar`, `helm_create_event`, etc. |
+| Send/read notifications | Helm MCP tool `helm_send_notification`, `helm_get_chat_history` |
+| Read frontend source | Local tool `read_frontend_file("app/(tabs)/chat.tsx")` |
+| Edit frontend source | Local tool `write_frontend_file("app/(tabs)/chat.tsx", content)` |
+| List frontend files | Local tool `list_frontend_files("app/(tabs)")` |
+
+**Security:** `write_frontend_file` validates that the path resolves inside `mobile/` before writing. Path traversal attempts are rejected.
 
 ---
 
@@ -157,13 +257,11 @@ SERVER_PORT=8000
 
 # ── AI / LLM ─────────────────────────────────────────────────────────
 # These are the DEFAULTS. Each user can override them in Settings → Agent Config.
-# IMPORTANT: Do NOT use pure reasoning models (stepfun, qwen3:thinking, liquid/lfm-thinking).
-# They return empty content when tools are enabled and will produce zero output.
-
 # OpenRouter (recommended — free tier available, 100+ models):
 OPENROUTER_API_KEY=sk-or-v1-...       # Required for AI chat
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=arcee-ai/trinity-large-preview:free
+OPENROUTER_MODEL=stepfun/step-3.5-flash:free
+# Reasoning/thinking models (stepfun, qwen3, DeepSeek-R1, etc.) are supported.
 
 # OpenAI (direct fallback — used only if OPENROUTER_API_KEY is empty):
 # OPENAI_API_KEY=sk-...
@@ -278,7 +376,7 @@ To change the server URL after setup: **Settings tab → Server URL** (or delete
 → `.env` must be at the **repo root** (`Helm/.env`), not `backend/.env`. `config.py` resolves the path as `Path(__file__).parent.parent.parent / ".env"`.
 
 **Chat returns empty messages**
-→ You may be using a pure reasoning model (`stepfun`, `qwen3:thinking`, etc.). Check `OPENROUTER_MODEL` in `.env`. Use `arcee-ai/trinity-large-preview:free` or a similar chat-tuned model.
+→ Check that `OPENROUTER_API_KEY` is set and valid. Check `OPENROUTER_MODEL` in `.env`. If the model is unknown/unavailable to OpenRouter, you may get a 404 or silent empty response.
 
 **`422 Unprocessable Entity` on calendar filter**
 → Known bug: frontend sends `?start=` but backend expects `?start_date=`. See `AI-TECHNICAL-REFERENCE.md`.

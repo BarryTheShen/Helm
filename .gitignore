@@ -1,1 +1,24 @@
 .env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+*.egg-info/
+
+# Database
+*.db
+*.sqlite3
+
+# Node
+node_modules/
+
+# Expo
+.expo/
+dist/
+
+# Build outputs
+build/
+
