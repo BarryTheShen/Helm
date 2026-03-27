@@ -138,6 +138,53 @@ async def delete_event(event_id: str, user_id: str) -> dict[str, Any]:
         return {"deleted": True}
 
 
+async def delete_all_events(user_id: str) -> dict[str, Any]:
+    """Delete every calendar event for the user in a single database transaction.
+
+    Prefer this over calling delete_event in a loop — it avoids O(N) LLM
+    context growth that causes token explosion on large calendars.
+    """
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(CalendarEvent).where(CalendarEvent.user_id == user_id)
+        )
+        events = result.scalars().all()
+        count = len(events)
+        for event in events:
+            await db.delete(event)
+        await db.commit()
+        return {"deleted_count": count}
+
+
+async def read_all_calendar(user_id: str) -> list[dict[str, Any]]:
+    """Return all calendar events for the user regardless of date range.
+
+    Use this when you need a full picture of the user’s schedule (e.g. before
+    bulk-deleting or auditing events) instead of guessing a wide date range.
+    """
+    async with AsyncSessionLocal() as db:
+        query = (
+            select(CalendarEvent)
+            .where(CalendarEvent.user_id == user_id)
+            .order_by(CalendarEvent.start_time)
+        )
+        result = await db.execute(query)
+        events = result.scalars().all()
+        return [
+            {
+                "id": str(e.id),
+                "title": e.title,
+                "start_time": e.start_time.isoformat(),
+                "end_time": e.end_time.isoformat(),
+                "description": e.description,
+                "color": e.color,
+                "location": e.location,
+                "all_day": e.is_all_day,
+            }
+            for e in events
+        ]
+
+
 async def send_notification(
     title: str,
     message: str,

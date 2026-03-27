@@ -13,9 +13,11 @@ from sqlalchemy import select
 
 from app.mcp.tools import (
     create_event,
+    delete_all_events,
     delete_event,
     get_chat_history,
     get_form_data,
+    read_all_calendar,
     read_calendar,
     send_chat_message,
     send_notification,
@@ -148,8 +150,29 @@ async def helm_update_event(
 
 @mcp.tool()
 async def helm_delete_event(event_id: str) -> dict:
-    """Delete a calendar event."""
+    """Delete a single calendar event by ID."""
     return await delete_event(event_id, get_current_user_id())
+
+
+@mcp.tool()
+async def helm_delete_all_events() -> dict:
+    """Delete ALL calendar events for the user in one call.
+
+    Use this instead of calling helm_delete_event in a loop — it is far more
+    efficient and avoids token explosion when the user has many events.
+    Returns: {"deleted_count": N}
+    """
+    return await delete_all_events(get_current_user_id())
+
+
+@mcp.tool()
+async def helm_read_all_calendar() -> list:
+    """Get every calendar event for the user across all dates.
+
+    Use this when you need a complete view of the calendar without guessing a
+    date range.  For scoped queries prefer helm_read_calendar with specific dates.
+    """
+    return await read_all_calendar(get_current_user_id())
 
 
 @mcp.tool()

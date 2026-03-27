@@ -97,6 +97,12 @@ _SYSTEM_PROMPT = (
     "- Preserve existing code style (TypeScript strict mode, functional components, "
     "named exports).\n"
     "- Explain what you changed and why after writing the file.\n\n"
+    "When displaying data to the user:\n"
+    "- Never show internal UUIDs or database IDs — users don't need these.\n"
+    "- Format calendar events with human-friendly date/time (e.g. 'Monday Apr 7, 9:00–10:00 AM').\n"
+    "- Use bulk operations whenever possible: prefer helm_delete_all_events over "
+    "looping helm_delete_event, prefer helm_read_all_calendar when you need the "
+    "full calendar instead of guessing a date range.\n\n"
     "Be concise, accurate, and confirm every action you take."
 )
 

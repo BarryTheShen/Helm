@@ -123,20 +123,73 @@
       background: #1a1530;
       border: 1px solid #3a2a6a;
       border-radius: 8px;
-      padding: 8px 12px;
+      padding: 6px 12px;
       margin-bottom: 8px;
       max-width: 100%;
-      font-style: italic;
-      white-space: pre-wrap;
       word-break: break-word;
     }
 
-    .thinking-label {
+    .thinking-block summary.thinking-label {
       font-style: normal;
       font-weight: 600;
-      display: block;
-      margin-bottom: 4px;
       color: #c4a8ff;
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 0;
+    }
+
+    .thinking-block summary::-webkit-details-marker { display: none; }
+
+    .thinking-block summary::before {
+      content: '▶';
+      font-size: 9px;
+      transition: transform 0.15s;
+    }
+
+    .thinking-block[open] summary::before { transform: rotate(90deg); }
+
+    .thinking-text {
+      display: block;
+      font-style: italic;
+      font-size: 11.5px;
+      color: #a78bfa;
+      padding: 6px 0 2px;
+      white-space: pre-wrap;
+    }
+
+    /* Rendered markdown styles inside assistant bubbles */
+    .msg.assistant .msg-bubble h1,
+    .msg.assistant .msg-bubble h2,
+    .msg.assistant .msg-bubble h3 {
+      margin: 10px 0 4px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .msg.assistant .msg-bubble h1 { font-size: 16px; }
+    .msg.assistant .msg-bubble h2 { font-size: 14px; }
+    .msg.assistant .msg-bubble h3 { font-size: 13px; }
+    .msg.assistant .msg-bubble p { margin: 4px 0; }
+    .msg.assistant .msg-bubble ul,
+    .msg.assistant .msg-bubble ol {
+      margin: 4px 0 4px 20px;
+    }
+    .msg.assistant .msg-bubble li { margin: 2px 0; }
+    .msg.assistant .msg-bubble strong { color: var(--text); }
+    .msg.assistant .msg-bubble hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 8px 0;
+    }
+    .msg.assistant .msg-bubble code {
+      font-family: "SF Mono", monospace;
+      font-size: 12px;
+      background: #22263a;
+      padding: 1px 4px;
+      border-radius: 3px;
     }
 
     .tool-block {
@@ -342,6 +395,30 @@
       return `${Date.now()}-${++msgCounter}-${Math.random().toString(36).slice(2, 7)}`;
     }
 
+    /**
+     * Convert plain assistant response text to safe HTML with basic markdown.
+     * Only used for assistant messages — user input is always rendered as textContent.
+     */
+    function renderMarkdown(text) {
+      // Escape HTML first to prevent injection, then apply markdown patterns
+      const escaped = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      return escaped
+        .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        .replace(/^---+$/gm, '<hr>')
+        .replace(/^- (.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>\n?)+/gs, m => `<ul>${m}</ul>`)
+        .replace(/\n/g, '<br>');
+    }
+
     // ── DOM helpers ────────────────────────────────────────────────────────────
     const messagesEl = document.getElementById('messages');
     const emptyState = document.getElementById('empty-state');
@@ -388,11 +465,16 @@
     }
 
     function appendThinking(bubble) {
-      const block = document.createElement('div');
+      const block = document.createElement('details');
       block.className = 'thinking-block';
-      block.innerHTML = '<span class="thinking-label">Thinking…</span><span class="thinking-text"></span>';
+      block.open = true;  // Expand while streaming
+      block.innerHTML = '<summary class="thinking-label">Thinking…</summary><span class="thinking-text"></span>';
       bubble.parentElement.insertBefore(block, bubble);
-      return block.querySelector('.thinking-text');
+      return {
+        blockEl: block,
+        textEl: block.querySelector('.thinking-text'),
+        summaryEl: block.querySelector('.thinking-label'),
+      };
     }
 
     /** Track open tool-call blocks keyed by tool_call_id */
@@ -462,7 +544,7 @@
       // Add user message to display and history
       const userMsgId = uid();
       appendMessage('user', text);
-      conversationHistory.push({ id: userMsgId, role: 'user', text });
+      conversationHistory.push({ id: userMsgId, role: 'user', parts: [{ type: 'text', text }] });
 
       // Prepare the assistant reply area with streaming cursor
       const { el: assistantEl, bubble } = appendMessage('assistant', '', true);
@@ -473,14 +555,17 @@
       let activeReasoningId = null;
       const assistantMsgId = uid();
       const cursor = bubble.querySelector('.cursor');
-      // Reset per-turn tool block tracking
+      // Reset per-turn tracking
       currentToolBlocks = {};
+      // Track reasoning blocks and tool calls for accurate conversation history
+      let reasoningParts = [];
+      let toolCallData = {};  // callId → {toolName, toolCallId, input, output}
 
-      // Build Vercel AI messages array from full history
+      // Build Vercel AI messages array from full history (includes tool + reasoning parts)
       const messages = conversationHistory.map(m => ({
         id: m.id,
         role: m.role,
-        parts: [{ type: 'text', text: m.text }],
+        parts: m.parts,
       }));
 
       const body = {
@@ -539,6 +624,7 @@
               activeTextId = null;
             } else if (type === 'reasoning-start') {
               activeReasoningId = chunk.id;
+              thinkingText = '';  // Reset per reasoning block — prevents duplication
               thinkingEl = appendThinking(bubble);
             } else if (type === 'reasoning-delta') {
               if (thinkingEl) {
@@ -547,7 +633,12 @@
                 scrollToBottom();
               }
             } else if (type === 'reasoning-end') {
-              activeReasoningId = null;
+              // Store completed reasoning block for accurate history replay
+              if (thinkingText) reasoningParts.push({ type: 'reasoning', text: thinkingText, state: 'done' });              // Collapse and update label now that reasoning is complete
+              if (thinkingEl) {
+                thinkingEl.summaryEl.textContent = 'Thought';
+                thinkingEl.blockEl.open = false;
+              }              activeReasoningId = null;
             } else if (type === 'tool-input-start') {
               // A new tool call is starting
               const toolCallId = chunk.toolCallId;
@@ -575,6 +666,8 @@
               } catch {
                 tb.bodyEl.textContent = String(chunk.input ?? '');
               }
+              // Store for history — will be updated with output in tool-output-available
+              toolCallData[toolCallId] = { toolName, toolCallId, input: chunk.input ?? null, output: null };
               scrollToBottom();
             } else if (type === 'tool-output-available') {
               const tb = currentToolBlocks[chunk.toolCallId];
@@ -589,6 +682,9 @@
                 }
                 scrollToBottom();
               }
+              // Record output in toolCallData so history reflects the complete tool exchange
+              const td = toolCallData[chunk.toolCallId];
+              if (td) td.output = chunk.output ?? null;
             } else if (type === 'tool-input-error' || type === 'tool-output-error') {
               const tb = currentToolBlocks[chunk.toolCallId];
               if (tb) {
@@ -606,14 +702,32 @@
           }
         }
 
-        // Remove cursor, finalize
+        // Remove cursor; render final text as markdown
         if (cursor) cursor.remove();
-        if (!assistantText) {
+        if (assistantText) {
+          bubble.innerHTML = renderMarkdown(assistantText);
+        } else {
           bubble.textContent = '(no response)';
         }
 
-        // Store completed assistant message in history
-        conversationHistory.push({ id: assistantMsgId, role: 'assistant', text: assistantText });
+        // Build full parts array: reasoning → tool calls → final text
+        // This gives the server accurate context for the next turn
+        const completedToolParts = Object.values(toolCallData)
+          .filter(d => d.output !== null)
+          .map(d => ({
+            type: 'dynamic-tool',
+            toolName: d.toolName,
+            toolCallId: d.toolCallId,
+            state: 'output-available',
+            input: d.input,
+            output: d.output,
+          }));
+        const assistantParts = [
+          ...reasoningParts,
+          ...completedToolParts,
+          ...(assistantText ? [{ type: 'text', text: assistantText }] : [{ type: 'text', text: '(no response)' }]),
+        ];
+        conversationHistory.push({ id: assistantMsgId, role: 'assistant', parts: assistantParts });
 
       } catch (err) {
         if (cursor) cursor.remove();
