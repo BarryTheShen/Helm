@@ -383,16 +383,19 @@
   </div>
 
   <script>
-      // ── State ──────────────────────────────────────────────────────────────────
-    /** @type {Array<{id: string, role: 'user'|'assistant', text: string}>} */
+    // ── State ─────────────────────────────────────────────────────────────────
     const conversationHistory = [];
     let isStreaming = false;
     let msgCounter = 0;
-    // Track tool blocks per assistant turn — reset on each new message
-    let currentToolBlocks = {};
 
     function uid() {
       return `${Date.now()}-${++msgCounter}-${Math.random().toString(36).slice(2, 7)}`;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     /**
@@ -419,90 +422,132 @@
         .replace(/\n/g, '<br>');
     }
 
-    // ── DOM helpers ────────────────────────────────────────────────────────────
+    // ── DOM refs ──────────────────────────────────────────────────────────────
     const messagesEl = document.getElementById('messages');
-    const emptyState = document.getElementById('empty-state');
-    const sendBtn = document.getElementById('send-btn');
-    const inputEl = document.getElementById('user-input');
-    const statusBar = document.getElementById('status-bar');
-    const modelLabel = document.getElementById('model-label');
+    const emptyState  = document.getElementById('empty-state');
+    const sendBtn     = document.getElementById('send-btn');
+    const inputEl     = document.getElementById('user-input');
+    const statusBar   = document.getElementById('status-bar');
+    const modelLabel  = document.getElementById('model-label');
 
     function setStreaming(on) {
       isStreaming = on;
       sendBtn.disabled = on;
       statusBar.classList.toggle('streaming', on);
     }
+    function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+    function hideEmptyState() { emptyState.style.display = 'none'; }
 
-    function scrollToBottom() {
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+    // ── Per-turn rendering state ───────────────────────────────────────────────
+    // These are reset at the start of each assistant turn.
+    let assistantContainer = null;  // outer .msg.assistant div
+    let currentTextBubble  = null;  // active .msg-bubble being streamed into
+    let currentBubbleText  = '';    // text buffer for currentTextBubble
+    const toolBlocks = {};          // toolCallId → {details, statusEl, bodyEl, resultEl}
+
+    function resetTurnState() {
+      assistantContainer = null;
+      currentTextBubble  = null;
+      currentBubbleText  = '';
+      Object.keys(toolBlocks).forEach(k => delete toolBlocks[k]);
     }
 
-    function hideEmptyState() {
-      emptyState.style.display = 'none';
+    /** Create the outer .msg.assistant container and append to chat. */
+    function startAssistantTurn() {
+      resetTurnState();
+      hideEmptyState();
+      const div = document.createElement('div');
+      div.className = 'msg assistant';
+      div.innerHTML = '<div class="msg-role">Helm Agent</div>';
+      messagesEl.appendChild(div);
+      assistantContainer = div;
+      scrollToBottom();
     }
 
     /**
-     * Append a message element and return { bubble, thinkingEl } for live updates.
+     * Get (or lazily create) the active text bubble.
+     * Called when text-delta arrives — creates a new bubble if none is open,
+     * allowing text before and after tool calls to be in separate blocks.
      */
-    function appendMessage(role, text = '', withCursor = false) {
-      hideEmptyState();
-      const div = document.createElement('div');
-      div.className = `msg ${role}`;
-      div.innerHTML = `
-        <div class="msg-role">${role === 'user' ? 'You' : 'Helm Agent'}</div>
-        <div class="msg-bubble"></div>
-      `;
-      const bubble = div.querySelector('.msg-bubble');
-      bubble.textContent = text;
-      if (withCursor) {
+    function getTextBubble() {
+      if (!currentTextBubble) {
+        const bubble = document.createElement('div');
+        bubble.className = 'msg-bubble';
         const cur = document.createElement('span');
         cur.className = 'cursor';
         bubble.appendChild(cur);
+        assistantContainer.appendChild(bubble);
+        currentTextBubble = bubble;
+        currentBubbleText = '';
       }
-      messagesEl.appendChild(div);
-      scrollToBottom();
-      return { el: div, bubble };
+      return currentTextBubble;
     }
 
-    function appendThinking(bubble) {
+    /**
+     * Finalize the active text bubble: render markdown, remove streaming cursor.
+     * Call this before inserting a thinking block or tool block so that any text
+     * that arrived before the block is rendered in its own bubble above it.
+     */
+    function sealTextBubble() {
+      if (!currentTextBubble) return;
+      const cur = currentTextBubble.querySelector('.cursor');
+      if (cur) cur.remove();
+      if (currentBubbleText.trim()) {
+        currentTextBubble.innerHTML = renderMarkdown(currentBubbleText);
+      } else {
+        currentTextBubble.remove();  // empty bubble → drop it
+      }
+      currentTextBubble = null;
+      currentBubbleText = '';
+    }
+
+    /** Append a collapsible thinking block. Seals any open text bubble first. */
+    function startThinkingBlock() {
+      sealTextBubble();
       const block = document.createElement('details');
       block.className = 'thinking-block';
-      block.open = true;  // Expand while streaming
+      block.open = true;  // open while streaming
       block.innerHTML = '<summary class="thinking-label">Thinking…</summary><span class="thinking-text"></span>';
-      bubble.parentElement.insertBefore(block, bubble);
+      assistantContainer.appendChild(block);
+      scrollToBottom();
       return {
-        blockEl: block,
-        textEl: block.querySelector('.thinking-text'),
+        blockEl:   block,
+        textEl:    block.querySelector('.thinking-text'),
         summaryEl: block.querySelector('.thinking-label'),
       };
     }
 
-    /** Track open tool-call blocks keyed by tool_call_id */
-    const toolBlocks = {};
-
-    function getOrCreateToolBlock(bubble, toolCallId, toolName) {
+    /**
+     * Get or create a collapsible tool-call block.
+     * Seals any open text bubble so text before the tool call stays in its own block.
+     * Tool blocks open by default so the user can see what was sent.
+     */
+    function getOrCreateToolBlock(toolCallId, toolName) {
       if (toolBlocks[toolCallId]) return toolBlocks[toolCallId];
+      sealTextBubble();
 
       const details = document.createElement('details');
       details.className = 'tool-block';
-      details.open = false;
+      details.open = true;  // visible by default — user can collapse
       details.innerHTML = `
         <summary>
-          🔧 <span class="tool-name">${toolName}</span>
-          <span class="tool-status" id="ts-${toolCallId}">calling…</span>
+          🔧 <span class="tool-name">${escapeHtml(toolName)}</span>
+          <span class="tool-status">calling…</span>
         </summary>
-        <div class="tool-body" id="tb-${toolCallId}"></div>
-        <div class="tool-result" id="tr-${toolCallId}" style="display:none"></div>
+        <div class="tool-body"></div>
+        <div class="tool-result" style="display:none"></div>
       `;
-      bubble.parentElement.insertBefore(details, bubble);
-      toolBlocks[toolCallId] = {
+      assistantContainer.appendChild(details);
+      const tb = {
         details,
-        statusEl: details.querySelector(`#ts-${toolCallId}`),
-        bodyEl: details.querySelector(`#tb-${toolCallId}`),
-        resultEl: details.querySelector(`#tr-${toolCallId}`),
+        statusEl:  details.querySelector('.tool-status'),
+        bodyEl:    details.querySelector('.tool-body'),
+        resultEl:  details.querySelector('.tool-result'),
         inputText: '',
       };
-      return toolBlocks[toolCallId];
+      toolBlocks[toolCallId] = tb;
+      scrollToBottom();
+      return tb;
     }
 
     // ── Load model info ────────────────────────────────────────────────────────
@@ -510,11 +555,9 @@
       .then(r => r.json())
       .then(cfg => {
         const models = cfg.models ?? cfg.Models ?? [];
-        if (models.length > 0) {
-          modelLabel.textContent = models[0].name ?? models[0].id ?? 'unknown';
-        } else {
-          modelLabel.textContent = 'connected';
-        }
+        modelLabel.textContent = models.length > 0
+          ? (models[0].name ?? models[0].id ?? 'connected')
+          : 'connected';
       })
       .catch(() => { modelLabel.textContent = 'offline'; });
 
@@ -541,38 +584,31 @@
       inputEl.style.height = 'auto';
       setStreaming(true);
 
-      // Add user message to display and history
+      // Append user bubble
+      hideEmptyState();
+      const userDiv = document.createElement('div');
+      userDiv.className = 'msg user';
+      userDiv.innerHTML = '<div class="msg-role">You</div><div class="msg-bubble"></div>';
+      userDiv.querySelector('.msg-bubble').textContent = text;
+      messagesEl.appendChild(userDiv);
+      scrollToBottom();
+
       const userMsgId = uid();
-      appendMessage('user', text);
       conversationHistory.push({ id: userMsgId, role: 'user', parts: [{ type: 'text', text }] });
 
-      // Prepare the assistant reply area with streaming cursor
-      const { el: assistantEl, bubble } = appendMessage('assistant', '', true);
-      let assistantText = '';
-      let thinkingEl = null;
-      let thinkingText = '';
-      let activeTextId = null;
-      let activeReasoningId = null;
+      // Start assistant turn
+      startAssistantTurn();
       const assistantMsgId = uid();
-      const cursor = bubble.querySelector('.cursor');
-      // Reset per-turn tracking
-      currentToolBlocks = {};
-      // Track reasoning blocks and tool calls for accurate conversation history
-      let reasoningParts = [];
-      let toolCallData = {};  // callId → {toolName, toolCallId, input, output}
 
-      // Build Vercel AI messages array from full history (includes tool + reasoning parts)
-      const messages = conversationHistory.map(m => ({
-        id: m.id,
-        role: m.role,
-        parts: m.parts,
-      }));
+      // Per-turn history tracking
+      let allAssistantText = '';  // cumulative text (for conversation history)
+      let thinkingEl       = null;
+      let thinkingText     = '';
+      let reasoningParts   = [];
+      let toolCallData     = {};  // callId → {toolName, input, output}
 
-      const body = {
-        trigger: 'submit-message',
-        id: uid(),
-        messages,
-      };
+      const messages = conversationHistory.map(m => ({ id: m.id, role: m.role, parts: m.parts }));
+      const body = { trigger: 'submit-message', id: uid(), messages };
 
       try {
         const resp = await fetch('/api/chat', {
@@ -581,22 +617,17 @@
           body: JSON.stringify(body),
         });
 
-        if (!resp.ok) {
-          const errText = await resp.text();
-          throw new Error(`HTTP ${resp.status}: ${errText}`);
-        }
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
 
-        // Parse SSE stream: each event is "data: {json}\n\n"
-        const reader = resp.body.getReader();
+        const reader  = resp.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = '';
+        let buffer    = '';
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
 
-          // Split on double newline (SSE event boundary)
           const parts = buffer.split('\n\n');
           buffer = parts.pop() ?? '';
 
@@ -609,131 +640,134 @@
             let chunk;
             try { chunk = JSON.parse(jsonStr); } catch { continue; }
 
-            const type = chunk.type;
+            const { type } = chunk;
 
-            if (type === 'text-start') {
-              activeTextId = chunk.id;
-            } else if (type === 'text-delta') {
-              if (activeTextId === chunk.id || chunk.id) {
-                assistantText += chunk.delta ?? '';
-                bubble.textContent = assistantText;
-                if (cursor) bubble.appendChild(cursor);
-                scrollToBottom();
-              }
-            } else if (type === 'text-end') {
-              activeTextId = null;
+            if (type === 'text-delta') {
+              // Lazily create (or reuse) the current text bubble
+              const seg = getTextBubble();
+              const delta = chunk.delta ?? '';
+              allAssistantText  += delta;
+              currentBubbleText += delta;
+              const cur = seg.querySelector('.cursor');
+              seg.textContent = currentBubbleText;
+              if (cur) seg.appendChild(cur);
+              scrollToBottom();
+
             } else if (type === 'reasoning-start') {
-              activeReasoningId = chunk.id;
-              thinkingText = '';  // Reset per reasoning block — prevents duplication
-              thinkingEl = appendThinking(bubble);
+              thinkingText = '';
+              thinkingEl   = startThinkingBlock();
+
             } else if (type === 'reasoning-delta') {
               if (thinkingEl) {
                 thinkingText += chunk.delta ?? '';
-                thinkingEl.textContent = thinkingText;
+                // Fix: use .textEl — thinkingEl is {blockEl, textEl, summaryEl}
+                thinkingEl.textEl.textContent = thinkingText;
                 scrollToBottom();
               }
+
             } else if (type === 'reasoning-end') {
-              // Store completed reasoning block for accurate history replay
-              if (thinkingText) reasoningParts.push({ type: 'reasoning', text: thinkingText, state: 'done' });              // Collapse and update label now that reasoning is complete
+              if (thinkingText) reasoningParts.push({ type: 'reasoning', text: thinkingText, state: 'done' });
               if (thinkingEl) {
                 thinkingEl.summaryEl.textContent = 'Thought';
                 thinkingEl.blockEl.open = false;
-              }              activeReasoningId = null;
+              }
+              thinkingEl = null;
+
             } else if (type === 'tool-input-start') {
-              // A new tool call is starting
-              const toolCallId = chunk.toolCallId;
-              const toolName = chunk.toolName ?? 'unknown';
-              const tb = getOrCreateToolBlock(bubble, toolCallId, toolName);
-              currentToolBlocks[toolCallId] = tb;
-              scrollToBottom();
+              getOrCreateToolBlock(chunk.toolCallId ?? uid(), chunk.toolName ?? 'tool');
+
             } else if (type === 'tool-input-delta') {
-              const tb = currentToolBlocks[chunk.toolCallId];
+              const tb = toolBlocks[chunk.toolCallId];
               if (tb) {
                 tb.inputText += chunk.inputTextDelta ?? '';
                 tb.bodyEl.textContent = tb.inputText;
               }
             } else if (type === 'tool-input-available') {
-              // Full input available (streaming complete or non-streaming)
-              const toolCallId = chunk.toolCallId;
-              const toolName = chunk.toolName ?? 'unknown';
-              let tb = currentToolBlocks[toolCallId];
-              if (!tb) {
-                tb = getOrCreateToolBlock(bubble, toolCallId, toolName);
-                currentToolBlocks[toolCallId] = tb;
-              }
+              const callId   = chunk.toolCallId;
+              const toolName = chunk.toolName ?? 'tool';
+              const tb       = getOrCreateToolBlock(callId, toolName);
               try {
                 tb.bodyEl.textContent = JSON.stringify(chunk.input, null, 2);
               } catch {
                 tb.bodyEl.textContent = String(chunk.input ?? '');
               }
-              // Store for history — will be updated with output in tool-output-available
-              toolCallData[toolCallId] = { toolName, toolCallId, input: chunk.input ?? null, output: null };
+              toolCallData[callId] = { toolName, input: chunk.input ?? null, output: null };
               scrollToBottom();
+
             } else if (type === 'tool-output-available') {
-              const tb = currentToolBlocks[chunk.toolCallId];
+              const tb = toolBlocks[chunk.toolCallId];
               if (tb) {
-                tb.statusEl.textContent = '✓ done';
-                tb.statusEl.classList.add('done');
+                tb.statusEl.textContent   = '✓ done';
+                tb.statusEl.className     = 'tool-status done';
                 tb.resultEl.style.display = '';
                 try {
                   tb.resultEl.textContent = JSON.stringify(chunk.output, null, 2);
                 } catch {
                   tb.resultEl.textContent = String(chunk.output ?? '');
                 }
+                tb.details.open = false;  // auto-collapse when complete
                 scrollToBottom();
               }
-              // Record output in toolCallData so history reflects the complete tool exchange
               const td = toolCallData[chunk.toolCallId];
               if (td) td.output = chunk.output ?? null;
+
             } else if (type === 'tool-input-error' || type === 'tool-output-error') {
-              const tb = currentToolBlocks[chunk.toolCallId];
+              const tb = toolBlocks[chunk.toolCallId];
               if (tb) {
-                tb.statusEl.textContent = '✗ error';
-                tb.statusEl.classList.add('error');
+                tb.statusEl.textContent   = '✗ error';
+                tb.statusEl.className     = 'tool-status error';
                 tb.resultEl.style.display = '';
-                tb.resultEl.textContent = chunk.error_text ?? chunk.errorText ?? 'Unknown error';
-                tb.details.open = true;
+                tb.resultEl.textContent   = chunk.error_text ?? chunk.errorText ?? 'Unknown error';
+                tb.details.open           = true;
               }
+
             } else if (type === 'error') {
               throw new Error(chunk.error_text ?? chunk.message ?? JSON.stringify(chunk));
-            } else if (type === 'finish' || type === 'done') {
-              // done
             }
           }
         }
 
-        // Remove cursor; render final text as markdown
-        if (cursor) cursor.remove();
-        if (assistantText) {
-          bubble.innerHTML = renderMarkdown(assistantText);
-        } else {
-          bubble.textContent = '(no response)';
+        // ── Finalize turn ────────────────────────────────────────────────────
+        // Seal the last text bubble (render markdown, remove cursor)
+        sealTextBubble();
+
+        // If nothing at all was rendered, add a fallback placeholder
+        if (!assistantContainer.querySelector('.msg-bubble')) {
+          const fb = document.createElement('div');
+          fb.className = 'msg-bubble';
+          fb.textContent = '(no response)';
+          assistantContainer.appendChild(fb);
         }
 
-        // Build full parts array: reasoning → tool calls → final text
-        // This gives the server accurate context for the next turn
-        const completedToolParts = Object.values(toolCallData)
-          .filter(d => d.output !== null)
-          .map(d => ({
-            type: 'dynamic-tool',
-            toolName: d.toolName,
-            toolCallId: d.toolCallId,
-            state: 'output-available',
-            input: d.input,
-            output: d.output,
+        // Build full parts array for conversation history so subsequent turns
+        // receive accurate context: reasoning → tool exchanges → final text
+        const completedToolParts = Object.entries(toolCallData)
+          .filter(([, d]) => d.output !== null)
+          .map(([callId, d]) => ({
+            type:       'dynamic-tool',
+            toolName:   d.toolName,
+            toolCallId: callId,
+            state:      'output-available',
+            input:      d.input,
+            output:     d.output,
           }));
-        const assistantParts = [
-          ...reasoningParts,
-          ...completedToolParts,
-          ...(assistantText ? [{ type: 'text', text: assistantText }] : [{ type: 'text', text: '(no response)' }]),
-        ];
-        conversationHistory.push({ id: assistantMsgId, role: 'assistant', parts: assistantParts });
+        conversationHistory.push({
+          id:    assistantMsgId,
+          role:  'assistant',
+          parts: [
+            ...reasoningParts,
+            ...completedToolParts,
+            { type: 'text', text: allAssistantText || '(no response)' },
+          ],
+        });
 
       } catch (err) {
-        if (cursor) cursor.remove();
-        assistantEl.className = 'msg error';
-        bubble.textContent = `Error: ${err.message}`;
-        // Remove failed assistant msg from would-be history (it never got added)
+        sealTextBubble();
+        assistantContainer.className = 'msg error';
+        const errBubble = document.createElement('div');
+        errBubble.className = 'msg-bubble';
+        errBubble.textContent = `Error: ${err.message}`;
+        assistantContainer.appendChild(errBubble);
       }
 
       setStreaming(false);
