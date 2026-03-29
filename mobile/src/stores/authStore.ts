@@ -57,7 +57,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         storage.getItem('server_url'),
         storage.getItem('username'),
       ]);
-      const user = token && username ? { id: '', username, email: '', created_at: '' } : null;
+      const user = token && username ? { id: '', username, created_at: '' } : null;
       set({ token, serverUrl, user, isLoading: false });
     } catch (error) {
       console.error('Failed to initialize auth store:', error);

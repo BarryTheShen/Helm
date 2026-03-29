@@ -3,7 +3,7 @@
 export interface User {
   id: string;
   username: string;
-  email: string;
+  email?: string;
   created_at: string;
 }
 
@@ -54,6 +54,7 @@ export interface CalendarEvent {
   end_time: string;
   is_all_day: boolean;
   location?: string;
+  color?: string;
   created_at: string;
   updated_at: string;
 }
@@ -96,6 +97,8 @@ export interface Module {
   name: string;
   icon: string;
   route: string;
+  description?: string;
+  enabled?: boolean;
 }
 
 export interface Device {

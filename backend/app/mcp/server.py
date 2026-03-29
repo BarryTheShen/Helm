@@ -15,12 +15,19 @@ from app.mcp.tools import (
     create_event,
     delete_all_events,
     delete_event,
+    delete_screen,
     get_chat_history,
     get_form_data,
+    get_screen,
+    hide_tab,
+    list_screens,
+    list_tabs,
     read_all_calendar,
     read_calendar,
     send_chat_message,
     send_notification,
+    set_screen,
+    show_tab,
     update_event,
     update_module_state,
 )
@@ -212,6 +219,119 @@ async def helm_update_module_state(module_type: str, state: dict) -> dict:
 async def helm_get_form_data(form_id: str = "") -> dict:
     """Get submitted form data."""
     return await get_form_data(form_id or None, get_current_user_id())
+
+
+@mcp.tool()
+async def helm_set_screen(module_id: str, screen: dict) -> dict:
+    """Set the Server-Driven UI screen for a module.
+
+    This is the primary AI tool for building dynamic native UIs.  Generate a
+    complete SDUIScreen JSON object and call this tool — the frontend re-renders
+    immediately via WebSocket without any polling.
+
+    SCHEMA (follow this exactly):
+    {
+      "schema_version": 1,
+      "module_id": "<same as module_id arg>",
+      "title": "Screen title shown in nav header",
+      "generated_at": "<ISO 8601 timestamp>",
+      "sections": [
+        {
+          "id": "unique-section-id",
+          "title": "Optional section header",
+          "component": <SDUIComponent>
+        }
+      ]
+    }
+
+    COMPONENT TYPES — use the "type" discriminant:
+      text        { content, size?, bold?, italic?, color?, align? }
+      heading     { content, level? (1-3), align? }
+      button      { label, variant? (primary|secondary|destructive|ghost), action }
+      icon_button { icon, label, action, size? }
+      divider     { spacing? (sm|md|lg) }
+      spacer      { size? (xs|sm|md|lg|xl) }
+      card        { title?, subtitle?, elevated?, action? } + children[]
+      container   { direction? (row|column), gap?, wrap?, align? } + children[]
+      list        { title?, items: [{id,title,subtitle?,badge?,icon?,right_text?,action?}] }
+      form        { title?, fields: [{id,type,label,...}], submit_label?, submit_action }
+      alert       { severity (info|warning|error|success), title, message, dismissible? }
+      badge       { label, color? (blue|green|red|yellow|gray) }
+      stat        { label, value, change?, change_direction? (up|down|neutral), icon? }
+      stats_row   { stats: [{label,value,change?,change_direction?}] }
+      calendar    { events: [{id,title,start,end,allDay?,color?}], view? (month|day) }
+      image       { uri, aspect_ratio?, alt?, action? }
+      progress    { value, max?, label?, color? }
+
+    ACTION TYPES:
+      navigate   { type:"navigate", screen, params? }
+      api_call   { type:"api_call", method, path, body? }
+      dismiss    { type:"dismiss" }
+      copy_text  { type:"copy_text", text }
+      open_url   { type:"open_url", url }
+
+    Available module_ids: home | chat | calendar | forms | alerts | modules | settings
+    """
+    return await set_screen(module_id, screen, get_current_user_id())
+
+
+@mcp.tool()
+async def helm_delete_screen(module_id: str) -> dict:
+    """Delete the AI-generated SDUI screen for a module.
+
+    The tab immediately returns to its empty/default state on the frontend.
+    Use this to blank out a screen or reset it before setting new content.
+
+    Available module_ids: home | chat | calendar | forms | alerts | modules | settings
+    """
+    return await delete_screen(module_id, get_current_user_id())
+
+
+@mcp.tool()
+async def helm_list_screens() -> dict:
+    """List all SDUI screens currently set by the AI across all modules.
+
+    Returns a list of {module_id, version, title, sections_count} for each
+    module that has AI-generated content. Modules not in the list are showing
+    their default/empty state.
+    """
+    return await list_screens(get_current_user_id())
+
+
+@mcp.tool()
+async def helm_get_screen(module_id: str) -> dict:
+    """Get the current SDUIScreen JSON for a module (null if not yet set)."""
+    return await get_screen(module_id, get_current_user_id())
+
+
+@mcp.tool()
+async def helm_hide_tab(tab_id: str) -> dict:
+    """Hide a tab from the bottom navigation bar.
+
+    The tab disappears from the nav bar instantly via WebSocket.
+    Tab content and data are fully preserved — use helm_show_tab to restore it.
+
+    Valid tab_ids: home | chat | modules | calendar | forms | alerts | settings
+    """
+    return await hide_tab(tab_id, get_current_user_id())
+
+
+@mcp.tool()
+async def helm_show_tab(tab_id: str) -> dict:
+    """Restore a previously hidden tab to the bottom navigation bar.
+
+    Valid tab_ids: home | chat | modules | calendar | forms | alerts | settings
+    """
+    return await show_tab(tab_id, get_current_user_id())
+
+
+@mcp.tool()
+async def helm_list_tabs() -> dict:
+    """List all app tabs and their current visibility status (visible or hidden).
+
+    Returns a list of {id, name, icon, visible} for each tab.
+    """
+    return await list_tabs(get_current_user_id())
 
 
 def get_mcp_asgi_app():

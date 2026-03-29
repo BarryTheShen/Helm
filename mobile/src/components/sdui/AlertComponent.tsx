@@ -1,9 +1,10 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import type { AlertProps } from '@/types/sdui';
+import type { AlertComponent as AlertData } from '@/types/sdui';
 import { Card } from '@/components/common/Card';
 import { colors, spacing, typography } from '@/theme/colors';
 
-interface AlertComponentProps extends AlertProps {
+type AlertComponentProps = AlertData['props'] & {
+  onDismiss?: () => void;
   onAction?: (action: string, data: any) => void;
 }
 

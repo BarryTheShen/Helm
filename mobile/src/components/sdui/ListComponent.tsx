@@ -1,9 +1,9 @@
 import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
-import type { ListProps } from '@/types/sdui';
+import type { ListComponent as ListData } from '@/types/sdui';
 import { Card } from '@/components/common/Card';
 import { colors, spacing, typography } from '@/theme/colors';
 
-interface ListComponentProps extends ListProps {
+type ListComponentProps = ListData['props'] & {
   onAction?: (action: string, data: any) => void;
 }
 
@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   itemSubtitle: {
-    ...typography.caption,
+    ...typography.caption1,
     color: colors.textSecondary,
     marginTop: 4,
   },

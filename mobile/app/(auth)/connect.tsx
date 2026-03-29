@@ -100,6 +100,7 @@ export default function ConnectScreen() {
           style={[styles.button, isLoading && styles.buttonDisabled]}
           onPress={isLoading ? undefined : handleSetup}
           disabled={isLoading}
+          accessibilityRole="button"
         >
           <Text style={styles.buttonText}>{isLoading ? 'Setting up...' : 'Setup'}</Text>
         </Pressable>
@@ -176,11 +177,11 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   footerText: {
-    ...typography.caption,
+    ...typography.caption1,
     color: colors.textSecondary,
   },
   link: {
-    ...typography.caption,
+    ...typography.caption1,
     color: colors.primary,
   },
 });

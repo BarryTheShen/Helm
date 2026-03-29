@@ -5,11 +5,17 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { colors, spacing, typography } from '@/theme/colors';
+import { useSDUIScreen } from '@/hooks/useSDUIScreen';
+import { SDUIScreenRenderer, type ActionDispatcher } from '@/components/sdui/SDUIRenderer';
+import type { SDUIAction } from '@/types/sdui';
+
+const handleAction: ActionDispatcher = (action: SDUIAction) => console.log('[SDUI action]', action);
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { user, serverUrl, logout } = useAuthStore();
   const { navigationMode, theme, setNavigationMode, setTheme } = useSettingsStore();
+  const { screen: sduiScreen } = useSDUIScreen('settings');
 
   const handleLogout = async () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -24,6 +30,11 @@ export default function SettingsScreen() {
       },
     ]);
   };
+
+  // If the AI has set an SDUI screen for the settings tab, render that instead
+  if (sduiScreen) {
+    return <SDUIScreenRenderer screen={sduiScreen} onAction={handleAction} />;
+  }
 
   return (
     <View style={styles.container}>

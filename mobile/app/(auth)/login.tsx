@@ -81,6 +81,7 @@ export default function LoginScreen() {
           style={[styles.button, isLoading && styles.buttonDisabled]}
           onPress={isLoading ? undefined : handleLogin}
           disabled={isLoading}
+          accessibilityRole="button"
         >
           <Text style={styles.buttonText}>{isLoading ? 'Signing in...' : 'Sign In'}</Text>
         </Pressable>

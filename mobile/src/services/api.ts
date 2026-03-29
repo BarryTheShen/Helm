@@ -153,8 +153,25 @@ export class ApiClient {
   }
 
   // Modules
-  async getModules(): Promise<Module[]> {
-    return this.request<Module[]>('/api/modules');
+  async getModules(): Promise<{ modules: Module[] }> {
+    return this.request<{ modules: Module[] }>('/api/modules');
+  }
+
+  async hideTab(tabId: string): Promise<void> {
+    return this.request<void>(`/api/modules/${tabId}`, { method: 'DELETE' });
+  }
+
+  async showTab(tabId: string): Promise<void> {
+    return this.request<void>(`/api/modules/${tabId}/show`, { method: 'POST' });
+  }
+
+  // SDUI
+  async getSDUIScreen(moduleId: string): Promise<{ screen: Record<string, unknown> | null; version?: number }> {
+    return this.request(`/api/sdui/${moduleId}`);
+  }
+
+  async deleteSDUIScreen(moduleId: string): Promise<void> {
+    return this.request<void>(`/api/sdui/${moduleId}`, { method: 'DELETE' });
   }
 
   // Chat history

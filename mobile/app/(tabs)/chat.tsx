@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,77 +10,84 @@ import {
 } from 'react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
-import { WebSocketService } from '@/services/websocket';
+import { useWebSocket } from '@/contexts/WebSocketContext';
+import { useSDUIScreen } from '@/hooks/useSDUIScreen';
 import { ApiClient } from '@/services/api';
 import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
 import { ErrorBanner } from '@/components/common/ErrorBanner';
+import { SDUIScreenRenderer, type ActionDispatcher } from '@/components/sdui/SDUIRenderer';
 import { colors, spacing, typography } from '@/theme/colors';
 import type { ChatMessage } from '@/types/api';
+import type { SDUIAction } from '@/types/sdui';
+
+const handleAction: ActionDispatcher = (action: SDUIAction) => {
+  console.log('[SDUI action]', action);
+};
 
 export default function ChatScreen() {
   const { token, serverUrl, logout } = useAuthStore();
   const { errorBanner, showError, hideError } = useUIStore();
+  const ws = useWebSocket();
+  const { screen: sduiScreen } = useSDUIScreen('chat');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const wsRef = useRef<WebSocketService | null>(null);
-  const apiRef = useRef<ApiClient | null>(null);
+  const [apiClient, setApiClient] = useState<ApiClient | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  // Ref to hold the latest handler so the ws.onMessage subscription (set up
+  // once when [ws] changes) always calls the current version and is never stale.
+  const wsHandlerRef = useRef<(msg: any) => void>(() => {});
 
   useEffect(() => {
     if (!token || !serverUrl) return;
 
-    // Initialize API client
-    apiRef.current = new ApiClient(serverUrl, token, logout);
+    const api = new ApiClient(serverUrl, token, logout);
+    setApiClient(api);
 
     // Load chat history
-    loadHistory();
+    api.getChatHistory().then((history) => {
+      setMessages([...history].reverse());
+      scrollToBottom();
+    }).catch(() => showError('Failed to load chat history'));
+  }, [token, serverUrl, logout]);
 
-    // Initialize WebSocket
-    const wsUrl = serverUrl.replace('http', 'ws') + '/ws';
-    wsRef.current = new WebSocketService(wsUrl, token);
+  // Subscribe to WebSocket messages via shared connection
+  useEffect(() => {
+    if (!ws) return;
 
-    wsRef.current.onConnect(() => {
+    const updateConnection = () => setIsConnected(ws.isConnected);
+    // Check initial connection state
+    updateConnection();
+
+    // Use the ref so hot-reload / re-renders don't leave a stale closure.
+    const unsubscribe = ws.onMessage((message: any) => {
+      wsHandlerRef.current(message);
+    });
+
+    const unsubConnect = ws.onConnect(() => {
       setIsConnected(true);
       hideError();
     });
 
-    wsRef.current.onDisconnect(() => {
+    const unsubDisconnect = ws.onDisconnect(() => {
       setIsConnected(false);
-      showError('Connection lost', () => wsRef.current?.connect());
+      showError('Connection lost', () => ws.connect());
     });
-
-    wsRef.current.onMessage((message) => {
-      handleWebSocketMessage(message);
-    });
-
-    wsRef.current.connect();
 
     return () => {
-      wsRef.current?.disconnect();
+      unsubscribe();
+      unsubConnect();
+      unsubDisconnect();
     };
-  }, [token, serverUrl]);
+  }, [ws]);
 
   const scrollToBottom = () => {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
   };
 
-  const loadHistory = async () => {
-    if (!apiRef.current) return;
-
-    try {
-      const history = await apiRef.current.getChatHistory();
-      // API returns newest-first (DESC). Reverse so oldest appears at top of chat.
-      setMessages([...history].reverse());
-      scrollToBottom();
-    } catch (error) {
-      showError('Failed to load chat history');
-    }
-  };
-
-  const handleWebSocketMessage = (message: any) => {
+  const handleWebSocketMessage = useCallback((message: any) => {
     if (message.type === 'chat_start') {
       setIsTyping(true);
     } else if (message.type === 'chat_token') {
@@ -104,6 +111,18 @@ export default function ChatScreen() {
         ];
       });
       scrollToBottom();
+    } else if (message.type === 'chat_message_replace') {
+      // Backend sends this to strip raw <tool_call> XML from the displayed message
+      // when using models that don't support native function-calling format.
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === message.message_id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], content: message.content };
+          return updated;
+        }
+        return prev;
+      });
     } else if (message.type === 'chat_complete') {
       setIsTyping(false);
       scrollToBottom();
@@ -111,15 +130,16 @@ export default function ChatScreen() {
       setIsTyping(false);
       showError(message.message || 'Chat error');
     } else if (message.type === 'tool_result') {
-      // Tool was executed — the follow-up LLM response will render the result in text
       setIsTyping(true);
     } else if (message.type === 'tool_error') {
       console.warn('Tool error:', message.tool, message.message);
     }
-  };
+  }, [showError]);
+  // Keep the ref in sync so the WS subscription always calls the latest handler.
+  wsHandlerRef.current = handleWebSocketMessage;
 
   const handleSend = () => {
-    if (!input.trim() || !wsRef.current) return;
+    if (!input.trim() || !ws) return;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -133,7 +153,7 @@ export default function ChatScreen() {
     setIsTyping(true);
     scrollToBottom();
 
-    wsRef.current.send({
+    ws.send({
       type: 'chat_message',
       content: input.trim(),
       conversation_id: 'default',
@@ -154,6 +174,11 @@ export default function ChatScreen() {
       </Card>
     </View>
   );
+
+  // If the AI has set an SDUI screen for the chat tab, render that instead
+  if (sduiScreen) {
+    return <SDUIScreenRenderer screen={sduiScreen} onAction={handleAction} />;
+  }
 
   return (
     <KeyboardAvoidingView

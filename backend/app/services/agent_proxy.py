@@ -20,6 +20,7 @@ Root-cause notes:
 """
 
 import json
+import re
 from uuid import uuid4
 
 import httpx
@@ -284,7 +285,53 @@ async def _stream_one_turn(
                     pending_tool_calls[idx]["arguments"] += fn.get("arguments", "")
 
     tool_calls_list = [v for _, v in sorted(pending_tool_calls.items())]
+
+    # Fallback: some models (e.g. stepfun/step-3.5-flash) don't use the OpenAI
+    # function-calling protocol and instead embed tool calls as <tool_call> XML
+    # inside the text content.  Detect, parse, and remove them so the agentic
+    # loop still fires tools and the user never sees raw XML in the chat.
+    if not tool_calls_list and "<tool_call>" in content:
+        cleaned_content, xml_tool_calls = _parse_xml_tool_calls(content)
+        if xml_tool_calls:
+            await manager.send(user_id, {
+                "type": "chat_message_replace",
+                "message_id": assistant_msg_id,
+                "content": cleaned_content,
+            })
+            content = cleaned_content
+            tool_calls_list = xml_tool_calls
+            finish_reason = "tool_calls"
+
     return content, tool_calls_list, finish_reason
+
+
+def _parse_xml_tool_calls(content: str) -> tuple[str, list[dict]]:
+    """Extract <tool_call>...</tool_call> blocks from model-generated text.
+
+    Some models (e.g. stepfun) embed tool invocations as XML in the response
+    text instead of using the OpenAI function-calling delta format.  This
+    helper strips those blocks and returns them as the same dict shape the
+    agentic loop expects: [{id, name, arguments}].
+    """
+    tool_calls: list[dict] = []
+
+    def _extract(match: re.Match) -> str:
+        try:
+            raw_json = match.group(1).strip()
+            payload = json.loads(raw_json)
+            name = payload.get("name", "")
+            args = payload.get("arguments", {})
+            tool_calls.append({
+                "id": str(uuid4()),
+                "name": name,
+                "arguments": json.dumps(args) if isinstance(args, dict) else str(args),
+            })
+        except (json.JSONDecodeError, AttributeError) as e:
+            logger.warning(f"Failed to parse XML tool call: {e!r} — raw={match.group(1)[:200]!r}")
+        return ""
+
+    cleaned = re.sub(r"<tool_call>(.*?)</tool_call>", _extract, content, flags=re.DOTALL)
+    return cleaned.strip(), tool_calls
 
 
 async def _execute_tool_safe(user_id: str, name: str, arguments_str: str) -> dict:
@@ -293,7 +340,8 @@ async def _execute_tool_safe(user_id: str, name: str, arguments_str: str) -> dic
 
     try:
         args = json.loads(arguments_str) if arguments_str.strip() else {}
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.warning(f"Tool {name} JSON decode error: {e} — arguments_str={repr(arguments_str[:200])}")
         args = {}
 
     logger.info(f"Executing tool: {name}({args}) for user={user_id}")
@@ -404,6 +452,151 @@ def _get_tool_definitions() -> list[dict]:
                         "limit": {"type": "integer", "default": 20},
                     },
                 },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "set_screen",
+                "description": (
+                    "Set the Server-Driven UI screen for any app tab. "
+                    "The frontend re-renders instantly via WebSocket — no code changes or rebuild needed. "
+                    "Call this to build any UI: dashboards, forms, calendars, lists, stats, or combinations. "
+                    "You can call it multiple times on the same module_id to update the screen. "
+                    "\n\nAvailable module_ids: home | chat | calendar | forms | alerts | modules | settings"
+                    "\n\nscreen must follow SDUIScreen schema:\n"
+                    "{ schema_version:1, module_id, title, sections:[{id, title?, component}] }\n\n"
+                    "Component types (use 'type' field):\n"
+                    "  heading     { content, level(1-3), align? }\n"
+                    "  text        { content, size(xs/sm/md/lg), bold?, italic?, color?, align? }\n"
+                    "  button      { label, variant(primary/secondary/destructive/ghost), action }\n"
+                    "  stats_row   { stats:[{label,value,change?,change_direction(up/down/neutral)}] }\n"
+                    "  stat        { label, value, change?, change_direction?, icon? }\n"
+                    "  list        { title?, items:[{id,title,subtitle?,badge?,icon?,right_text?,action?}] }\n"
+                    "  card        { title?, subtitle?, elevated? } + children[]\n"
+                    "  container   { direction(row/column), gap?, wrap? } + children[]\n"
+                    "  alert       { severity(info/warning/error/success), title, message, dismissible? }\n"
+                    "  progress    { value(0-100), max?, label?, color? }\n"
+                    "  calendar    { events:[{id,title,start(ISO),end(ISO),color?}] }\n"
+                    "  divider     { spacing? }\n"
+                    "  spacer      { size(xs/sm/md/lg/xl) }\n"
+                    "  badge       { label, color(blue/green/red/yellow/gray) }\n"
+                    "  image       { uri, aspect_ratio?, alt? }\n"
+                    "  form        { title?, fields:[{id,type,label,...}], submit_label?, submit_action }\n\n"
+                    "Action types: {type:navigate,screen} | {type:api_call,method,path,body?} | "
+                    "{type:dismiss} | {type:copy_text,text} | {type:open_url,url}\n\n"
+                    "Each component object must have: { type, id, props: {...} }\n"
+                    "Containers/cards also have: children: [component, ...]"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "module_id": {
+                            "type": "string",
+                            "description": "The tab to update: home|chat|calendar|forms|alerts|modules|settings",
+                        },
+                        "screen": {
+                            "type": "object",
+                            "description": "The complete SDUIScreen JSON object",
+                            "properties": {
+                                "schema_version": {"type": "integer", "enum": [1]},
+                                "module_id": {"type": "string"},
+                                "title": {"type": "string"},
+                                "sections": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {"type": "string"},
+                                            "title": {"type": "string"},
+                                            "component": {"type": "object"},
+                                        },
+                                        "required": ["id", "component"],
+                                    },
+                                },
+                            },
+                            "required": ["schema_version", "module_id", "title", "sections"],
+                        },
+                    },
+                    "required": ["module_id", "screen"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "delete_screen",
+                "description": (
+                    "Clear the AI-generated SDUI screen for a tab, returning it to its empty/default state. "
+                    "Use this to blank out a tab completely or reset before setting new content. "
+                    "Available module_ids: home|chat|calendar|forms|alerts|modules|settings"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "module_id": {"type": "string", "description": "The tab to clear"},
+                    },
+                    "required": ["module_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_screens",
+                "description": "List all SDUI screens currently set by the AI across all tabs",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "hide_tab",
+                "description": (
+                    "Hide a tab from the bottom navigation bar. "
+                    "The tab disappears from the nav bar instantly but its content and data are preserved. "
+                    "Valid tabs: home, chat, modules, calendar, forms, alerts, settings"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "tab_id": {
+                            "type": "string",
+                            "enum": ["home", "chat", "modules", "calendar", "forms", "alerts", "settings"],
+                            "description": "The tab to hide",
+                        },
+                    },
+                    "required": ["tab_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "show_tab",
+                "description": (
+                    "Restore a previously hidden tab to the bottom navigation bar. "
+                    "Valid tabs: home, chat, modules, calendar, forms, alerts, settings"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "tab_id": {
+                            "type": "string",
+                            "enum": ["home", "chat", "modules", "calendar", "forms", "alerts", "settings"],
+                            "description": "The tab to show",
+                        },
+                    },
+                    "required": ["tab_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_tabs",
+                "description": "List all app tabs and their current visibility status (visible or hidden in the nav bar)",
+                "parameters": {"type": "object", "properties": {}},
             },
         },
     ]

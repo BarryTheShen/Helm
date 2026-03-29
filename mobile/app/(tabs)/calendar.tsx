@@ -4,8 +4,11 @@ import { useAuthStore } from '@/stores/authStore';
 import { ApiClient } from '@/services/api';
 import { ErrorBanner } from '@/components/common/ErrorBanner';
 import { useUIStore } from '@/stores/uiStore';
-import { colors, spacing, typography, borderRadius } from '@/theme/colors';
+import { useSDUIScreen } from '@/hooks/useSDUIScreen';
+import { SDUIScreenRenderer, type ActionDispatcher } from '@/components/sdui/SDUIRenderer';
+import type { SDUIAction } from '@/types/sdui';
 import type { CalendarEvent } from '@/types/api';
+import { colors, spacing, typography, borderRadius } from '@/theme/colors';
 import {
   format,
   startOfMonth,
@@ -21,9 +24,12 @@ import { useFocusEffect } from 'expo-router';
 
 const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
+const handleAction: ActionDispatcher = (action: SDUIAction) => console.log('[SDUI action]', action);
+
 export default function CalendarScreen() {
   const { token, serverUrl, logout } = useAuthStore();
   const { errorBanner, showError, hideError } = useUIStore();
+  const { screen: sduiScreen } = useSDUIScreen('calendar');
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -83,6 +89,11 @@ export default function CalendarScreen() {
     if (!selectedDate) return [];
     return eventsByDate[format(selectedDate, 'yyyy-MM-dd')] ?? [];
   }, [selectedDate, eventsByDate]);
+
+  // If the AI has set SDUI content for the calendar tab, render that
+  if (sduiScreen) {
+    return <SDUIScreenRenderer screen={sduiScreen} onAction={handleAction} />;
+  }
 
   return (
     <View style={styles.container}>

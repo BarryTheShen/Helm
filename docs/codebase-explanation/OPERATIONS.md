@@ -241,9 +241,11 @@ DATABASE_URL=sqlite+aiosqlite:///./helm.db
 # ── Security (REQUIRED — change these) ──────────────────────────────
 # Generate SECRET_KEY:  python -c "import secrets; print(secrets.token_hex(32))"
 SECRET_KEY=change-me-generate-a-secure-random-key
+# NOTE: API keys entered by users are Fernet-encrypted using a key DERIVED
+# from SECRET_KEY via SHA-256. Changing SECRET_KEY makes all stored API keys
+# irrecoverable. Back up before rotating.
 
-# Generate ENCRYPTION_KEY: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-ENCRYPTION_KEY=change-me-32-byte-fernet-key-here
+# ENCRYPTION_KEY in config.py is not used by the app — do not rely on it.
 
 # Token lifetimes
 ACCESS_TOKEN_EXPIRE_HOURS=24

@@ -1,10 +1,11 @@
 /**
- * Forms screen — SDUI-driven.
+ * Home screen — fully SDUI-driven.
  *
- * The AI creates forms via helm_set_screen("forms", ...) using the "form"
- * component type with typed fields (text, email, checkbox, select, etc.).
- * Until the AI has set up a form, an empty state is shown instead of the
- * placeholder quick-form that was here before.
+ * The AI generates a SDUIScreen JSON via helm_set_screen("home", ...) and the
+ * screen updates in real-time over the shared WebSocket (WebSocketProvider in
+ * the tab layout).  No code changes or app rebuild needed.
+ *
+ * Empty state is shown when no screen has been set.
  */
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useSDUIScreen } from '@/hooks/useSDUIScreen';
@@ -12,10 +13,13 @@ import { SDUIScreenRenderer, type ActionDispatcher } from '@/components/sdui/SDU
 import type { SDUIAction } from '@/types/sdui';
 import { colors, spacing, typography } from '@/theme/colors';
 
-const handleAction: ActionDispatcher = (action: SDUIAction) => console.log('[SDUI action]', action);
+const handleAction: ActionDispatcher = (action: SDUIAction) => {
+  // Future: dispatch navigate → Expo Router, api_call → fetch, etc.
+  console.log('[SDUI action]', action);
+};
 
-export default function FormsScreen() {
-  const { screen, loading, error, refresh } = useSDUIScreen('forms');
+export default function HomeScreen() {
+  const { screen, loading, error, refresh } = useSDUIScreen('home');
 
   if (loading) {
     return (
@@ -37,14 +41,14 @@ export default function FormsScreen() {
   if (!screen) {
     return (
       <View style={styles.empty}>
-        <Text style={styles.emptyIcon}>📝</Text>
-        <Text style={styles.emptyTitle}>Forms</Text>
+        <Text style={styles.emptyIcon}>🏠</Text>
+        <Text style={styles.emptyTitle}>Home</Text>
         <Text style={styles.emptyBody}>
-          This screen is empty.{'\n'}
-          Ask the AI to create a form for you.
+          Ask the AI to set up your Home screen.{'\n'}
+          It can display calendars, stats, tasks, forms, and more — in any layout you describe.
         </Text>
         <Text style={styles.emptyHint}>
-          Try: "Create a feedback form with name, rating, and comments fields"
+          Try: "Set up my home screen with a morning greeting, upcoming events, and a quick stats row"
         </Text>
       </View>
     );
@@ -63,4 +67,5 @@ const styles = StyleSheet.create({
   errorText: { ...typography.body, color: colors.error, textAlign: 'center', marginBottom: spacing.sm },
   retryLink: { ...typography.body, color: colors.primary, textDecorationLine: 'underline' },
 });
+
 

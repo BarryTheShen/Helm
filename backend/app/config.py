@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # Security
     secret_key: str = "dev-secret-key-change-in-production"
     encryption_key: str = ""
-    access_token_expire_hours: int = 24
+    access_token_expire_hours: int = 720  # 30 days
     refresh_token_expire_days: int = 30
 
     # Server

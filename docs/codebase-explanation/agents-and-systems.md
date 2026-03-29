@@ -7,7 +7,7 @@ Helm has four "intelligence" systems beyond basic CRUD:
 1. **AI Agent Proxy** — Connects to any OpenAI-compatible LLM (GPT-4o, Claude, local models). Streams responses in real-time and can call tools (calendar, notifications, etc.) mid-conversation.
 2. **MCP Server** — Exposes Helm's tools to external AI agents via the MCP standard protocol. Any MCP-compatible agent can read/write calendar, send notifications, etc.
 3. **Workflow Engine** — Simple automation: "When X happens → do Y". Supports cron schedules and event triggers. Runs automatically via APScheduler.
-4. **Standalone PydanticAI Agent** (`agent/`) — An independent **developer/admin** agent. Runs outside the backend. Connects to Helm's MCP server over HTTP and can read/write the React Native frontend source code. Three modes: `--web` (pydantic-ai's built-in browser UI), REPL, one-shot. Not the same agent as the Agent Proxy — these are completely separate systems.
+4. **Standalone PydanticAI Agent** (`agent/`) — An independent **developer/admin** agent. Runs outside the backend. Connects to Helm's MCP server over HTTP and can read/write the React Native frontend source code. Three modes: `--web` (local `chat_ui.html`-based browser chat), REPL, one-shot. Not the same agent as the Agent Proxy — these are completely separate systems.
 
 ---
 
@@ -29,12 +29,12 @@ User → WebSocket → Agent Proxy → OpenAI API (streaming) → We$bSocket →
 3. Loads last 20 chat messages for context
 4. Saves user message to DB
 5. Makes a streaming POST to the LLM's `/chat/completions` endpoint
-6. As tokens arrive, forwards them to the user via WebSocket
-7. If the LLM calls a tool (e.g., "read_calendar"), the Agent Proxy:
-   - Parses the tool call from the stream
-   - Executes it locally via `execute_tool()`
-   - Sends the result back to the user via WebSocket
-8. When done, saves the full assistant response to DB
+6. As tokens arrive, forwards them to the user via WebSocket (`chat_token` events)
+7. If the LLM calls a tool, the Agent Proxy: parses the tool call (JSON from `tool_calls[]` in the stream, or XML fallback via `_parse_xml_tool_calls()`), executes it via `_execute_tool_safe()`, sends the result to the user via `tool_result` WebSocket event
+8. **Multi-turn loop**: After tool execution, the result is injected back into the message history and the LLM is called again (up to `_MAX_TOOL_TURNS=5` iterations)
+9. Reasoning tokens (`delta.reasoning`) are stripped from the streamed output and not forwarded to the user
+10. If the response contains XML tool call markup, it is stripped and the cleaned message is sent via `chat_message_replace` WebSocket event
+11. When done, saves the full assistant response to DB
 
 **Configurable per-user:**
 - Provider (OpenAI, compatible APIs)
@@ -51,19 +51,27 @@ The MCP (Model Context Protocol) server is a separate sub-application mounted at
 
 **Purpose:** Let external AI agents (like Claude Desktop, custom agents, etc.) call Helm's tools programmatically.
 
-**Available tools (9):**
+**Available tools (17):**
 
 | Tool | What it does |
-|------|-------------|
+|------|--------------|
 | `helm_read_calendar` | Query events by date range |
 | `helm_create_event` | Create a new calendar event |
 | `helm_update_event` | Modify an existing event |
 | `helm_delete_event` | Remove an event |
+| `helm_delete_all_events` | Delete all events for the user |
+| `helm_read_all_calendar` | Read all events (no date filter) |
 | `helm_send_notification` | Push a notification to the user's app |
 | `helm_get_chat_history` | Read recent chat messages |
 | `helm_send_chat_message` | Send a message as the assistant |
-| `helm_update_module_state` | Push SDUI state to a module |
+| `helm_update_module_state` | Push SDUI state to a module (legacy key) |
 | `helm_get_form_data` | Get form submissions |
+| `helm_set_screen` | Set SDUI screen JSON for a module |
+| `helm_delete_screen` | Delete the SDUI screen for a module |
+| `helm_list_screens` | List all active SDUI screens |
+| `helm_hide_tab` | Hide a tab from the bottom navigator |
+| `helm_show_tab` | Show a previously hidden tab |
+| `helm_list_tabs` | List tabs and their visibility |
 
 **Architecture note:** The actual tool logic lives in `backend/app/mcp/tools.py` and is shared between the Agent Proxy (internal calls) and the MCP Server (external calls). This means the same code handles both internal LLM tool calls and external agent tool calls.
 
@@ -121,7 +129,7 @@ Browse available models and their free tier status at: https://openrouter.ai/mod
 
 #### What the agent can do
 
-- Connect to the Helm MCP server (all 9 tools) via HTTP + Bearer token
+- Connect to the Helm MCP server (all 17 tools) via HTTP + Bearer token
 - Read any file inside `mobile/` (the React Native frontend)
 - Write / overwrite any file inside `mobile/` to programmatically edit the frontend
 - List files in any `mobile/` subdirectory
@@ -131,10 +139,10 @@ Browse available models and their free tier status at: https://openrouter.ai/mod
 
 ```
 agent/helm_agent.py (no backend imports)
-  ├── Three modes: --web (pydantic-ai built-in web UI), REPL, one-shot
+  ├── Three modes: --web (local chat_ui.html), REPL, one-shot
   ├── _build_agent()  — shared agent factory used by all modes
   ├── _SYSTEM_PROMPT  — shared system prompt string
-  ├── MCPServerStreamableHTTP → Helm /mcp (9 Helm MCP tools)
+  ├── MCPServerStreamableHTTP → Helm /mcp (17 Helm MCP tools)
   └── Local filesystem tools (path-validated to mobile/ only)
         read_frontend_file(relative_path)
         write_frontend_file(relative_path, content)
@@ -143,12 +151,11 @@ agent/helm_agent.py (no backend imports)
 
 #### Web UI details
 
-The `--web` mode uses `pydantic_ai.ui._web.create_web_app(agent)` — pydantic-ai's official built-in Starlette app:
-- Serves the official `@pydantic/ai-chat-ui` React frontend from CDN
-- Cached locally in `~/.cache/pydantic-ai/web-ui/` after first download
-- MCP and tool connections are managed per-request by pydantic-ai's `Agent.iter()`
-- API under `/api`, UI at `/`; run with uvicorn
-- No custom HTML, no FastAPI, no SSE plumbing — all handled by pydantic-ai
+The `--web` mode serves `agent/chat_ui.html` — a local, standalone HTML file containing a minimal chat interface. It does NOT use pydantic-ai's CDN-hosted web app. The backend is a simple FastAPI + SSE server (`/chat` POST endpoint + `/stream` SSE stream) implemented inline in `helm_agent.py`. This means:
+- Works offline once the Python deps are installed
+- No CDN dependency
+- Streams tokens via SSE to the browser
+- History is kept in-memory per server process
 
 #### Security
 

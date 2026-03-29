@@ -1,9 +1,10 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import type { CalendarProps } from '@/types/sdui';
+import type { CalendarComponent as CalendarData } from '@/types/sdui';
 import { Card } from '@/components/common/Card';
 import { colors, spacing, typography } from '@/theme/colors';
 
-interface CalendarComponentProps extends CalendarProps {
+type CalendarComponentProps = CalendarData['props'] & {
+  onEventPress?: (id: string) => void;
   onAction?: (action: string, data: any) => void;
 }
 
@@ -45,7 +46,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    ...typography.h2,
+    ...typography.title2,
     color: colors.text,
     marginBottom: spacing.md,
   },
@@ -68,11 +69,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   eventTime: {
-    ...typography.caption,
+    ...typography.caption1,
     color: colors.textSecondary,
   },
   allDayBadge: {
-    ...typography.caption,
+    ...typography.caption1,
     color: colors.primary,
     marginTop: 4,
   },

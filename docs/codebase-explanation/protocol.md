@@ -71,12 +71,15 @@ App                     Backend                    LLM
 | `pong` | B→F | Heartbeat response |
 | `chat_start` | B→F | LLM processing started |
 | `chat_token` | B→F | Single streamed token from LLM |
-| `chat_complete` | B→F | Full response with complete content |
+| `chat_message_replace` | B→F | Replaces full message content (used after XML tool call stripping) |
+| `chat_complete` | B→F | Full response finalised |
 | `chat_error` | B→F | Error during LLM processing |
 | `tool_result` | B→F | MCP tool call result |
 | `tool_error` | B→F | MCP tool call failed |
 | `notification` | B→F | Push notification |
-| `module_state_update` | B→F | SDUI state change for a module |
+| `sdui_screen_update` | B→F | New SDUI screen set for a module |
+| `tabs_updated` | B→F | AI changed tab visibility config |
+| `module_state_update` | B→F | Module state change (legacy) |
 | `ack` | B→F | Action acknowledged |
 | `error` | B→F | Generic error |
 
@@ -92,7 +95,7 @@ App                     Backend                    LLM
 
 Mounted at `/mcp` on the FastAPI app. Uses the MCP (Model Context Protocol) standard for AI agent tool calling.
 
-**Available MCP tools:**
+**Available MCP tools (17):**
 
 | Tool | Purpose |
 |------|---------|
@@ -100,11 +103,19 @@ Mounted at `/mcp` on the FastAPI app. Uses the MCP (Model Context Protocol) stan
 | `helm_create_event` | Create calendar event |
 | `helm_update_event` | Update calendar event |
 | `helm_delete_event` | Delete calendar event |
+| `helm_delete_all_events` | Delete all calendar events for user |
+| `helm_read_all_calendar` | Read all calendar events (no date filter) |
 | `helm_send_notification` | Send push notification |
 | `helm_get_chat_history` | Get recent messages |
 | `helm_send_chat_message` | Send message as assistant |
-| `helm_update_module_state` | Update SDUI module state |
+| `helm_update_module_state` | Update module state (legacy key) |
 | `helm_get_form_data` | Get form submission data |
+| `helm_set_screen` | Set SDUI screen for a module |
+| `helm_delete_screen` | Delete SDUI screen for a module |
+| `helm_list_screens` | List all active SDUI screens |
+| `helm_hide_tab` | Hide a tab from the bottom navigator |
+| `helm_show_tab` | Show a previously hidden tab |
+| `helm_list_tabs` | List tabs and their visibility status |
 
 The same tool implementations are shared between:
 - The **Agent Proxy** (called directly when the LLM makes tool calls during chat)
@@ -338,45 +349,45 @@ Tool calling follows the MCP specification:
 
 ### SDUI JSON Schema
 
+SDUI screens are stored per-user per-module in `module_states` (key: `sdui__<module_id>`). The actual screen payload:
+
 ```typescript
-interface SDUIComponent {
-  type: 'calendar' | 'form' | 'alert' | 'list' | 'card' | 'chart' | 'map' | 'text' | 'image' | 'button';
+interface SDUIScreen {
+  schema_version: 1;
+  module_id: string;        // e.g. 'home', 'chat', 'calendar'
+  title: string;
+  sections: SDUISection[];
+}
+
+interface SDUISection {
   id: string;
-  props: Record<string, any>;
-  children?: SDUIComponent[];  // Recursive nesting
+  component: SDUIComponent;
+}
+
+interface SDUIComponent {
+  type: 'calendar' | 'form' | 'alert' | 'list' | 'card' | 'text' | 'heading'
+       | 'button' | 'icon_button' | 'container' | 'badge' | 'stat' | 'stats_row'
+       | 'image' | 'progress' | 'divider' | 'spacer';
+  id?: string;
+  props?: Record<string, any>;
+  children?: SDUIComponent[];
+  actions?: SDUIAction[];
+}
+
+interface SDUIAction {
+  type: 'navigate' | 'api_call' | 'open_url' | 'dismiss' | 'refresh';
+  // type-specific fields
 }
 ```
 
-**Calendar props:**
-```json
-{
-  "events": [{"id": "...", "title": "Meeting", "start": "ISO", "end": "ISO", "allDay": false, "color": "#007AFF"}],
-  "view": "month"
-}
-```
-
-**Form props:**
-```json
-{
-  "fields": [{"id": "name", "type": "text", "label": "Name", "placeholder": "...", "required": true}],
-  "submitLabel": "Submit"
-}
-```
-
-**Alert props:**
-```json
-{
-  "severity": "info|warning|error|success",
-  "title": "Title",
-  "message": "Body text",
-  "dismissible": true
-}
-```
+**⚠️ SDUI actions are NEVER executed** — `onAction` handlers only `console.log`. No action type dispatches to real functionality.
 
 ### Known Protocol Issues
 
-1. **No conversation_id support** — Backend agent proxy ignores `conversation_id` when loading history. All messages for a user are in one flat list.
+1. **SDUI actions never execute** — `onAction` handlers in `SDUIRenderer.tsx` only call `console.log`. `navigate`, `api_call`, `open_url`, `dismiss`, `refresh` are all non-functional.
 
-2. **No tool call display** — When the LLM makes tool calls, the frontend logs them to console but doesn’t display anything to the user. The tool calling protocol works backend→LLM but the UI feedback loop is incomplete.
+2. **No conversation_id support** — Backend agent proxy ignores `conversation_id` when loading history. All messages for a user are in one flat list.
 
-3. **Calendar API query params** — Frontend sends `?start=`/`?end=` but backend expects `?start_date=`/`?end_date=`.
+3. **No tool call UI feedback** — When the LLM makes tool calls, the frontend logs `tool_result`/`tool_error` to console but shows nothing to the user.
+
+4. **Server session not invalidated on logout** — Frontend only clears local token. `DELETE /auth/logout` is never called by the app.

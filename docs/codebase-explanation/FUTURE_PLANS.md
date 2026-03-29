@@ -1,37 +1,61 @@
 # Helm — Future Plans
 
 This document captures planned improvements and features beyond the MVP.
-Items are grouped by area. None of these are implemented yet.
+Items are grouped by area.
+
+---
+
+## Current State (as of 2026-03)
+
+What has already been built:
+
+- **Backend**: FastAPI + SQLAlchemy async + SQLite. Auth (session JWT), calendar, notifications, workflows (cron scheduler), agent proxy (multi-turn, reasoning model, XML fallback), MCP server (17 tools), SDUI screen storage, tab visibility control.
+- **Frontend**: Expo SDK 55 + Expo Router. 7 tabs (Home, Chat, Modules, Calendar, Alerts, Settings). Singleton WebSocket (`WebSocketContext`). AI-controlled tab visibility (`tabsStore`). SDUI rendering engine (`SDUIRenderer.tsx`) with 19 component types over all tabs. `useSDUIScreen` hook for live SDUI updates per module.
+- **Standalone Agent**: PydanticAI agent with local browser UI (`chat_ui.html`), REPL, and one-shot modes. Connects to backend MCP + can read/write mobile source.
+
+**Known gaps that need fixing before feature work:**
+1. SDUI actions (`navigate`, `api_call`, `open_url`, etc.) never execute — `onAction` is `console.log` only
+2. Four dead SDUI component files (`AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx`) that should be deleted
+3. `logout()` doesn't call `DELETE /auth/logout` — server sessions never invalidated
+4. `markNotificationRead` never called — no UI to mark alerts read
+5. `handleModulePress` stub — module taps do nothing
+6. `fire_trigger()` never called from any router — event-based workflows are dead code
+7. Calendar is read-only — no create/edit/delete UI
+8. `conversation_id: 'default'` hardcoded — no multi-conversation support
 
 ---
 
 ## 1. Fully Customizable UI
 
-**Current state (MVP):** The app has a fixed set of tabs — Chat, Modules, Calendar,
-Forms, Alerts, and Settings — each with a minimal, hardcoded look. Icons are
-placeholder emoji, colors are a single dark theme, and there is no user-facing
-way to change layouts or styles.
+**Current state:** SDUI is live — the AI can push screens to all 7 tabs via `helm_set_screen`. Tab visibility can be controlled via `helm_hide_tab`/`helm_show_tab`. Component rendering works for 19 types. **The missing piece: SDUI actions never execute** (navigate, api_call, open_url, etc. all console.log only).
 
-**Planned improvements:**
+**Planned improvements (still needed):**
+
+### 1.0 SDUI Action Dispatcher (HIGHEST PRIORITY)
+- Wire `onAction` in `SDUIRenderer.tsx` to actually execute action types:
+  - `navigate` → `router.push(action.screen)`
+  - `api_call` → call `ApiClient.request(action.method, action.endpoint, action.body)`
+  - `open_url` → `Linking.openURL(action.url)`
+  - `dismiss` → close modal/clear screen
+  - `refresh` → re-fetch `useSDUIScreen`
+- This is what transforms SDUI from "renders UI" to "renders interactive UI"
 
 ### 1.1 Component Theme System
 - Replace hardcoded `colors.ts` constants with a dynamic theme object stored in the
   backend per user or per tenant.
 - Allow AI agent to push theme updates (primary color, fonts, spacing scale) via an
   MCP `update_theme` tool that triggers a live UI refresh.
-- Support light mode / dark mode / custom theme presets.
+- **Fix first**: `userInterfaceStyle: "light"` is hardcoded in `app.json` — wire up the `settingsStore.theme` field.
 
 ### 1.2 Tab & Navigation Customization
-- Let users (or the AI agent) reorder, rename, and hide tabs.
-- Support custom tab icons — either from a library (e.g., SF Symbols, Material Icons)
-  or uploaded SVG.
-- Store tab configuration in `module_state` under a reserved `navigation` module type.
+- ✅ AI can hide/show tabs via `helm_hide_tab`/`helm_show_tab` MCP tools
+- Still needed: Let users reorder tabs, custom icons, drawer navigation mode
+- Store tab reorder config in `module_states` (extend `_tabs_config`)
 
 ### 1.3 Widget & Card Builder
-- Each tab can contain a configurable list of **widgets** (cards, charts, counters,
-  feeds) rather than one hardcoded screen.
-- Widget config is stored as JSON in the backend and rendered by the SDUI renderer.
-- The AI agent can rearrange, add, or remove widgets without a code deploy.
+- Each tab can contain a configurable list of **widgets** via SDUI sections
+- Widget config is stored as JSON in the backend — already architected via `helm_set_screen`
+- Still needed: a builder UI to create SDUI layouts without talking to AI
 
 ---
 
@@ -39,7 +63,7 @@ way to change layouts or styles.
 
 **Current state (MVP):** The only way to modify what appears in the app is to either
 edit TypeScript source files directly or instruct the Helm Agent (AI) to edit them
-via `write_frontend_file`.
+via `write_frontend_file` or use the MCP `helm_set_screen` tool.
 
 **Planned improvements:**
 
@@ -62,19 +86,15 @@ via `write_frontend_file`.
 
 ### 2.4 Human vs. AI Edit Mode
 - The editor has two modes:
-  - **Human mode** — visual, WYSIWYG, no code. For users who find AI too expensive
-    or just prefer direct control.
-  - **AI mode** — instruct the Helm Agent in natural language. The AI uses MCP tools
-    to apply the same config changes that the human editor would.
+  - **Human mode** — visual, WYSIWYG, no code.
+  - **AI mode** — instruct the Helm Agent in natural language.
 - Both modes operate on the same underlying JSON config, so results are identical.
 
 ---
 
 ## 3. MCP Server Improvements
 
-**Current state (MVP):** The MCP server exposes 9 tools with minimal descriptions
-and limited error handling. Tool naming is inconsistent. Some tools have poor
-parameter documentation, making it harder for AI agents to use them correctly.
+**Current state:** The MCP server has 17 tools. Added since last review: SDUI screen management, tab visibility, bulk calendar operations. Tool naming uses `helm_` prefix throughout.
 
 **Planned improvements:**
 
@@ -82,141 +102,126 @@ parameter documentation, making it harder for AI agents to use them correctly.
 - Rewrite all tool docstrings to follow a consistent `What / When to use / Example`
   format.
 - Add concrete examples in docstrings so the model can pattern-match.
-- Make parameter descriptions more explicit about format constraints (e.g.,
-  `start_time: ISO 8601 datetime string, e.g. '2026-03-28T09:00:00'`).
 
-### 3.2 Consistent Tool Naming
-- Rename all tools to follow a consistent verb-noun pattern:
-  - `calendar_list_events`, `calendar_create_event`, `calendar_update_event`,
-    `calendar_delete_event`
-  - `notification_send`, `notification_list`
-  - `chat_send_message`, `chat_list_messages`
-  - `module_update_state`, `module_get_state`
-  - `form_get_schema`, `form_submit`
+### 3.2 Wire `fire_trigger()` in Routers
+- `workflow_engine.fire_trigger()` exists but NO router calls it.
+- Wire it up: calendar routers should call `fire_trigger('event_created', ...)` on event creation, etc.
+- This makes event-driven workflows actually work.
 
 ### 3.3 Structured Error Responses
 - Tools should return structured errors with codes (e.g., `NOT_FOUND`, `INVALID_INPUT`)
   rather than raising unhandled exceptions.
-- Agent can handle these gracefully without crashing.
 
-### 3.4 Tool Pagination & Filtering
-- `calendar_list_events` should support pagination for large calendars.
-- `chat_list_messages` should support cursor-based pagination.
-
-### 3.5 New Tools
+### 3.4 New Tools (planned)
 - `calendar_find_free_slot` — suggest a free time slot given duration and constraints.
 - `notification_dismiss` — mark a notification as read/dismissed.
-- `module_list` — list all module types and their current state versions.
 - `task_create` / `task_complete` — basic task tracking module.
-- `file_read` / `file_write` for a user-scoped file storage area.
 
 ---
 
 ## 4. Forms — SDUI-Driven Dynamic Forms
 
-**Current state (MVP):** The Forms tab is a hardcoded static form (Name, Email,
-Comments). Submitting it only logs to the console. There is no backend integration.
+**Current state:** The Forms tab has been replaced by SDUI — any tab can render a form via the `form` SDUI component. Static placeholder screen removed. Form rendering works but submission only logs to console (SDUI actions).
 
 **Planned improvements:**
 
-### 4.1 Form Schema from Backend
-- Forms are defined as JSON schemas stored in the backend under `module_state`
-  type `forms`.
-- The frontend reads the schema on mount and renders the appropriate input types
-  (text, number, date, dropdown, checkbox, multi-select, file upload).
+### 4.1 Form Submission Action
+- Wire the SDUI `api_call` action in `FormRenderer` to POST the form data to a backend endpoint.
+- Store submissions in the DB.
 
 ### 4.2 AI-Generated Forms
-- The Helm Agent can create custom forms via an MCP `form_define` tool:
-  ```
-  "Create a bug report form with fields: title (required text),
-   severity (dropdown: low/medium/high), steps_to_reproduce (textarea)"
-  ```
-- The form appears live in the app without any code change.
+- The Helm Agent can create custom forms via `helm_set_screen` with a `form` component payload.
 
-### 4.3 Form Submissions to Backend
-- Submissions are POSTed to `/api/forms/{form_id}/submit` and stored in the DB.
-- The AI agent can query submissions via a `form_list_submissions` MCP tool.
-- Trigger workflows on submission (e.g., send a notification to admin).
+### 4.3 Submission Storage & Query
+- `GET /api/forms/{form_id}/submissions` endpoint.
+- AI agent can query submissions via MCP.
+- Trigger workflows on submission.
 
 ---
 
 ## 5. Alerts — Real-Time Push Notifications
 
-**Current state (MVP):** The Alerts tab shows a list of notifications fetched from
-the REST API. There is no real-time push — you have to navigate away and back to
-see new alerts.
+**Current state:** WebSocket push for notifications partially works — the `notification` WS event exists. The Alerts tab polls REST on mount but doesn't listen for live WS events. `markNotificationRead` API method exists but is never called.
 
 **Planned improvements:**
 
-### 5.1 WebSocket Push to Mobile
-- The mobile app WebSocket connection (already partially implemented) should listen
-  for `notification` events and immediately add them to the alerts list with an
-  in-app banner.
+### 5.1 Wire Real-Time Alerts
+- `alerts.tsx` should subscribe to WS `notification` events and append them live.
+- Show in-app banner for new notifications.
 
-### 5.2 Notification Actions
-- Notifications support an `actions` array in the schema. The UI should render
-  action buttons (e.g., "Approve", "Dismiss", "Open") that send callbacks to the
-  backend.
+### 5.2 Mark as Read
+- Wire `markNotificationRead(id)` call when user taps a notification.
+- "Mark all read" button.
 
-### 5.3 Mobile Push (APNs / FCM)
-- Integrate Expo Notifications for native push when the app is in background.
-- Requires EAS build and Apple/Google push credentials.
+### 5.3 Notification Actions
+- Render `actions` array on notification cards as tappable buttons.
 
-### 5.4 Notification Grouping & Filtering
-- Group notifications by type or source.
-- Allow marking as read / archive / dismiss.
-- Filter by severity (info, warning, error).
+### 5.4 Mobile Push (APNs / FCM)
+- Integrate Expo Notifications for native push when app is in background.
 
 ---
 
 ## 6. Authentication & Multi-User
 
-**Current state (MVP):** Single-user, session-based JWT auth. No multi-tenancy.
+**Current state:** Single-user session JWT. `logout()` doesn't invalidate server session.
 
 **Planned improvements:**
 
-- Multiple user accounts with role-based access (admin vs. user).
-- OAuth 2.0 providers (Google, GitHub) as login options.
-- Per-user isolated data — calendar, notifications, module states, forms.
-- Shared workspaces (family, team) with permission scopes.
+- Fix `logout()` to call `DELETE /auth/logout`.
+- Multiple user accounts with role-based access.
+- OAuth 2.0 providers (Google, GitHub).
+- Per-user isolated data.
 
 ---
 
-## 7. Plugin / Connector System
+## 7. Calendar — Full CRUD
+
+**Current state:** Calendar is read-only. Fetch and display works. No create/edit/delete UI.
+
+**Planned improvements:**
+- Create event modal (title, date/time, all-day toggle, color picker).
+- Tap event to edit/delete.
+- Month grid view (current is list view).
+- AI creates/edits events via MCP tools and pushes SDUI updates.
+
+---
+
+## 8. Plugin / Connector System
 
 **Current state (MVP):** The backend is a monolith with hardcoded integrations.
 
 **Planned improvements:**
-
-- Plugin architecture: each connected service (Google Calendar, GitHub, Slack,
-  weather, email, etc.) is a self-contained connector with its own MCP tools.
+- Plugin architecture: each connected service (Google Calendar, GitHub, Slack, weather, email, etc.) is a self-contained connector with its own MCP tools.
 - Connectors can be enabled/disabled per user.
-- Community connector registry (similar to npm, pip) for sharing connectors.
 - OAuth flow UI for connectors that require user authorization.
 
 ---
 
-## 8. Agent Customization
+## 9. Agent Customization
 
 **Planned improvements:**
-
-- Per-user system prompt customization ("always respond in Spanish", "use a
-  casual tone").
-- Model selection UI — let users choose from available OpenRouter models.
-- Agent memory — persistent vector-store-backed long-term memory for context
-  across sessions.
-- Multi-agent support — run specialized agents for different domains (calendar vs.
-  code vs. research) and route tasks automatically.
+- Per-user system prompt customization.
+- Model selection UI in settings (already has the agent config API, needs frontend).
+- Agent memory — persistent vector-store-backed long-term memory.
+- Multi-agent routing — specialized agents for different domains.
+- Multi-conversation support (replace hardcoded `conversation_id: 'default'`).
 
 ---
 
-## 9. Performance & Scale
+## 10. Admin Dashboard
 
 **Planned improvements:**
+- Web dashboard at `/admin` for server operators.
+- View all users, sessions, workflow runs, MCP call logs.
+- Manage connectors and global agent config defaults.
 
-- Switch from SQLite to PostgreSQL for production deployments.
-- Add Redis for WebSocket session state and caching.
-- Horizontal scaling with sticky sessions or Redis pub/sub for WebSocket.
+---
+
+## 11. Performance & Scale
+
+**Planned improvements:**
+- Switch from SQLite to PostgreSQL for production.
+- Redis for WebSocket session state and caching.
 - Background job queue (Celery or ARQ) for long-running agent tasks.
 
 ---
@@ -225,11 +230,17 @@ see new alerts.
 
 | Priority | Feature | Why |
 |----------|---------|-----|
-| P0 | Real-time WebSocket push to Alerts | Core "live AI" experience |
-| P0 | MCP tool naming & descriptions rewrite | AI accuracy depends on this |
-| P1 | SDUI-driven dynamic forms | Replaces static MVP stub |
-| P1 | Visual UI editor (human mode) | Non-AI users need this |
-| P2 | Calendar grid view | Current list view is functional but basic |
-| P2 | Component theme system | Personalization |
+| P0 | **SDUI action dispatcher** | Core "interactive SDUI" — navigate/api_call/open_url actions do nothing now |
+| P0 | **Delete dead SDUI component files** | Dead code causes confusion; `SDUIRenderer` renders inline |
+| P0 | **Fix logout** (call DELETE /auth/logout) | Security — server sessions never invalidated |
+| P1 | Wire `fire_trigger()` in calendar/chat routers | Event-driven workflows are dead without this |
+| P1 | Wire `markNotificationRead` in `alerts.tsx` | Basic UX hygiene |
+| P1 | Calendar create/edit/delete UI | Calendar is currently read-only |
+| P2 | Real-time WebSocket push to Alerts | Core "live AI" experience |
+| P2 | Module tap handler (`handleModulePress`) | Tapping a module does nothing |
+| P2 | Multi-conversation support | Remove `conversation_id: 'default'` hardcode |
+| P3 | Dark mode | Tokens exist, need `Appearance.getColorScheme()` wiring |
+| P3 | Visual UI editor (human mode) | Non-AI users need direct control |
 | P3 | Plugin / connector system | Extensibility |
-| P3 | Multi-user + OAuth | Production-readiness |
+| P4 | Multi-user + OAuth | Production-readiness |
+| P4 | Admin dashboard | Operations visibility |

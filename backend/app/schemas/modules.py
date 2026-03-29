@@ -36,3 +36,9 @@ class DeviceConfigUpdate(BaseModel):
     tab_bar_modules: list[str] | None = None
     default_module: str | None = None
     nav_mode: str | None = None
+
+
+class SDUIScreenRequest(BaseModel):
+    """Body for POST /api/sdui/{module_id} — the AI sends a complete SDUIScreen JSON."""
+    screen: dict[str, Any]
+

@@ -101,10 +101,15 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | PUT | `/api/workflows/{id}` | Yes | Update workflow |
 | DELETE | `/api/workflows/{id}` | Yes | Delete workflow |
 | GET | `/api/modules` | Yes | List available modules |
-| GET | `/api/modules/{id}/state` | Yes | Get module SDUI state |
-| POST | `/api/modules/{id}/action` | Yes | Trigger module action |
+| DELETE | `/api/modules/{id}` | Yes | Hide tab from navigation |
+| POST | `/api/modules/{id}/show` | Yes | Show tab in navigation |
+| GET | `/api/modules/{id}/state` | Yes | Get module state |
+| POST | `/api/modules/{id}/action` | Yes | Trigger module action (stub) |
 | GET | `/api/devices/config` | Yes | Get device tab config |
 | PUT | `/api/devices/config` | Yes | Update device config |
+| GET | `/api/sdui/{module_id}` | Yes | Get AI-generated SDUI screen |
+| POST | `/api/sdui/{module_id}` | Yes | Set AI-generated SDUI screen |
+| DELETE | `/api/sdui/{module_id}` | Yes | Clear AI-generated SDUI screen |
 | GET | `/api/agent/config` | Yes | Get AI agent config |
 | PUT | `/api/agent/config` | Yes | Update AI agent config |
 | WS | `/ws?token=...` | Yes (query param) | Real-time WebSocket |
@@ -166,7 +171,7 @@ All models use:
 
 **Workflow** — Trigger types: event_created, event_updated, form_submitted, schedule, message_received. `trigger_config` holds cron expressions for scheduled workflows. `action_config` holds tool name + args.
 
-**AgentConfig** — Per-user AI provider config. Fields: provider, model, api_key_encrypted (NOTE: currently stored as plaintext — marked as TODO for encryption), base_url, system_prompt, temperature, max_tokens.
+**AgentConfig** — Per-user AI provider config. Fields: provider, model, `api_key_encrypted` (encrypted with Fernet derived from `SECRET_KEY` via SHA-256 — decrypt in `services/agent_proxy.py` via `_decrypt_api_key` imported from `routers/agent_config.py`), base_url, system_prompt, temperature, max_tokens, is_active. **NOTE:** Changing `SECRET_KEY` renders all stored API keys irrecoverable.
 
 **ModuleState** — Stores SDUI state per module per user. Versioned with integer increment.
 
@@ -226,7 +231,15 @@ Error handling:
 - Network error → sends connection error message
 - General exception → sends generic error
 
-Tool definitions sent to LLM: `read_calendar`, `create_event`, `send_notification`, `update_module_state`, `get_chat_history`
+**Multi-turn agentic loop:** Runs up to `_MAX_TOOL_TURNS` (5) iterations. Each turn streams from the LLM. If `finish_reason == "tool_calls"`, tools are executed and a new turn is started with tool results. The loop exits when the LLM returns `stop` or when the turn limit is reached.
+
+**Reasoning model support:** Reads `delta.get("reasoning")` as fallback to `delta.content`. Required for DeepSeek-R1, QwQ, stepfun style models that emit thinking tokens in a separate field.
+
+**XML tool call fallback:** `_parse_xml_tool_calls()` parses `<tool_call>{"name":...,"arguments":...}</tool_call>` XML from content. Needed for models like stepfun that emit XML instead of OpenAI-standard function call JSON. If XML is found and no standard tool calls exist, it converts to standard format before executing.
+
+**`chat_message_replace` event:** Sent after XML-tool-call processing to push the cleaned content (with XML stripped) to the frontend.
+
+Tool definitions sent to LLM: `read_calendar`, `create_event`, `send_notification`, `update_module_state`, `get_chat_history`, `set_screen`
 
 #### `app/services/websocket_manager.py` — Connection Manager
 
@@ -247,7 +260,7 @@ Tool definitions sent to LLM: `read_calendar`, `create_event`, `send_notificatio
 #### `app/mcp/server.py` — MCP Server
 
 - Uses `FastMCP` from the `mcp` library
-- Exposes 9 tools prefixed with `helm_` (read_calendar, create_event, update_event, delete_event, send_notification, get_chat_history, send_chat_message, update_module_state, get_form_data)
+- Exposes **17 tools** prefixed with `helm_`: `helm_read_calendar`, `helm_create_event`, `helm_update_event`, `helm_delete_event`, `helm_delete_all_events`, `helm_read_all_calendar`, `helm_send_notification`, `helm_get_chat_history`, `helm_send_chat_message`, `helm_update_module_state`, `helm_get_form_data`, `helm_set_screen`, `helm_delete_screen`, `helm_list_screens`, `helm_hide_tab`, `helm_show_tab`, `helm_list_tabs`
 - Uses `contextvars` for `_current_user_id` — set per-request by `_MCPAuthMiddleware`
 - Returns ASGI app via `get_mcp_asgi_app()` which wraps `mcp.streamable_http_app()` with `_MCPAuthMiddleware`
 - **Auth is fully wired:** `_MCPAuthMiddleware` extracts the `Authorization: Bearer <token>` header on every incoming HTTP/WebSocket, validates it via `get_session_by_token`, sets `_current_user_id`, and returns `401` for invalid tokens. Note: FastAPI's `Depends()` doesn't apply to mounted ASGI sub-apps — that's why ASGI-level middleware is required.
@@ -259,14 +272,14 @@ Tool definitions sent to LLM: `read_calendar`, `create_event`, `send_notificatio
 All tools are shared between the Agent Proxy (called directly) and the MCP Server (wrapped):
 
 - `execute_tool()` — Name → handler dispatcher
-- `read_calendar()` — Queries events by date range
-- `create_event()` — Creates calendar event
-- `update_event()` — Updates event fields
-- `delete_event()` — Deletes event
+- `read_calendar()` / `read_all_calendar()` — Query events by date range or all events
+- `create_event()` / `update_event()` / `delete_event()` / `delete_all_events()` — Calendar CRUD
 - `send_notification()` — Creates notification in DB + pushes via WebSocket
-- `get_chat_history()` — Gets last N messages
-- `send_chat_message()` — Creates assistant message + pushes via WebSocket
-- `update_module_state()` — Upserts module state in DB + pushes SDUI update via WebSocket
+- `get_chat_history()` / `send_chat_message()` — Chat read/write
+- `update_module_state()` — Upserts module state in DB + pushes `module_state_update` WS event
+- `set_screen(module_id, screen)` — Upserts `sdui__<module_id>` in module_states + pushes `sdui_screen_update` WS event
+- `get_screen(module_id)` / `delete_screen(module_id)` / `list_screens()` — SDUI screen management
+- `hide_tab(tab_id)` / `show_tab(tab_id)` / `list_tabs()` — Tab visibility management via `_tabs_config` key
 - `get_form_data()` — Gets form module state (stub)
 
 #### `app/utils/security.py` — Crypto Utilities
@@ -295,6 +308,7 @@ Test files:
 Uses Alembic with async support:
 - `de71aeb133e3` — Initial schema (all 9 tables)
 - `d4aa5857b012` — Added `run_count` and `last_run_at` to workflows
+- `ee17096d9496` — Added `temperature`, `max_tokens`, `is_active` to agent_configs
 
 ### Dependencies (pyproject.toml)
 
@@ -349,9 +363,12 @@ HELM_MCP_URL=http://localhost:8000/mcp/
 
 ### Known Issues / TODOs
 
-1. **API key encryption** — `api_key_encrypted` in AgentConfig is stored as plaintext. The `encryption_key` setting exists but isn't used yet.
-2. **Refresh endpoint** — Sets `device_id=None` on the new session, breaking the device tracking.
-3. **CORS** — Currently allows all origins (`"*"`). Should be restricted in production.
-4. **Workflow schemas** — Defined inline in the router instead of in `app/schemas/`.
-5. **Chat history in agent proxy** — Loads last 20 messages regardless of conversation_id.
-6. **`fire_trigger()` never called** — Event-based workflow triggers (event_created, form_submitted, etc.) exist in schema but no router actually calls `fire_trigger()`.
+1. ✅ **API key encryption** — FIXED. `api_key_encrypted` is encrypted with Fernet derived from `SECRET_KEY`. Changing `SECRET_KEY` makes stored keys irrecoverable.
+2. **Refresh endpoint** — Sets `device_id=None` on the new session, breaking device tracking.
+3. **CORS** — Currently allows all origins (`"*"`). Restrict for production.
+4. **Workflow schemas** — `WorkflowCreate`, `WorkflowUpdate`, `WorkflowResponse` are defined inline in the router (`routers/workflows.py`) instead of `app/schemas/`. Inconsistent with other domains.
+5. **Chat history ignores `conversation_id`** — Loads last 20 messages per user regardless of conversation_id. Multi-conversation not implemented.
+6. **`fire_trigger()` never called** — Event-based workflow triggers (`event_created`, `event_updated`, `form_submitted`, `message_received`) exist in the engine but no router calls `fire_trigger()`. These trigger types are architecturally complete but dead code.
+7. **Unread count is O(N)** — Notifications router fetches all scalars then does `len()`. Should use a COUNT query.
+8. **MCP `_current_user_id` context var** — Set per-request by `_MCPAuthMiddleware`. Never persisted to DB or passed as arg — if code runs outside the request lifecycle (e.g. in a background task) it may be empty.
+9. **`module_action` endpoint is a stub** — `POST /api/modules/{id}/action` just returns a placeholder response.

@@ -5,7 +5,7 @@ export const sduiComponentSchema: z.ZodType<any> = z.lazy(() =>
   z.object({
     type: z.enum(['calendar', 'form', 'alert', 'list', 'card', 'chart', 'map', 'text', 'image', 'button']),
     id: z.string(),
-    props: z.record(z.any()),
+    props: z.record(z.string(), z.any()),
     children: z.array(sduiComponentSchema).optional(),
   })
 );

@@ -26,6 +26,12 @@ async def execute_tool(name: str, args: dict[str, Any], user_id: str) -> Any:
         "send_chat_message": send_chat_message,
         "update_module_state": update_module_state,
         "get_form_data": get_form_data,
+        "set_screen": set_screen,
+        "delete_screen": delete_screen,
+        "list_screens": list_screens,
+        "hide_tab": hide_tab,
+        "show_tab": show_tab,
+        "list_tabs": list_tabs,
     }
     handler = handlers.get(name)
     if handler is None:
@@ -307,3 +313,218 @@ async def get_form_data(form_id: str | None = None, user_id: str = "") -> dict[s
         )
         state = result.scalar_one_or_none()
         return state.state_json if state else {"forms": []}
+
+
+# ── SDUI tools ─────────────────────────────────────────────────────────────
+# AI-facing tool to set/get a full SDUIScreen for a module.
+
+_SDUI_PREFIX = "sdui__"
+
+
+async def set_screen(module_id: str, screen: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Persist an SDUIScreen JSON for *module_id* and push it to the frontend.
+
+    The screen must follow the SDUIScreen schema:
+      { schema_version: 1, module_id, title, sections: [...] }
+    """
+    from app.services.websocket_manager import manager
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(ModuleState).where(
+                ModuleState.user_id == user_id,
+                ModuleState.module_type == _SDUI_PREFIX + module_id,
+            )
+        )
+        state = result.scalar_one_or_none()
+        if state is None:
+            state = ModuleState(
+                id=str(uuid4()),
+                user_id=user_id,
+                module_type=_SDUI_PREFIX + module_id,
+                state_json=screen,
+                version=1,
+            )
+            db.add(state)
+        else:
+            state.state_json = screen
+            state.version += 1
+        await db.commit()
+        version = state.version
+
+    await manager.send(user_id, {
+        "type": "sdui_screen_update",
+        "module_id": module_id,
+        "screen": screen,
+        "version": version,
+    })
+    return {"module_id": module_id, "version": version, "updated": True}
+
+
+async def get_screen(module_id: str, user_id: str) -> dict[str, Any]:
+    """Return the current SDUIScreen JSON for *module_id*, or null if not yet set."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(ModuleState).where(
+                ModuleState.user_id == user_id,
+                ModuleState.module_type == _SDUI_PREFIX + module_id,
+            )
+        )
+        state = result.scalar_one_or_none()
+    if state is None:
+        return {"screen": None}
+    return {"screen": state.state_json, "version": state.version}
+
+
+async def delete_screen(module_id: str, user_id: str) -> dict[str, Any]:
+    """Delete the SDUI screen for *module_id*, returning the tab to its empty state."""
+    from app.services.websocket_manager import manager
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(ModuleState).where(
+                ModuleState.user_id == user_id,
+                ModuleState.module_type == _SDUI_PREFIX + module_id,
+            )
+        )
+        state = result.scalar_one_or_none()
+        if state is not None:
+            await db.delete(state)
+            await db.commit()
+
+    await manager.send(user_id, {
+        "type": "sdui_screen_update",
+        "module_id": module_id,
+        "screen": None,
+        "version": 0,
+    })
+    return {"module_id": module_id, "deleted": True}
+
+
+async def list_screens(user_id: str) -> dict[str, Any]:
+    """List all SDUI screens the AI has set, across all modules."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(ModuleState).where(
+                ModuleState.user_id == user_id,
+                ModuleState.module_type.like(_SDUI_PREFIX + "%"),
+            )
+        )
+        states = result.scalars().all()
+    return {
+        "screens": [
+            {
+                "module_id": s.module_type.removeprefix(_SDUI_PREFIX),
+                "version": s.version,
+                "title": (s.state_json or {}).get("title", ""),
+                "sections_count": len((s.state_json or {}).get("sections", [])),
+            }
+            for s in states
+        ]
+    }
+
+
+# ── Tab management tools ───────────────────────────────────────────────────
+# These tools let the AI show or hide tabs from the bottom navigation bar.
+# Tab content (data, SDUI screens) is always preserved — only visibility changes.
+
+_TABS_CONFIG_KEY = "_tabs_config"
+
+_ALL_TAB_DETAILS = [
+    {"id": "home", "name": "Home", "icon": "🏠"},
+    {"id": "chat", "name": "Chat", "icon": "💬"},
+    {"id": "modules", "name": "Modules", "icon": "🧩"},
+    {"id": "calendar", "name": "Calendar", "icon": "📅"},
+    {"id": "forms", "name": "Forms", "icon": "📝"},
+    {"id": "alerts", "name": "Alerts", "icon": "🔔"},
+    {"id": "settings", "name": "Settings", "icon": "⚙️"},
+]
+_ALL_TAB_IDS = [t["id"] for t in _ALL_TAB_DETAILS]
+
+
+async def _get_hidden_tabs_for_user(user_id: str) -> list[str]:
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(ModuleState).where(
+                ModuleState.user_id == user_id,
+                ModuleState.module_type == _TABS_CONFIG_KEY,
+            )
+        )
+        state = result.scalar_one_or_none()
+    if state is None:
+        return []
+    return (state.state_json or {}).get("hidden_tabs", [])
+
+
+async def _set_hidden_tabs_for_user(user_id: str, hidden_tabs: list[str]) -> None:
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(ModuleState).where(
+                ModuleState.user_id == user_id,
+                ModuleState.module_type == _TABS_CONFIG_KEY,
+            )
+        )
+        state = result.scalar_one_or_none()
+        if state is None:
+            state = ModuleState(
+                id=str(uuid4()),
+                user_id=user_id,
+                module_type=_TABS_CONFIG_KEY,
+                state_json={"hidden_tabs": hidden_tabs},
+                version=1,
+            )
+            db.add(state)
+        else:
+            state.state_json = {"hidden_tabs": hidden_tabs}
+            state.version += 1
+        await db.commit()
+
+
+async def hide_tab(tab_id: str, user_id: str) -> dict[str, Any]:
+    """Hide a tab from the bottom nav bar.  Content and data are preserved."""
+    from app.services.websocket_manager import manager
+
+    if tab_id not in _ALL_TAB_IDS:
+        raise ValueError(f"Unknown tab '{tab_id}'. Valid tabs: {', '.join(_ALL_TAB_IDS)}")
+
+    hidden = await _get_hidden_tabs_for_user(user_id)
+    if tab_id not in hidden:
+        hidden = hidden + [tab_id]
+        await _set_hidden_tabs_for_user(user_id, hidden)
+
+    modules = [
+        {"id": t["id"], "name": t["name"], "icon": t["icon"], "enabled": t["id"] not in hidden}
+        for t in _ALL_TAB_DETAILS
+    ]
+    await manager.send(user_id, {"type": "tabs_updated", "modules": modules})
+    return {"tab_id": tab_id, "hidden": True, "message": f"'{tab_id}' tab hidden from navigation."}
+
+
+async def show_tab(tab_id: str, user_id: str) -> dict[str, Any]:
+    """Restore a previously hidden tab to the bottom nav bar."""
+    from app.services.websocket_manager import manager
+
+    if tab_id not in _ALL_TAB_IDS:
+        raise ValueError(f"Unknown tab '{tab_id}'. Valid tabs: {', '.join(_ALL_TAB_IDS)}")
+
+    hidden = await _get_hidden_tabs_for_user(user_id)
+    if tab_id in hidden:
+        hidden = [t for t in hidden if t != tab_id]
+        await _set_hidden_tabs_for_user(user_id, hidden)
+
+    modules = [
+        {"id": t["id"], "name": t["name"], "icon": t["icon"], "enabled": t["id"] not in hidden}
+        for t in _ALL_TAB_DETAILS
+    ]
+    await manager.send(user_id, {"type": "tabs_updated", "modules": modules})
+    return {"tab_id": tab_id, "hidden": False, "message": f"'{tab_id}' tab is now visible in navigation."}
+
+
+async def list_tabs(user_id: str) -> dict[str, Any]:
+    """List all tabs and their current visibility status."""
+    hidden = await _get_hidden_tabs_for_user(user_id)
+    tabs = [
+        {"id": t["id"], "name": t["name"], "icon": t["icon"], "visible": t["id"] not in hidden}
+        for t in _ALL_TAB_DETAILS
+    ]
+    return {"tabs": tabs}
