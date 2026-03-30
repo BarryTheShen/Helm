@@ -44,14 +44,21 @@ export function SDUIScreenRenderer({ screen, onAction }: SDUIScreenRendererProps
   const dispatch: ActionDispatcher = onAction ?? (() => {});
   return (
     <ScrollView style={styles.screenContainer} contentContainerStyle={styles.screenContent}>
-      {screen.sections.map((section: SDUISection) => (
-        <View key={section.id} style={styles.section}>
-          {section.title ? (
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-          ) : null}
-          <SDUIRenderer component={section.component} onAction={dispatch} />
-        </View>
-      ))}
+      {screen.sections.map((section: SDUISection) => {
+        // Support both singular `component` and plural `components` formats
+        const comps: SDUIComponent[] = section.components
+          ?? (section.component ? [section.component] : []);
+        return (
+          <View key={section.id} style={styles.section}>
+            {section.title ? (
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+            ) : null}
+            {comps.map((comp, idx) => (
+              <SDUIRenderer key={comp.id ?? `${section.id}-c${idx}`} component={comp} onAction={dispatch} />
+            ))}
+          </View>
+        );
+      })}
     </ScrollView>
   );
 }
@@ -199,8 +206,17 @@ function renderComponent(comp: SDUIComponent, dispatch: ActionDispatcher): React
     // ── Container (row / column layout) ──────────────────────────────────
     case 'container': {
       const p = comp.props;
-      const gapMap = { xs: 4, sm: 8, md: 12, lg: 20 };
+      const gapMap: Record<string, number> = { none: 0, xs: 4, sm: 8, md: 12, lg: 20 };
+      const paddingMap: Record<string, number> = { none: 0, xs: 4, sm: 8, md: 12, lg: 20 };
       const gap = gapMap[p.gap ?? 'md'] ?? 12;
+      const pad = paddingMap[p.padding ?? 'none'] ?? 0;
+      const justifyMap: Record<string, string> = {
+        start: 'flex-start',
+        center: 'center',
+        end: 'flex-end',
+        'space-between': 'space-between',
+        'space-around': 'space-around',
+      };
       return (
         <View
           key={comp.id}
@@ -208,10 +224,13 @@ function renderComponent(comp: SDUIComponent, dispatch: ActionDispatcher): React
             flexDirection: p.direction ?? 'column',
             flexWrap: p.wrap ? 'wrap' : 'nowrap',
             gap,
+            padding: pad,
+            flex: p.flex ?? undefined,
             alignItems: p.align === 'center' ? 'center'
               : p.align === 'end' ? 'flex-end'
               : p.align === 'stretch' ? 'stretch'
               : 'flex-start',
+            justifyContent: (justifyMap[p.justify ?? 'start'] ?? 'flex-start') as any,
           }}
         >
           {comp.children?.map(child => (
@@ -387,9 +406,11 @@ function FormRenderer({ comp, dispatch }: { comp: Extract<SDUIComponent, { type:
   const [values, setValues] = useState<Record<string, string | boolean>>(initialValues);
 
   const handleSubmit = () => {
-    // Merge form values into the action body (api_call) or pass as navigate params
+    // Merge form values into the action
     const action = p.submit_action;
-    if (action.type === 'api_call') {
+    if (action.type === 'server_action') {
+      dispatch({ ...action, params: { ...(action.params ?? {}), ...values } });
+    } else if (action.type === 'api_call') {
       dispatch({ ...action, body: { ...(action.body ?? {}), ...values } });
     } else {
       dispatch(action);
@@ -442,7 +463,7 @@ function FormRenderer({ comp, dispatch }: { comp: Extract<SDUIComponent, { type:
           )}
         </View>
       ))}
-      <TouchableOpacity style={styles.submitButton} onPress={handleSubmit} activeOpacity={0.8}>
+      <TouchableOpacity style={styles.submitButton} onPress={handleSubmit} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel={p.submit_label ?? 'Submit'}>
         <Text style={styles.submitButtonText}>{p.submit_label ?? 'Submit'}</Text>
       </TouchableOpacity>
     </View>

@@ -12,6 +12,7 @@ from mcp.server.fastmcp import FastMCP
 from sqlalchemy import select
 
 from app.mcp.tools import (
+    approve_draft,
     create_event,
     delete_all_events,
     delete_event,
@@ -222,7 +223,7 @@ async def helm_get_form_data(form_id: str = "") -> dict:
 
 
 @mcp.tool()
-async def helm_set_screen(module_id: str, screen: dict) -> dict:
+async def helm_set_screen(module_id: str, screen: dict | str) -> dict:
     """Set the Server-Driven UI screen for a module.
 
     This is the primary AI tool for building dynamic native UIs.  Generate a
@@ -272,6 +273,9 @@ async def helm_set_screen(module_id: str, screen: dict) -> dict:
 
     Available module_ids: home | chat | calendar | forms | alerts | modules | settings
     """
+    import json as _json
+    if isinstance(screen, str):
+        screen = _json.loads(screen)
     return await set_screen(module_id, screen, get_current_user_id())
 
 
@@ -305,7 +309,16 @@ async def helm_get_screen(module_id: str) -> dict:
 
 
 @mcp.tool()
-async def helm_hide_tab(tab_id: str) -> dict:
+async def helm_approve_draft(module_id: str) -> dict:
+    """Approve and publish a draft screen so it goes live in the mobile app.
+
+    Call this after helm_set_screen to promote the saved draft to the live screen.
+    The screen will immediately become visible to the user.
+
+    Available module_ids: home | chat | calendar | forms | alerts | modules | settings
+    """
+    return await approve_draft(module_id, get_current_user_id())
+
     """Hide a tab from the bottom navigation bar.
 
     The tab disappears from the nav bar instantly via WebSocket.

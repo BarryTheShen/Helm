@@ -6,24 +6,35 @@ import { Card } from '@/components/common/Card';
 import { ErrorBanner } from '@/components/common/ErrorBanner';
 import { useUIStore } from '@/stores/uiStore';
 import { useSDUIScreen } from '@/hooks/useSDUIScreen';
-import { SDUIScreenRenderer, type ActionDispatcher } from '@/components/sdui/SDUIRenderer';
-import type { SDUIAction } from '@/types/sdui';
+import { SDUIScreenRenderer } from '@/components/sdui/SDUIRenderer';
+import { useActionDispatcher } from '@/hooks/useActionDispatcher';
+import { useWebSocket } from '@/contexts/WebSocketContext';
 import { colors, spacing, typography } from '@/theme/colors';
 import type { Notification } from '@/types/api';
 import { format } from 'date-fns';
 
-const handleAction: ActionDispatcher = (action: SDUIAction) => console.log('[SDUI action]', action);
-
 export default function AlertsScreen() {
+  const handleAction = useActionDispatcher();
   const { token, serverUrl, logout } = useAuthStore();
   const { errorBanner, showError, hideError } = useUIStore();
   const { screen: sduiScreen } = useSDUIScreen('alerts');
+  const ws = useWebSocket();
   const [notifications, setNotifications] = useState<Notification[]>([]);;
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadNotifications();
   }, [token, serverUrl]);
+
+  // Reload notifications when a live notification arrives via WebSocket.
+  useEffect(() => {
+    if (!ws) return;
+    return ws.onMessage((msg: any) => {
+      if (msg.type === 'notification') {
+        loadNotifications();
+      }
+    });
+  }, [ws]);
 
   const loadNotifications = async () => {
     if (!token || !serverUrl) return;

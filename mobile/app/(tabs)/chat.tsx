@@ -16,16 +16,13 @@ import { ApiClient } from '@/services/api';
 import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
 import { ErrorBanner } from '@/components/common/ErrorBanner';
-import { SDUIScreenRenderer, type ActionDispatcher } from '@/components/sdui/SDUIRenderer';
+import { SDUIScreenRenderer } from '@/components/sdui/SDUIRenderer';
+import { useActionDispatcher } from '@/hooks/useActionDispatcher';
 import { colors, spacing, typography } from '@/theme/colors';
 import type { ChatMessage } from '@/types/api';
-import type { SDUIAction } from '@/types/sdui';
-
-const handleAction: ActionDispatcher = (action: SDUIAction) => {
-  console.log('[SDUI action]', action);
-};
 
 export default function ChatScreen() {
+  const handleAction = useActionDispatcher();
   const { token, serverUrl, logout } = useAuthStore();
   const { errorBanner, showError, hideError } = useUIStore();
   const ws = useWebSocket();

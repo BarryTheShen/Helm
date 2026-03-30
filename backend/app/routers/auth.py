@@ -40,8 +40,14 @@ async def auth_status(db: AsyncSession = Depends(get_db)):
 
 @router.post("/setup", response_model=SetupResponse, status_code=status.HTTP_201_CREATED)
 async def setup(body: SetupRequest, db: AsyncSession = Depends(get_db)):
+    """Create the first user.
+
+    Locked after first user is created — returns 409 if server is already set up.
+    Architecture Decision: Session 2, Section 11 — CLI-only user creation preferred.
+    This endpoint is kept for initial setup only; additional users should use CLI.
+    """
     if await is_setup_complete(db):
-        raise HTTPException(status_code=409, detail="Server already set up")
+        raise HTTPException(status_code=409, detail="Server already set up. Use CLI to create additional users.")
     user = await create_first_user(db, body.username, body.password)
     return SetupResponse(user_id=str(user.id), message="Setup complete")
 

@@ -5,16 +5,16 @@ Items are grouped by area.
 
 ---
 
-## Current State (as of 2026-03)
+## Current State (as of 2026-03, updated Session 2)
 
 What has already been built:
 
-- **Backend**: FastAPI + SQLAlchemy async + SQLite. Auth (session JWT), calendar, notifications, workflows (cron scheduler), agent proxy (multi-turn, reasoning model, XML fallback), MCP server (17 tools), SDUI screen storage, tab visibility control.
-- **Frontend**: Expo SDK 55 + Expo Router. 7 tabs (Home, Chat, Modules, Calendar, Alerts, Settings). Singleton WebSocket (`WebSocketContext`). AI-controlled tab visibility (`tabsStore`). SDUI rendering engine (`SDUIRenderer.tsx`) with 19 component types over all tabs. `useSDUIScreen` hook for live SDUI updates per module.
+- **Backend**: FastAPI + SQLAlchemy async + SQLite. Auth (session JWT, setup lockdown), calendar, notifications, workflows (cron scheduler), agent proxy (multi-turn, reasoning model, XML fallback), MCP server (20 tools), SDUI screen storage + draft/approval flow, tab visibility control, action registry (8 handlers), `manage.py` CLI for user management.
+- **Frontend**: Expo SDK 55 + Expo Router. 7 tabs (Home, Chat, Modules, Calendar, Alerts, Settings). Singleton WebSocket (`WebSocketContext`, device-aware). AI-controlled tab visibility (`tabsStore`). SDUI rendering engine (`SDUIRenderer.tsx`) with 19 component types over all tabs. `useSDUIScreen` hook for live SDUI updates per module (now also returns `draft`). `useActionDispatcher` hook — all 7 action types execute. `DraftPreview` component for AI-generated draft approval.
 - **Standalone Agent**: PydanticAI agent with local browser UI (`chat_ui.html`), REPL, and one-shot modes. Connects to backend MCP + can read/write mobile source.
 
-**Known gaps that need fixing before feature work:**
-1. SDUI actions (`navigate`, `api_call`, `open_url`, etc.) never execute — `onAction` is `console.log` only
+**Remaining known gaps:**
+1. ~~SDUI actions never execute~~ — **FIXED (Session 2)**: `useActionDispatcher` wires all 7 action types
 2. Four dead SDUI component files (`AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx`) that should be deleted
 3. `logout()` doesn't call `DELETE /auth/logout` — server sessions never invalidated
 4. `markNotificationRead` never called — no UI to mark alerts read
@@ -27,18 +27,16 @@ What has already been built:
 
 ## 1. Fully Customizable UI
 
-**Current state:** SDUI is live — the AI can push screens to all 7 tabs via `helm_set_screen`. Tab visibility can be controlled via `helm_hide_tab`/`helm_show_tab`. Component rendering works for 19 types. **The missing piece: SDUI actions never execute** (navigate, api_call, open_url, etc. all console.log only).
+**Current state:** SDUI is live — the AI can push screens to all 7 tabs via `helm_set_screen`. Tab visibility can be controlled via `helm_hide_tab`/`helm_show_tab`. Component rendering works for 19 types. **All 7 SDUI action types now execute** via the `useActionDispatcher` hook (navigate, go_back, open_url, copy_text, server_action, send_to_agent, toggle).
+
+**Draft/Approval Flow:** The AI defaults to `helm_set_screen(draft=True)`, which queues a draft for human review. The home screen shows a `DraftPreview` banner; the user can approve or reject. On approve the draft becomes live; on reject it is discarded with optional feedback.
 
 **Planned improvements (still needed):**
 
-### 1.0 SDUI Action Dispatcher (HIGHEST PRIORITY)
-- Wire `onAction` in `SDUIRenderer.tsx` to actually execute action types:
-  - `navigate` → `router.push(action.screen)`
-  - `api_call` → call `ApiClient.request(action.method, action.endpoint, action.body)`
-  - `open_url` → `Linking.openURL(action.url)`
-  - `dismiss` → close modal/clear screen
-  - `refresh` → re-fetch `useSDUIScreen`
-- This is what transforms SDUI from "renders UI" to "renders interactive UI"
+### ~~1.0 SDUI Action Dispatcher~~ — ✅ DONE (Session 2)
+~~Wire `onAction` in `SDUIRenderer.tsx` to actually execute action types~~
+
+Completed: `useActionDispatcher` hook handles all action types. All 7 tab screens use the hook. New action types added: `server_action` (POST /api/actions/execute), `send_to_agent` (WS + navigate), `go_back`, `toggle`, `copy_text` (expo-clipboard). Legacy `api_call` mapped to `server_action`.
 
 ### 1.1 Component Theme System
 - Replace hardcoded `colors.ts` constants with a dynamic theme object stored in the
@@ -94,7 +92,7 @@ via `write_frontend_file` or use the MCP `helm_set_screen` tool.
 
 ## 3. MCP Server Improvements
 
-**Current state:** The MCP server has 17 tools. Added since last review: SDUI screen management, tab visibility, bulk calendar operations. Tool naming uses `helm_` prefix throughout.
+**Current state:** The MCP server has 20 tools (up from 17 in Session 2). Added: `approve_draft`, `reject_draft`, `get_draft`. `helm_set_screen` now has a `draft` parameter (default `True`) enabling human-in-the-loop approval. Tool naming uses `helm_` prefix throughout.
 
 **Planned improvements:**
 
@@ -121,13 +119,14 @@ via `write_frontend_file` or use the MCP `helm_set_screen` tool.
 
 ## 4. Forms — SDUI-Driven Dynamic Forms
 
-**Current state:** The Forms tab has been replaced by SDUI — any tab can render a form via the `form` SDUI component. Static placeholder screen removed. Form rendering works but submission only logs to console (SDUI actions).
+**Current state:** The Forms tab has been replaced by SDUI — any tab can render a form via the `form` SDUI component. Static placeholder screen removed. Form submission now works: `server_action` action type POSTs to `/api/actions/execute` which calls the `submit_form` handler in the action registry — stores submissions in `module_states` DB.
 
 **Planned improvements:**
 
-### 4.1 Form Submission Action
-- Wire the SDUI `api_call` action in `FormRenderer` to POST the form data to a backend endpoint.
-- Store submissions in the DB.
+### ~~4.1 Form Submission Action~~ — ✅ DONE (Session 2)
+~~Wire the SDUI `api_call` action in `FormRenderer` to POST the form data to a backend endpoint.~~
+
+Completed: `FormRenderer` handles `server_action`, merges form values into params, calls `executeAction()`. Backend `submit_form` stores in `module_states`. SQLAlchemy JSON mutation bug fixed (copy-on-write).
 
 ### 4.2 AI-Generated Forms
 - The Helm Agent can create custom forms via `helm_set_screen` with a `form` component payload.
@@ -230,7 +229,11 @@ via `write_frontend_file` or use the MCP `helm_set_screen` tool.
 
 | Priority | Feature | Why |
 |----------|---------|-----|
-| P0 | **SDUI action dispatcher** | Core "interactive SDUI" — navigate/api_call/open_url actions do nothing now |
+| ✅ Done | ~~SDUI action dispatcher~~ | Navigate/api_call/open_url now execute via `useActionDispatcher` |
+| ✅ Done | Action registry + /api/actions/execute | Backend whitelist for SDUI `server_action` calls |
+| ✅ Done | Draft/approval flow | AI queues draft; user approves/rejects before publishing live |
+| ✅ Done | Device-aware WebSocket | `device_id` tracking; `send_to_device()` targeted delivery |
+| ✅ Done | Auth setup lockdown + manage.py CLI | POST /auth/setup locked after first user; CLI for additional users |
 | P0 | **Delete dead SDUI component files** | Dead code causes confusion; `SDUIRenderer` renders inline |
 | P0 | **Fix logout** (call DELETE /auth/logout) | Security — server sessions never invalidated |
 | P1 | Wire `fire_trigger()` in calendar/chat routers | Event-driven workflows are dead without this |
@@ -239,8 +242,11 @@ via `write_frontend_file` or use the MCP `helm_set_screen` tool.
 | P2 | Real-time WebSocket push to Alerts | Core "live AI" experience |
 | P2 | Module tap handler (`handleModulePress`) | Tapping a module does nothing |
 | P2 | Multi-conversation support | Remove `conversation_id: 'default'` hardcode |
+| P2 | Explicit device push routing | Send WS events to a specific device, not broadcast |
 | P3 | Dark mode | Tokens exist, need `Appearance.getColorScheme()` wiring |
 | P3 | Visual UI editor (human mode) | Non-AI users need direct control |
+| P3 | Template bundling | Package SDUI screen JSON as shareable templates |
 | P3 | Plugin / connector system | Extensibility |
+| P4 | Data pipeline / streaming | Live data feeds into SDUI components |
 | P4 | Multi-user + OAuth | Production-readiness |
 | P4 | Admin dashboard | Operations visibility |

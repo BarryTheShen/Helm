@@ -31,6 +31,16 @@
     
     **Build order:** Backend → Protocol → Frontend.
     
+    ## Blueprint Spec Documents
+    
+    Detailed production specifications live in `docs/Agentic AI Super App — Project Hub/Blueprint — Production Spec Documents/`:
+    
+    - `Frontend Spec — iOS App (React Native : Expo).md` — SDUI renderer, navigation, component catalog, design system
+    - `Backend Spec — Python FastAPI Server.md` — API endpoints, database schema, MCP server, agent proxy, workflow engine
+    - `Protocol Spec — Communication Layer.md` — WebSocket, REST, OpenAI-compatible API, MCP, SDUI JSON schema, sequence diagrams
+    
+    **Read all three specs before starting implementation. When making architectural decisions, consult these docs first.**
+    
     ## Project Structure
     
     <!-- Update this as the project grows. Run: tree -I node_modules -L 2 --dirsfirst --noreport --charset utf-8 --prune and paste here -->
@@ -156,6 +166,16 @@ Below is the same content formatted for easy reading on this page.
 3. **React Native App** — SDUI renderer. Pre-built component library (calendar, chat, news feed, charts, forms, maps, notifications, lists). JSON payloads → native components.
 
 **Build order:** Backend → Protocol → Frontend.
+
+### Blueprint Spec Documents
+
+Detailed production specifications live in `docs/Agentic AI Super App — Project Hub/Blueprint — Production Spec Documents/`:
+
+- `Frontend Spec — iOS App (React Native : Expo).md` — SDUI renderer, navigation, component catalog, design system
+- `Backend Spec — Python FastAPI Server.md` — API endpoints, database schema, MCP server, agent proxy, workflow engine
+- `Protocol Spec — Communication Layer.md` — WebSocket, REST, OpenAI-compatible API, MCP, SDUI JSON schema, sequence diagrams
+
+**Read all three specs before starting implementation. When making architectural decisions, consult these docs first.**
 
 ### Commands
 

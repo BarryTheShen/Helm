@@ -24,11 +24,15 @@
 
 export type SDUIAction =
   | { type: 'navigate'; screen: string; params?: Record<string, string> }
+  | { type: 'go_back' }
   | { type: 'api_call'; method: 'GET' | 'POST' | 'PUT' | 'DELETE'; path: string; body?: Record<string, unknown> }
+  | { type: 'server_action'; function: string; params?: Record<string, any> }
+  | { type: 'send_to_agent'; message: string }
   | { type: 'dismiss' }
   | { type: 'open_sheet'; content: SDUIComponent }
   | { type: 'copy_text'; text: string }
-  | { type: 'open_url'; url: string };
+  | { type: 'open_url'; url: string }
+  | { type: 'toggle'; target: string };
 
 // ── Component type union ───────────────────────────────────────────────────
 
@@ -100,7 +104,15 @@ export interface CardComponent {
 export interface ContainerComponent {
   type: 'container';
   id: string;
-  props: { direction?: 'row' | 'column'; gap?: 'xs' | 'sm' | 'md' | 'lg'; wrap?: boolean; align?: 'start' | 'center' | 'end' | 'stretch' };
+  props: {
+    direction?: 'row' | 'column';
+    gap?: 'none' | 'xs' | 'sm' | 'md' | 'lg';
+    wrap?: boolean;
+    align?: 'start' | 'center' | 'end' | 'stretch';
+    justify?: 'start' | 'center' | 'end' | 'space-between' | 'space-around';
+    padding?: 'none' | 'xs' | 'sm' | 'md' | 'lg';
+    flex?: number;
+  };
   children: SDUIComponent[];
 }
 
@@ -210,7 +222,10 @@ export interface SDUISection {
   id: string;
   /** Optional display title above the section */
   title?: string;
-  component: SDUIComponent;
+  /** Single component (legacy) */
+  component?: SDUIComponent;
+  /** Array of components (preferred format) */
+  components?: SDUIComponent[];
 }
 
 /**

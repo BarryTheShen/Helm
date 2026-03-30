@@ -49,7 +49,22 @@ async def handle_chat_message(
 ) -> None:
     """Entry point called from WebSocket handler (runs as background task)."""
     try:
-        await _process_chat(user_id, content, conversation_id)
+        # Save the user message first regardless of routing
+        async with AsyncSessionLocal() as db:
+            user_msg = ChatMessage(
+                id=str(uuid4()),
+                user_id=user_id,
+                role="user",
+                content=content,
+            )
+            db.add(user_msg)
+            await db.commit()
+
+        # Route: external agent when configured, else built-in OpenRouter proxy
+        if settings.external_agent_url:
+            await _process_via_external_agent(user_id, content)
+        else:
+            await _process_chat(user_id, content, conversation_id)
     except Exception as exc:
         logger.exception(f"Agent proxy error for user={user_id}: {exc}")
         await manager.send(user_id, {
@@ -58,12 +73,81 @@ async def handle_chat_message(
         })
 
 
+async def _process_via_external_agent(user_id: str, content: str) -> None:
+    """Forward the chat message to the external agent API (api_server.py) and stream back.
+
+    This is used when EXTERNAL_AGENT_URL is configured. The external agent has full
+    access to all Helm MCP tools and a more capable LLM than the built-in proxy.
+    """
+    url = f"{settings.external_agent_url.rstrip('/')}/api/run"
+    assistant_msg_id = str(uuid4())
+
+    await manager.send(user_id, {"type": "chat_start", "message_id": assistant_msg_id})
+
+    full_response = ""
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream("POST", url, json={"message": content}) as resp:
+                if resp.status_code != 200:
+                    raise RuntimeError(f"External agent returned {resp.status_code}")
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    raw = line[5:].strip()
+                    if not raw or raw == "[DONE]":
+                        continue
+                    try:
+                        event = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+
+                    event_type = event.get("type")
+                    if event_type == "token":
+                        token = event.get("text", "")
+                        full_response += token
+                        await manager.send(user_id, {"type": "chat_token", "token": token})
+                    elif event_type == "done":
+                        # Use the final full text from the agent
+                        final = event.get("text", "")
+                        if final and not full_response:
+                            full_response = final
+                    elif event_type == "error":
+                        raise RuntimeError(event.get("text", "Unknown agent error"))
+    except Exception as exc:
+        logger.error(f"External agent error for user={user_id}: {exc}")
+        await manager.send(user_id, {
+            "type": "chat_error",
+            "message": f"External agent error: {exc}",
+        })
+        return
+
+    # Persist the conversation
+    async with AsyncSessionLocal() as db:
+        assistant_msg = ChatMessage(
+            id=assistant_msg_id,
+            user_id=user_id,
+            role="assistant",
+            content=full_response,
+        )
+        db.add(assistant_msg)
+        await db.commit()
+
+    await manager.send(user_id, {
+        "type": "chat_complete",
+        "message_id": assistant_msg_id,
+        "content": full_response,
+    })
+
+
 async def _process_chat(
     user_id: str,
     content: str,
     conversation_id: str | None,
 ) -> None:
-    # ── Load config + history; save user message with commit ──────────────────
+    # ── Load config + history ─────────────────────────────────────────────────
+    # Note: user message has already been saved by handle_chat_message before
+    # this function is called. We load history BEFORE that save snapshot so we
+    # don't duplicate it in the conversation sent to the LLM.
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(AgentConfig).where(
@@ -80,24 +164,19 @@ async def _process_chat(
         temperature = agent_config.temperature if agent_config else 0.7
         max_tokens = agent_config.max_tokens if agent_config else 4096
 
+        # Load history excluding the current user message (last message already saved)
         history_result = await db.execute(
             select(ChatMessage)
             .where(ChatMessage.user_id == user_id)
             .order_by(ChatMessage.created_at.desc())
-            .limit(20)
+            .limit(21)  # extra 1 to skip the just-saved user msg
         )
-        history = list(reversed(history_result.scalars().all()))
-
-        # Persist user message immediately so it's stored even if LLM fails.
-        # Bug fix: previous code used db.flush() with no commit — message was lost.
-        user_msg = ChatMessage(
-            id=str(uuid4()),
-            user_id=user_id,
-            role="user",
-            content=content,
-        )
-        db.add(user_msg)
-        await db.commit()
+        all_history = list(reversed(history_result.scalars().all()))
+        # Drop the last message if it's the current user message
+        if all_history and all_history[-1].role == "user" and all_history[-1].content == content:
+            history = all_history[:-1]
+        else:
+            history = all_history
 
     await manager.send(user_id, {"type": "chat_start", "message_id": str(uuid4())})
 

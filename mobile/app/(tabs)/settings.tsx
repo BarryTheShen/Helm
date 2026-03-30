@@ -6,12 +6,11 @@ import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { colors, spacing, typography } from '@/theme/colors';
 import { useSDUIScreen } from '@/hooks/useSDUIScreen';
-import { SDUIScreenRenderer, type ActionDispatcher } from '@/components/sdui/SDUIRenderer';
-import type { SDUIAction } from '@/types/sdui';
-
-const handleAction: ActionDispatcher = (action: SDUIAction) => console.log('[SDUI action]', action);
+import { SDUIScreenRenderer } from '@/components/sdui/SDUIRenderer';
+import { useActionDispatcher } from '@/hooks/useActionDispatcher';
 
 export default function SettingsScreen() {
+  const handleAction = useActionDispatcher();
   const router = useRouter();
   const { user, serverUrl, logout } = useAuthStore();
   const { navigationMode, theme, setNavigationMode, setTheme } = useSettingsStore();

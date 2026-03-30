@@ -19,6 +19,7 @@ import type { SDUIScreen } from '@/types/sdui';
 
 interface SDUIScreenState {
   screen: SDUIScreen | null;
+  draft: SDUIScreen | null;
   loading: boolean;
   error: string | null;
   refresh: () => void;
@@ -28,6 +29,7 @@ export function useSDUIScreen(moduleId: string): SDUIScreenState {
   const { token, serverUrl, logout } = useAuthStore();
   const ws = useWebSocket();
   const [screen, setScreen] = useState<SDUIScreen | null>(null);
+  const [draft, setDraft] = useState<SDUIScreen | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,8 +39,14 @@ export function useSDUIScreen(moduleId: string): SDUIScreenState {
     setError(null);
     try {
       const api = new ApiClient(serverUrl, token, logout);
-      const data = await api.getSDUIScreen(moduleId);
-      setScreen((data.screen as unknown as SDUIScreen) ?? null);
+      const [screenData, draftData] = await Promise.all([
+        api.getSDUIScreen(moduleId),
+        api.getSDUIDraft(moduleId),
+      ]);
+      setScreen((screenData.screen as unknown as SDUIScreen) ?? null);
+      if (draftData.has_draft) {
+        setDraft((draftData.screen as unknown as SDUIScreen) ?? null);
+      }
     } catch (err) {
       setError('Failed to load screen');
     } finally {
@@ -61,10 +69,16 @@ export function useSDUIScreen(moduleId: string): SDUIScreenState {
         setScreen((message.screen as SDUIScreen) ?? null);
         setLoading(false);
       }
+      if (message.type === 'sdui_draft_update' && message.module_id === moduleId) {
+        setDraft((message.screen as SDUIScreen) ?? null);
+      }
+      if (message.type === 'sdui_draft_rejected' && message.module_id === moduleId) {
+        setDraft(null);
+      }
     });
 
     return unsubscribe;
   }, [ws, moduleId]);
 
-  return { screen, loading, error, refresh: fetchScreen };
+  return { screen, draft, loading, error, refresh: fetchScreen };
 }

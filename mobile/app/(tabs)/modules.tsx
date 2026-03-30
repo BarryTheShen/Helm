@@ -14,10 +14,8 @@ import { Card } from '@/components/common/Card';
 import { ErrorBanner } from '@/components/common/ErrorBanner';
 import { colors, spacing, typography } from '@/theme/colors';
 import { useSDUIScreen } from '@/hooks/useSDUIScreen';
-import { SDUIScreenRenderer, type ActionDispatcher } from '@/components/sdui/SDUIRenderer';
-import type { SDUIAction } from '@/types/sdui';
-
-const handleAction: ActionDispatcher = (action: SDUIAction) => console.log('[SDUI action]', action);
+import { SDUIScreenRenderer } from '@/components/sdui/SDUIRenderer';
+import { useActionDispatcher } from '@/hooks/useActionDispatcher';
 
 interface Module {
   id: string;
@@ -28,6 +26,7 @@ interface Module {
 }
 
 export default function ModulesScreen() {
+  const handleAction = useActionDispatcher();
   const { token, serverUrl, logout } = useAuthStore();
   const { errorBanner, showError, hideError } = useUIStore();
   const [modules, setModules] = useState<Module[]>([]);

@@ -57,9 +57,12 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | Auth | `app/dependencies.py` | JWT token validation, `get_current_user` dependency |
 | Models | `app/models/` | 9 SQLAlchemy ORM models (User, Session, Device, ChatMessage, CalendarEvent, Notification, Workflow, AgentConfig, ModuleState) |
 | Schemas | `app/schemas/` | Pydantic request/response models |
-| Routers | `app/routers/` | 8 route files (auth, calendar, chat, notifications, workflows, modules, agent_config, websocket) |
+| Routers | `app/routers/` | 9 route files (auth, calendar, chat, notifications, workflows, modules, agent_config, websocket, actions) |
 | Services | `app/services/` | Auth logic, Agent Proxy (LLM streaming), WebSocket Manager, Workflow Engine |
-| MCP | `app/mcp/` | MCP server + 9 tool implementations |
+| MCP | `app/mcp/` | MCP server + tool implementations |
+| Action Registry | `app/services/action_registry.py` | Named function whitelist — 8 built-in handlers callable from SDUI `server_action` |
+| Actions Router | `app/routers/actions.py` | POST /api/actions/execute + GET /api/actions/functions |
+| CLI Tool | `manage.py` | User management CLI (used since POST /auth/setup is locked after first user) |
 | Utils | `app/utils/` | JWT + bcrypt password helpers |
 | Tests | `tests/` | pytest-asyncio with in-memory SQLite |
 
@@ -76,6 +79,8 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | `workflows` | id, user_id, name, trigger_type, trigger_config, action_config, is_active, run_count |
 | `agent_configs` | id, user_id, provider, model, api_key_encrypted, system_prompt, temperature, max_tokens |
 | `module_states` | id, user_id, module_type, state_json, version |
+
+**`module_states` key naming conventions:** `sdui__<module_id>` (live AI screen), `sdui__<module_id>__draft` (pending draft awaiting approval), `_tabs_config` (hidden tabs), `device_config` (per-device layout), `form_data__<form_id>` (form submission history)
 
 ### API Endpoints Summary
 
@@ -110,6 +115,12 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | GET | `/api/sdui/{module_id}` | Yes | Get AI-generated SDUI screen |
 | POST | `/api/sdui/{module_id}` | Yes | Set AI-generated SDUI screen |
 | DELETE | `/api/sdui/{module_id}` | Yes | Clear AI-generated SDUI screen |
+| GET | `/api/sdui` | Yes | List all active SDUI screens |
+| GET | `/api/sdui/{module_id}/draft` | Yes | Get pending draft screen (if any) |
+| POST | `/api/sdui/{module_id}/draft/approve` | Yes | Promote draft to live screen |
+| POST | `/api/sdui/{module_id}/draft/reject` | Yes | Discard draft screen |
+| POST | `/api/actions/execute` | Yes | Execute a named server-side function (whitelist model) |
+| GET | `/api/actions/functions` | Yes | List registered action function names |
 | GET | `/api/agent/config` | Yes | Get AI agent config |
 | PUT | `/api/agent/config` | Yes | Update AI agent config |
 | WS | `/ws?token=...` | Yes (query param) | Real-time WebSocket |
@@ -185,7 +196,7 @@ Request/response models matching the API contracts. Notable patterns:
 #### `app/routers/auth.py` — Authentication Endpoints
 
 - `GET /auth/status` — Checks if any user exists in DB
-- `POST /auth/setup` — Creates the first admin user (409 if already set up)
+- `POST /auth/setup` — Creates the first admin user. Returns 409 with "Server already set up. Use CLI to create additional users." after first user is created.
 - `POST /auth/login` — Authenticates user, upserts device, creates session with JWT
 - `POST /auth/refresh` — Invalidates old session, creates new one (NOTE: `device_id` is set to `None` on refresh — potential bug)
 - `POST /auth/logout` — Deactivates session
@@ -198,8 +209,10 @@ Request/response models matching the API contracts. Notable patterns:
 - Message types handled:
   - `ping` → responds with `pong`
   - `chat_message` → dispatches to agent proxy as background task
-  - `module_action` → sends simple `ack` (placeholder)
+  - `module_action` → dispatches to action registry (was a stub ack)
   - Unknown → error response
+- `_authenticate_ws()` returns `(user_id, device_id)` tuple
+- WS endpoint reads `device_id` from query params; passes to `manager.connect()`
 
 #### `app/services/auth.py` — Auth Business Logic
 
@@ -244,10 +257,24 @@ Tool definitions sent to LLM: `read_calendar`, `create_event`, `send_notificatio
 #### `app/services/websocket_manager.py` — Connection Manager
 
 - Singleton `manager` instance shared across the app
-- Keyed by `user_id` → list of WebSocket connections (multi-device support)
+- Device-aware: `_connections` is `dict[str, list[tuple[str | None, WebSocket]]]` (keyed by user_id, stores (device_id, ws) tuples)
+- `connect(user_id, websocket, device_id=None)` — optional device_id tracking
 - `send()` sends to ALL connections for a user
+- `send_to_device(user_id, device_id, message)` — targeted single-device delivery
+- `get_device_ids(user_id)` — returns list of active device IDs
 - `broadcast()` sends to ALL connected users
 - Dead connections auto-cleaned on send failure
+
+#### `app/services/action_registry.py` — Action Registry
+
+- Singleton `registry` instance with 8 built-in action handlers
+- Whitelist model: only registered functions can be called from the frontend via `server_action`
+- Handler signature: `async (user_id: str, params: dict, db: AsyncSession) -> dict`
+- Built-in actions: `refresh_data`, `submit_form`, `send_to_agent`, `mark_notification_read`, `create_calendar_event`, `delete_calendar_event`, `approve_draft`, `reject_draft`
+- `refresh_data` — re-pushes current SDUI screen over WebSocket
+- `submit_form` — stores form submission in DB (key: `form_data__<form_id>`), pushes success notification
+- `approve_draft` / `reject_draft` — delegate to `mcp/tools.py`
+- Architecture Decision: Session 2, Section 5 — Named functions vs raw API endpoints keeps the whitelist explicit and prevents SSRF/abuse
 
 #### `app/services/workflow_engine.py` — Automation Engine
 
@@ -281,6 +308,9 @@ All tools are shared between the Agent Proxy (called directly) and the MCP Serve
 - `get_screen(module_id)` / `delete_screen(module_id)` / `list_screens()` — SDUI screen management
 - `hide_tab(tab_id)` / `show_tab(tab_id)` / `list_tabs()` — Tab visibility management via `_tabs_config` key
 - `get_form_data()` — Gets form module state (stub)
+- `set_screen()` now takes `draft: bool = True`. Draft mode stores at `sdui__<module>__draft` and sends `sdui_draft_update` WS event. `draft=False` publishes live directly via `_publish_screen()`.
+- New tool functions: `approve_draft(module_id, user_id)`, `reject_draft(module_id, user_id, feedback)`, `get_draft(module_id, user_id)`
+- `execute_tool()` dispatcher updated with `approve_draft`, `reject_draft`, `get_draft` entries
 
 #### `app/utils/security.py` — Crypto Utilities
 
@@ -288,6 +318,18 @@ All tools are shared between the Agent Proxy (called directly) and the MCP Serve
 - `create_access_token()` — JWT with HS256, configurable expiry
 - `create_refresh_token()` — JWT with 30-day expiry
 - `decode_token()` / `get_subject_from_token()` — JWT decode helpers
+
+#### `manage.py` — CLI Tool (Backend Root)
+
+User management tool for when the web setup is locked:
+
+```bash
+python manage.py create_user                          # interactive
+python manage.py create_user --username bob --password secret123
+python manage.py list_users
+```
+
+POST /auth/setup is intentionally locked after the first user is created. Use this CLI to create additional users. The CLI uses `AsyncSessionLocal` directly, bypassing the HTTP layer.
 
 ### Test Infrastructure
 
@@ -297,11 +339,13 @@ Tests use `pytest-asyncio` with:
 - `client` fixture — AsyncClient with DB override
 - `auth_client` fixture — Pre-authenticated client (creates user + logs in)
 
-Test files:
+Test files (55 total, up from 32):
 - `test_auth.py` — Setup, login, status, logout flows
 - `test_calendar.py` — CRUD for calendar events
 - `test_notifications.py` — List, mark read, mark all read
 - `test_workflows.py` — CRUD for workflows
+- `test_actions.py` — 15 tests for action system (execute, list, auth, 404 for unknown functions)
+- `test_drafts.py` — 8 tests for draft/approval flow (set draft, approve, reject, REST endpoints)
 
 ### Database Migrations
 

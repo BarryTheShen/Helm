@@ -8,13 +8,12 @@
  */
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useSDUIScreen } from '@/hooks/useSDUIScreen';
-import { SDUIScreenRenderer, type ActionDispatcher } from '@/components/sdui/SDUIRenderer';
-import type { SDUIAction } from '@/types/sdui';
+import { SDUIScreenRenderer } from '@/components/sdui/SDUIRenderer';
+import { useActionDispatcher } from '@/hooks/useActionDispatcher';
 import { colors, spacing, typography } from '@/theme/colors';
 
-const handleAction: ActionDispatcher = (action: SDUIAction) => console.log('[SDUI action]', action);
-
 export default function FormsScreen() {
+  const handleAction = useActionDispatcher();
   const { screen, loading, error, refresh } = useSDUIScreen('forms');
 
   if (loading) {

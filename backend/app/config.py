@@ -44,5 +44,10 @@ class Settings(BaseSettings):
     # MCP
     mcp_path: str = "/mcp"
 
+    # External Agent — when set, the backend forwards mobile-app chat to this service
+    # instead of calling the LLM provider directly.
+    # Example: EXTERNAL_AGENT_URL=http://localhost:7860
+    external_agent_url: str = ""
+
 
 settings = Settings()

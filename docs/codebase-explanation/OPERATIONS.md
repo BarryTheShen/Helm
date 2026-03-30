@@ -84,11 +84,41 @@ The database file lives at `backend/helm.db`. Delete it and re-run `alembic upgr
 ```bash
 cd backend
 source .venv/bin/activate
-pytest                      # all tests
+pytest                      # all 55 tests
 pytest -v                   # verbose
 pytest tests/test_auth.py   # single file
 pytest --cov=app            # with coverage
 ```
+
+Test files:
+| File | Tests | Covers |
+|------|-------|--------|
+| `tests/test_auth.py` | 8 | Registration, login, lockdown, JWT |
+| `tests/test_calendar.py` | 9 | Calendar CRUD, bulk delete |
+| `tests/test_notifications.py` | 7 | Notifications + mark-read action |
+| `tests/test_workflows.py` | 8 | Workflow CRUD, cron scheduling |
+| `tests/test_actions.py` | 15 | Action registry, endpoint auth, each handler |
+| `tests/test_drafts.py` | 8 | Draft lifecycle (approve / reject / overwrite) |
+
+### User management (CLI)
+
+After the first user is created via the app's login screen or `POST /auth/setup`, that endpoint is **locked** — it returns 409. Use the `manage.py` CLI to create additional users:
+
+```bash
+cd backend
+source .venv/bin/activate
+
+# Interactive (prompts for username + password):
+python manage.py create_user
+
+# Non-interactive:
+python manage.py create_user --username alice --password supersecret
+
+# List all users:
+python manage.py list_users
+```
+
+The CLI uses the same SQLAlchemy models and bcrypt hashing as the REST API — no special privileges needed.
 
 ---
 

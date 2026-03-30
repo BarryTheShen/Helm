@@ -104,7 +104,13 @@ Uses **Expo Router** (file-based routing):
 **`useSDUIScreen(moduleId)`** (`src/hooks/useSDUIScreen.ts`):
 - Fetches `GET /api/sdui/{moduleId}` on mount and auth changes
 - Subscribes to WS `sdui_screen_update` messages for live updates
-- Returns `{ screen, loading, error, refresh }` — used by all 7 tab screens
+- Returns `{ screen, draft, loading, error, refresh }` — `draft` is `SDUIScreen | null` from `sdui_draft_update` WS events
+
+**`useActionDispatcher()`** (`src/hooks/useActionDispatcher.ts`):
+- Returns a stable `handleAction` callback for dispatching SDUI actions
+- Replaces the 7 per-screen `console.log` stubs — call `const handleAction = useActionDispatcher()` inside the component
+- Action types handled: navigate (tab route mapping), go_back, open_url (scheme-whitelisted), copy_text (expo-clipboard), server_action (POST /api/actions/execute), send_to_agent (WS + router.push), toggle (local state, no-op at dispatcher), dismiss, api_call (legacy compat)
+- Dependencies: useRouter, useAuthStore, useWebSocket, ApiClient
 
 ### SDUI Component System
 
@@ -131,7 +137,7 @@ The app has a **Server-Driven UI renderer** (`SDUIRenderer.tsx`) that accepts a 
 | `spacer` | Empty height spacer | Implemented |
 | *(unknown)* | Error card | Graceful fallback |
 
-**⚠️ SDUI Actions never execute** — `onAction` handlers log to console only. Navigate, api_call, open_url, dismiss, etc. are all non-functional.
+~~**⚠️ SDUI Actions never execute**~~ — **FIXED (Session 2)**: All 7 action types are now handled by `useActionDispatcher`. All tab screens use the hook instead of `console.log` stubs.
 
 **⚠️ Dead SDUI component files** — `AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx` are NOT used by `SDUIRenderer.tsx` (it renders all types inline). These files are dead code.
 
@@ -161,6 +167,7 @@ The app has a **Server-Driven UI renderer** (`SDUIRenderer.tsx`) that accepts a 
 - `date-fns` ^4.1.0 (date formatting)
 - `zod` ^4.3.6 (runtime validation)
 - `expo-secure-store` ^55.0.9 (encrypted storage on native)
+- `expo-clipboard` ~13.x.x (SDK 55) (clipboard read/write — used by `useActionDispatcher` for `copy_text`)
 - `react-native-reanimated` ^4.2.3 (animations)
 
 **`app.json`** — Expo config:
@@ -217,8 +224,8 @@ The auth guard logic:
 
 **Home** (`(tabs)/home.tsx`) — Fully AI-driven screen:
 - Only content: `useSDUIScreen('home')` render
+- Uses `useActionDispatcher()` for SDUI actions; shows `DraftPreview` component when `draft !== null`
 - No functional fallback — empty state shown when no SDUI screen is set
-- `handleAction` is `console.log` only — SDUI actions never execute
 
 **Calendar** (`(tabs)/calendar.tsx`):
 - Loads events for current month via `GET /api/calendar/events?start_date=...&end_date=...`
@@ -250,6 +257,7 @@ The auth guard logic:
 - Generic `request<T>()` method that handles auth headers, 401 redirect, error parsing
 - Methods for all backend endpoints: auth, calendar, notifications, agent config, workflows, modules, chat, SDUI screens, tab visibility
 - New endpoints added: `getSDUIScreen`, `setSDUIScreen`, `deleteSDUIScreen`, `hideTab`, `showTab`
+- `executeAction(functionName, params)` — POST /api/actions/execute; calls a named backend function from the action registry
 - On 401: calls `onUnauthorized` callback (which triggers logout)
 
 **`AuthService`** (`src/services/auth.ts`):
@@ -279,9 +287,15 @@ The auth guard logic:
 **`SDUIRenderer`** (`src/components/sdui/SDUIRenderer.tsx`) — Inline switch-based renderer:
 - 19 component types all rendered inline (no sub-component imports)
 - `SDUIScreenRenderer` wraps a `sections[]` array from the screen payload
-- `FormRenderer` is a local stateful component inside the same file
-- `onAction` prop is forwarded but handlers only `console.log` — no actions execute
+- `FormRenderer` is a local stateful component inside the same file; handles `server_action` submit type (merges form values into params)
+- `onAction` prop forwarded to `useActionDispatcher()` via the calling screen — actions now execute
 - Unknown component types render an error card with the type name
+
+**`DraftPreview`** (`src/components/sdui/DraftPreview.tsx`):
+- Shown on home.tsx when `useSDUIScreen('home').draft !== null`
+- Props: `{ moduleId: string, draft: SDUIScreen, onApprove: () => void, onReject: (feedback?: string) => void }`
+- Renders a banner + SDUI preview of the draft screen + feedback input (toggleable)
+- Calls POST /api/sdui/{moduleId}/draft/approve or /reject on user action
 
 **⚠️ Dead code files** (not imported anywhere):
 - `AlertComponent.tsx` — dead
@@ -298,6 +312,8 @@ All 4 files should be deleted to reduce confusion.
 **`sdui.ts`** — SDUI component type definitions:
 - Old flat `SDUIComponent {type, id, props, children}` type
 - Does NOT reflect the real screen payload shape: `SDUIScreen {schema_version, module_id, title, sections[]}`. Use the backend schema source of truth.
+- Action union type includes: `navigate`, `api_call`, `open_url`, `dismiss`, `server_action` (call named backend function), `send_to_agent` (route message to AI), `go_back` (navigate back), `toggle` (client-side toggle), `copy_text`, `open_sheet`
+- `ContainerComponent` has new flexbox props: `justify` (`'start'|'center'|'end'|'space-between'|'space-around'`), `padding` (`'none'|'xs'|'sm'|'md'|'lg'`), `flex: number`
 
 **`navigation.ts`** — Route type definitions. **Dead code** — Expo Router handles routing types automatically.
 
@@ -378,6 +394,7 @@ mobile/
     │   │   └── Input.tsx         # Styled text input
     │   └── sdui/
     │       ├── SDUIRenderer.tsx  # SDUI engine (19 inline component types)
+    │       ├── DraftPreview.tsx  # Draft review UI (approve/reject)
     │       ├── AlertComponent.tsx    # DEAD CODE
     │       ├── CalendarComponent.tsx # DEAD CODE
     │       ├── FormComponent.tsx     # DEAD CODE
@@ -385,7 +402,8 @@ mobile/
     ├── contexts/
     │   └── WebSocketContext.tsx  # Singleton WS, useWebSocket() hook
     ├── hooks/
-    │   └── useSDUIScreen.ts      # Fetch + live-update SDUI per module
+    │   ├── useSDUIScreen.ts      # Fetch + live-update SDUI per module; returns screen + draft
+    │   └── useActionDispatcher.ts # SDUI action dispatcher hook
     ├── services/
     │   ├── api.ts                # REST API client (all endpoints)
     │   ├── auth.ts               # Auth service (setup/login/logout)
@@ -408,7 +426,7 @@ mobile/
 
 ### Known Issues / TODOs
 
-1. **SDUI actions never execute** — All `onAction` callbacks only `console.log`. `navigate`, `api_call`, `open_url`, `dismiss`, `refresh` are dead. This is the #1 missing feature.
+1. ~~**SDUI actions never execute**~~ — **FIXED (Session 2)**: All 7 action types now handled by `useActionDispatcher`. All tab screens use the hook instead of `console.log` stubs.
 2. **Dead SDUI component files** — `AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx` not imported anywhere. Should be deleted.
 3. **`logout()` no server call** — `AuthService.logout()` only clears local state. Backend session remains active. `DELETE /auth/logout` is never called.
 4. **`markNotificationRead` never called** — The method exists in `api.ts` but `alerts.tsx` never calls it.

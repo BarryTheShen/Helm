@@ -5,8 +5,8 @@ import { ApiClient } from '@/services/api';
 import { ErrorBanner } from '@/components/common/ErrorBanner';
 import { useUIStore } from '@/stores/uiStore';
 import { useSDUIScreen } from '@/hooks/useSDUIScreen';
-import { SDUIScreenRenderer, type ActionDispatcher } from '@/components/sdui/SDUIRenderer';
-import type { SDUIAction } from '@/types/sdui';
+import { SDUIScreenRenderer } from '@/components/sdui/SDUIRenderer';
+import { useActionDispatcher } from '@/hooks/useActionDispatcher';
 import type { CalendarEvent } from '@/types/api';
 import { colors, spacing, typography, borderRadius } from '@/theme/colors';
 import {
@@ -24,9 +24,8 @@ import { useFocusEffect } from 'expo-router';
 
 const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
-const handleAction: ActionDispatcher = (action: SDUIAction) => console.log('[SDUI action]', action);
-
 export default function CalendarScreen() {
+  const handleAction = useActionDispatcher();
   const { token, serverUrl, logout } = useAuthStore();
   const { errorBanner, showError, hideError } = useUIStore();
   const { screen: sduiScreen } = useSDUIScreen('calendar');

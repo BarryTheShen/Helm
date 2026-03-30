@@ -51,7 +51,7 @@ The MCP (Model Context Protocol) server is a separate sub-application mounted at
 
 **Purpose:** Let external AI agents (like Claude Desktop, custom agents, etc.) call Helm's tools programmatically.
 
-**Available tools (17):**
+**Available tools (20):**
 
 | Tool | What it does |
 |------|--------------|
@@ -66,14 +66,19 @@ The MCP (Model Context Protocol) server is a separate sub-application mounted at
 | `helm_send_chat_message` | Send a message as the assistant |
 | `helm_update_module_state` | Push SDUI state to a module (legacy key) |
 | `helm_get_form_data` | Get form submissions |
-| `helm_set_screen` | Set SDUI screen JSON for a module |
+| `helm_set_screen` | Set SDUI screen JSON for a module. `draft=True` by default — sends for human approval; `draft=False` publishes live immediately |
 | `helm_delete_screen` | Delete the SDUI screen for a module |
 | `helm_list_screens` | List all active SDUI screens |
 | `helm_hide_tab` | Hide a tab from the bottom navigator |
 | `helm_show_tab` | Show a previously hidden tab |
 | `helm_list_tabs` | List tabs and their visibility |
+| `approve_draft` | Promote a pending draft screen to the live screen |
+| `reject_draft` | Discard a draft screen (with optional feedback) |
+| `get_draft` | Read the current pending draft for a module |
 
 **Architecture note:** The actual tool logic lives in `backend/app/mcp/tools.py` and is shared between the Agent Proxy (internal calls) and the MCP Server (external calls). This means the same code handles both internal LLM tool calls and external agent tool calls.
+
+**Action Registry:** The `/api/actions/execute` endpoint exposes a named-function dispatch layer. Both external MCP tool calls (`helm_set_screen`, etc.) and SDUI `server_action` events from `useActionDispatcher` on the frontend route through the same registry — the AI and the user’s UI interact with the same tool layer. The `module_action` WebSocket message type (sent from the frontend) was previously a stub `ack`; it now dispatches to this action registry.
 
 **Authentication:** The MCP ASGI app is wrapped in `_MCPAuthMiddleware` (in `backend/app/mcp/server.py`). Every request must include `Authorization: Bearer <token>`. The middleware validates the token, looks up the session, and sets `_current_user_id` for the request context. Unauthenticated requests return 401.
 
@@ -129,7 +134,7 @@ Browse available models and their free tier status at: https://openrouter.ai/mod
 
 #### What the agent can do
 
-- Connect to the Helm MCP server (all 17 tools) via HTTP + Bearer token
+- Connect to the Helm MCP server (all 20 tools) via HTTP + Bearer token
 - Read any file inside `mobile/` (the React Native frontend)
 - Write / overwrite any file inside `mobile/` to programmatically edit the frontend
 - List files in any `mobile/` subdirectory
@@ -142,7 +147,7 @@ agent/helm_agent.py (no backend imports)
   ├── Three modes: --web (local chat_ui.html), REPL, one-shot
   ├── _build_agent()  — shared agent factory used by all modes
   ├── _SYSTEM_PROMPT  — shared system prompt string
-  ├── MCPServerStreamableHTTP → Helm /mcp (17 Helm MCP tools)
+  ├── MCPServerStreamableHTTP → Helm /mcp (20 Helm MCP tools)
   └── Local filesystem tools (path-validated to mobile/ only)
         read_frontend_file(relative_path)
         write_frontend_file(relative_path, content)
@@ -264,6 +269,9 @@ Each tool in `backend/app/mcp/tools.py` follows the same pattern:
 | `send_notification` | `{"type": "notification", "id": "...", "title": "...", "message": "...", "severity": "..."}` |
 | `send_chat_message` | `{"type": "chat_complete", "message_id": "...", "content": "..."}` |
 | `update_module_state` | `{"type": "module_state_update", "module": "...", "state": {...}, "version": N}` |
+| `helm_set_screen` (draft=True) | `{"type": "sdui_draft_update", "module_id": "...", "draft": {...}}` |
+| `approve_draft` | `{"type": "sdui_screen_update", "module_id": "...", "screen": {...}}` (publishes draft as live) |
+| `reject_draft` | `{"type": "sdui_draft_rejected", "module_id": "..."}` |
 
 The other tools (read_calendar, create_event, etc.) only modify the DB and return results — no WebSocket push.
 

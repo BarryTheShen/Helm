@@ -32,6 +32,9 @@ async def execute_tool(name: str, args: dict[str, Any], user_id: str) -> Any:
         "hide_tab": hide_tab,
         "show_tab": show_tab,
         "list_tabs": list_tabs,
+        "approve_draft": approve_draft,
+        "reject_draft": reject_draft,
+        "get_draft": get_draft,
     }
     handler = handlers.get(name)
     if handler is None:
@@ -89,6 +92,10 @@ async def create_event(
         )
         db.add(event)
         await db.commit()
+        # Refresh the SDUI calendar screen so the frontend auto-updates
+        from app.routers.calendar import _update_sdui_calendar
+        async with AsyncSessionLocal() as db2:
+            await _update_sdui_calendar(db2, user_id)
         return {"id": str(event.id), "title": event.title, "created": True}
 
 
@@ -320,13 +327,155 @@ async def get_form_data(form_id: str | None = None, user_id: str = "") -> dict[s
 
 _SDUI_PREFIX = "sdui__"
 
+# Fields that belong in props for each component type (keyed by type literal)
+_SDUI_PROPS_FIELDS: dict[str, set[str]] = {
+    'text':        {'content', 'size', 'color', 'bold', 'italic', 'align'},
+    'heading':     {'content', 'level', 'align'},
+    'button':      {'label', 'variant', 'action', 'disabled', 'icon'},
+    'icon_button': {'icon', 'label', 'action', 'size'},
+    'divider':     {'spacing'},
+    'spacer':      {'size'},
+    'card':        {'title', 'subtitle', 'elevated', 'action'},
+    'container':   {'direction', 'gap', 'wrap', 'align', 'justify', 'padding', 'flex'},
+    'list':        {'title', 'items'},
+    'form':        {'title', 'fields', 'submit_label', 'submit_action'},
+    'alert':       {'severity', 'title', 'message', 'dismissible'},
+    'badge':       {'label', 'color'},
+    'stat':        {'label', 'value', 'change', 'change_direction', 'icon'},
+    'stats_row':   {'stats'},
+    'calendar':    {'events', 'view'},
+    'image':       {'uri', 'aspect_ratio', 'alt', 'action'},
+    'progress':    {'value', 'max', 'label', 'color'},
+}
 
-async def set_screen(module_id: str, screen: dict[str, Any], user_id: str) -> dict[str, Any]:
-    """Persist an SDUIScreen JSON for *module_id* and push it to the frontend.
+_SDUI_STRUCTURAL_KEYS = {'type', 'id', 'children', 'props'}
+
+
+def _normalize_sdui_component(comp: dict[str, Any]) -> dict[str, Any]:
+    """Convert a flat AI-generated component to the props-based schema the frontend expects.
+
+    AI models sometimes generate: {"type": "text", "content": "Hello"}
+    The frontend TypeScript types require: {"type": "text", "id": "...", "props": {"content": "Hello"}}
+
+    If the component already has a 'props' key it is returned unchanged (children still
+    recursed). Unknown fields are left at the top level to remain forward-compatible.
+    """
+    if not isinstance(comp, dict) or 'type' not in comp:
+        return comp
+
+    comp_id = comp.get('id') or str(uuid4())
+
+    # Already has props — ensure id and recurse into children
+    if 'props' in comp:
+        result = {**comp, 'id': comp_id}
+        if 'children' in result:
+            result['children'] = [_normalize_sdui_component(c) for c in result['children']]
+        return result
+
+    # Flat format — split fields into props vs structural
+    comp_type: str = comp.get('type', '')
+    prop_fields = _SDUI_PROPS_FIELDS.get(comp_type, set())
+
+    props: dict[str, Any] = {}
+    rest: dict[str, Any] = {}
+    for key, val in comp.items():
+        if key in _SDUI_STRUCTURAL_KEYS:
+            continue
+        elif key in prop_fields:
+            props[key] = val
+        else:
+            rest[key] = val  # unexpected fields preserved at top level
+
+    result = {'type': comp_type, 'id': comp_id, 'props': props, **rest}
+
+    if 'children' in comp:
+        result['children'] = [_normalize_sdui_component(c) for c in comp['children']]
+
+    return result
+
+
+def normalize_sdui_screen(screen: dict[str, Any]) -> dict[str, Any]:
+    """Normalize every component in an SDUIScreen to use the props-based schema.
+
+    Called before storing and before serving SDUI screens so that flat
+    AI-generated JSON always matches what the frontend TypeScript types expect.
+    """
+    if not isinstance(screen, dict):
+        return screen
+
+    normalized_sections = []
+    for section in screen.get('sections', []):
+        if not isinstance(section, dict):
+            normalized_sections.append(section)
+            continue
+
+        norm_section = dict(section)
+        if 'component' in norm_section:
+            norm_section['component'] = _normalize_sdui_component(norm_section['component'])
+        if 'components' in norm_section:
+            norm_section['components'] = [_normalize_sdui_component(c) for c in norm_section['components']]
+        normalized_sections.append(norm_section)
+
+    return {**screen, 'sections': normalized_sections}
+
+
+async def set_screen(module_id: str, screen: dict[str, Any], user_id: str, draft: bool = True) -> dict[str, Any]:
+    """Persist an SDUIScreen JSON for *module_id*.
+
+    Architecture Decision: Session 2, Section 8 — Draft/Approval Flow.
+    When draft=True (default), the screen is saved as a draft. The frontend
+    shows a preview with approve/reject options. When approved, the draft
+    becomes the live screen.
 
     The screen must follow the SDUIScreen schema:
       { schema_version: 1, module_id, title, sections: [...] }
     """
+    from app.services.websocket_manager import manager
+
+    # Normalise before storage so flat AI-generated components become props-based
+    screen = normalize_sdui_screen(screen)
+
+    if draft:
+        # Store as draft, don't overwrite live screen
+        draft_key = _SDUI_PREFIX + module_id + "__draft"
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(ModuleState).where(
+                    ModuleState.user_id == user_id,
+                    ModuleState.module_type == draft_key,
+                )
+            )
+            state = result.scalar_one_or_none()
+            if state is None:
+                state = ModuleState(
+                    id=str(uuid4()),
+                    user_id=user_id,
+                    module_type=draft_key,
+                    state_json=screen,
+                    version=1,
+                )
+                db.add(state)
+            else:
+                state.state_json = screen
+                state.version += 1
+            await db.commit()
+            version = state.version
+
+        # Notify frontend about the draft
+        await manager.send(user_id, {
+            "type": "sdui_draft_update",
+            "module_id": module_id,
+            "screen": screen,
+            "version": version,
+        })
+        return {"module_id": module_id, "version": version, "draft": True, "message": "Screen saved as draft. User must approve to go live."}
+    else:
+        # Direct publish (for auto-approval or programmatic use)
+        return await _publish_screen(module_id, screen, user_id)
+
+
+async def _publish_screen(module_id: str, screen: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Directly publish a screen (bypasses draft flow)."""
     from app.services.websocket_manager import manager
 
     async with AsyncSessionLocal() as db:
@@ -528,3 +677,87 @@ async def list_tabs(user_id: str) -> dict[str, Any]:
         for t in _ALL_TAB_DETAILS
     ]
     return {"tabs": tabs}
+
+
+# ── Draft management (Human-in-the-Loop) ──────────────────────────────────
+# Architecture Decision: Session 2, Section 8.
+# AI layout changes go through approval. Draft screens are stored separately.
+
+async def approve_draft(module_id: str, user_id: str) -> dict[str, Any]:
+    """Approve a draft screen — promote it to the live screen."""
+    draft_key = _SDUI_PREFIX + module_id + "__draft"
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(ModuleState).where(
+                ModuleState.user_id == user_id,
+                ModuleState.module_type == draft_key,
+            )
+        )
+        draft = result.scalar_one_or_none()
+        if draft is None:
+            return {"status": "error", "message": f"No draft found for module '{module_id}'"}
+
+        screen = draft.state_json
+
+        # Delete the draft
+        await db.delete(draft)
+        await db.commit()
+
+    # Publish the draft as the live screen
+    result = await _publish_screen(module_id, screen, user_id)
+    result["approved"] = True
+    return result
+
+
+async def reject_draft(module_id: str, user_id: str, feedback: str | None = None) -> dict[str, Any]:
+    """Reject a draft screen — discard it and optionally provide feedback."""
+    from app.services.websocket_manager import manager
+
+    draft_key = _SDUI_PREFIX + module_id + "__draft"
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(ModuleState).where(
+                ModuleState.user_id == user_id,
+                ModuleState.module_type == draft_key,
+            )
+        )
+        draft = result.scalar_one_or_none()
+        if draft is None:
+            return {"status": "error", "message": f"No draft found for module '{module_id}'"}
+
+        await db.delete(draft)
+        await db.commit()
+
+    # Notify frontend that draft was rejected
+    await manager.send(user_id, {
+        "type": "sdui_draft_rejected",
+        "module_id": module_id,
+    })
+
+    response: dict[str, Any] = {"module_id": module_id, "rejected": True}
+    if feedback:
+        response["feedback"] = feedback
+        response["message"] = f"Draft rejected. User feedback: {feedback}"
+    else:
+        response["message"] = "Draft rejected by user."
+    return response
+
+
+async def get_draft(module_id: str, user_id: str) -> dict[str, Any]:
+    """Get the current draft screen for a module, if any."""
+    draft_key = _SDUI_PREFIX + module_id + "__draft"
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(ModuleState).where(
+                ModuleState.user_id == user_id,
+                ModuleState.module_type == draft_key,
+            )
+        )
+        draft = result.scalar_one_or_none()
+
+    if draft is None:
+        return {"screen": None, "has_draft": False}
+    return {"screen": draft.state_json, "version": draft.version, "has_draft": True}

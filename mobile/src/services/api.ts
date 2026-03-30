@@ -170,6 +170,10 @@ export class ApiClient {
     return this.request(`/api/sdui/${moduleId}`);
   }
 
+  async getSDUIDraft(moduleId: string): Promise<{ screen: Record<string, unknown> | null; has_draft: boolean }> {
+    return this.request(`/api/sdui/${moduleId}/draft`);
+  }
+
   async deleteSDUIScreen(moduleId: string): Promise<void> {
     return this.request<void>(`/api/sdui/${moduleId}`, { method: 'DELETE' });
   }
@@ -183,5 +187,13 @@ export class ApiClient {
 
   async deleteConversation(conversationId: string): Promise<void> {
     return this.request<void>(`/api/chat/history`, { method: 'DELETE' });
+  }
+
+  // Server actions (SDUI function registry)
+  async executeAction(functionName: string, params: Record<string, any> = {}): Promise<any> {
+    return this.request<any>('/api/actions/execute', {
+      method: 'POST',
+      body: JSON.stringify({ function: functionName, params }),
+    });
   }
 }
