@@ -24,6 +24,12 @@ import { ChatModule } from '@/components/composite/ChatModule';
 import { NotesModule } from '@/components/composite/NotesModule';
 import { InputBar } from '@/components/composite/InputBar';
 
+// Tier 4 — SDUI-specific (shared across V1 + V2)
+import { SDUIBadge } from '@/components/sdui/SDUIBadge';
+import { SDUIStat } from '@/components/sdui/SDUIStat';
+import { ListComponent } from '@/components/sdui/ListComponent';
+import { AlertComponent } from '@/components/sdui/AlertComponent';
+
 // Registry: type string → React component
 // Components receive { ...props, dispatch, children? }
 const registry: Record<string, ComponentType<any>> = {
@@ -40,6 +46,11 @@ const registry: Record<string, ComponentType<any>> = {
   ChatModule: ChatModule,
   NotesModule: NotesModule,
   InputBar: InputBar,
+  // Composites used by AI-generated SDUI
+  Badge: SDUIBadge,
+  Stat: SDUIStat,
+  List: ListComponent,
+  Alert: AlertComponent,
 };
 
 /** Look up a component by its SDUI type string. Returns null if not found. */
