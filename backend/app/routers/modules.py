@@ -18,6 +18,7 @@ from app.schemas.modules import (
     ModuleListResponse,
     ModuleStateResponse,
     SDUIScreenRequest,
+    TabConfigRequest,
 )
 
 router = APIRouter(prefix="/api", tags=["modules"])
@@ -55,8 +56,39 @@ async def _get_hidden_tabs(db: AsyncSession, user_id: str) -> list[str]:
     return (state.state_json or {}).get("hidden_tabs", [])
 
 
-async def _set_hidden_tabs(db: AsyncSession, user_id: str, hidden_tabs: list[str]) -> None:
-    """Persist the updated hidden-tabs list for a user."""
+async def _get_tab_overrides(db: AsyncSession, user_id: str) -> dict[str, dict]:
+    """Return per-user tab name/icon overrides as {tab_id: {name?, icon?}}."""
+    result = await db.execute(
+        select(ModuleState).where(
+            ModuleState.user_id == user_id,
+            ModuleState.module_type == _TABS_CONFIG_KEY,
+        )
+    )
+    state = result.scalar_one_or_none()
+    if state is None:
+        return {}
+    return (state.state_json or {}).get("tab_overrides", {})
+
+
+async def _get_tabs_config(db: AsyncSession, user_id: str) -> dict:
+    """Return the full tabs config dict for a user (hidden_tabs + tab_overrides)."""
+    result = await db.execute(
+        select(ModuleState).where(
+            ModuleState.user_id == user_id,
+            ModuleState.module_type == _TABS_CONFIG_KEY,
+        )
+    )
+    state = result.scalar_one_or_none()
+    if state is None:
+        return {"hidden_tabs": [], "tab_overrides": {}}
+    cfg = state.state_json or {}
+    cfg.setdefault("hidden_tabs", [])
+    cfg.setdefault("tab_overrides", {})
+    return cfg
+
+
+async def _save_tabs_config(db: AsyncSession, user_id: str, config: dict) -> None:
+    """Persist the full tabs config for a user."""
     result = await db.execute(
         select(ModuleState).where(
             ModuleState.user_id == user_id,
@@ -69,14 +101,34 @@ async def _set_hidden_tabs(db: AsyncSession, user_id: str, hidden_tabs: list[str
             id=str(uuid4()),
             user_id=user_id,
             module_type=_TABS_CONFIG_KEY,
-            state_json={"hidden_tabs": hidden_tabs},
+            state_json=config,
             version=1,
         )
         db.add(state)
     else:
-        state.state_json = {"hidden_tabs": hidden_tabs}
+        state.state_json = config
         state.version += 1
     await db.commit()
+
+
+async def _set_hidden_tabs(db: AsyncSession, user_id: str, hidden_tabs: list[str]) -> None:
+    """Persist the updated hidden-tabs list for a user (preserves tab_overrides)."""
+    config = await _get_tabs_config(db, user_id)
+    config["hidden_tabs"] = hidden_tabs
+    await _save_tabs_config(db, user_id, config)
+
+
+def _build_module_list(hidden: list[str], overrides: dict[str, dict]) -> list[ModuleInfo]:
+    """Build the full module list applying per-user overrides on top of defaults."""
+    return [
+        ModuleInfo(
+            id=m.id,
+            name=overrides.get(m.id, {}).get("name", m.name),
+            icon=overrides.get(m.id, {}).get("icon", m.icon),
+            enabled=m.id not in hidden,
+        )
+        for m in _ALL_TABS
+    ]
 
 DEFAULT_MODULE_STATES: dict[str, dict[str, Any]] = {
     "chat": {"type": "chat", "props": {"messages": [], "streaming": False}, "version": 0},
@@ -92,12 +144,9 @@ async def list_modules(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return all tabs with per-user enabled/disabled status."""
-    hidden = await _get_hidden_tabs(db, str(current_user.id))
-    modules = [
-        ModuleInfo(id=m.id, name=m.name, icon=m.icon, enabled=m.id not in hidden)
-        for m in _ALL_TABS
-    ]
+    """Return all tabs with per-user enabled/disabled status and name/icon overrides."""
+    config = await _get_tabs_config(db, str(current_user.id))
+    modules = _build_module_list(config["hidden_tabs"], config["tab_overrides"])
     return ModuleListResponse(modules=modules)
 
 
@@ -124,10 +173,8 @@ async def hide_module(
         hidden = hidden + [module_id]
         await _set_hidden_tabs(db, str(current_user.id), hidden)
 
-    modules_payload = [
-        {"id": m.id, "name": m.name, "icon": m.icon, "enabled": m.id not in hidden}
-        for m in _ALL_TABS
-    ]
+    overrides = await _get_tab_overrides(db, str(current_user.id))
+    modules_payload = [m.model_dump() for m in _build_module_list(hidden, overrides)]
     await manager.send(str(current_user.id), {"type": "tabs_updated", "modules": modules_payload})
     return {"module_id": module_id, "hidden": True}
 
@@ -154,12 +201,48 @@ async def show_module(
         hidden = [t for t in hidden if t != module_id]
         await _set_hidden_tabs(db, str(current_user.id), hidden)
 
-    modules_payload = [
-        {"id": m.id, "name": m.name, "icon": m.icon, "enabled": m.id not in hidden}
-        for m in _ALL_TABS
-    ]
+    overrides = await _get_tab_overrides(db, str(current_user.id))
+    modules_payload = [m.model_dump() for m in _build_module_list(hidden, overrides)]
     await manager.send(str(current_user.id), {"type": "tabs_updated", "modules": modules_payload})
     return {"module_id": module_id, "hidden": False}
+
+
+@router.patch("/modules/{module_id}/config", status_code=200)
+async def configure_module(
+    module_id: str,
+    body: TabConfigRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Rename a tab and/or change its icon.
+
+    The name and icon are stored as per-user overrides so the default labels
+    survive a backend restart.  A 'tabs_updated' WebSocket event is pushed
+    so the frontend reflects the change immediately.
+    """
+    from app.services.websocket_manager import manager
+
+    valid_ids = {m.id for m in _ALL_TABS}
+    if module_id not in valid_ids:
+        raise HTTPException(status_code=404, detail=f"Unknown tab: {module_id}")
+
+    if body.name is None and body.icon is None:
+        raise HTTPException(status_code=422, detail="Provide at least 'name' or 'icon'.")
+
+    config = await _get_tabs_config(db, str(current_user.id))
+    override = config["tab_overrides"].get(module_id, {})
+    if body.name is not None:
+        override["name"] = body.name
+    if body.icon is not None:
+        override["icon"] = body.icon
+    config["tab_overrides"][module_id] = override
+    await _save_tabs_config(db, str(current_user.id), config)
+
+    modules_payload = [m.model_dump() for m in _build_module_list(config["hidden_tabs"], config["tab_overrides"])]
+    await manager.send(str(current_user.id), {"type": "tabs_updated", "modules": modules_payload})
+
+    updated = next(m for m in modules_payload if m["id"] == module_id)
+    return updated
 
 
 @router.get("/modules/{module_id}/state", response_model=ModuleStateResponse)

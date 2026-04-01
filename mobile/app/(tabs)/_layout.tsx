@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
+import { Tabs, useRouter } from 'expo-router';
+import { Text, TouchableOpacity } from 'react-native';
 import { colors } from '@/theme/colors';
 import { WebSocketProvider, useWebSocket } from '@/contexts/WebSocketContext';
 import { useAuthStore } from '@/stores/authStore';
@@ -8,17 +8,16 @@ import { useTabsStore } from '@/stores/tabsStore';
 import { ApiClient } from '@/services/api';
 
 /**
- * Loads tab visibility from the server and keeps it in sync via WebSocket.
- *
- * Why a separate component: useWebSocket() requires a WebSocketProvider ancestor,
- * so this must live inside <WebSocketProvider> rather than in TabsLayout itself.
+ * Loads tab visibility and module configs from the server and keeps them in
+ * sync via WebSocket. Runs inside <WebSocketProvider> so it can use the WS hook.
  */
 function TabsConfigSync() {
   const { token, serverUrl, logout } = useAuthStore();
   const ws = useWebSocket();
   const setHiddenTabs = useTabsStore((s) => s.setHiddenTabs);
+  const setModuleConfigs = useTabsStore((s) => s.setModuleConfigs);
 
-  // Initial load: fetch which tabs are hidden from the REST API.
+  // Initial load: fetch module list (name, icon, enabled) from REST.
   useEffect(() => {
     if (!token || !serverUrl) return;
     const api = new ApiClient(serverUrl, token, logout);
@@ -28,13 +27,18 @@ function TabsConfigSync() {
           .filter((m) => !m.enabled)
           .map((m) => m.id);
         setHiddenTabs(hidden);
+
+        // Build id → {name, icon} map so tabs can display dynamic labels.
+        const configs: Record<string, { name: string; icon: string }> = {};
+        data.modules.forEach((m) => { configs[m.id] = { name: m.name, icon: m.icon }; });
+        setModuleConfigs(configs);
       })
       .catch(() => {
-        // On error keep all tabs visible — safer than hiding them.
+        // On error keep all tabs visible with default labels.
       });
   }, [token, serverUrl]);
 
-  // Live updates: when the AI hides/shows a tab, the backend pushes tabs_updated.
+  // Live updates: when the AI hides/shows a tab or renames a module.
   useEffect(() => {
     if (!ws) return;
     return ws.onMessage((msg: any) => {
@@ -43,6 +47,10 @@ function TabsConfigSync() {
           .filter((m: any) => !m.enabled)
           .map((m: any) => m.id as string);
         setHiddenTabs(hidden);
+
+        const configs: Record<string, { name: string; icon: string }> = {};
+        msg.modules.forEach((m: any) => { configs[m.id] = { name: m.name, icon: m.icon }; });
+        setModuleConfigs(configs);
       }
     });
   }, [ws]);
@@ -50,10 +58,33 @@ function TabsConfigSync() {
   return null;
 }
 
+/** Small gear button rendered in the header right corner of every tab. */
+function SettingsHeaderButton() {
+  const router = useRouter();
+  return (
+    <TouchableOpacity
+      onPress={() => router.push('/(tabs)/settings' as any)}
+      style={{ paddingHorizontal: 16, paddingVertical: 8 }}
+      accessibilityRole="button"
+      accessibilityLabel="Settings"
+    >
+      <Text style={{ fontSize: 22 }}>⚙️</Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function TabsLayout() {
   const hiddenTabs = useTabsStore((s) => s.hiddenTabs);
+  const moduleConfigs = useTabsStore((s) => s.moduleConfigs);
+
   // href: null hides the tab from the nav bar while keeping the route accessible.
   const tabHref = (name: string) => (hiddenTabs.includes(name) ? null : undefined);
+
+  // Resolve tab label and icon from server-provided config, falling back to defaults.
+  const tabLabel = (id: string, fallback: string) => moduleConfigs[id]?.name ?? fallback;
+  const tabIcon = (id: string, fallback: string) => moduleConfigs[id]?.icon ?? fallback;
+
+  const headerRight = () => <SettingsHeaderButton />;
 
   return (
     <WebSocketProvider>
@@ -62,67 +93,74 @@ export default function TabsLayout() {
         screenOptions={{
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.textSecondary,
-          headerShown: false,
+          // Show a minimal header with the settings gear on every tab.
+          headerShown: true,
+          headerStyle: { backgroundColor: colors.background },
+          headerShadowVisible: false,
+          headerTitleStyle: { color: colors.text, fontSize: 17, fontWeight: '600' },
+          headerRight,
         }}
       >
         <Tabs.Screen
           name="home"
           options={{
-            title: 'Home',
+            title: tabLabel('home', 'Home'),
             href: tabHref('home'),
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 24 }}>🏠</Text>,
+            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 22 }}>{tabIcon('home', '🏠')}</Text>,
           }}
         />
         <Tabs.Screen
           name="chat"
           options={{
-            title: 'Chat',
+            title: tabLabel('chat', 'Chat'),
             href: tabHref('chat'),
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 24 }}>💬</Text>,
+            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 22 }}>{tabIcon('chat', '💬')}</Text>,
           }}
         />
         <Tabs.Screen
           name="modules"
           options={{
-            title: 'Modules',
+            title: tabLabel('modules', 'Modules'),
             href: tabHref('modules'),
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 24 }}>🧩</Text>,
+            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 22 }}>{tabIcon('modules', '🧩')}</Text>,
           }}
         />
         <Tabs.Screen
           name="calendar"
           options={{
-            title: 'Calendar',
+            title: tabLabel('calendar', 'Calendar'),
             href: tabHref('calendar'),
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 24 }}>📅</Text>,
+            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 22 }}>{tabIcon('calendar', '📅')}</Text>,
           }}
         />
         <Tabs.Screen
           name="forms"
           options={{
-            title: 'Forms',
+            title: tabLabel('forms', 'Forms'),
             href: tabHref('forms'),
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 24 }}>📝</Text>,
+            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 22 }}>{tabIcon('forms', '📝')}</Text>,
           }}
         />
         <Tabs.Screen
           name="alerts"
           options={{
-            title: 'Alerts',
+            title: tabLabel('alerts', 'Alerts'),
             href: tabHref('alerts'),
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 24 }}>🔔</Text>,
+            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 22 }}>{tabIcon('alerts', '🔔')}</Text>,
           }}
         />
+        {/* Settings is always hidden from the tab bar — accessible via the header gear button. */}
         <Tabs.Screen
           name="settings"
           options={{
             title: 'Settings',
-            href: tabHref('settings'),
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 24 }}>⚙️</Text>,
+            href: null,
+            headerRight: () => null,
           }}
         />
       </Tabs>
     </WebSocketProvider>
   );
 }
+
 

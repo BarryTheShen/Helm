@@ -678,4 +678,30 @@ def _get_tool_definitions() -> list[dict]:
                 "parameters": {"type": "object", "properties": {}},
             },
         },
+        {
+            "type": "function",
+            "function": {
+                "name": "rename_tab",
+                "description": "Rename a navigation tab and/or change its icon. Use this to give tabs meaningful custom names — e.g. rename 'forms' to 'Tokyo Trip Dashboard' or 'modules' to 'My Journal'.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "tab_id": {
+                            "type": "string",
+                            "enum": ["home", "chat", "modules", "calendar", "forms", "alerts", "settings"],
+                            "description": "The tab to rename",
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "New display name for the tab, e.g. 'Tokyo Trip Dashboard'",
+                        },
+                        "icon": {
+                            "type": "string",
+                            "description": "New emoji icon for the tab, e.g. '🗾'",
+                        },
+                    },
+                    "required": ["tab_id"],
+                },
+            },
+        },
     ]

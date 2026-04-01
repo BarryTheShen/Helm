@@ -165,6 +165,13 @@ export class ApiClient {
     return this.request<void>(`/api/modules/${tabId}/show`, { method: 'POST' });
   }
 
+  async configureModule(tabId: string, config: { name?: string; icon?: string }): Promise<void> {
+    return this.request<void>(`/api/modules/${tabId}/config`, {
+      method: 'PATCH',
+      body: JSON.stringify(config),
+    });
+  }
+
   // SDUI
   async getSDUIScreen(moduleId: string): Promise<{ screen: Record<string, unknown> | null; version?: number }> {
     return this.request(`/api/sdui/${moduleId}`);

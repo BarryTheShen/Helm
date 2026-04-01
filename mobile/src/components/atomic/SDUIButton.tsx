@@ -69,7 +69,7 @@ export function SDUIButton({
           <ActivityIndicator size="small" color={themeColors.primary} />
         ) : (
           <Text style={[styles.iconText, { fontSize: height * 0.5, color: resolveColor(variantStyle.text) }]}>
-            {icon}
+            {resolveIconName(icon ?? '')}
           </Text>
         )}
       </TouchableOpacity>

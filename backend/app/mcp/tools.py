@@ -32,6 +32,7 @@ async def execute_tool(name: str, args: dict[str, Any], user_id: str) -> Any:
         "hide_tab": hide_tab,
         "show_tab": show_tab,
         "list_tabs": list_tabs,
+        "rename_tab": rename_tab,
         "approve_draft": approve_draft,
         "reject_draft": reject_draft,
         "get_draft": get_draft,
@@ -621,6 +622,12 @@ _ALL_TAB_IDS = [t["id"] for t in _ALL_TAB_DETAILS]
 
 
 async def _get_hidden_tabs_for_user(user_id: str) -> list[str]:
+    cfg = await _get_tabs_config_for_user(user_id)
+    return cfg["hidden_tabs"]
+
+
+async def _get_tabs_config_for_user(user_id: str) -> dict:
+    """Return the full tabs config (hidden_tabs + tab_overrides) for a user."""
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(ModuleState).where(
@@ -630,11 +637,15 @@ async def _get_hidden_tabs_for_user(user_id: str) -> list[str]:
         )
         state = result.scalar_one_or_none()
     if state is None:
-        return []
-    return (state.state_json or {}).get("hidden_tabs", [])
+        return {"hidden_tabs": [], "tab_overrides": {}}
+    cfg = state.state_json or {}
+    cfg.setdefault("hidden_tabs", [])
+    cfg.setdefault("tab_overrides", {})
+    return cfg
 
 
-async def _set_hidden_tabs_for_user(user_id: str, hidden_tabs: list[str]) -> None:
+async def _save_tabs_config_for_user(user_id: str, config: dict) -> None:
+    """Persist the full tabs config for a user (hidden_tabs + tab_overrides)."""
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(ModuleState).where(
@@ -648,14 +659,33 @@ async def _set_hidden_tabs_for_user(user_id: str, hidden_tabs: list[str]) -> Non
                 id=str(uuid4()),
                 user_id=user_id,
                 module_type=_TABS_CONFIG_KEY,
-                state_json={"hidden_tabs": hidden_tabs},
+                state_json=config,
                 version=1,
             )
             db.add(state)
         else:
-            state.state_json = {"hidden_tabs": hidden_tabs}
+            state.state_json = config
             state.version += 1
         await db.commit()
+
+
+async def _set_hidden_tabs_for_user(user_id: str, hidden_tabs: list[str]) -> None:
+    config = await _get_tabs_config_for_user(user_id)
+    config["hidden_tabs"] = hidden_tabs
+    await _save_tabs_config_for_user(user_id, config)
+
+
+def _apply_overrides(hidden: list[str], overrides: dict) -> list[dict]:
+    """Build the module list applying per-user name/icon overrides and visibility."""
+    return [
+        {
+            "id": t["id"],
+            "name": overrides.get(t["id"], {}).get("name", t["name"]),
+            "icon": overrides.get(t["id"], {}).get("icon", t["icon"]),
+            "enabled": t["id"] not in hidden,
+        }
+        for t in _ALL_TAB_DETAILS
+    ]
 
 
 async def hide_tab(tab_id: str, user_id: str) -> dict[str, Any]:
@@ -670,10 +700,8 @@ async def hide_tab(tab_id: str, user_id: str) -> dict[str, Any]:
         hidden = hidden + [tab_id]
         await _set_hidden_tabs_for_user(user_id, hidden)
 
-    modules = [
-        {"id": t["id"], "name": t["name"], "icon": t["icon"], "enabled": t["id"] not in hidden}
-        for t in _ALL_TAB_DETAILS
-    ]
+    overrides = (await _get_tabs_config_for_user(user_id))["tab_overrides"]
+    modules = _apply_overrides(hidden, overrides)
     await manager.send(user_id, {"type": "tabs_updated", "modules": modules})
     return {"tab_id": tab_id, "hidden": True, "message": f"'{tab_id}' tab hidden from navigation."}
 
@@ -690,22 +718,65 @@ async def show_tab(tab_id: str, user_id: str) -> dict[str, Any]:
         hidden = [t for t in hidden if t != tab_id]
         await _set_hidden_tabs_for_user(user_id, hidden)
 
-    modules = [
-        {"id": t["id"], "name": t["name"], "icon": t["icon"], "enabled": t["id"] not in hidden}
-        for t in _ALL_TAB_DETAILS
-    ]
+    overrides = (await _get_tabs_config_for_user(user_id))["tab_overrides"]
+    modules = _apply_overrides(hidden, overrides)
     await manager.send(user_id, {"type": "tabs_updated", "modules": modules})
     return {"tab_id": tab_id, "hidden": False, "message": f"'{tab_id}' tab is now visible in navigation."}
 
 
 async def list_tabs(user_id: str) -> dict[str, Any]:
-    """List all tabs and their current visibility status."""
-    hidden = await _get_hidden_tabs_for_user(user_id)
+    """List all tabs and their current visibility status, names, and icons."""
+    cfg = await _get_tabs_config_for_user(user_id)
+    hidden = cfg["hidden_tabs"]
+    overrides = cfg["tab_overrides"]
     tabs = [
-        {"id": t["id"], "name": t["name"], "icon": t["icon"], "visible": t["id"] not in hidden}
+        {
+            "id": t["id"],
+            "name": overrides.get(t["id"], {}).get("name", t["name"]),
+            "icon": overrides.get(t["id"], {}).get("icon", t["icon"]),
+            "visible": t["id"] not in hidden,
+        }
         for t in _ALL_TAB_DETAILS
     ]
     return {"tabs": tabs}
+
+
+async def rename_tab(
+    tab_id: str,
+    user_id: str,
+    name: str | None = None,
+    icon: str | None = None,
+) -> dict[str, Any]:
+    """Rename a navigation tab and/or change its icon.
+
+    Use this to give tabs meaningful custom names — e.g. rename 'forms' to
+    'Tokyo Trip Dashboard' or change 'modules' to '🗾 Japan Itinerary'.
+
+    Args:
+        tab_id: The tab to rename (home/chat/modules/calendar/forms/alerts/settings)
+        name:   New display label, e.g. "Tokyo Trip Dashboard"
+        icon:   New emoji icon, e.g. "🗾"
+    """
+    from app.services.websocket_manager import manager
+
+    if tab_id not in _ALL_TAB_IDS:
+        raise ValueError(f"Unknown tab '{tab_id}'. Valid tabs: {', '.join(_ALL_TAB_IDS)}")
+    if name is None and icon is None:
+        raise ValueError("Provide at least one of: name, icon")
+
+    cfg = await _get_tabs_config_for_user(user_id)
+    override = cfg["tab_overrides"].get(tab_id, {})
+    if name is not None:
+        override["name"] = name
+    if icon is not None:
+        override["icon"] = icon
+    cfg["tab_overrides"][tab_id] = override
+    await _save_tabs_config_for_user(user_id, cfg)
+
+    modules = _apply_overrides(cfg["hidden_tabs"], cfg["tab_overrides"])
+    await manager.send(user_id, {"type": "tabs_updated", "modules": modules})
+    display_name = override.get("name") or tab_id
+    return {"tab_id": tab_id, "name": override.get("name"), "icon": override.get("icon"), "message": f"Tab '{tab_id}' renamed to '{display_name}'."}
 
 
 # ── Draft management (Human-in-the-Loop) ──────────────────────────────────

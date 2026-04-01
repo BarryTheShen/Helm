@@ -9,6 +9,8 @@ Usage:
     python manage.py create_user              # Interactive prompts
     python manage.py create_user --username admin --password secret
     python manage.py list_users
+    python manage.py reset_password --username admin  # Password prompted securely
+    python manage.py reset_password --username admin --password newpass
 """
 import argparse
 import asyncio
@@ -54,6 +56,18 @@ async def list_users() -> None:
             print(f"{user.id:<40} {user.username:<20} {user.role:<10}")
 
 
+async def reset_password(username: str, password: str) -> None:
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(User).where(User.username == username))
+        user = result.scalar_one_or_none()
+        if not user:
+            print(f"Error: User '{username}' not found.")
+            sys.exit(1)
+        user.password_hash = hash_password(password)
+        await db.commit()
+        print(f"Password for '{username}' reset successfully.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Helm server management CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -65,6 +79,11 @@ def main():
 
     # list_users
     subparsers.add_parser("list_users", help="List all users")
+
+    # reset_password
+    reset_parser = subparsers.add_parser("reset_password", help="Reset a user's password")
+    reset_parser.add_argument("--username", "-u", help="Username")
+    reset_parser.add_argument("--password", "-p", help="New password (prompted if not provided)")
 
     args = parser.parse_args()
 
@@ -81,6 +100,17 @@ def main():
 
     elif args.command == "list_users":
         asyncio.run(list_users())
+
+    elif args.command == "reset_password":
+        username = args.username or input("Username: ").strip()
+        if not username:
+            print("Error: Username cannot be empty.")
+            sys.exit(1)
+        password = args.password or getpass.getpass("New password: ")
+        if not password:
+            print("Error: Password cannot be empty.")
+            sys.exit(1)
+        asyncio.run(reset_password(username, password))
 
     else:
         parser.print_help()

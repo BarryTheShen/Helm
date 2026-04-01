@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native
 import type { ListComponent as ListData } from '@/types/sdui';
 import { Card } from '@/components/common/Card';
 import { colors, spacing, typography } from '@/theme/colors';
+import { resolveIconName } from '@/components/atomic/SDUIIcon';
 
 type ListComponentProps = ListData['props'] & {
   onAction?: (action: string, data: any) => void;
@@ -19,7 +20,7 @@ export function ListComponent({ items, onAction }: ListComponentProps) {
       activeOpacity={0.7}
     >
       <Card style={styles.itemCard}>
-        {item.icon && <Text style={styles.icon}>{item.icon}</Text>}
+        {item.icon && <Text style={styles.icon}>{resolveIconName(item.icon)}</Text>}
         <View style={styles.itemContent}>
           <Text style={styles.itemTitle}>{item.title}</Text>
           {item.subtitle && (

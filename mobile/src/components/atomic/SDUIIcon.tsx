@@ -61,6 +61,11 @@ const ICON_MAP: Record<string, string> = {
   'chevron-up': '⌃',
   'copy': '📋',
   'menu': '☰',
+  'book-open': '📖',
+  'book': '📚',
+  'plus-circle': '➕',
+  'minus-circle': '➖',
+  'notebook-pen': '📝',
   // Travel & lifestyle
   'credit-card': '💳',
   'alert-triangle': '⚠️',

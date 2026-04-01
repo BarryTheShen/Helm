@@ -31,6 +31,7 @@ import { isSDUIPage } from '@/types/sdui';
 import { colors, spacing, typography } from '@/theme/colors';
 import { resolveComponent } from '@/renderer/componentRegistry';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
+import { resolveIconName } from '@/components/atomic/SDUIIcon';
 
 // ── Flat-props extraction ─────────────────────────────────────────────────
 // AI-generated JSON often omits the "props" wrapper required by the V2 schema.
@@ -379,7 +380,7 @@ function renderComponent(comp: SDUIComponent, dispatch: ActionDispatcher): React
           onPress={() => dispatch(p.action)}
           accessibilityLabel={p.label}
         >
-          <Text style={styles.iconButtonText}>{p.icon}</Text>
+          <Text style={styles.iconButtonText}>{resolveIconName(p.icon)}</Text>
         </TouchableOpacity>
       );
     }
@@ -469,7 +470,7 @@ function renderComponent(comp: SDUIComponent, dispatch: ActionDispatcher): React
               activeOpacity={item.action ? 0.7 : 1}
               disabled={!item.action}
             >
-              {item.icon ? <Text style={styles.listItemIcon}>{item.icon}</Text> : null}
+              {item.icon ? <Text style={styles.listItemIcon}>{resolveIconName(item.icon)}</Text> : null}
               <View style={styles.listItemContent}>
                 <Text style={styles.listItemTitle}>{item.title}</Text>
                 {item.subtitle ? <Text style={styles.listItemSubtitle}>{item.subtitle}</Text> : null}
@@ -529,7 +530,7 @@ function renderComponent(comp: SDUIComponent, dispatch: ActionDispatcher): React
       const directionColor = { up: colors.success, down: colors.error, neutral: colors.textSecondary }[p.change_direction ?? 'neutral'];
       return (
         <View key={comp.id} style={styles.stat}>
-          {p.icon ? <Text style={styles.statIcon}>{p.icon}</Text> : null}
+          {p.icon ? <Text style={styles.statIcon}>{resolveIconName(p.icon)}</Text> : null}
           <Text style={styles.statValue}>{p.value}</Text>
           <Text style={styles.statLabel}>{p.label}</Text>
           {p.change ? <Text style={[styles.statChange, { color: directionColor }]}>{p.change}</Text> : null}

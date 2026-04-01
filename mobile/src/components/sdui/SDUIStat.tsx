@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, spacing, typography, borderRadius } from '@/theme/colors';
+import { resolveIconName } from '@/components/atomic/SDUIIcon';
 
 interface SDUIStatProps {
   label: string;
@@ -18,7 +19,7 @@ export function SDUIStat({ label, value, change, change_direction = 'neutral', i
 
   return (
     <View style={styles.container}>
-      {icon && <Text style={styles.icon}>{icon}</Text>}
+      {icon && <Text style={styles.icon}>{resolveIconName(icon)}</Text>}
       <Text style={styles.value}>{value}</Text>
       <Text style={styles.label}>{label}</Text>
       {change && (

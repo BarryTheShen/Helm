@@ -42,3 +42,9 @@ class SDUIScreenRequest(BaseModel):
     """Body for POST /api/sdui/{module_id} — the AI sends a complete SDUIScreen JSON."""
     screen: dict[str, Any]
 
+
+class TabConfigRequest(BaseModel):
+    """Body for PATCH /api/modules/{module_id}/config — rename a tab and/or change its icon."""
+    name: str | None = None
+    icon: str | None = None
+

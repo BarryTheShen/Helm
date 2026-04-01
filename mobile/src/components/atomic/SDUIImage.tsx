@@ -3,7 +3,7 @@
  * Display images from URLs with proper sizing and placeholders.
  */
 import React, { useState } from 'react';
-import { Image, View, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { Image, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { resolveColor, themeColors } from '@/theme/tokens';
 import type { SDUIAction } from '@/types/sdui';
 
@@ -62,7 +62,9 @@ export function SDUIImage({
           accessibilityLabel={alt}
         />
       ) : (
-        <View style={[styles.errorPlaceholder, sizeStyle, { borderRadius }]} />
+        <View style={[styles.errorPlaceholder, sizeStyle, { borderRadius }]}>
+          <Text style={styles.errorText}>🖼️</Text>
+        </View>
       )}
     </View>
   );
@@ -92,5 +94,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F2F7',
     width: '100%',
     height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorText: {
+    fontSize: 32,
+    opacity: 0.4,
   },
 });
