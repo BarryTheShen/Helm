@@ -216,7 +216,7 @@ python helm_agent.py "Do a task"     # One-shot
 ### Agent construction (`_build_agent()`)
 ```python
 provider = OpenAIProvider(base_url=OPENROUTER_BASE_URL, api_key=OPENROUTER_API_KEY)
-model = OpenAIChatModel(OPENROUTER_MODEL, provider=provider)  
+model = OpenAIChatModel(OPENROUTER_MODEL, provider=provider)
 helm_mcp = MCPServerStreamableHTTP(
     url=HELM_MCP_URL,   # default: http://localhost:8000/mcp/
     headers={"Authorization": f"Bearer {HELM_SESSION_TOKEN}"},

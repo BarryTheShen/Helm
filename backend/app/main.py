@@ -72,7 +72,7 @@ async def _run_time_alerts() -> None:
         message = f"Current time: {time_str}\n{date_str}"
         logger.info(f"Time alert broadcast: {time_str}")
 
-        connected = list(manager.connected_users())
+        connected = list(manager.connected_user_ids)
 
         # Persist a notification to the DB for every connected user, then broadcast.
         async with AsyncSessionLocal() as db:

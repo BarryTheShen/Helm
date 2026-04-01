@@ -19,7 +19,7 @@ export default function AlertsScreen() {
   const { errorBanner, showError, hideError } = useUIStore();
   const { screen: sduiScreen } = useSDUIScreen('alerts');
   const ws = useWebSocket();
-  const [notifications, setNotifications] = useState<Notification[]>([]);;
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
