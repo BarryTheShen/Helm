@@ -101,31 +101,37 @@ _SYSTEM_PROMPT = (
     "replace it with new content, or blank it completely with helm_delete_screen.\n"
     "Use helm_list_screens() to see which tabs currently have AI-generated content.\n"
     "Use helm_delete_screen(module_id) to clear a screen (tab returns to empty state).\n\n"
-    "The screen argument must be a dict following the SDUIScreen schema:\n"
-    "  { schema_version: 1, module_id, title, sections: [SDUISection, ...] }\n\n"
-    "Each section has { id, title?, component: SDUIComponent }.\n\n"
-    "Component types and their key props:\n"
-    "  heading     { content, level (1-3), align? }\n"
-    "  text        { content, size (xs/sm/md/lg), bold?, italic?, color? }\n"
-    "  button      { label, variant (primary/secondary/destructive/ghost), action }\n"
-    "  stats_row   { stats: [{label, value, change?, change_direction (up/down/neutral)}] }\n"
-    "  stat        { label, value, change?, change_direction?, icon? }\n"
-    "  list        { title?, items: [{id, title, subtitle?, badge?, icon?, action?}] }\n"
-    "  card        { title?, subtitle?, elevated? } + children[]\n"
-    "  container   { direction (row/column), gap?, wrap? } + children[]\n"
-    "  alert       { severity (info/warning/error/success), title, message }\n"
-    "  progress    { value (0-100), max?, label?, color? }\n"
-    "  calendar    { events: [{id, title, start (ISO), end (ISO), color?}] }\n"
-    "  divider     { spacing? }\n"
-    "  spacer      { size (xs/sm/md/lg/xl) }\n"
-    "  badge       { label, color (blue/green/red/yellow/gray) }\n"
-    "  image       { uri, aspect_ratio?, alt? }\n"
-    "  form        { title?, fields: [...], submit_label?, submit_action }\n\n"
-    "Action types: { type:'navigate', screen } | { type:'api_call', method, path, body? } "
+    "### V2 Row-by-Row Format (PREFERRED)\n"
+    "The screen argument should be a dict following the SDUIPage schema:\n"
+    "  { schema_version: '1.0.0', module_id, title, rows: [SDUIRow, ...] }\n\n"
+    "Each row has { id, cells: [SDUICell, ...], compact?, regular?, scrollable?, gap? }.\n"
+    "Each cell has { id, width (number or 'auto'), content: V2Component }.\n\n"
+    "Responsive: Each row can have compact (phone) and regular (tablet) variants:\n"
+    "  compact: { stack: true } → cells stack vertically on phone\n"
+    "  compact/regular: { hidden: true } → hide row on that breakpoint\n\n"
+    "V2 Component types (PascalCase):\n"
+    "  Text          { content, variant (heading/body/caption), color?, bold?, italic?, align?, numberOfLines? }\n"
+    "  Markdown      { content }\n"
+    "  Button        { label?, icon?, iconPosition (left/right), variant (primary/secondary/ghost/icon/destructive), size (sm/md/lg), fullWidth?, onPress: Action, disabled?, loading? }\n"
+    "  Image         { src, alt?, resizeMode?, width?, height?, aspectRatio?, borderRadius?, placeholder? }\n"
+    "  TextInput     { value?, placeholder?, multiline?, maxLines? }\n"
+    "  Icon          { name (feather icon name), size?, color? }\n"
+    "  Divider       { direction?, thickness?, color?, indent? }\n"
+    "  Container     { direction (row/column), gap?, padding?, backgroundColor?, borderRadius?, shadow?, align?, justify? } + children[]\n"
+    "  CalendarModule { defaultView (month/threeDay), events: [{id,title,start,end,color?}] }\n"
+    "  ChatModule    { }\n"
+    "  NotesModule   { }\n"
+    "  InputBar      { placeholder?, settingsItems?, maxLines?, onSend: Action }\n\n"
+    "### V1 Section-based Format (legacy, still supported)\n"
+    "  { schema_version: 1, module_id, title, sections: [SDUISection, ...] }\n"
+    "Each section has { id, title?, component: V1Component }.\n"
+    "V1 uses lowercase type names (text, heading, button, etc.).\n\n"
+    "Action types: { type:'navigate', screen, params? } | { type:'api_call', method, path, body? } "
+    "| { type:'server_action', function, params? } "
     "| { type:'dismiss' } | { type:'copy_text', text } | { type:'open_url', url }\n\n"
-    "When building screens, prefer stats_row for key metrics, list for data, "
-    "heading + text for summaries, and card/container for grouping.  Always include "
-    "a generated_at ISO timestamp.\n\n"
+    "When building screens with V2, use rows with cells for layout. Use Container "
+    "as a card (backgroundColor + borderRadius + shadow + padding). Use CalendarModule "
+    "for calendar views. Use Markdown for rich text. Always include a generated_at ISO timestamp.\n\n"
     "## Calendar & Data Tools\n"
     "- Use bulk operations: helm_delete_all_events over looping helm_delete_event.\n"
     "- Use helm_read_all_calendar when you need the full calendar instead of guessing a date range.\n"
@@ -275,6 +281,7 @@ def _build_agent():
         url=HELM_MCP_URL,
         headers={"Authorization": f"Bearer {HELM_SESSION_TOKEN}"},
         timeout=30,
+        max_retries=3,
     )
 
     return Agent(
@@ -282,6 +289,7 @@ def _build_agent():
         mcp_servers=[helm_mcp],
         tools=[read_frontend_file, write_frontend_file, list_frontend_files],
         system_prompt=_SYSTEM_PROMPT,
+        retries=3,
     )
 
 

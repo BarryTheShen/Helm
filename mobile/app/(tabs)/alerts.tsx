@@ -6,7 +6,7 @@ import { Card } from '@/components/common/Card';
 import { ErrorBanner } from '@/components/common/ErrorBanner';
 import { useUIStore } from '@/stores/uiStore';
 import { useSDUIScreen } from '@/hooks/useSDUIScreen';
-import { SDUIScreenRenderer } from '@/components/sdui/SDUIRenderer';
+import { SDUIUniversalRenderer } from '@/components/sdui/SDUIRenderer';
 import { useActionDispatcher } from '@/hooks/useActionDispatcher';
 import { useWebSocket } from '@/contexts/WebSocketContext';
 import { colors, spacing, typography } from '@/theme/colors';
@@ -54,7 +54,7 @@ export default function AlertsScreen() {
 
   // If the AI has set SDUI content for the alerts tab, render that
   if (sduiScreen) {
-    return <SDUIScreenRenderer screen={sduiScreen} onAction={handleAction} />;
+    return <SDUIUniversalRenderer payload={sduiScreen} onAction={handleAction} />;
   }
 
   return (

@@ -6,13 +6,14 @@ import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { colors, spacing, typography } from '@/theme/colors';
 import { useSDUIScreen } from '@/hooks/useSDUIScreen';
-import { SDUIScreenRenderer } from '@/components/sdui/SDUIRenderer';
+import { SDUIUniversalRenderer } from '@/components/sdui/SDUIRenderer';
 import { useActionDispatcher } from '@/hooks/useActionDispatcher';
+import { AuthService } from '@/services/auth';
 
 export default function SettingsScreen() {
   const handleAction = useActionDispatcher();
   const router = useRouter();
-  const { user, serverUrl, logout } = useAuthStore();
+  const { user, token, serverUrl, logout } = useAuthStore();
   const { navigationMode, theme, setNavigationMode, setTheme } = useSettingsStore();
   const { screen: sduiScreen } = useSDUIScreen('settings');
 
@@ -23,8 +24,17 @@ export default function SettingsScreen() {
         text: 'Logout',
         style: 'destructive',
         onPress: async () => {
+          // Invalidate session on the server first
+          if (serverUrl && token) {
+            try {
+              const authService = new AuthService(serverUrl);
+              await authService.logout(token);
+            } catch {
+              // Server logout failed — still clear local state
+            }
+          }
           await logout();
-          router.replace('/(auth)/connect');
+          router.replace('/(auth)/login');
         },
       },
     ]);
@@ -32,7 +42,7 @@ export default function SettingsScreen() {
 
   // If the AI has set an SDUI screen for the settings tab, render that instead
   if (sduiScreen) {
-    return <SDUIScreenRenderer screen={sduiScreen} onAction={handleAction} />;
+    return <SDUIUniversalRenderer payload={sduiScreen} onAction={handleAction} />;
   }
 
   return (

@@ -8,7 +8,7 @@
  */
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useSDUIScreen } from '@/hooks/useSDUIScreen';
-import { SDUIScreenRenderer } from '@/components/sdui/SDUIRenderer';
+import { SDUIUniversalRenderer } from '@/components/sdui/SDUIRenderer';
 import { useActionDispatcher } from '@/hooks/useActionDispatcher';
 import { colors, spacing, typography } from '@/theme/colors';
 
@@ -49,7 +49,7 @@ export default function FormsScreen() {
     );
   }
 
-  return <SDUIScreenRenderer screen={screen} onAction={handleAction} />;
+  return <SDUIUniversalRenderer payload={screen} onAction={handleAction} />;
 }
 
 const styles = StyleSheet.create({

@@ -15,7 +15,8 @@ export class AuthService {
     });
 
     if (!response.ok) {
-      throw new Error(`Setup failed: ${response.status} ${response.statusText}`);
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || `Setup failed: ${response.status} ${response.statusText}`);
     }
 
     return response.json();

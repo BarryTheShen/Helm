@@ -227,10 +227,56 @@ async def helm_set_screen(module_id: str, screen: dict | str) -> dict:
     """Set the Server-Driven UI screen for a module.
 
     This is the primary AI tool for building dynamic native UIs.  Generate a
-    complete SDUIScreen JSON object and call this tool — the frontend re-renders
+    complete SDUI payload and call this tool — the frontend re-renders
     immediately via WebSocket without any polling.
 
-    SCHEMA (follow this exactly):
+    TWO FORMATS ARE SUPPORTED:
+
+    === V2: Row-by-Row (PREFERRED) ===
+    {
+      "schema_version": "1.0.0",
+      "module_id": "<same as module_id arg>",
+      "title": "Screen title",
+      "generated_at": "<ISO 8601 timestamp>",
+      "rows": [
+        {
+          "id": "row-id",
+          "cells": [
+            { "id": "cell-id", "width": <number|"auto">, "content": <V2Component> }
+          ],
+          "compact": { "stack": true, "hidden": false },
+          "regular": { "hidden": false },
+          "scrollable": false,
+          "gap": 12
+        }
+      ]
+    }
+
+    V2 COMPONENT TYPES (PascalCase — Tier 2 atomic):
+      Text          { content, variant? (heading|body|caption), color?, bold?, italic?, underline?, align?, numberOfLines? }
+      Markdown      { content }
+      Button        { label?, icon?, iconPosition? (left|right), variant? (primary|secondary|ghost|icon|destructive), size? (sm|md|lg), fullWidth?, onPress: <Action>, disabled?, loading? }
+      Image         { src, alt?, resizeMode? (cover|contain|stretch), width?, height?, aspectRatio?, borderRadius?, placeholder? }
+      TextInput     { value?, placeholder?, multiline?, maxLines?, secureTextEntry?, keyboardType? }
+      Icon          { name (feather icon name), size?, color? }
+      Divider       { direction? (horizontal|vertical), thickness?, color?, indent? }
+
+    V2 Structural (Tier 1):
+      Container     { direction? (row|column), gap?, padding?, backgroundColor?, borderRadius?, shadow? (sm|md|lg), flex?, align?, justify? } + children[]
+
+    V2 Composite (Tier 3):
+      CalendarModule  { defaultView? (month|threeDay), events: [{id,title,start,end,color?}] }
+      ChatModule      { }
+      NotesModule     { }
+      InputBar        { placeholder?, settingsItems?, maxLines?, onSend: <Action> }
+
+    RESPONSIVE LAYOUT:
+      - Each row can have compact (phone) and regular (tablet) variants
+      - compact.stack: true → cells stack vertically on phone
+      - compact.hidden / regular.hidden → hide row on that breakpoint
+      - Breakpoint: ≥768px = regular (tablet), <768px = compact (phone)
+
+    === V1: Section-based (legacy, still supported) ===
     {
       "schema_version": 1,
       "module_id": "<same as module_id arg>",
@@ -240,12 +286,12 @@ async def helm_set_screen(module_id: str, screen: dict | str) -> dict:
         {
           "id": "unique-section-id",
           "title": "Optional section header",
-          "component": <SDUIComponent>
+          "component": <V1Component>
         }
       ]
     }
 
-    COMPONENT TYPES — use the "type" discriminant:
+    V1 COMPONENT TYPES (lowercase):
       text        { content, size?, bold?, italic?, color?, align? }
       heading     { content, level? (1-3), align? }
       button      { label, variant? (primary|secondary|destructive|ghost), action }
@@ -264,9 +310,10 @@ async def helm_set_screen(module_id: str, screen: dict | str) -> dict:
       image       { uri, aspect_ratio?, alt?, action? }
       progress    { value, max?, label?, color? }
 
-    ACTION TYPES:
+    ACTION TYPES (both V1 and V2):
       navigate   { type:"navigate", screen, params? }
       api_call   { type:"api_call", method, path, body? }
+      server_action { type:"server_action", function, params? }
       dismiss    { type:"dismiss" }
       copy_text  { type:"copy_text", text }
       open_url   { type:"open_url", url }
@@ -275,8 +322,16 @@ async def helm_set_screen(module_id: str, screen: dict | str) -> dict:
     """
     import json as _json
     if isinstance(screen, str):
-        screen = _json.loads(screen)
-    return await set_screen(module_id, screen, get_current_user_id())
+        try:
+            screen = _json.loads(screen)
+        except _json.JSONDecodeError:
+            from json_repair import repair_json
+            repaired = repair_json(screen, return_objects=True)
+            if isinstance(repaired, dict):
+                screen = repaired
+            else:
+                raise
+    return await set_screen(module_id, screen, get_current_user_id(), draft=True)
 
 
 @mcp.tool()

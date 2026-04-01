@@ -227,6 +227,7 @@ Helm/
 │   ├── helm_agent.py               # Standalone PydanticAI agent (REPL/web/one-shot)
 │   ├── api_server.py               # Starlette SSE server (external agent mode)
 │   ├── chat_ui.html                # Self-hosted browser chat UI
+│   ├── send_prompt.py              # CLI tool to send one-shot prompt to api_server
 │   └── README.md
 ├── backend/
 │   ├── pyproject.toml
@@ -261,6 +262,14 @@ Helm/
 │       └── types/                  # sdui.ts, api.ts TypeScript types
 └── docs/
     ├── codebase-explanation/       # Living technical docs (read before contributing)
+    │   ├── README.md               # Index of all docs in this folder
+    │   ├── AI-TECHNICAL-REFERENCE.md
+    │   ├── OPERATIONS.md
+    │   ├── backend.md
+    │   ├── frontend.md
+    │   ├── protocol.md
+    │   ├── agents-and-systems.md
+    │   └── FUTURE_PLANS.md
     └── Agentic AI Super App — Project Hub/
         └── Blueprint — Production Spec Documents/
 ```
@@ -306,7 +315,7 @@ Any MCP-compatible agent can connect to `http://localhost:8000/mcp/` with a vali
 ---
 
 ## Documentation
-
+All living technical docs are in [`docs/codebase-explanation/`](docs/codebase-explanation/README.md).
 | Document | Description |
 |----------|-------------|
 | [AI Technical Reference](docs/codebase-explanation/AI-TECHNICAL-REFERENCE.md) | File map, data flow, known bugs, patterns |

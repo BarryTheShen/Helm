@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert, Pressable } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { AuthService } from '@/services/auth';
@@ -9,18 +9,21 @@ export default function ConnectScreen() {
   const router = useRouter();
   const setServerUrl = useAuthStore((state) => state.setServerUrl);
   const [url, setUrl] = useState('http://localhost:8000');
-  const [username, setUsername] = useState('testuser');
-  const [password, setPassword] = useState('testpass123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSetup = async () => {
+    setError(null);
+
     if (!url.trim()) {
-      Alert.alert('Error', 'Please enter a server URL');
+      setError('Please enter a server URL');
       return;
     }
 
     if (!username.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please enter username and password');
+      setError('Please enter username and password');
       return;
     }
 
@@ -33,16 +36,18 @@ export default function ConnectScreen() {
         await setServerUrl(url);
         router.replace('/(auth)/login');
       } else {
-        Alert.alert('Error', 'Setup failed');
+        setError('Setup failed — unexpected response');
       }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Failed to setup';
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to setup';
       // 409 Conflict means server is already set up — save server URL and go to login
       if (msg.includes('409') || msg.toLowerCase().includes('conflict') || msg.toLowerCase().includes('already set up')) {
         await setServerUrl(url);
         router.replace('/(auth)/login');
+      } else if (msg.toLowerCase().includes('fetch') || msg.toLowerCase().includes('network')) {
+        setError('Cannot reach the server. Check the URL and try again.');
       } else {
-        Alert.alert('Error', msg);
+        setError(msg);
       }
     } finally {
       setIsLoading(false);
@@ -54,6 +59,12 @@ export default function ConnectScreen() {
       <View style={styles.content}>
         <Text style={styles.title}>Welcome to Helm</Text>
         <Text style={styles.subtitle}>Setup your server and create an account</Text>
+
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
 
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Server URL</Text>
@@ -107,7 +118,12 @@ export default function ConnectScreen() {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Already have an account?</Text>
-          <Text style={styles.link} onPress={() => router.push('/(auth)/login')}>
+          <Text style={styles.link} onPress={async () => {
+            if (url.trim()) {
+              await setServerUrl(url.trim());
+            }
+            router.push('/(auth)/login');
+          }}>
             Sign In
           </Text>
         </View>
@@ -136,6 +152,20 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     marginBottom: spacing.xl,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  errorText: {
+    ...typography.subheadline,
+    color: '#DC2626',
     textAlign: 'center',
   },
   inputContainer: {

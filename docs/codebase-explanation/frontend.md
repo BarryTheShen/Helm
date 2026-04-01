@@ -1,5 +1,7 @@
 # Frontend — React Native (Expo) Mobile App
 
+> Last updated: 2026-03-30
+
 ## Tier 1: TLDR
 
 The frontend is a **React Native (Expo)** mobile app that serves as the universal UI for the Helm super app. It:
@@ -7,435 +9,383 @@ The frontend is a **React Native (Expo)** mobile app that serves as the universa
 - **Authenticates** users against a self-hosted backend (connect → setup → login)
 - **Renders 7 tab screens**: Home, Chat, Modules, Calendar, Forms, Alerts, Settings
 - **Streams AI chat** via WebSocket with real-time token-by-token rendering
-- **Has a fully integrated SDUI renderer** — the AI can push any screen to any tab via MCP tools; 19 component types supported
-- **AI controls tab visibility** — the AI can hide/show tabs live via MCP tools (`helm_hide_tab`, `helm_show_tab`)
+- **Integrated SDUI renderer** — AI can push any screen to any tab via MCP tools; V1 (19 component types) and V2 (compositional row+cell format) both supported
+- **V2 component registry** — extensible type-string→component map; PascalCase types; atomic, structural, composite component layers
+- **AI controls tab visibility** — hide/show tabs live via MCP tools
 - **Uses Zustand** for state management (auth, UI, settings, tab visibility)
-- **Single shared WebSocket** connection via `WebSocketContext` to prevent duplicate connections
+- **Single shared WebSocket** connection via `WebSocketContext`
 - **Works on iOS, Android, and Web** (Expo universal platform)
 
 **To run it:** `cd mobile && npx expo start`
-**To run on web:** `cd mobile && npx expo start --web`
 
 ---
 
 ## Tier 2: Deeper Explanation
 
-### Architecture Overview
+### Navigation Structure (Expo Router)
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   Expo Router (File-Based)                    │
-│                                                              │
-│  ┌─────────────┐  ┌──────────────────────────────────────┐   │
-│  │  (auth)/    │  │             (tabs)/                  │   │
-│  │  connect    │  │  home  chat  modules  calendar       │   │
-│  │  login      │  │  forms       alerts   settings       │   │
-│  └─────────────┘  └──────────────────────────────────────┘   │
-│         │                       │                            │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ WebSocketContext (Singleton — one WS for all tabs)       │   │
-│  └─────────────────────────────────────────────────────┘   │
-│         │                       │                            │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ Services: ApiClient | AuthService | WebSocketService     │   │
-│  └─────────────────────────────────────────────────────┘   │
-│         │                                                    │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ Zustand: authStore | uiStore | settingsStore | tabsStore│   │
-│  └─────────────────────────────────────────────────────┘   │
-│         │                                                    │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ SDUI Renderer: SDUIScreenRenderer → 19 component types  │   │
-│  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
+app/
+├── _layout.tsx           → RootLayout: auth guard + root providers
+├── index.tsx             → Splash/redirect while auth hydrates
+├── (auth)/
+│   ├── _layout.tsx       → Stack (headerShown: false)
+│   ├── connect.tsx       → Server URL entry + first account setup
+│   └── login.tsx         → Username/password sign-in
+└── (tabs)/
+    ├── _layout.tsx       → Tabs + WebSocketProvider + TabsConfigSync
+    ├── home.tsx          → SDUI-driven home (DraftPreview when draft exists)
+    ├── chat.tsx          → AI chat (WebSocket streaming)
+    ├── modules.tsx       → Module list (enable/disable tabs)
+    ├── calendar.tsx      → Month grid calendar with event dots
+    ├── forms.tsx         → SDUI-driven forms (no fallback native UI)
+    ├── alerts.tsx        → Notifications list
+    └── settings.tsx      → Server info, account, logout
 ```
 
-### Navigation Structure
+**Auth guard** (`_layout.tsx`): Calls `initialize()` + `initializeSettings()` on mount. No token → redirect to `/(auth)/connect`. Has token + in auth group → redirect to `/(tabs)/chat`.
 
-Uses **Expo Router** (file-based routing):
+**Tab visibility**: `TabsConfigSync` (inside `(tabs)/_layout.tsx`) fetches `GET /api/modules` on mount, maps disabled modules to `tabsStore.hiddenTabs`. Live updates via `tabs_updated` WebSocket event. Tabs use `href: null` to hide from nav bar while keeping route accessible.
 
-- **Root Layout** (`app/_layout.tsx`) — Auth guard. Redirects to auth flow if no token, to tabs if authenticated.
-- **Index** (`app/index.tsx`) — `ActivityIndicator` while auth state hydrates from SecureStore. Redirect fallback.
-- **(auth)/** — Unauthenticated stack:
-  - `connect.tsx` — Server URL entry + account setup (creates first user)
-  - `login.tsx` — Username/password login
-- **(tabs)/** — Authenticated bottom tab navigator:
-  - `home.tsx` — Fully AI-driven home screen (SDUI only, no fallback UI)
-  - `chat.tsx` — Main AI chat interface with WebSocket streaming
-  - `modules.tsx` — Module/tab browser
-  - `calendar.tsx` — Month-grid calendar with event dots and selected-day detail
-  - `forms.tsx` — SDUI-driven forms screen (empty state until AI builds it)
-  - `alerts.tsx` — Notifications list
-  - `settings.tsx` — Server info, account details, logout
+---
 
-### State Management (Zustand)
+## Screens (Full Detail)
 
-| Store | Purpose | Key State | Persisted? |
-|-------|---------|-----------|----------|
-| `authStore` | Auth state | token, user, serverUrl, isLoading | SecureStore (token, serverUrl, username) |
-| `uiStore` | UI state | isConnected, errorBanner | No |
-| `settingsStore` | User preferences | navigationMode, theme | AsyncStorage |
-| `tabsStore` | AI-controlled tab visibility | hiddenTabs: string[] | No (reloaded from server) |
+### `app/index.tsx` — Loading Splash
+Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
+
+### `app/(auth)/connect.tsx` — Server Setup
+- **Shows:** Server URL field, username, password, Setup button, "Already have an account?" link
+- **Default values:** URL = `http://localhost:8000`, username = `testuser`, password = `testpass123`
+- **API:** `POST /auth/setup` via `AuthService.setup()`. On 409 → saves server URL, navigates to login
+- **State written:** `authStore.serverUrl` (persisted to SecureStore)
+
+### `app/(auth)/login.tsx` — Sign In
+- **Shows:** Username + password fields, "Connected to: {serverUrl}" + "Change Server" link
+- **API:** `POST /auth/login` with `device_id: 'web'`, `device_name: 'Web Browser'`
+- **State written:** `authStore.token` + `authStore.user` (persisted)
+
+### `app/(tabs)/home.tsx` — SDUI Home
+- **Shows:** AI-generated SDUI screen, or `DraftPreview` if draft exists, or empty-state prompt
+- **API:** `GET /api/sdui/home` + `GET /api/sdui/home/draft` via `useSDUIScreen('home')`
+- **Approve draft:** `POST /api/actions/execute {function: "approve_draft", params: {module_id: "home"}}`
+- **Reject draft:** `POST /api/actions/execute {function: "reject_draft", ...}`
+
+### `app/(tabs)/chat.tsx` — AI Chat
+- **Shows:** Chat message list (FlatList), typing indicator (`●●●`), text input + Send button. If AI set SDUI for chat tab, renders that instead.
+- **API:** `GET /api/chat/history` on mount (reversed for display)
+- **WS sent:** `{type: 'chat_message', content, conversation_id: 'default'}`
+- **WS handled:** `chat_start`, `chat_token` (streaming), `chat_message_replace` (strips XML tool calls), `chat_complete`, `chat_error`, `tool_result`, `tool_error`
+- **Pattern:** stale-closure-safe `wsHandlerRef` — subscription set up once on `[ws]` change, always calls latest ref
+
+### `app/(tabs)/calendar.tsx` — Calendar
+- **Shows:** Month navigation header, 7-column day grid with event dots, selected day agenda. SDUI fallback if AI sets it.
+- **API:** `GET /api/calendar/events?start_date=...&end_date=...` via `useFocusEffect` (re-runs on focus + currentMonth change)
+- **Performance:** `useMemo` for `calendarDays`, `eventsByDate` (O(1) lookup by date string), `selectedDayEvents`
+
+### `app/(tabs)/alerts.tsx` — Notifications
+- **Shows:** List of notification cards with title, message, formatted timestamp. SDUI fallback if set.
+- **API:** `GET /api/notifications` on mount and when `[token, serverUrl]` change. Re-fetches on WS `notification` message.
+
+### `app/(tabs)/modules.tsx` — Module Manager
+- **Shows:** FlatList of modules with icon, name, description, enabled/disabled badge. SDUI fallback if set.
+- **API:** `GET /api/modules` on mount.
+
+### `app/(tabs)/forms.tsx` — Forms
+- **Shows:** SDUI-driven form screen via `useSDUIScreen('forms')`, or empty-state loading/error. **No native fallback UI** — purely SDUI.
+
+### `app/(tabs)/settings.tsx` — Settings
+- **Shows:** Server URL, Navigation Mode, Theme, Version (1.0.0), Username, Logout. SDUI fallback if set.
+- **No API calls** — display only. Logout → `authStore.logout()` → navigate to connect.
+
+---
+
+## State Management (Zustand)
+
+| Store | File | Key State | Persisted? |
+|-------|------|-----------|----------|
+| `useAuthStore` | `src/stores/authStore.ts` | `token`, `user`, `serverUrl`, `isLoading` | SecureStore: `auth_token`, `server_url`, `username` |
+| `useUIStore` | `src/stores/uiStore.ts` | `isConnected`, `errorBanner: {message, retry?}` | No |
+| `useSettingsStore` | `src/stores/settingsStore.ts` | `navigationMode`, `theme` | AsyncStorage: `navigation_mode`, `theme` |
+| `useTabsStore` | `src/stores/tabsStore.ts` | `hiddenTabs: string[]` | No (reloaded from server) |
 
 **Critical notes:**
-- `authStore.logout()` clears the client-side token but **does not call the backend logout endpoint**
+- `authStore.logout()` clears client-side token but **does NOT call `/auth/logout`**
 - `settingsStore.navigationMode` and `settingsStore.theme` are stored but **neither has any effect** on the UI
 - `settingsStore` uses `AsyncStorage` directly instead of the `storage` utility (inconsistency)
-- `tabsStore.hiddenTabs` is repopulated from `GET /api/modules` on every app launch (not persisted locally)
+- `tabsStore.hiddenTabs` is repopulated from `GET /api/modules` on every app launch
 
-### Services Layer
+---
+
+## Services Layer
 
 | Service | File | Purpose |
 |---------|------|---------|
 | `ApiClient` | `services/api.ts` | HTTP client for all REST API calls. Auto-redirects on 401. |
-| `AuthService` | `services/auth.ts` | Standalone auth service for setup/login/logout (used before ApiClient exists) |
-| `WebSocketService` | `services/websocket.ts` | ReconnectingWebSocket wrapper with heartbeat, Zod validation, multi-handler subscriptions |
+| `AuthService` | `services/auth.ts` | Standalone auth service for setup/login/logout (used before token exists) |
+| `WebSocketService` | `services/websocket.ts` | ReconnectingWebSocket wrapper with heartbeat (30s ping), Zod validation, multi-handler subscriptions |
 
-### Contexts
+### ApiClient — All Methods
 
-**`WebSocketContext`** (`src/contexts/WebSocketContext.tsx`) — Singleton WebSocket:
-- Creates one `WebSocketService` instance on `[token, serverUrl]` changes
-- Prevents N duplicate connections (old issue: each tab was creating its own WS)
-- WS URL: `serverUrl.replace(/^http/, 'ws') + '/ws'`
-- `useWebSocket()` returns the service or `null` before auth is ready
+| Method | HTTP | Path | Notes |
+|--------|------|------|-------|
+| `login(data)` | POST | `/auth/login` | |
+| `logout()` | POST | `/auth/logout` | |
+| `healthCheck()` | GET | `/health` | |
+| `getCalendarEvents(start?, end?)` | GET | `/api/calendar/events` | |
+| `createCalendarEvent(event)` | POST | `/api/calendar/events` | |
+| `updateCalendarEvent(id, event)` | PUT | `/api/calendar/events/{id}` | Backend bug: 404 |
+| `deleteCalendarEvent(id)` | DELETE | `/api/calendar/events/{id}` | |
+| `getNotifications()` | GET | `/api/notifications` | Returns `.notifications` array |
+| `markNotificationRead(id)` | POST | `/api/notifications/{id}/read` | |
+| `getAgentConfig()` | GET | `/api/agent/config` | |
+| `updateAgentConfig(config)` | PUT | `/api/agent/config` | |
+| `getWorkflows()` | GET | `/api/workflows` | |
+| `createWorkflow(w)` | POST | `/api/workflows` | |
+| `updateWorkflow(id, w)` | PUT | `/api/workflows/{id}` | |
+| `deleteWorkflow(id)` | DELETE | `/api/workflows/{id}` | |
+| `getModules()` | GET | `/api/modules` | |
+| `hideTab(tabId)` | DELETE | `/api/modules/{tabId}` | |
+| `showTab(tabId)` | POST | `/api/modules/{tabId}/show` | |
+| `getSDUIScreen(moduleId)` | GET | `/api/sdui/{moduleId}` | `{screen, version?}` |
+| `getSDUIDraft(moduleId)` | GET | `/api/sdui/{moduleId}/draft` | `{screen, has_draft}` |
+| `deleteSDUIScreen(moduleId)` | DELETE | `/api/sdui/{moduleId}` | |
+| `getChatHistory(conversationId?)` | GET | `/api/chat/history` | Returns `.messages` array |
+| `deleteConversation(id)` | DELETE | `/api/chat/history` | |
+| `executeAction(functionName, params)` | POST | `/api/actions/execute` | `{function, params}` body |
 
-### Hooks
+### WebSocketService
 
-**`useSDUIScreen(moduleId)`** (`src/hooks/useSDUIScreen.ts`):
-- Fetches `GET /api/sdui/{moduleId}` on mount and auth changes
-- Subscribes to WS `sdui_screen_update` messages for live updates
-- Returns `{ screen, draft, loading, error, refresh }` — `draft` is `SDUIScreen | null` from `sdui_draft_update` WS events
-
-**`useActionDispatcher()`** (`src/hooks/useActionDispatcher.ts`):
-- Returns a stable `handleAction` callback for dispatching SDUI actions
-- Replaces the 7 per-screen `console.log` stubs — call `const handleAction = useActionDispatcher()` inside the component
-- Action types handled: navigate (tab route mapping), go_back, open_url (scheme-whitelisted), copy_text (expo-clipboard), server_action (POST /api/actions/execute), send_to_agent (WS + router.push), toggle (local state, no-op at dispatcher), dismiss, api_call (legacy compat)
-- Dependencies: useRouter, useAuthStore, useWebSocket, ApiClient
-
-### SDUI Component System
-
-The app has a **Server-Driven UI renderer** (`SDUIRenderer.tsx`) that accepts a JSON component tree and renders native components:
-
-| SDUI Type | Component | Status |
-|-----------|-----------|--------|
-| `calendar` | Vertical event list (left-border colors) | Implemented |
-| `form` | Stateful form with submit | Implemented |
-| `alert` | Severity-colored alert block | Implemented |
-| `list` | Rows with icon/title/subtitle/chevron | Implemented |
-| `card` | Card with optional children | Implemented |
-| `text` | Styled text block | Implemented |
-| `heading` | Level-based heading (h1–h3) | Implemented |
-| `button` | primary/secondary/destructive/ghost variants | Implemented |
-| `icon_button` | Emoji icon button | Implemented |
-| `container` | Flex row/column layout | Implemented |
-| `badge` | Colored pill | Implemented |
-| `stat` | Value + label + change | Implemented |
-| `stats_row` | Row of stat items | Implemented |
-| `image` | `<Image>` with tap action | Implemented |
-| `progress` | Labeled progress bar | Implemented |
-| `divider` | 1px separator | Implemented |
-| `spacer` | Empty height spacer | Implemented |
-| *(unknown)* | Error card | Graceful fallback |
-
-~~**⚠️ SDUI Actions never execute**~~ — **FIXED (Session 2)**: All 7 action types are now handled by `useActionDispatcher`. All tab screens use the hook instead of `console.log` stubs.
-
-**⚠️ Dead SDUI component files** — `AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx` are NOT used by `SDUIRenderer.tsx` (it renders all types inline). These files are dead code.
-
-### Common Components
-
-| Component | Purpose |
-|-----------|---------|
-| `Button` | Three variants: primary, secondary, outline |
-| `Card` | Elevated card container with shadow |
-| `ErrorBanner` | Red banner with retry/dismiss actions |
-| `Input` | Styled TextInput wrapper |
+- **URL:** `${serverUrl}?token=${token}` (WS URL derived from serverUrl + `/ws` in context)
+- **ReconnectingWebSocket config:** maxRetries=10, connectionTimeout=5000ms, maxReconnectionDelay=10000ms, minReconnectionDelay=1000ms
+- **Heartbeat:** sends `{type: 'ping'}` every 30 seconds
+- **Validation:** all incoming messages validated with `wsMessageSchema` (Zod `.passthrough()` — preserves all extra fields)
 
 ---
 
-## Tier 3: Extensive Detail
+## Hooks
 
-### File-by-File Breakdown
+### `useSDUIScreen(moduleId)` → `SDUIScreenState`
+```ts
+{ screen: SDUIPayload | null, draft: SDUIPayload | null, loading: boolean,
+  error: string | null, refresh: () => void }
+```
+- Fetches `GET /api/sdui/{moduleId}` + `GET /api/sdui/{moduleId}/draft` in parallel on mount
+- Re-fetches on `[moduleId, token, serverUrl]` change
+- Subscribes to WS: `sdui_screen_update` (sets live screen), `sdui_draft_update` (sets draft), `sdui_draft_rejected` (clears draft)
+- Supports both V1 (`SDUIScreen`) and V2 (`SDUIPage`) payloads via `isSDUIPage()` type guard
 
-#### Config Files
+### `useActionDispatcher()` → `(action: SDUIAction) => void`
+Memoized stable callback. Handles all SDUI action types:
 
-**`package.json`** — Key dependencies:
-- `expo` ~55.0.8 (SDK 55)
-- `react` 19.2.0, `react-native` 0.83.2
-- `expo-router` ^55.0.7 (file-based routing)
-- `zustand` ^5.0.12 (state management)
-- `reconnecting-websocket` ^4.4.0 (WebSocket with auto-reconnect)
-- `date-fns` ^4.1.0 (date formatting)
-- `zod` ^4.3.6 (runtime validation)
-- `expo-secure-store` ^55.0.9 (encrypted storage on native)
-- `expo-clipboard` ~13.x.x (SDK 55) (clipboard read/write — used by `useActionDispatcher` for `copy_text`)
-- `react-native-reanimated` ^4.2.3 (animations)
+| Action type | Behavior |
+|-------------|----------|
+| `navigate` | Maps module IDs to tab routes, calls `router.push()` |
+| `go_back` | `router.back()` if `canGoBack()` |
+| `open_url` | Only allows `http/https/mailto/tel` schemes; calls `Linking.openURL()` |
+| `copy_text` | `Clipboard.setStringAsync()` + Alert confirmation |
+| `dismiss` | `router.back()` |
+| `open_sheet` | Not yet implemented (stub) |
+| `server_action` | `ApiClient.executeAction(function, params)` |
+| `send_to_agent` | `ws.send({type:'chat_message', content})` then navigates to chat |
 
-**`app.json`** — Expo config:
-- App name: "Helm"
-- Slug: "helm"
-- Scheme: "helm" (deep linking)
-- iOS bundle: `com.helm.app`, minimum iOS 16
-- Light mode only (`userInterfaceStyle: "light"`)
-- Portrait only
+### `useBreakpoint()` → `'compact' | 'regular'`
+Returns `'compact'` (width < 768px) or `'regular'` (width ≥ 768px). Listens to `Dimensions` change events. Used by V2 row renderer for responsive layout.
 
-**`babel.config.js`** — Module resolver with `@/` alias → `./src/`
+---
 
-**`tsconfig.json`** — Strict mode, paths alias `@/*` → `src/*`
+## Contexts
 
-#### Root Layout (`app/_layout.tsx`)
+### `WebSocketContext` — `WebSocketProvider` / `useWebSocket()`
+- Creates a single `WebSocketService` instance per `[token, serverUrl]`
+- WS URL: `serverUrl.replace(/^http/, 'ws') + '/ws'`
+- On connect: `uiStore.setConnected(true)`, `hideError()`
+- On disconnect: `uiStore.setConnected(false)`, `showError('Connection lost', reconnect)`
+- `useWebSocket()` returns `WebSocketService | null`
 
-The auth guard logic:
-1. On mount: calls `initialize()` on auth store and settings store
-2. Watches `token`, `segments`, `isLoading`
-3. If not loading and no token and not in auth group → redirect to `/(auth)/connect`
-4. If not loading and has token and in auth group → redirect to `/(tabs)/chat`
-5. Renders `<Slot />` (current route)
+---
 
-#### Auth Flow
+## SDUI Component System
 
-**Connect Screen** (`(auth)/connect.tsx`):
-- Three inputs: Server URL, Username, Password
-- Defaults: `http://localhost:8000`, `testuser`, `testpass123`
-- On setup: calls `POST /auth/setup` → saves server URL → navigates to login
-- Uses `AuthService` (not `ApiClient`) since we don't have a token yet
+### V1 — `SDUIScreen` (legacy, still supported)
 
-**Login Screen** (`(auth)/login.tsx`):
-- Two inputs: Username, Password
-- On login: calls `POST /auth/login` with device_id="web", device_name="Web Browser"
-- Saves token → navigates to `/(tabs)/chat`
-- Shows "Connected to: {serverUrl}" with "Change Server" link
-
-#### Tab Screens
-
-**Chat** (`(tabs)/chat.tsx`) — The primary screen:
-- Uses shared `WebSocketContext` (gets `WebSocketService` via `useWebSocket()`)
-- Loads chat history via REST on mount
-- `wsHandlerRef` pattern avoids stale closures (handler updated via ref)
-- WebSocket message handling:
-  - `chat_start` → Sets isTyping=true, initializes new assistant message
-  - `chat_token` → Appends token to current assistant message
-  - `chat_message_replace` → Replaces current message content (used after XML tool call stripping)
-  - `chat_complete` → Sets isTyping=false, finalises message
-  - `chat_error` → Shows error banner
-  - `tool_result` / `tool_error` → Logged to console (no UI yet)
-- Send: appends user message to local state + sends via WebSocket `{type: "chat_message", content: "...", conversation_id: "default"}`
-- Shows typing indicator (`●●●`) while waiting for response
-- SDUI override: `useSDUIScreen('chat')` — if AI sets a chat SDUI screen, it overrides the default chat view
-
-**Home** (`(tabs)/home.tsx`) — Fully AI-driven screen:
-- Only content: `useSDUIScreen('home')` render
-- Uses `useActionDispatcher()` for SDUI actions; shows `DraftPreview` component when `draft !== null`
-- No functional fallback — empty state shown when no SDUI screen is set
-
-**Calendar** (`(tabs)/calendar.tsx`):
-- Loads events for current month via `GET /api/calendar/events?start_date=...&end_date=...`
-- Renders as a simple scrollable list of `Card` components
-- **Read-only** — no create/edit/delete calendar UI
-- Has `view` state (month/day) but toggle not yet implemented
-
-**Alerts** (`(tabs)/alerts.tsx`):
-- Loads notifications via `GET /api/notifications`
-- Renders as cards with title, body, timestamp
-- **Bug**: `markNotificationRead` method exists in `api.ts` but is never called — notifications cannot be marked read
-
-**Modules** (`(tabs)/modules.tsx`):
-- Loads module list via `GET /api/modules`
-- Renders as cards with icon, name, description, enabled/disabled badge
-- `handleModulePress` is a stub (console.log) — tapping a module does nothing
-
-**Forms** (`(tabs)/forms.tsx`):
-- Static placeholder screen
-- Text: "Forms will be dynamically rendered here via SDUI"
-
-**Settings** (`(tabs)/settings.tsx`):
-- Displays: Server URL, Agent model, Navigation mode, Theme, Version, Username
-- Logout button with confirmation dialog
-
-#### Services
-
-**`ApiClient`** (`src/services/api.ts`):
-- Generic `request<T>()` method that handles auth headers, 401 redirect, error parsing
-- Methods for all backend endpoints: auth, calendar, notifications, agent config, workflows, modules, chat, SDUI screens, tab visibility
-- New endpoints added: `getSDUIScreen`, `setSDUIScreen`, `deleteSDUIScreen`, `hideTab`, `showTab`
-- `executeAction(functionName, params)` — POST /api/actions/execute; calls a named backend function from the action registry
-- On 401: calls `onUnauthorized` callback (which triggers logout)
-
-**`AuthService`** (`src/services/auth.ts`):
-- Standalone service for setup, login, logout
-- **Bug**: `logout()` only clears local state; does NOT call `DELETE /auth/logout` — server sessions remain active indefinitely
-
-**`WebSocketService`** (`src/services/websocket.ts`):
-- Wraps `ReconnectingWebSocket` with:
-  - Max 10 retries, 1-10s reconnection delay, 5s timeout
-  - 30s heartbeat (ping/pong)
-  - Message validation via Zod schema (`wsMessageSchema` uses `.passthrough()` so extra fields like `token`, `message_id` are preserved after validation)
-  - Handler registration with cleanup functions
-  - Connection/disconnection event handlers
-
-#### Stores
-
-**`authStore`** — Persists `auth_token` and `server_url` to secure storage. `initialize()` loads both on app start.
-
-**`uiStore`** — In-memory only. Tracks WebSocket connection status and error banner state.
-
-**`settingsStore`** — Persists to AsyncStorage (not SecureStore). Stores navigation mode and theme. Both settings are stubs — they have no UI effect.
-
-**`tabsStore`** — In-memory only (not persisted). `hiddenTabs: string[]` + `setHiddenTabs()`. Updated by `TabsConfigSync` when a `tabs_updated` WS event arrives. Controls `href: null` on tab entries in the bottom navigator. Reloads from server on each start.
-
-#### SDUI Components
-
-**`SDUIRenderer`** (`src/components/sdui/SDUIRenderer.tsx`) — Inline switch-based renderer:
-- 19 component types all rendered inline (no sub-component imports)
-- `SDUIScreenRenderer` wraps a `sections[]` array from the screen payload
-- `FormRenderer` is a local stateful component inside the same file; handles `server_action` submit type (merges form values into params)
-- `onAction` prop forwarded to `useActionDispatcher()` via the calling screen — actions now execute
-- Unknown component types render an error card with the type name
-
-**`DraftPreview`** (`src/components/sdui/DraftPreview.tsx`):
-- Shown on home.tsx when `useSDUIScreen('home').draft !== null`
-- Props: `{ moduleId: string, draft: SDUIScreen, onApprove: () => void, onReject: (feedback?: string) => void }`
-- Renders a banner + SDUI preview of the draft screen + feedback input (toggleable)
-- Calls POST /api/sdui/{moduleId}/draft/approve or /reject on user action
-
-**⚠️ Dead code files** (not imported anywhere):
-- `AlertComponent.tsx` — dead
-- `CalendarComponent.tsx` — dead
-- `FormComponent.tsx` — dead
-- `ListComponent.tsx` — dead
-
-All 4 files should be deleted to reduce confusion.
-
-#### Types
-
-**`api.ts`** — TypeScript interfaces matching (roughly) the backend schemas.
-
-**`sdui.ts`** — SDUI component type definitions:
-- Old flat `SDUIComponent {type, id, props, children}` type
-- Does NOT reflect the real screen payload shape: `SDUIScreen {schema_version, module_id, title, sections[]}`. Use the backend schema source of truth.
-- Action union type includes: `navigate`, `api_call`, `open_url`, `dismiss`, `server_action` (call named backend function), `send_to_agent` (route message to AI), `go_back` (navigate back), `toggle` (client-side toggle), `copy_text`, `open_sheet`
-- `ContainerComponent` has new flexbox props: `justify` (`'start'|'center'|'end'|'space-between'|'space-around'`), `padding` (`'none'|'xs'|'sm'|'md'|'lg'`), `flex: number`
-
-**`navigation.ts`** — Route type definitions. **Dead code** — Expo Router handles routing types automatically.
-
-#### Utils
-
-**`storage.ts`** — Platform-aware storage abstraction:
-- Native: Uses `expo-secure-store` (encrypted)
-- Web: Uses `localStorage`
-
-**`validation.ts`** — Zod schemas for:
-- SDUI component validation (recursive)
-- Calendar/Form/Alert props validation
-- WebSocket message validation
-
-#### Theme
-
-**`colors.ts`** — iOS-inspired design system:
-- Colors: iOS system colors (primary=#007AFF, etc.)
-- Spacing: 4/8/16/24/32/48
-- Border radius: 4/8/12/16/9999
-- Typography: iOS Dynamic Type scale (largeTitle through caption2)
-- Dark mode colors defined but not used yet
-
-### How to Use
-
-```bash
-# Install dependencies
-cd mobile
-npm install
-
-# Start Expo dev server
-npx expo start
-
-# Run on specific platforms
-npx expo start --ios        # iOS simulator (Mac only)
-npx expo start --android    # Android emulator
-npx expo start --web        # Web browser
-
-# The app expects a backend running at http://localhost:8000
-# On first launch:
-# 1. Enter server URL on Connect screen
-# 2. Create admin account
-# 3. Login with created credentials
-# 4. Start chatting (requires AI API key configured in backend)
+```json
+{
+  "schema_version": 1,
+  "sections": [
+    { "id": "s1", "title": "optional", "component": { "type": "text", ... } }
+  ]
+}
 ```
 
-### Project Structure
+Component types (lowercase): `text`, `heading`, `button`, `icon_button`, `divider`, `spacer`, `card`, `container`, `list`, `form`, `alert`, `badge`, `stat`, `stats_row`, `calendar`, `image`, `progress`
 
-```
-mobile/
-├── app.json                      # Expo configuration
-├── babel.config.js               # Babel + module resolver
-├── index.ts                      # Entry point (expo-router/entry)
-├── package.json                  # Dependencies
-├── tsconfig.json                 # TypeScript config
-├── app/
-│   ├── _layout.tsx               # Root layout (auth guard)
-│   ├── index.tsx                 # Loading screen (redirects)
-│   ├── (auth)/
-│   │   ├── _layout.tsx           # Auth stack layout
-│   │   ├── connect.tsx           # Server setup screen
-│   │   └── login.tsx             # Login screen
-│   └── (tabs)/
-│       ├── _layout.tsx           # Tab navigator (TabsLayout + TabsConfigSync)
-│       ├── home.tsx              # AI home (SDUI only)
-│       ├── chat.tsx              # AI chat with streaming WebSocket
-│       ├── modules.tsx           # Module browser
-│       ├── calendar.tsx          # Calendar events (read-only)
-│       ├── alerts.tsx            # Notifications
-│       └── settings.tsx          # App settings + logout
-├── assets/                       # Icons, splash screen
-└── src/
-    ├── components/
-    │   ├── common/
-    │   │   ├── Button.tsx        # Reusable button (3 variants)
-    │   │   ├── Card.tsx          # Elevated card container
-    │   │   ├── ErrorBanner.tsx   # Error banner with retry/dismiss
-    │   │   └── Input.tsx         # Styled text input
-    │   └── sdui/
-    │       ├── SDUIRenderer.tsx  # SDUI engine (19 inline component types)
-    │       ├── DraftPreview.tsx  # Draft review UI (approve/reject)
-    │       ├── AlertComponent.tsx    # DEAD CODE
-    │       ├── CalendarComponent.tsx # DEAD CODE
-    │       ├── FormComponent.tsx     # DEAD CODE
-    │       └── ListComponent.tsx     # DEAD CODE
-    ├── contexts/
-    │   └── WebSocketContext.tsx  # Singleton WS, useWebSocket() hook
-    ├── hooks/
-    │   ├── useSDUIScreen.ts      # Fetch + live-update SDUI per module; returns screen + draft
-    │   └── useActionDispatcher.ts # SDUI action dispatcher hook
-    ├── services/
-    │   ├── api.ts                # REST API client (all endpoints)
-    │   ├── auth.ts               # Auth service (setup/login/logout)
-    │   └── websocket.ts          # ReconnectingWebSocket wrapper
-    ├── stores/
-    │   ├── authStore.ts          # Auth state (Zustand + SecureStore)
-    │   ├── uiStore.ts            # UI state (WS status, errors)
-    │   ├── settingsStore.ts      # Settings (Zustand + AsyncStorage)
-    │   └── tabsStore.ts          # AI-controlled tab visibility
-    ├── theme/
-    │   └── colors.ts             # Design system tokens (iOS-inspired)
-    ├── types/
-    │   ├── api.ts                # Backend API types
-    │   ├── navigation.ts         # Route types (DEAD CODE)
-    │   └── sdui.ts               # SDUI component types (partially stale)
-    └── utils/
-        ├── storage.ts            # Platform-aware storage abstraction
-        └── validation.ts         # Zod schemas (mostly unused)
+Rendered by `SDUIScreenRenderer` → `SDUIRenderer` (single component) in `src/components/sdui/SDUIRenderer.tsx`.
+
+### V2 — `SDUIPage` (preferred)
+
+```json
+{
+  "schema_version": "1.0.0",
+  "module_id": "home",
+  "title": "optional",
+  "rows": [
+    {
+      "id": "r1",
+      "cells": [
+        { "id": "c1", "width": 1, "content": { "type": "Text", ... } }
+      ],
+      "compact": { "direction": "column" },
+      "regular": { "direction": "row" },
+      "scrollable": false,
+      "gap": 12
+    }
+  ]
+}
 ```
 
-### Known Issues / TODOs
+Component types (PascalCase — registered in `src/renderer/componentRegistry.ts`):
+`Text`, `Markdown`, `Button`, `Image`, `TextInput`, `Icon`, `Divider`, `Container`, `CalendarModule`, `ChatModule`, `NotesModule`, `InputBar`
 
-1. ~~**SDUI actions never execute**~~ — **FIXED (Session 2)**: All 7 action types now handled by `useActionDispatcher`. All tab screens use the hook instead of `console.log` stubs.
-2. **Dead SDUI component files** — `AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx` not imported anywhere. Should be deleted.
-3. **`logout()` no server call** — `AuthService.logout()` only clears local state. Backend session remains active. `DELETE /auth/logout` is never called.
-4. **`markNotificationRead` never called** — The method exists in `api.ts` but `alerts.tsx` never calls it.
-5. **`handleModulePress` stub** — Module tap handler is `console.log`. No module detail screen exists.
-6. **`conversation_id: 'default'` hardcoded** — No multi-conversation support.
-7. **Calendar read-only** — No create/edit/delete calendar event UI.
-8. **Dark mode** — Color tokens defined but `userInterfaceStyle: "light"` forced in `app.json`.
-9. **Navigation mode setting is a stub** — Settings stores drawer preference but only tabs is implemented.
-10. **`navigation.ts` dead code** — Route type file not imported anywhere; Expo Router handles types.
-11. **`validation.ts` mostly unused** — Only `wsMessageSchema` is actually used.
-12. **`@react-navigation/bottom-tabs` dependency** — Listed in `package.json` but never imported (Expo Router handles tabs).
-13. **Hardcoded dev credentials** — `connect.tsx` defaults to `testuser`/`testpass123`.
+Rendered by `SDUIPageRenderer` → `RowRenderer` → `CellRenderer` → `V2ComponentRenderer`.
+
+### Auto-dispatch — `SDUIUniversalRenderer`
+Detects format via `isSDUIPage()` type guard and dispatches to `SDUIPageRenderer` (V2) or `SDUIScreenRenderer` (V1).
+
+---
+
+## Component Library
+
+### Common (`src/components/common/`)
+
+| Component | Props | Notes |
+|-----------|-------|-------|
+| `Button` | `title, onPress, variant?('primary'\|'secondary'\|'outline'), disabled?, style?` | |
+| `Card` | `children, style?` | White bg, 12px radius, shadow |
+| `ErrorBanner` | `message, onRetry?, onDismiss?` | Red banner |
+| `Input` | `...TextInputProps` | Styled TextInput |
+
+### V1 SDUI (`src/components/sdui/`)
+
+| Component | Notes |
+|-----------|-------|
+| `AlertComponent` | Severity-colored card; `dismissible`, `onAction` |
+| `CalendarComponent` | Event list with color bars |
+| `DraftPreview` | Banner + preview + Approve/Reject/Add Feedback buttons |
+| `FormComponent` | Controlled form; validates required fields |
+| `ListComponent` | FlatList with icon/title/subtitle/chevron |
+| `SDUIRenderer` / `SDUIScreenRenderer` / `SDUIPageRenderer` / `SDUIUniversalRenderer` | Main renderer |
+
+**⚠️ Dead code:** `AlertComponent`, `CalendarComponent`, `FormComponent`, `ListComponent` are NOT used by `SDUIRenderer.tsx` (it renders all V1 types inline). These files exist but are not imported.
+
+### V2 Atomic (`src/components/atomic/`)
+
+| Component | Key Props |
+|-----------|-----------|
+| `SDUIText` | `content, variant?('heading'\|'body'\|'caption'), color?, bold?, italic?, underline?, strikethrough?, align?, numberOfLines?, selectable?` |
+| `SDUIMarkdown` | `content` — regex-based inline + block-level markdown parsing |
+| `SDUIButton` | `label?, icon?, variant?('primary'\|'secondary'\|'ghost'\|'icon'\|'destructive'), size?('sm'\|'md'\|'lg'), loading?, fullWidth?, dispatch?` |
+| `SDUIImage` | `src, alt?, width?, height?, aspectRatio?, borderRadius?, onPress?, placeholder?('blur'\|'skeleton'\|'none')` |
+| `SDUITextInput` | `value?, onChangeText?, placeholder?, multiline?, maxLines?, secureTextEntry?, keyboardType?, editable?` |
+| `SDUIIcon` | `name` (Feather name → emoji/unicode map, ~40 icons), `size?, color?, onPress?` |
+| `SDUIDivider` | `direction?('horizontal'\|'vertical'), thickness?, color?, indent?` |
+
+### V2 Structural (`src/components/structural/`)
+
+| Component | Key Props |
+|-----------|-----------|
+| `SDUIContainer` | `direction?, gap?, padding?, backgroundColor?, borderRadius?, shadow?('sm'\|'md'\|'lg'), flex?, align?, justify?, children?` |
+
+Uses `resolveColor()` and `themeShadows` from `src/theme/tokens.ts`.
+
+### V2 Composite (`src/components/composite/`)
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `CalendarModule` | Full MVP | Month grid + 3-day view stub; event dots; day agenda |
+| `ChatModule` | Placeholder | Shows "navigate to Chat tab" |
+| `NotesModule` | Placeholder | Shows "Notes will appear here" |
+| `InputBar` | Full MVP | `[⚙️][TextInput][➤]` strip with optional settings items |
+
+### Component Registry (`src/renderer/componentRegistry.ts`)
+
+```ts
+resolveComponent(type: string) // → React component or undefined
+registerComponent(type, component) // extend registry at runtime
+getRegisteredTypes() // → string[]
+```
+
+---
+
+## Theme & Design Tokens
+
+### `src/theme/colors.ts`
+iOS-style color palette + spacing + border radius + typography:
+
+```ts
+// Colors
+primary: '#007AFF'     secondary: '#5856D6'   success: '#34C759'
+warning: '#FF9500'     error: '#FF3B30'        info: '#5AC8FA'
+background: '#FFFFFF'  surface: '#F2F2F7'      card: '#FFFFFF'
+text: '#000000'        textSecondary: '#8E8E93' border: '#C6C6C8'
+// Dark mode tokens also defined (not yet applied to UI)
+
+// Spacing: xs:4, sm:8, md:16, lg:24, xl:32, xxl:48
+// Border radius: sm:4, md:8, lg:12, xl:16, full:9999
+// Typography: largeTitle(34/700), title1(28/700), title2(22/700),
+//   title3(20/600), headline(17/600), body(17/400), callout(16/400),
+//   subheadline(15/400), footnote(13/400), caption1(12/400), caption2(11/400)
+```
+
+### `src/theme/tokens.ts`
+V2 renderer tokens:
+
+```ts
+themeColors    // extended palette + primaryLight, surfaceElevated
+themeShadows   // { sm, md, lg } shadow objects for SDUIContainer
+resolveColor(tokenOrHex, fallback?)  // resolves token name or passes through hex
+```
+
+---
+
+## Types
+
+### `src/types/sdui.ts` — SDUI Type System
+
+**`SDUIAction`** (discriminated union): `navigate`, `go_back`, `api_call`, `server_action`, `send_to_agent`, `dismiss`, `open_sheet`, `copy_text`, `open_url`, `toggle`
+
+**V1:** `SDUISection`, `SDUIScreen` (schema_version: 1)
+
+**V2:** `SDUICell { id, width, content }`, `SDUIRow { id, cells, compact?, regular?, scrollable?, gap?, padding?, backgroundColor? }`, `SDUIPage { schema_version: '1.0.0', module_id, title?, rows }`
+
+**`SDUIPayload`** = `SDUIScreen | SDUIPage`
+
+**`isSDUIPage(payload)`** — type guard
+
+### `src/types/api.ts`
+```ts
+User, SetupRequest, SetupResponse, LoginRequest, LoginResponse,
+ChatMessage, CalendarEvent, Notification, AgentConfig, Workflow, Module, Device
+```
+
+---
+
+## Package Dependencies
+
+| Package | Version |
+|---------|---------|
+| `expo` | ~55.0.8 |
+| `expo-router` | ^55.0.7 |
+| `react` | 19.2.0 |
+| `react-native` | 0.83.2 |
+| `zustand` | ^5.0.12 |
+| `zod` | ^4.3.6 |
+| `date-fns` | ^4.1.0 |
+| `reconnecting-websocket` | ^4.4.0 |
+| `@react-native-async-storage/async-storage` | ^3.0.1 |
+| `expo-secure-store` | ^55.0.9 |
+| `expo-clipboard` | ~55.0.9 |
+| `@react-navigation/bottom-tabs` | ^7.15.6 |
+| `react-native-gesture-handler` | ^2.30.0 |
+| `react-native-reanimated` | ^4.2.3 |
+| `typescript` | ~5.9.2 |

@@ -16,13 +16,13 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { SDUIScreenRenderer } from '@/components/sdui/SDUIRenderer';
+import { SDUIUniversalRenderer } from '@/components/sdui/SDUIRenderer';
 import { useActionDispatcher } from '@/hooks/useActionDispatcher';
-import type { SDUIScreen } from '@/types/sdui';
+import type { SDUIPayload } from '@/types/sdui';
 import { colors, spacing, typography } from '@/theme/colors';
 
 interface DraftPreviewProps {
-  draft: SDUIScreen;
+  draft: SDUIPayload;
   moduleId: string;
   onApprove: () => void;
   onReject: (feedback?: string) => void;
@@ -64,7 +64,7 @@ export function DraftPreview({ draft, moduleId, onApprove, onReject }: DraftPrev
 
       {/* Preview of the draft screen */}
       <ScrollView style={styles.previewContainer} contentContainerStyle={styles.previewContent}>
-        <SDUIScreenRenderer screen={draft} onAction={handleAction} />
+        <SDUIUniversalRenderer payload={draft} onAction={handleAction} />
       </ScrollView>
 
       {/* Feedback input (toggled) */}

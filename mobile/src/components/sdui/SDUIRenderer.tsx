@@ -1,13 +1,10 @@
 /**
- * SDUIRenderer — renders any SDUIComponent or SDUIScreen from a JSON payload.
+ * SDUIRenderer — renders any SDUIComponent, SDUIScreen (v1), or SDUIPage (v2) from JSON.
  *
- * The AI generates SDUIScreen JSON (via helm_set_screen MCP tool) and stores it
- * on the backend.  The frontend fetches it and passes it here to render natively.
+ * V1: Section-based layout (SDUIScreen → sections → components)
+ * V2: Row-by-Row layout (SDUIPage → rows → cells → component)
  *
- * To add a new component:
- *   1. Add its type + props to src/types/sdui.ts
- *   2. Add a case here in renderComponent()
- *   3. The AI can immediately start generating that component type
+ * The renderer auto-detects the format via isSDUIPage().
  */
 import React, { useState } from 'react';
 import {
@@ -24,8 +21,29 @@ import type {
   SDUIScreen,
   SDUISection,
   SDUIAction,
+  SDUIPage,
+  SDUIRow,
+  SDUICell,
+  SDUIComponentV2,
+  SDUIPayload,
 } from '@/types/sdui';
+import { isSDUIPage } from '@/types/sdui';
 import { colors, spacing, typography } from '@/theme/colors';
+import { resolveComponent } from '@/renderer/componentRegistry';
+import { useBreakpoint } from '@/hooks/useBreakpoint';
+
+// ── Flat-props extraction ─────────────────────────────────────────────────
+// AI-generated JSON often omits the "props" wrapper required by the V2 schema.
+// This extracts all non-structural keys as props so components still render.
+const STRUCTURAL_KEYS = new Set(['type', 'id', 'children', 'props']);
+
+function extractFlatProps(comp: SDUIComponentV2): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [k, v] of Object.entries(comp)) {
+    if (!STRUCTURAL_KEYS.has(k)) result[k] = v;
+  }
+  return result;
+}
 
 // ── Action dispatcher ─────────────────────────────────────────────────────
 // Passed down to all components so they can fire actions without knowing
@@ -33,7 +51,7 @@ import { colors, spacing, typography } from '@/theme/colors';
 
 export type ActionDispatcher = (action: SDUIAction) => void;
 
-// ── Screen renderer ───────────────────────────────────────────────────────
+// ── Screen renderer (V1 — section-based) ────────────────────────────────
 
 interface SDUIScreenRendererProps {
   screen: SDUIScreen;
@@ -63,7 +81,204 @@ export function SDUIScreenRenderer({ screen, onAction }: SDUIScreenRendererProps
   );
 }
 
-// ── Component renderer ────────────────────────────────────────────────────
+// ── Page renderer (V2 — Row-by-Row) ─────────────────────────────────────
+
+interface SDUIPageRendererProps {
+  page: SDUIPage;
+  onAction?: ActionDispatcher;
+}
+
+export function SDUIPageRenderer({ page, onAction }: SDUIPageRendererProps) {
+  const dispatch: ActionDispatcher = onAction ?? (() => {});
+  const breakpoint = useBreakpoint();
+
+  return (
+    <ScrollView style={styles.screenContainer} contentContainerStyle={styles.screenContent}>
+      {page.rows.map((row, idx) => (
+        <RowRenderer key={row.id ?? `row-${idx}`} row={row} dispatch={dispatch} breakpoint={breakpoint} />
+      ))}
+    </ScrollView>
+  );
+}
+
+function RowRenderer({
+  row,
+  dispatch,
+  breakpoint,
+}: {
+  row: SDUIRow;
+  dispatch: ActionDispatcher;
+  breakpoint: 'compact' | 'regular';
+}) {
+  // Handle responsive visibility
+  const bpConfig = breakpoint === 'compact' ? row.compact : row.regular;
+  if (bpConfig?.hidden) return null;
+
+  // Skip malformed rows without cells
+  if (!row.cells || !Array.isArray(row.cells) || row.cells.length === 0) return null;
+
+  // Stack cells vertically on compact if specified
+  const shouldStack = breakpoint === 'compact' && row.compact?.stack;
+  const gap = row.gap ?? 12;
+
+  const cellElements = row.cells.map((cell, ci) => (
+    <CellRenderer key={cell.id ?? `cell-${ci}`} cell={cell} dispatch={dispatch} />
+  ));
+
+  // Scrollable row (horizontal carousel with snap)
+  if (row.scrollable) {
+    return (
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        style={[rowStyles.scrollableRow, row.backgroundColor ? { backgroundColor: row.backgroundColor } : null]}
+        contentContainerStyle={{ gap }}
+      >
+        {cellElements}
+      </ScrollView>
+    );
+  }
+
+  return (
+    <View
+      style={[
+        rowStyles.row,
+        {
+          flexDirection: shouldStack ? 'column' : 'row',
+          gap,
+        },
+        row.backgroundColor ? { backgroundColor: row.backgroundColor } : null,
+        row.padding ? { padding: typeof row.padding === 'number' ? row.padding : 0 } : null,
+      ]}
+    >
+      {cellElements}
+    </View>
+  );
+}
+
+function CellRenderer({
+  cell,
+  dispatch,
+}: {
+  cell: SDUICell;
+  dispatch: ActionDispatcher;
+}) {
+  // Skip malformed cells (metadata objects, missing content)
+  if (!cell.content) {
+    // Detect nested row objects masquerading as cells (agent error)
+    if ((cell as any).cells && Array.isArray((cell as any).cells)) {
+      return <RowRenderer row={cell as any} dispatch={dispatch} breakpoint="compact" />;
+    }
+    return null;
+  }
+
+  const width = cell.width;
+  const flexStyle = width === 'auto' || width === undefined
+    ? { flex: 1 }
+    : { flex: width };
+
+  return (
+    <View style={flexStyle}>
+      <V2ComponentRenderer component={cell.content} dispatch={dispatch} />
+    </View>
+  );
+}
+
+/** Renders a V2 component using the component registry with fallback. */
+function V2ComponentRenderer({
+  component,
+  dispatch,
+}: {
+  component: SDUIComponentV2;
+  dispatch: ActionDispatcher;
+}) {
+  if (!component || !component.type) {
+    // Unwrap cell-format children: { id, width, content: { type, ... } }
+    if ((component as any)?.content?.type) {
+      const inner = (component as any).content;
+      const unwrapped = { ...inner, id: inner.id ?? (component as any).id };
+      return <V2ComponentRenderer component={unwrapped} dispatch={dispatch} />;
+    }
+    return (
+      <View style={styles.unknownComponent}>
+        <Text style={styles.unknownText}>Invalid component</Text>
+      </View>
+    );
+  }
+
+  // Extract props: merge explicit props with any flat top-level keys.
+  // Agents often place some props at the top level and some inside "props".
+  const flatProps = extractFlatProps(component);
+  const props = Object.keys(flatProps).length > 0
+    ? { ...flatProps, ...(component.props ?? {}) }
+    : (component.props ?? {});
+
+  // Try V2 registry first
+  const Comp = resolveComponent(component.type);
+  if (Comp) {
+    // Render children recursively if present (check multiple locations where agents place them)
+    const kids = component.children
+      ?? (component as any).content?.children
+      ?? (props as any)?.children;
+    // Strip children from props to avoid passing array as React prop
+    const { children: _dropped, ...cleanProps } = (props ?? {}) as any;
+    const childElements = kids?.map((child: SDUIComponentV2, idx: number) => (
+      <V2ComponentRenderer
+        key={child.id ?? `${component.id}-child-${idx}`}
+        component={child}
+        dispatch={dispatch}
+      />
+    ));
+
+    return (
+      <Comp {...cleanProps} dispatch={dispatch}>
+        {childElements}
+      </Comp>
+    );
+  }
+
+  // Fallback: try old V1 switch-based renderer
+  try {
+    const v1Comp = component as unknown as SDUIComponent;
+    const rendered = renderComponent(v1Comp, dispatch);
+    if (rendered) return <View>{rendered}</View>;
+  } catch {
+    // Fall through to unknown fallback
+  }
+
+  // Unknown component — graceful fallback per versioning strategy
+  return (
+    <View style={styles.unknownComponent}>
+      <Text style={styles.unknownText}>Unsupported: {component.type}</Text>
+    </View>
+  );
+}
+
+// ── Universal renderer (auto-detects V1 vs V2) ──────────────────────────
+
+interface SDUIUniversalRendererProps {
+  payload: SDUIPayload;
+  onAction?: ActionDispatcher;
+}
+
+export function SDUIUniversalRenderer({ payload, onAction }: SDUIUniversalRendererProps) {
+  if (isSDUIPage(payload)) {
+    return <SDUIPageRenderer page={payload} onAction={onAction} />;
+  }
+  return <SDUIScreenRenderer screen={payload as SDUIScreen} onAction={onAction} />;
+}
+
+const rowStyles = StyleSheet.create({
+  row: {
+    marginBottom: 8,
+  },
+  scrollableRow: {
+    marginBottom: 8,
+  },
+});
+
+// ── V1 Component renderer ─────────────────────────────────────────────────
 
 interface SDUIRendererProps {
   component: SDUIComponent;

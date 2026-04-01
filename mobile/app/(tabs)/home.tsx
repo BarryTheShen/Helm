@@ -9,7 +9,7 @@
  */
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useSDUIScreen } from '@/hooks/useSDUIScreen';
-import { SDUIScreenRenderer } from '@/components/sdui/SDUIRenderer';
+import { SDUIUniversalRenderer } from '@/components/sdui/SDUIRenderer';
 import { DraftPreview } from '@/components/sdui/DraftPreview';
 import { useActionDispatcher } from '@/hooks/useActionDispatcher';
 import { useAuthStore } from '@/stores/authStore';
@@ -89,7 +89,7 @@ export default function HomeScreen() {
     );
   }
 
-  return <SDUIScreenRenderer screen={screen} onAction={handleAction} />;
+  return <SDUIUniversalRenderer payload={screen} onAction={handleAction} />;
 }
 
 const styles = StyleSheet.create({

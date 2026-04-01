@@ -16,7 +16,7 @@ import { ApiClient } from '@/services/api';
 import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
 import { ErrorBanner } from '@/components/common/ErrorBanner';
-import { SDUIScreenRenderer } from '@/components/sdui/SDUIRenderer';
+import { SDUIUniversalRenderer } from '@/components/sdui/SDUIRenderer';
 import { useActionDispatcher } from '@/hooks/useActionDispatcher';
 import { colors, spacing, typography } from '@/theme/colors';
 import type { ChatMessage } from '@/types/api';
@@ -174,7 +174,7 @@ export default function ChatScreen() {
 
   // If the AI has set an SDUI screen for the chat tab, render that instead
   if (sduiScreen) {
-    return <SDUIScreenRenderer screen={sduiScreen} onAction={handleAction} />;
+    return <SDUIUniversalRenderer payload={sduiScreen} onAction={handleAction} />;
   }
 
   return (
@@ -214,7 +214,7 @@ export default function ChatScreen() {
           onChangeText={setInput}
           placeholder="Type a message..."
           multiline
-          maxLength={2000}
+          maxLength={10000}
         />
         <Button
           title="Send"

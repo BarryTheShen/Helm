@@ -116,7 +116,11 @@ def _create_app():
                         yield f"data: {json.dumps({'type': 'token', 'text': chunk})}\n\n"
                     yield f"data: {json.dumps({'type': 'done', 'text': ''.join(full_text)})}\n\n"
             except Exception as exc:
-                yield f"data: {json.dumps({'type': 'error', 'text': str(exc)})}\n\n"
+                import traceback
+                error_detail = str(exc) or f"{type(exc).__name__}: {traceback.format_exc()[-500:]}"
+                print(f"[AGENT ERROR] {type(exc).__name__}: {exc}")
+                traceback.print_exc()
+                yield f"data: {json.dumps({'type': 'error', 'text': error_detail})}\n\n"
 
         return StreamingResponse(
             generate(),

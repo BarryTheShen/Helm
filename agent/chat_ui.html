@@ -773,6 +773,17 @@
       setStreaming(false);
       scrollToBottom();
     });
+
+    // ── Auto-send via URL query parameter ─────────────────────────────────────
+    // Navigate to /?q=your+message to auto-fill and send.
+    const autoMsg = new URLSearchParams(window.location.search).get('q');
+    if (autoMsg && autoMsg.trim()) {
+      inputEl.value = autoMsg.trim();
+      // Clear the query param from URL to prevent re-send on refresh
+      window.history.replaceState({}, '', '/');
+      // Trigger send after a short delay to let the page fully initialize
+      setTimeout(() => document.getElementById('input-form').requestSubmit(), 200);
+    }
   </script>
 </body>
 </html>

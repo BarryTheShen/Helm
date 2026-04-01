@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert, Pressable } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { AuthService } from '@/services/auth';
@@ -11,15 +11,23 @@ export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async () => {
-    if (!username.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please enter username and password');
+    setError(null);
+
+    if (!username.trim()) {
+      setError('Please enter your username');
+      return;
+    }
+
+    if (!password.trim()) {
+      setError('Please enter your password');
       return;
     }
 
     if (!serverUrl) {
-      Alert.alert('Error', 'Server URL not configured');
+      setError('Server URL not configured');
       router.replace('/(auth)/connect');
       return;
     }
@@ -37,8 +45,15 @@ export default function LoginScreen() {
       await setToken(response.session_token);
       await setUser({ id: response.user_id, username: response.username, email: '', created_at: '' });
       router.replace('/(tabs)/chat');
-    } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Login failed');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Login failed';
+      if (message.toLowerCase().includes('invalid credentials')) {
+        setError('Incorrect username or password');
+      } else if (message.toLowerCase().includes('fetch') || message.toLowerCase().includes('network')) {
+        setError('Cannot reach server. Check your connection and server URL.');
+      } else {
+        setError(message);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -49,6 +64,12 @@ export default function LoginScreen() {
       <View style={styles.content}>
         <Text style={styles.title}>Sign In</Text>
         <Text style={styles.subtitle}>Enter your credentials to continue</Text>
+
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
 
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Username</Text>
@@ -120,6 +141,20 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     marginBottom: spacing.xl,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  errorText: {
+    ...typography.subheadline,
+    color: '#DC2626',
     textAlign: 'center',
   },
   inputContainer: {

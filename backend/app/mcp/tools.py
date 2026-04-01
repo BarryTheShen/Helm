@@ -39,6 +39,9 @@ async def execute_tool(name: str, args: dict[str, Any], user_id: str) -> Any:
     handler = handlers.get(name)
     if handler is None:
         raise ValueError(f"Unknown tool: {name}")
+    # Prevent LLM from bypassing the draft flow by passing draft=False
+    if name == "set_screen":
+        args.pop("draft", None)
     return await handler(**args, user_id=user_id)
 
 
@@ -329,14 +332,14 @@ _SDUI_PREFIX = "sdui__"
 
 # Fields that belong in props for each component type (keyed by type literal)
 _SDUI_PROPS_FIELDS: dict[str, set[str]] = {
-    'text':        {'content', 'size', 'color', 'bold', 'italic', 'align'},
+    'text':        {'content', 'size', 'color', 'bold', 'italic', 'align', 'variant', 'underline', 'strikethrough', 'numberOfLines', 'selectable'},
     'heading':     {'content', 'level', 'align'},
     'button':      {'label', 'variant', 'action', 'disabled', 'icon'},
     'icon_button': {'icon', 'label', 'action', 'size'},
     'divider':     {'spacing'},
     'spacer':      {'size'},
     'card':        {'title', 'subtitle', 'elevated', 'action'},
-    'container':   {'direction', 'gap', 'wrap', 'align', 'justify', 'padding', 'flex'},
+    'container':   {'direction', 'gap', 'wrap', 'align', 'justify', 'padding', 'flex', 'backgroundColor', 'borderRadius', 'shadow'},
     'list':        {'title', 'items'},
     'form':        {'title', 'fields', 'submit_label', 'submit_action'},
     'alert':       {'severity', 'title', 'message', 'dismissible'},
@@ -374,14 +377,16 @@ def _normalize_sdui_component(comp: dict[str, Any]) -> dict[str, Any]:
 
     # Flat format — split fields into props vs structural
     comp_type: str = comp.get('type', '')
-    prop_fields = _SDUI_PROPS_FIELDS.get(comp_type, set())
+    # Case-insensitive lookup; if type is unknown, ALL non-structural keys become props
+    prop_fields = _SDUI_PROPS_FIELDS.get(comp_type) or _SDUI_PROPS_FIELDS.get(comp_type.lower())
 
     props: dict[str, Any] = {}
     rest: dict[str, Any] = {}
     for key, val in comp.items():
         if key in _SDUI_STRUCTURAL_KEYS:
             continue
-        elif key in prop_fields:
+        elif prop_fields is None or key in prop_fields:
+            # Unknown types: everything goes in props (be liberal)
             props[key] = val
         else:
             rest[key] = val  # unexpected fields preserved at top level
@@ -399,10 +404,34 @@ def normalize_sdui_screen(screen: dict[str, Any]) -> dict[str, Any]:
 
     Called before storing and before serving SDUI screens so that flat
     AI-generated JSON always matches what the frontend TypeScript types expect.
+    Handles both V1 (section-based) and V2 (row-based) formats.
     """
     if not isinstance(screen, dict):
         return screen
 
+    # V2: row-based format — normalize each cell's content component
+    if 'rows' in screen and isinstance(screen.get('rows'), list):
+        normalized_rows = []
+        for row in screen['rows']:
+            if not isinstance(row, dict):
+                normalized_rows.append(row)
+                continue
+            norm_row = dict(row)
+            if 'cells' in norm_row and isinstance(norm_row['cells'], list):
+                norm_cells = []
+                for cell in norm_row['cells']:
+                    if not isinstance(cell, dict):
+                        norm_cells.append(cell)
+                        continue
+                    norm_cell = dict(cell)
+                    if 'content' in norm_cell and isinstance(norm_cell['content'], dict):
+                        norm_cell['content'] = _normalize_sdui_component(norm_cell['content'])
+                    norm_cells.append(norm_cell)
+                norm_row['cells'] = norm_cells
+            normalized_rows.append(norm_row)
+        return {**screen, 'rows': normalized_rows}
+
+    # V1: section-based format
     normalized_sections = []
     for section in screen.get('sections', []):
         if not isinstance(section, dict):

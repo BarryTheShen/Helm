@@ -6,7 +6,8 @@
  *   const { screen, loading, error, refresh } = useSDUIScreen('calendar');
  *
  * - If screen is null, the tab should render its default fallback UI.
- * - If screen is non-null, the tab should render SDUIScreenRenderer.
+ * - If screen is non-null, the tab should render SDUIUniversalRenderer.
+ * - Supports both V1 (section-based SDUIScreen) and V2 (row-based SDUIPage).
  * - The screen state updates in real-time when the AI calls helm_set_screen or
  *   helm_delete_screen via the shared WebSocket connection.
  */
@@ -15,11 +16,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { ApiClient } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import { useWebSocket } from '@/contexts/WebSocketContext';
-import type { SDUIScreen } from '@/types/sdui';
+import type { SDUIScreen, SDUIPayload } from '@/types/sdui';
 
 interface SDUIScreenState {
-  screen: SDUIScreen | null;
-  draft: SDUIScreen | null;
+  screen: SDUIPayload | null;
+  draft: SDUIPayload | null;
   loading: boolean;
   error: string | null;
   refresh: () => void;
@@ -28,8 +29,8 @@ interface SDUIScreenState {
 export function useSDUIScreen(moduleId: string): SDUIScreenState {
   const { token, serverUrl, logout } = useAuthStore();
   const ws = useWebSocket();
-  const [screen, setScreen] = useState<SDUIScreen | null>(null);
-  const [draft, setDraft] = useState<SDUIScreen | null>(null);
+  const [screen, setScreen] = useState<SDUIPayload | null>(null);
+  const [draft, setDraft] = useState<SDUIPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,9 +44,9 @@ export function useSDUIScreen(moduleId: string): SDUIScreenState {
         api.getSDUIScreen(moduleId),
         api.getSDUIDraft(moduleId),
       ]);
-      setScreen((screenData.screen as unknown as SDUIScreen) ?? null);
+      setScreen((screenData.screen as unknown as SDUIPayload) ?? null);
       if (draftData.has_draft) {
-        setDraft((draftData.screen as unknown as SDUIScreen) ?? null);
+        setDraft((draftData.screen as unknown as SDUIPayload) ?? null);
       }
     } catch (err) {
       setError('Failed to load screen');
@@ -66,11 +67,11 @@ export function useSDUIScreen(moduleId: string): SDUIScreenState {
     const unsubscribe = ws.onMessage((message: any) => {
       if (message.type === 'sdui_screen_update' && message.module_id === moduleId) {
         // screen is null when the AI deletes the screen (helm_delete_screen)
-        setScreen((message.screen as SDUIScreen) ?? null);
+        setScreen((message.screen as SDUIPayload) ?? null);
         setLoading(false);
       }
       if (message.type === 'sdui_draft_update' && message.module_id === moduleId) {
-        setDraft((message.screen as SDUIScreen) ?? null);
+        setDraft((message.screen as SDUIPayload) ?? null);
       }
       if (message.type === 'sdui_draft_rejected' && message.module_id === moduleId) {
         setDraft(null);

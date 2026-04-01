@@ -5,7 +5,7 @@ import { ApiClient } from '@/services/api';
 import { ErrorBanner } from '@/components/common/ErrorBanner';
 import { useUIStore } from '@/stores/uiStore';
 import { useSDUIScreen } from '@/hooks/useSDUIScreen';
-import { SDUIScreenRenderer } from '@/components/sdui/SDUIRenderer';
+import { SDUIUniversalRenderer } from '@/components/sdui/SDUIRenderer';
 import { useActionDispatcher } from '@/hooks/useActionDispatcher';
 import type { CalendarEvent } from '@/types/api';
 import { colors, spacing, typography, borderRadius } from '@/theme/colors';
@@ -91,7 +91,7 @@ export default function CalendarScreen() {
 
   // If the AI has set SDUI content for the calendar tab, render that
   if (sduiScreen) {
-    return <SDUIScreenRenderer screen={sduiScreen} onAction={handleAction} />;
+    return <SDUIUniversalRenderer payload={sduiScreen} onAction={handleAction} />;
   }
 
   return (

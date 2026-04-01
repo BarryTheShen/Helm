@@ -252,3 +252,85 @@ export interface LegacySDUIComponent {
   props: Record<string, unknown>;
   children?: LegacySDUIComponent[];
 }
+
+// ── Row-by-Row SDUI Layout (v2) ─────────────────────────────────────────
+// New architecture: Page → rows[] → cells[] → component
+// Supports responsive breakpoints (compact = phone, regular = tablet)
+
+/** A single cell within a row, holding one component */
+export interface SDUICell {
+  id: string;
+  /** Fractional width within the row (1–12 grid, or 'auto'). Default: 'auto' */
+  width?: number | 'auto';
+  /** The component rendered inside this cell */
+  content: SDUIComponentV2;
+}
+
+/** A single row containing one or more cells laid out horizontally */
+export interface SDUIRow {
+  id: string;
+  /** Cells within this row */
+  cells: SDUICell[];
+  /** Row-level layout variants for responsive breakpoints */
+  compact?: { hidden?: boolean; stack?: boolean };
+  regular?: { hidden?: boolean };
+  /** Horizontal scroll with paging snap (for carousels) */
+  scrollable?: boolean;
+  /** Background color for the row */
+  backgroundColor?: string;
+  /** Padding inside the row */
+  padding?: number | string;
+  /** Gap between cells */
+  gap?: number;
+}
+
+/**
+ * A Row-by-Row page descriptor (v2).
+ * Coexists with SDUIScreen (v1) — the renderer detects format by checking
+ * for the presence of `rows` vs `sections`.
+ */
+export interface SDUIPage {
+  schema_version: '1.0.0';
+  module_id: string;
+  title: string;
+  rows: SDUIRow[];
+  generated_at?: string;
+  /** Optional metadata for the page */
+  meta?: Record<string, unknown>;
+}
+
+// ── V2 Component type union (superset of v1 + new tier components) ──────
+
+export type SDUIComponentTypeV2 =
+  | SDUIComponentType
+  // Tier 2 atomic additions
+  | 'Text'
+  | 'Markdown'
+  | 'Button'
+  | 'Image'
+  | 'TextInput'
+  | 'Icon'
+  | 'Divider'
+  // Tier 1 structural
+  | 'Container'
+  // Tier 3 composite
+  | 'CalendarModule'
+  | 'ChatModule'
+  | 'NotesModule'
+  | 'InputBar';
+
+/** V2 component: type + props bag. Rendered via componentRegistry. */
+export interface SDUIComponentV2 {
+  type: SDUIComponentTypeV2;
+  id: string;
+  props: Record<string, any>;
+  children?: SDUIComponentV2[];
+}
+
+/** Union type: either a legacy SDUIScreen (v1) or a Row-by-Row SDUIPage (v2) */
+export type SDUIPayload = SDUIScreen | SDUIPage;
+
+/** Type guard: returns true if the payload is a v2 Row-by-Row page */
+export function isSDUIPage(payload: SDUIPayload): payload is SDUIPage {
+  return 'rows' in payload && Array.isArray((payload as any).rows);
+}

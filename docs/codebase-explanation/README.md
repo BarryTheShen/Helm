@@ -21,6 +21,7 @@ Each doc has three tiers:
 | [frontend.md](frontend.md) | React Native Expo app — screens, navigation, SDUI, state management |
 | [protocol.md](protocol.md) | REST API contracts, WebSocket message types, MCP tools, SDUI schema |
 | [agents-and-systems.md](agents-and-systems.md) | AI Agent Proxy, MCP Server, Workflow Engine, standalone PydanticAI agent (`agent/`), testing infrastructure |
+| [FUTURE_PLANS.md](FUTURE_PLANS.md) | Planned features, known gaps, and improvement roadmap |
 
 ## For AI Agents
 
