@@ -34,15 +34,28 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       hideError();
     });
 
+    // Only show "Connection lost" if we're still disconnected after 3 s.
+    // ReconnectingWebSocket typically reconnects in < 1 s — this prevents
+    // the error banner from flashing on every normal reconnect cycle.
+    let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
     service.onDisconnect(() => {
       setConnected(false);
-      showError('Connection lost', () => service.connect());
+      disconnectTimer = setTimeout(() => {
+        showError('Connection lost', () => service.connect());
+      }, 3000);
+    });
+    service.onConnect(() => {
+      if (disconnectTimer) {
+        clearTimeout(disconnectTimer);
+        disconnectTimer = null;
+      }
     });
 
     service.connect();
     setWs(service);
 
     return () => {
+      if (disconnectTimer) clearTimeout(disconnectTimer);
       service.disconnect();
       setWs(null);
     };

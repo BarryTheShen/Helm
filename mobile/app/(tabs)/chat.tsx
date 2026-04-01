@@ -120,7 +120,7 @@ function MessageBubble({ msg }: { msg: UIMessage }) {
         {msg.isStreaming && !msg.content && (
           <Text style={styles.streamingPlaceholder}>●●●</Text>
         )}
-        {msg.isStreaming && msg.content && (
+        {!!msg.isStreaming && !!msg.content && (
           <Text style={styles.streamingCursor}>▌</Text>
         )}
       </View>
@@ -160,6 +160,15 @@ export default function ChatScreen() {
   // current handler version without needing to re-subscribe on every render.
   const wsHandlerRef = useRef<(msg: any) => void>(() => {});
 
+  // ── Scroll to bottom when messages change ────────────────────────────────
+  const messagesLen = messages.length;
+  useEffect(() => {
+    if (messagesLen === 0) return;
+    // Use a short delay to allow FlatList to finish layout before scrolling
+    const t = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 150);
+    return () => clearTimeout(t);
+  }, [messagesLen]);
+
   // ── Init: load history ───────────────────────────────────────────────────
   useEffect(() => {
     if (!token || !serverUrl) return;
@@ -170,7 +179,6 @@ export default function ChatScreen() {
         // API returns messages in descending order; reverse to chronological
         const ui = [...history].reverse().map(apiToUI);
         setMessages(ui);
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
       })
       .catch(() => showError('Failed to load chat history'));
   }, [token, serverUrl, logout]);
@@ -225,8 +233,6 @@ export default function ChatScreen() {
           }
           return prev;
         });
-        // Throttled scroll — only scroll on every ~5th token to reduce jank
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 80);
         break;
       }
 
@@ -298,7 +304,6 @@ export default function ChatScreen() {
           }
           return prev;
         });
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
         break;
       }
 
@@ -321,30 +326,34 @@ export default function ChatScreen() {
       ...prev,
       { kind: 'text', id: `user-${Date.now()}`, role: 'user', content: text },
     ]);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
     ws.send({ type: 'chat_message', content: text, conversation_id: 'default' });
   }, [input, ws]);
 
   // ── New Chat ─────────────────────────────────────────────────────────────
   const handleNewChat = useCallback(() => {
-    Alert.alert(
-      'Start New Chat',
-      'This will clear your conversation history. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: async () => {
-            if (apiClient) {
-              await apiClient.deleteConversation('default').catch(() => {});
-            }
-            setMessages([]);
-            setIsTyping(false);
-          },
-        },
-      ]
-    );
+    const doClear = async () => {
+      if (apiClient) {
+        await apiClient.deleteConversation('default').catch(() => {});
+      }
+      setMessages([]);
+      setIsTyping(false);
+    };
+
+    if (Platform.OS === 'web') {
+      // Alert.alert is unreliable on web — use browser confirm instead
+      if (window.confirm('Clear conversation history?')) {
+        doClear();
+      }
+    } else {
+      Alert.alert(
+        'Start New Chat',
+        'This will clear your conversation history. Continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Clear', style: 'destructive', onPress: doClear },
+        ]
+      );
+    }
   }, [apiClient]);
 
   // ── SDUI override — AI can push a custom layout to the chat tab ──────────
