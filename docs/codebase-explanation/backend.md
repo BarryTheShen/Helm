@@ -1,6 +1,6 @@
 # Backend — Python FastAPI Server
 
-> Last updated: 2026-03-30
+> Last updated: 2026-04-03
 
 ## Tier 1: TLDR
 
@@ -74,8 +74,7 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 - Startup: `start_scheduler()`, starts MCP session manager, creates `_run_time_alerts()` background task
 - Shutdown: cancels alert task, stops MCP session manager, `stop_scheduler()`
 
-**Background task `_run_time_alerts()`**: Every 2 minutes, saves a Notification to DB for every connected user and broadcasts a notification via WebSocket.
-⚠️ **Bug:** calls `manager.connected_users()` but the property is `connected_user_ids`. Task crashes every 2 minutes.
+**Background task `_run_time_alerts()`**: Every 2 minutes, saves a Notification to DB for every connected user and broadcasts a notification via WebSocket. Controlled by `DEMO_TIME_ALERTS=true` env var.
 
 **Routers registered:** auth, modules, chat, calendar, notifications, agent_config, workflows, actions, websocket
 
@@ -129,12 +128,18 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | GET | `/api/modules` | ✅ | List all tabs with enabled/disabled status |
 | DELETE | `/api/modules/{module_id}` | ✅ | Hide a tab (broadcasts `tabs_updated` WS event) |
 | POST | `/api/modules/{module_id}/show` | ✅ | Restore a hidden tab (broadcasts `tabs_updated`) |
+| PATCH | `/api/modules/{module_id}/config` | ✅ | Rename tab and/or change icon `{name?, icon?}` — broadcasts `tabs_updated` |
 | GET | `/api/modules/{module_id}/state` | ✅ | Get module state; returns defaults if not set |
 | POST | `/api/modules/{module_id}/action` | ✅ | Execute mini-app action (random_number, play_rps, create_note, delete_note) |
+| GET | `/api/devices/config` | ✅ | Get device tab config (tab_bar_modules, default_module, nav_mode) |
+| PUT | `/api/devices/config` | ✅ | Update device tab config |
+| GET | `/api/sdui` | ✅ | List all AI-set screens across all modules |
 | GET | `/api/sdui/{module_id}` | ✅ | Get live SDUI screen `{screen, version}` for module |
 | POST | `/api/sdui/{module_id}` | ✅ | Set SDUI screen; `draft=True` by default |
 | DELETE | `/api/sdui/{module_id}` | ✅ | Delete SDUI screen |
 | GET | `/api/sdui/{module_id}/draft` | ✅ | Get pending draft `{screen, has_draft}` |
+| POST | `/api/sdui/{module_id}/draft/approve` | ✅ | Approve draft → publish to live screen |
+| POST | `/api/sdui/{module_id}/draft/reject` | ✅ | Reject + delete draft; optional `{feedback?}` body |
 
 ### Chat (`/api/chat`)
 
@@ -151,7 +156,7 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | POST | `/api/calendar/events` | ✅ | Create event; auto-refreshes SDUI calendar screen |
 | POST | `/api/calendar/add-meeting` | ✅ | User-friendly meeting creation `{title, date, start_time, end_time, description?, color?}` |
 | DELETE | `/api/calendar/events/{event_id}` | ✅ | Delete event; auto-refreshes SDUI calendar screen |
-| ~~PUT~~ | ~~`/api/calendar/events/{id}`~~ | — | **⚠️ Bug: defined but no `@router.put` decorator — unreachable** |
+| PUT | `/api/calendar/events/{event_id}` | ✅ | Update event fields (title, times, description, color, location) |
 
 ### Notifications (`/api/notifications`)
 
@@ -300,12 +305,15 @@ APScheduler (`AsyncIOScheduler(timezone="UTC")`)-based automation engine.
 | `helm_delete_screen` | `module_id` | Clear SDUI screen |
 | `helm_list_screens` | — | List all AI-set screens |
 | `helm_get_screen` | `module_id` | Get current SDUI JSON for a module |
+| `helm_get_draft` | `module_id` | Get pending draft `{screen, has_draft}` for a module |
 | `helm_approve_draft` | `module_id` | Promote draft to live |
+| `helm_reject_draft` | `module_id, feedback?` | Discard pending draft with optional feedback |
+| `helm_hide_tab` | `tab_id` | Hide a nav-bar tab |
 | `helm_show_tab` | `tab_id` | Restore hidden tab |
+| `helm_rename_tab` | `tab_id, name?, icon?` | Rename a tab and/or change its emoji icon |
 | `helm_list_tabs` | — | List all tabs with visibility |
-| ~~`helm_hide_tab`~~ | ~~`tab_id`~~ | **⚠️ Bug: not registered in MCP server** |
 
-**Note:** `helm_hide_tab` is defined in `mcp/server.py` but NOT registered (body falls at module level due to bug). Use `POST /api/actions/execute {function: "hide_tab", params: {tab_id}}` instead.
+**Total: 22 MCP tools** (registered in `mcp/server.py` via `@mcp.tool()`). The Agent Proxy (`services/agent_proxy.py`) exposes a **12-tool subset** of these to the in-app LLM.
 
 ### `mcp/tools.py` — Core Tool Implementations
 

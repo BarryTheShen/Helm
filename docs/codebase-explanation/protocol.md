@@ -1,6 +1,6 @@
 # Protocol — Communication Layer
 
-> Last updated: 2026-03-30
+> Last updated: 2026-04-03
 
 ## Tier 1: TLDR
 
@@ -129,14 +129,17 @@ Mounted at `/mcp` on the FastAPI app. Uses FastMCP (Streamable HTTP). All reques
 | `helm_send_chat_message` | `content: str` | Send message as assistant + push `chat_complete` event |
 | `helm_update_module_state` | `module_type: str`, `state: dict` | Update module state key |
 | `helm_get_form_data` | `form_id: str = ""` | Get form submission data |
-| `helm_set_screen` | `module_id: str`, `screen: dict\|str` | Set SDUI screen; draft=True by default |
+| `helm_set_screen` | `module_id: str`, `screen: dict\|str` | Set SDUI screen; draft=True by default; **V2 only** — server validates component types against registered V2 types and raises error for unknown types |
 | `helm_delete_screen` | `module_id: str` | Clear SDUI screen → empty state |
 | `helm_list_screens` | — | List all AI-set SDUI screens |
 | `helm_get_screen` | `module_id: str` | Get current SDUI JSON for a module |
+| `helm_get_draft` | `module_id: str` | Get pending draft screen for a module; returns `{screen, has_draft}` |
 | `helm_approve_draft` | `module_id: str` | Promote draft to live |
+| `helm_reject_draft` | `module_id: str`, `feedback?: str` | Discard pending draft with optional feedback |
+| `helm_hide_tab` | `tab_id: str` | Hide a nav-bar tab |
 | `helm_show_tab` | `tab_id: str` | Restore hidden tab |
+| `helm_rename_tab` | `tab_id: str`, `name?: str`, `icon?: str` | Rename a tab and/or change its emoji icon |
 | `helm_list_tabs` | — | List all tabs + visibility status |
-| ~~`helm_hide_tab`~~ | ~~`tab_id: str`~~ | **⚠️ Bug: not registered in MCP server** |
 
 **Valid `module_id` values:** `home`, `chat`, `calendar`, `forms`, `alerts`, `modules`, `settings`
 

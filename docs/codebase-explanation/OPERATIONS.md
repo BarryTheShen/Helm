@@ -2,7 +2,7 @@
 
 How to run, configure, and edit every part of the stack.
 
-> Last updated: 2026-03-30
+> Last updated: 2026-04-03
 
 ---
 
@@ -102,7 +102,7 @@ The database file lives at `backend/helm.db`. Delete it and re-run `alembic upgr
 ```bash
 cd backend
 source .venv/bin/activate
-pytest                         # all 55 tests
+pytest                         # all 59 tests
 pytest -v                      # verbose
 pytest tests/test_auth.py      # single file
 pytest --cov=app               # with coverage
@@ -111,10 +111,10 @@ pytest --cov=app               # with coverage
 Test files:
 | File | Tests | Covers |
 |------|-------|--------|
-| `tests/test_auth.py` | 8 | Registration, login, lockdown, JWT |
-| `tests/test_calendar.py` | 9 | Calendar CRUD, bulk delete |
-| `tests/test_notifications.py` | 7 | Notifications + mark-read action |
-| `tests/test_workflows.py` | 8 | Workflow CRUD, cron scheduling |
+| `tests/test_auth.py` | 12 | Registration, login, lockdown, JWT |
+| `tests/test_calendar.py` | 8 | Calendar CRUD, bulk delete |
+| `tests/test_notifications.py` | 6 | Notifications + mark-read action |
+| `tests/test_workflows.py` | 10 | Workflow CRUD, cron scheduling |
 | `tests/test_actions.py` | 15 | Action registry, endpoint auth, each handler |
 | `tests/test_drafts.py` | 8 | Draft lifecycle (set/approve/reject/overwrite) |
 
@@ -419,9 +419,6 @@ python inject-home.py
 | `401 Unauthorized` from API | Token expired | Re-login and update token |
 | `429 Too Many Requests` from LLM | Rate-limited on free tier | Wait 2–3 min or switch model |
 | WebSocket disconnects immediately | Token invalid or expired | Re-login |
-| `AttributeError: connected_users` in logs | Known bug in `main.py` | See Known Bugs in AI-TECHNICAL-REFERENCE.md |
 | Agent can't connect to MCP | `HELM_SESSION_TOKEN` missing or expired | Regenerate token, update `.env` |
-| `helm_hide_tab` MCP tool does nothing | Known bug in `mcp/server.py` | Use action registry: `POST /api/actions/execute {function: "hide_tab", params: {tab_id: "..."}}` |
-| `PUT /api/calendar/events/{id}` → 404 | Known bug: decorator missing on `update_event` | No fix yet — use delete + create |
 | Android emulator can't reach backend | Wrong localhost | Use `http://10.0.2.2:8000` not `http://localhost:8000` |
 | Expo Go can't reach backend | Device on different network | Use `npx expo start --tunnel` |

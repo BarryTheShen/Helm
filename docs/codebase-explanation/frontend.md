@@ -1,6 +1,6 @@
 # Frontend — React Native (Expo) Mobile App
 
-> Last updated: 2026-03-30
+> Last updated: 2026-04-03
 
 ## Tier 1: TLDR
 
@@ -107,7 +107,7 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 | `useAuthStore` | `src/stores/authStore.ts` | `token`, `user`, `serverUrl`, `isLoading` | SecureStore: `auth_token`, `server_url`, `username` |
 | `useUIStore` | `src/stores/uiStore.ts` | `isConnected`, `errorBanner: {message, retry?}` | No |
 | `useSettingsStore` | `src/stores/settingsStore.ts` | `navigationMode`, `theme` | AsyncStorage: `navigation_mode`, `theme` |
-| `useTabsStore` | `src/stores/tabsStore.ts` | `hiddenTabs: string[]` | No (reloaded from server) |
+| `useTabsStore` | `src/stores/tabsStore.ts` | `hiddenTabs: string[]`, `moduleConfigs: Record<string, {name, icon}>` | No (reloaded from server) |
 
 **Critical notes:**
 - `authStore.logout()` clears client-side token but **does NOT call `/auth/logout`**
@@ -147,6 +147,7 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 | `getModules()` | GET | `/api/modules` | |
 | `hideTab(tabId)` | DELETE | `/api/modules/{tabId}` | |
 | `showTab(tabId)` | POST | `/api/modules/{tabId}/show` | |
+| `configureModule(tabId, config)` | PATCH | `/api/modules/{tabId}/config` | `{name?, icon?}` body |
 | `getSDUIScreen(moduleId)` | GET | `/api/sdui/{moduleId}` | `{screen, version?}` |
 | `getSDUIDraft(moduleId)` | GET | `/api/sdui/{moduleId}/draft` | `{screen, has_draft}` |
 | `deleteSDUIScreen(moduleId)` | DELETE | `/api/sdui/{moduleId}` | |

@@ -5,12 +5,12 @@ Items are grouped by area.
 
 ---
 
-## Current State (as of 2026-03, updated Session 2)
+## Current State (as of 2026-04-03, updated Session 5)
 
 What has already been built:
 
-- **Backend**: FastAPI + SQLAlchemy async + SQLite. Auth (session JWT, setup lockdown), calendar, notifications, workflows (cron scheduler), agent proxy (multi-turn, reasoning model, XML fallback), MCP server (20 tools), SDUI screen storage + draft/approval flow, tab visibility control, action registry (8 handlers), `manage.py` CLI for user management.
-- **Frontend**: Expo SDK 55 + Expo Router. 7 tabs (Home, Chat, Modules, Calendar, Alerts, Settings). Singleton WebSocket (`WebSocketContext`, device-aware). AI-controlled tab visibility (`tabsStore`). SDUI rendering engine (`SDUIRenderer.tsx`) with 19 component types over all tabs. `useSDUIScreen` hook for live SDUI updates per module (now also returns `draft`). `useActionDispatcher` hook — all 7 action types execute. `DraftPreview` component for AI-generated draft approval.
+- **Backend**: FastAPI + SQLAlchemy async + SQLite. Auth (session JWT, setup lockdown), calendar (full CRUD), notifications, workflows (cron scheduler), agent proxy (multi-turn, reasoning model, XML fallback), MCP server (22 tools), SDUI screen storage + draft/approval flow, tab visibility + rename control, action registry (8 handlers), `manage.py` CLI for user management.
+- **Frontend**: Expo SDK 55 + Expo Router. 7 tabs (Home, Chat, Modules, Calendar, Alerts, Settings). Singleton WebSocket (`WebSocketContext`, device-aware). AI-controlled tab visibility (`tabsStore`). SDUI rendering engine (V1: 19 component types, V2: 12 component types) across all tabs. `useSDUIScreen` hook for live SDUI updates per module (returns both `screen` and `draft`). `useActionDispatcher` hook — all action types execute. `DraftPreview` component for AI-generated draft approval.
 - **Standalone Agent**: PydanticAI agent with local browser UI (`chat_ui.html`), REPL, and one-shot modes. Connects to backend MCP + can read/write mobile source.
 
 **Remaining known gaps:**
@@ -92,7 +92,7 @@ via `write_frontend_file` or use the MCP `helm_set_screen` tool.
 
 ## 3. MCP Server Improvements
 
-**Current state:** The MCP server has 20 tools (up from 17 in Session 2). Added: `approve_draft`, `reject_draft`, `get_draft`. `helm_set_screen` now has a `draft` parameter (default `True`) enabling human-in-the-loop approval. Tool naming uses `helm_` prefix throughout.
+**Current state:** The MCP server has 22 tools (up from 20 in Session 3). Added: `helm_rename_tab` (renames/re-icons a tab), `helm_hide_tab` (now correctly registered). All 22 tools are registered via `@mcp.tool()` in `mcp/server.py`. `helm_set_screen` defaults to `draft=True` enabling human-in-the-loop approval. Tool naming uses `helm_` prefix throughout.
 
 **Planned improvements:**
 

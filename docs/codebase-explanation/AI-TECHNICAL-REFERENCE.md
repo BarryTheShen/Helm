@@ -4,7 +4,7 @@
 > Read this FIRST before making any changes. It tells you exactly where everything is,
 > what connects to what, and what the known pitfalls are.
 >
-> Last updated: 2026-03-30
+> Last updated: 2026-04-03
 
 ---
 
@@ -166,13 +166,21 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 
 ---
 
-## Known Bugs / Issues
+## Known Gaps / Outstanding Work
 
-| # | File | Description | Impact |
-|---|------|-------------|--------|
-| 1 | `backend/app/main.py` | `_run_time_alerts()` calls `manager.connected_users()` but `ConnectionManager` only has `connected_user_ids` (property, not method). Time-alert background task crashes every 2 minutes with `AttributeError`. | Background periodic notifications broken |
-| 2 | `backend/app/mcp/server.py` | `helm_hide_tab` MCP tool not registered — body appears at module level after premature return in `helm_approve_draft`. Tab hiding is unavailable from external MCP clients. Agent proxy `hide_tab` works fine (calls `tools.py` directly). | MCP `helm_hide_tab` broken |
-| 3 | `backend/app/routers/calendar.py` | `update_event()` function defined but has no `@router.put(...)` decorator — endpoint is unreachable via REST. | `PUT /api/calendar/events/{id}` → 404 |
+No active bugs known as of 2026-04-03.  All previously filed bugs (`connected_user_ids`, calendar `PUT` decorator, `helm_hide_tab` registration) have been resolved.
+
+The following **incomplete features** exist (tracked in `docs/codebase-explanation/FUTURE_PLANS.md`):
+
+| # | Area | Description |
+|---|------|-------------|
+| 1 | Frontend | `logout()` in settings screen doesn't call `DELETE /auth/logout` — server-side sessions are never invalidated |
+| 2 | Frontend | `handleModulePress` in modules.tsx is a stub — tab presses do nothing |
+| 3 | Frontend | Calendar tab is read-only — no create/edit/delete UI in the frontend |
+| 4 | Frontend | `conversation_id: 'default'` is hardcoded — no multi-conversation support |
+| 5 | Frontend | Four dead SDUI component files (`AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx`) — unused, should be cleaned up |
+| 6 | Backend | `fire_trigger()` for non-SCHEDULE trigger types (event-based workflows) is never called from any router — event-triggered workflows are dead code |
+| 7 | Frontend | `settingsStore.navigationMode` and `.theme` are persisted but neither value is applied to the UI |
 
 ---
 
@@ -188,6 +196,7 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 | WS message validation: Zod `.passthrough()` | `utils/validation.ts` | Never strip unknown fields from backend! |
 | SDUI V2 (preferred) | `SDUIPage` with rows+cells | Responsive, compositional; use PascalCase component types |
 | SDUI V1 (legacy) | `SDUIScreen` with sections | Still supported; lowercase component types |
+| V2 schema validation | `mcp/tools.py::_validate_sdui_v2()` | Server-side validation of component types against `_VALID_V2_COMPONENT_TYPES` frozenset; raises ValueError with actionable message for external agents |
 | Draft workflow | `sdui__X__draft` in module_states | AI always sets drafts first (default); user approves |
 | XML tool-call fallback | `agent_proxy._parse_xml_tool_calls()` | Supports stepfun and other non-function-calling models |
 

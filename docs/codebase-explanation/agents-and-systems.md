@@ -1,6 +1,6 @@
 # Agents, MCP, Workflows & Additional Systems
 
-> Last updated: 2026-03-30
+> Last updated: 2026-04-03
 
 ## Tier 1: TLDR
 
@@ -70,7 +70,7 @@ OpenAI-compatible POST to `{base_url}/chat/completions` with `stream: True`, `to
 
 **Per SSE chunk:**
 - `delta.content` → send `{type:"chat_token", token}` to WS; accumulate text
-- `delta.reasoning` → accumulate but NOT forwarded to WS (reasoning tokens stripped)
+- `delta.reasoning` → forwarded as `chat_token` same as regular content (reasoning tokens appear as visible chat output)
 - `delta.tool_calls[].index` → accumulate into `pending_tool_calls: dict[int, {id, name, arguments}]`; execute only AFTER stream ends
 
 **HTTP headers set:** `Authorization: Bearer <api_key>`, `HTTP-Referer: https://github.com/BarryTheShen/Helm`, `X-Title: Helm`
@@ -83,7 +83,7 @@ For models that don't use OpenAI function-calling (e.g. stepfun): if `finish_rea
 4. Sends `{type:"chat_message_replace", message_id, content: cleaned_content}` to strip XML from frontend display
 
 ### Built-in Tool Definitions (`_get_tool_definitions()`)
-10 tools exposed to the LLM (OpenAI function-calling format):
+12 tools exposed to the LLM (OpenAI function-calling format):
 
 | Tool name | Required params | Description |
 |-----------|----------------|-------------|
@@ -98,6 +98,7 @@ For models that don't use OpenAI function-calling (e.g. stepfun): if `finish_rea
 | `hide_tab` | `tab_id` | Hide nav-bar tab |
 | `show_tab` | `tab_id` | Restore hidden tab |
 | `list_tabs` | — | All tabs + visibility |
+| `rename_tab` | `tab_id` | Optional: `name`, `icon` — renames/re-icons a tab |
 
 Tools are dispatched via `_execute_tool_safe()` → `execute_tool(name, args, user_id)` from `app/mcp/tools.py`.
 
@@ -302,9 +303,11 @@ POSTs to `http://localhost:7860/api/run` by default. Useful for scripting agent 
 
 Key contents:
 - All 7 module IDs: `home | chat | calendar | forms | alerts | modules | settings`
-- SDUI V2 schema with full row/cell/component format
-- All V2 component types (PascalCase) and props
+- SDUI V2 schema with full row/cell/component format (V2-only; no V1 references)
+- All V2 component types (PascalCase) and props, with required/optional field annotations
+- Three few-shot `helm_set_screen` examples and a "NEVER DO" blacklist
+- Common Feather icon names reference
 - All action types and `server_action` function names
-- V1 schema and types (legacy reference)
-- Instructions for draft vs live screen publishing
+- Workflow: `helm_set_screen` → `helm_approve_draft`
+- Responsive layout guidance (compact/regular breakpoints)
 - Filesystem tool usage for editing `mobile/` source code directly
