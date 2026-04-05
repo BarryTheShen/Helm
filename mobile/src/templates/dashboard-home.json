@@ -1,0 +1,256 @@
+{
+  "schema_version": "1.0.0",
+  "module_id": "home",
+  "title": "Home Dashboard",
+  "rows": [
+    {
+      "id": "row-header",
+      "cells": [
+        {
+          "id": "cell-avatar",
+          "width": 1,
+          "content": {
+            "type": "Image",
+            "id": "avatar",
+            "props": {
+              "src": "https://i.pravatar.cc/80",
+              "width": 40,
+              "height": 40,
+              "borderRadius": 999,
+              "resizeMode": "cover",
+              "placeholder": "skeleton"
+            }
+          }
+        },
+        {
+          "id": "cell-greeting",
+          "width": 8,
+          "content": {
+            "type": "Container",
+            "id": "greeting-stack",
+            "props": { "direction": "column", "gap": 2, "padding": 0 },
+            "children": [
+              {
+                "type": "Text",
+                "id": "greeting-title",
+                "props": { "variant": "heading", "content": "Good evening, Barry", "numberOfLines": 1 }
+              },
+              {
+                "type": "Text",
+                "id": "greeting-sub",
+                "props": { "variant": "caption", "content": "Mon, Mar 30 · 3 upcoming events", "color": "textSecondary" }
+              }
+            ]
+          }
+        },
+        {
+          "id": "cell-settings",
+          "width": 2,
+          "content": {
+            "type": "Button",
+            "id": "btn-settings",
+            "props": {
+              "variant": "icon",
+              "icon": "settings",
+              "size": "sm",
+              "onPress": { "type": "navigate", "screen": "settings" }
+            }
+          }
+        }
+      ],
+      "gap": 12
+    },
+    {
+      "id": "row-calendar",
+      "cells": [
+        {
+          "id": "cell-calendar",
+          "width": "auto",
+          "content": {
+            "type": "CalendarModule",
+            "id": "calendar-snap",
+            "props": {
+              "defaultView": "month",
+              "events": [
+                { "id": "ev1", "title": "Team Standup", "start": "2026-03-30T10:00:00", "end": "2026-03-30T10:30:00", "color": "#007AFF" },
+                { "id": "ev2", "title": "Design Review", "start": "2026-03-30T13:00:00", "end": "2026-03-30T14:00:00", "color": "#5856D6" },
+                { "id": "ev3", "title": "1:1 with Manager", "start": "2026-03-30T16:30:00", "end": "2026-03-30T17:00:00", "color": "#34C759" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "row-quick-actions",
+      "scrollable": true,
+      "gap": 12,
+      "cells": [
+        {
+          "id": "qa-1",
+          "content": {
+            "type": "Container",
+            "id": "qa-card-1",
+            "props": { "backgroundColor": "surfaceElevated", "borderRadius": 12, "shadow": "md", "padding": 16, "direction": "column", "gap": 8, "align": "center" },
+            "children": [
+              { "type": "Icon", "id": "qa-icon-1", "props": { "name": "file-text", "size": 28, "color": "primary" } },
+              { "type": "Text", "id": "qa-text-1", "props": { "variant": "body", "content": "New Note" } },
+              { "type": "Button", "id": "qa-btn-1", "props": { "variant": "ghost", "size": "sm", "label": "Create", "onPress": { "type": "server_action", "function": "create_note" } } }
+            ]
+          }
+        },
+        {
+          "id": "qa-2",
+          "content": {
+            "type": "Container",
+            "id": "qa-card-2",
+            "props": { "backgroundColor": "surfaceElevated", "borderRadius": 12, "shadow": "md", "padding": 16, "direction": "column", "gap": 8, "align": "center" },
+            "children": [
+              { "type": "Icon", "id": "qa-icon-2", "props": { "name": "calendar", "size": 28, "color": "primary" } },
+              { "type": "Text", "id": "qa-text-2", "props": { "variant": "body", "content": "Add Event" } },
+              { "type": "Button", "id": "qa-btn-2", "props": { "variant": "ghost", "size": "sm", "label": "Schedule", "onPress": { "type": "navigate", "screen": "planner" } } }
+            ]
+          }
+        },
+        {
+          "id": "qa-3",
+          "content": {
+            "type": "Container",
+            "id": "qa-card-3",
+            "props": { "backgroundColor": "surfaceElevated", "borderRadius": 12, "shadow": "md", "padding": 16, "direction": "column", "gap": 8, "align": "center" },
+            "children": [
+              { "type": "Icon", "id": "qa-icon-3", "props": { "name": "check", "size": 28, "color": "primary" } },
+              { "type": "Text", "id": "qa-text-3", "props": { "variant": "body", "content": "Quick Task" } },
+              { "type": "Button", "id": "qa-btn-3", "props": { "variant": "ghost", "size": "sm", "label": "Add", "onPress": { "type": "server_action", "function": "create_task" } } }
+            ]
+          }
+        },
+        {
+          "id": "qa-4",
+          "content": {
+            "type": "Container",
+            "id": "qa-card-4",
+            "props": { "backgroundColor": "surfaceElevated", "borderRadius": 12, "shadow": "md", "padding": 16, "direction": "column", "gap": 8, "align": "center" },
+            "children": [
+              { "type": "Icon", "id": "qa-icon-4", "props": { "name": "message-circle", "size": 28, "color": "primary" } },
+              { "type": "Text", "id": "qa-text-4", "props": { "variant": "body", "content": "Ask AI" } },
+              { "type": "Button", "id": "qa-btn-4", "props": { "variant": "ghost", "size": "sm", "label": "Chat", "onPress": { "type": "navigate", "screen": "workspace" } } }
+            ]
+          }
+        },
+        {
+          "id": "qa-5",
+          "content": {
+            "type": "Container",
+            "id": "qa-card-5",
+            "props": { "backgroundColor": "surfaceElevated", "borderRadius": 12, "shadow": "md", "padding": 16, "direction": "column", "gap": 8, "align": "center" },
+            "children": [
+              { "type": "Icon", "id": "qa-icon-5", "props": { "name": "share", "size": 28, "color": "primary" } },
+              { "type": "Text", "id": "qa-text-5", "props": { "variant": "body", "content": "Share Day" } },
+              { "type": "Button", "id": "qa-btn-5", "props": { "variant": "ghost", "size": "sm", "label": "Export", "onPress": { "type": "server_action", "function": "export_summary" } } }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "row-divider-1",
+      "cells": [
+        {
+          "id": "cell-div-1",
+          "width": "auto",
+          "content": {
+            "type": "Divider",
+            "id": "div-1",
+            "props": { "direction": "horizontal", "thickness": 1, "color": "border", "indent": 16 }
+          }
+        }
+      ]
+    },
+    {
+      "id": "row-schedule-stats",
+      "compact": { "stack": true },
+      "gap": 12,
+      "cells": [
+        {
+          "id": "cell-schedule",
+          "width": 7,
+          "content": {
+            "type": "Container",
+            "id": "schedule-card",
+            "props": { "backgroundColor": "surfaceElevated", "borderRadius": 12, "shadow": "sm", "padding": 16, "direction": "column", "gap": 8 },
+            "children": [
+              { "type": "Text", "id": "sched-title", "props": { "variant": "heading", "content": "Today's Schedule" } },
+              { "type": "Divider", "id": "sched-div", "props": { "thickness": 1, "indent": 0 } },
+              { "type": "Markdown", "id": "sched-md", "props": { "content": "**10:00 AM** — Team Standup *(Zoom)*\n\n**1:00 PM** — Design Review *(Room 3B)*\n\n**4:30 PM** — 1:1 with Manager *(Zoom)*" } }
+            ]
+          }
+        },
+        {
+          "id": "cell-stats",
+          "width": 5,
+          "content": {
+            "type": "Container",
+            "id": "stats-card",
+            "props": { "backgroundColor": "surfaceElevated", "borderRadius": 12, "shadow": "sm", "padding": 16, "direction": "column", "gap": 8 },
+            "children": [
+              { "type": "Text", "id": "stats-title", "props": { "variant": "heading", "content": "Focus Stats" } },
+              { "type": "Image", "id": "stats-chart", "props": { "src": "/api/charts/focus-time-today", "resizeMode": "contain", "aspectRatio": 1.5, "placeholder": "skeleton" } },
+              { "type": "Text", "id": "stats-caption", "props": { "variant": "caption", "content": "3h 20m deep work · 1h 45m meetings", "align": "center" } }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "row-recent-notes",
+      "scrollable": true,
+      "gap": 12,
+      "cells": [
+        {
+          "id": "note-1",
+          "content": {
+            "type": "Container",
+            "id": "note-card-1",
+            "props": { "backgroundColor": "surfaceElevated", "borderRadius": 12, "shadow": "sm", "padding": 16, "direction": "column", "gap": 6 },
+            "children": [
+              { "type": "Text", "id": "note-title-1", "props": { "variant": "body", "bold": true, "content": "Architecture Decisions", "numberOfLines": 1 } },
+              { "type": "Text", "id": "note-time-1", "props": { "variant": "caption", "content": "2h ago", "color": "textSecondary" } },
+              { "type": "Markdown", "id": "note-body-1", "props": { "content": "Component tier system finalized. 7 atomics, 4 composites..." } },
+              { "type": "Button", "id": "note-btn-1", "props": { "variant": "ghost", "size": "sm", "label": "Open", "icon": "external-link", "iconPosition": "right", "onPress": { "type": "navigate", "screen": "workspace", "params": { "noteId": "note-001" } } } }
+            ]
+          }
+        },
+        {
+          "id": "note-2",
+          "content": {
+            "type": "Container",
+            "id": "note-card-2",
+            "props": { "backgroundColor": "surfaceElevated", "borderRadius": 12, "shadow": "sm", "padding": 16, "direction": "column", "gap": 6 },
+            "children": [
+              { "type": "Text", "id": "note-title-2", "props": { "variant": "body", "bold": true, "content": "Sprint Planning Notes", "numberOfLines": 1 } },
+              { "type": "Text", "id": "note-time-2", "props": { "variant": "caption", "content": "5h ago", "color": "textSecondary" } },
+              { "type": "Markdown", "id": "note-body-2", "props": { "content": "Q2 goals reviewed. Focus on performance and stability..." } },
+              { "type": "Button", "id": "note-btn-2", "props": { "variant": "ghost", "size": "sm", "label": "Open", "icon": "external-link", "iconPosition": "right", "onPress": { "type": "navigate", "screen": "workspace", "params": { "noteId": "note-002" } } } }
+            ]
+          }
+        },
+        {
+          "id": "note-3",
+          "content": {
+            "type": "Container",
+            "id": "note-card-3",
+            "props": { "backgroundColor": "surfaceElevated", "borderRadius": 12, "shadow": "sm", "padding": 16, "direction": "column", "gap": 6 },
+            "children": [
+              { "type": "Text", "id": "note-title-3", "props": { "variant": "body", "bold": true, "content": "Meeting Takeaways", "numberOfLines": 1 } },
+              { "type": "Text", "id": "note-time-3", "props": { "variant": "caption", "content": "yesterday", "color": "textSecondary" } },
+              { "type": "Markdown", "id": "note-body-3", "props": { "content": "Design review feedback: simplify the onboarding flow..." } },
+              { "type": "Button", "id": "note-btn-3", "props": { "variant": "ghost", "size": "sm", "label": "Open", "icon": "external-link", "iconPosition": "right", "onPress": { "type": "navigate", "screen": "workspace", "params": { "noteId": "note-003" } } } }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "generated_at": "2026-03-30T18:00:00Z"
+}

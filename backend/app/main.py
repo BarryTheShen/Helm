@@ -1,5 +1,5 @@
 import sys
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,9 +17,89 @@ logger.add(sys.stderr, level="INFO", colorize=True, format="<green>{time:HH:mm:s
 async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.server_name} v{settings.server_version}")
     await start_scheduler()
-    yield
-    await stop_scheduler()
-    logger.info("Helm backend stopped")
+
+    # Start the MCP StreamableHTTP session manager.
+    # FastAPI does not invoke sub-app lifespans when using app.mount(), so we
+    # must manually enter the session manager's context here.  Without this the
+    # task-group is never initialised and every MCP request returns 500.
+    _mcp_session_cm = None
+    try:
+        from app.mcp.server import mcp  # noqa: PLC0415
+        sm = mcp.session_manager  # None until streamable_http_app() has been called
+        if sm is not None:
+            _mcp_session_cm = sm.run()
+            await _mcp_session_cm.__aenter__()
+            logger.info("MCP session manager started")
+    except Exception as exc:
+        logger.warning(f"MCP session manager not started: {exc}")
+        _mcp_session_cm = None
+
+    # Start the 2-minute time alert task (opt-in via DEMO_TIME_ALERTS=true in .env)
+    import asyncio as _asyncio
+    _alert_task = _asyncio.create_task(_run_time_alerts()) if settings.demo_time_alerts else None
+
+    try:
+        yield
+    finally:
+        if _alert_task is not None:
+            _alert_task.cancel()
+        if _mcp_session_cm is not None:
+            with suppress(Exception):
+                await _mcp_session_cm.__aexit__(None, None, None)
+        await stop_scheduler()
+        logger.info("Helm backend stopped")
+
+
+async def _run_time_alerts() -> None:
+    """Background task: broadcast the current time to all connected users every 2 minutes.
+
+    Saves each alert to the DB and broadcasts via WebSocket so the Alerts tab
+    receives it live AND shows it on next page load.
+    Starts 2 minutes after server startup to avoid noise during development restarts.
+    """
+    import asyncio
+    import uuid
+    from datetime import datetime, timezone
+    from app.database import AsyncSessionLocal
+    from app.models.notification import Notification
+    from app.services.websocket_manager import manager
+
+    await asyncio.sleep(120)  # initial 2-minute delay
+    while True:
+        now = datetime.now(timezone.utc)
+        time_str = now.strftime("%H:%M:%S UTC")
+        date_str = now.strftime("%A, %B %d %Y")
+        title = "⏰ Time Check"
+        message = f"Current time: {time_str}\n{date_str}"
+        logger.info(f"Time alert broadcast: {time_str}")
+
+        connected = list(manager.connected_user_ids)
+
+        # Persist a notification to the DB for every connected user, then broadcast.
+        async with AsyncSessionLocal() as db:
+            for user_id in connected:
+                notification = Notification(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    title=title,
+                    message=message,
+                    severity="info",
+                )
+                db.add(notification)
+            with suppress(Exception):
+                await db.commit()
+
+        for user_id in connected:
+            with suppress(Exception):
+                await manager.send(user_id, {
+                    "type": "notification",
+                    "title": title,
+                    "message": message,
+                    "severity": "info",
+                    "timestamp": now.isoformat(),
+                })
+
+        await asyncio.sleep(120)  # repeat every 2 minutes
 
 
 app = FastAPI(
@@ -44,7 +124,7 @@ async def health():
 
 
 # Register routers
-from app.routers import auth, modules, chat, calendar, notifications, agent_config, websocket, workflows  # noqa: E402
+from app.routers import auth, modules, chat, calendar, notifications, agent_config, websocket, workflows, actions  # noqa: E402
 
 app.include_router(auth.router)
 app.include_router(modules.router)
@@ -53,6 +133,7 @@ app.include_router(calendar.router)
 app.include_router(notifications.router)
 app.include_router(agent_config.router)
 app.include_router(workflows.router)
+app.include_router(actions.router)
 app.include_router(websocket.router)
 
 # Mount MCP server

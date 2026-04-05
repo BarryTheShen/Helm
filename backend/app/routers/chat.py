@@ -36,7 +36,7 @@ async def get_chat_history(
                 role=m.role,
                 content=m.content,
                 created_at=m.created_at,
-                metadata=m.message_metadata,
+                metadata=m.metadata_json,
             )
             for m in messages[:limit]
         ],

@@ -1,7 +1,9 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class AgentConfigOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     provider: str
     model: str
@@ -11,9 +13,6 @@ class AgentConfigOut(BaseModel):
     temperature: float
     max_tokens: int
     is_active: bool
-
-    class Config:
-        from_attributes = True
 
 
 class AgentConfigUpdate(BaseModel):

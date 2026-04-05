@@ -1,14 +1,36 @@
+import base64
+import hashlib
 from uuid import uuid4
 
+from cryptography.fernet import Fernet
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.agent_config import AgentConfig
 from app.models.user import User
 from app.schemas.agent_config import AgentConfigOut, AgentConfigUpdate
+
+
+def _get_fernet() -> Fernet:
+    """Derive a Fernet key from the app's secret key."""
+    key_material = settings.secret_key.encode()
+    digest = hashlib.sha256(key_material).digest()
+    fernet_key = base64.urlsafe_b64encode(digest)
+    return Fernet(fernet_key)
+
+
+def _encrypt_api_key(api_key: str) -> str:
+    """Encrypt an API key string, return base64-encoded ciphertext."""
+    return _get_fernet().encrypt(api_key.encode()).decode()
+
+
+def _decrypt_api_key(encrypted: str) -> str:
+    """Decrypt an encrypted API key string, return plaintext."""
+    return _get_fernet().decrypt(encrypted.encode()).decode()
 
 router = APIRouter(prefix="/api/agent", tags=["agent-config"])
 
@@ -68,8 +90,7 @@ async def update_agent_config(
     if body.model is not None:
         config.model = body.model
     if body.api_key is not None:
-        # Store encrypted in production — for MVP store as-is
-        config.api_key_encrypted = body.api_key
+        config.api_key_encrypted = _encrypt_api_key(body.api_key)
     if body.base_url is not None:
         config.base_url = body.base_url
     if body.system_prompt is not None:

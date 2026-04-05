@@ -21,7 +21,19 @@ An independent, open-source React Native (Expo) mobile app — a universal agent
 
 ## Codebase Map
 
-For detailed architecture, file purposes, data flow, and navigation guides, see [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md).
+> **AI agents: always read `docs/codebase-explanation/` at the start of every session.**
+> These docs describe what actually exists in the code today — not aspirational specs.
+>
+> | File | Read when... |
+> |------|-------------|
+> | [docs/codebase-explanation/AI-TECHNICAL-REFERENCE.md](docs/codebase-explanation/AI-TECHNICAL-REFERENCE.md) | **Read this first, every session.** File map, data flow, known bugs, patterns. |
+> | [docs/codebase-explanation/OPERATIONS.md](docs/codebase-explanation/OPERATIONS.md) | Running backend/frontend/agent, API keys, `.env` reference. |
+> | [docs/codebase-explanation/backend.md](docs/codebase-explanation/backend.md) | Backend architecture, all endpoints, DB schema detail. |
+> | [docs/codebase-explanation/frontend.md](docs/codebase-explanation/frontend.md) | Frontend screens, navigation, state management, SDUI. |
+> | [docs/codebase-explanation/protocol.md](docs/codebase-explanation/protocol.md) | REST API contracts, WebSocket message types, MCP tools. |
+> | [docs/codebase-explanation/agents-and-systems.md](docs/codebase-explanation/agents-and-systems.md) | AI Agent Proxy, MCP Server, Workflow Engine, standalone agent. |
+
+For high-level architecture diagrams see [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md).
 
 ## Blueprint Spec Documents
 
@@ -38,6 +50,9 @@ Detailed production specifications live in `docs/Agentic AI Super App — Projec
 ```
 Helm/
 ├── CLAUDE.md
+├── agent/
+│   ├── helm_agent.py           # Standalone PydanticAI agent (MCP + frontend editor)
+│   └── README.md               # How to run + architecture
 ├── backend/
 │   ├── pyproject.toml          # Dependencies + pytest config
 │   ├── alembic.ini
@@ -61,6 +76,13 @@ Helm/
 │       ├── test_notifications.py
 │       └── test_workflows.py
 └── docs/
+    ├── codebase-explanation/   # ← AI agents: read this folder first every session
+    │   ├── AI-TECHNICAL-REFERENCE.md
+    │   ├── OPERATIONS.md
+    │   ├── backend.md
+    │   ├── frontend.md
+    │   ├── protocol.md
+    │   └── agents-and-systems.md
     └── Agentic AI Super App — Project Hub/
         └── Blueprint — Production Spec Documents/
             ├── Backend Spec — Python FastAPI Server.md
@@ -71,13 +93,21 @@ Helm/
 ## Commands
 
 ### Frontend
-npx expo start              # Dev server with hot reload
-npx expo start --ios        # iOS simulator (requires Mac)
-npx expo start --android    # Android emulator
+npx expo start              # Dev server with hot reload (QR code for Expo Go on real device)
+npx expo start --ios        # iOS simulator (requires Mac + Xcode)
+npx expo start --android    # Android emulator (requires Android Studio)
+npx expo start --web        # Browser (limited native API support)
+npx expo start --tunnel     # Tunnel mode (works across networks, uses ngrok)
 
 ### Backend
-cd backend && uvicorn main:app --reload   # FastAPI dev server
-pytest                                     # Run backend tests
+cd backend && uvicorn app.main:app --reload   # FastAPI dev server
+cd backend && pytest                           # Run backend tests
+
+### Standalone Agent
+source backend/.venv/bin/activate
+cd agent && python helm_agent.py --web            # Web UI at http://localhost:7860
+cd agent && python helm_agent.py                  # Interactive REPL
+cd agent && python helm_agent.py "Your task"      # One-shot mode
 
 ### Build
 eas build --platform ios    # Production iOS build (Mac required)

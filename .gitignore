@@ -1,0 +1,51 @@
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+*.egg-info/
+
+# Database
+*.db
+*.sqlite3
+
+# Node
+node_modules/
+
+# Expo
+.expo/
+dist/
+
+# Build outputs
+build/
+
+# Logs
+*.log
+*.log.*
+
+# Playwright / test artifacts
+.playwright-mcp/
+test-results/
+.pytest_cache/
+
+# Virtualenvs
+backend/.venv/
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# Packaging / cache
+.mypy_cache/
+.tox/
+.cache/
+coverage/
+htmlcov/
+
+# MacOS
+.DS_Store
+
+

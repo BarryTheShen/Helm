@@ -8,7 +8,7 @@ Date: March 23, 2026 9:23 AM
 
 **Instructional Header — Agentic AI Super App**
 
-Barry's vision: an independent, open-source, **React Native** mobile app (iOS-first, Android later) that acts as a **universal agentic AI frontend** — a "browser for AI agents" that dynamically renders rich native UI components (calendar, chat, news, dashboards, forms, etc.) connected to ANY service via APIs. Self-hosted backend, on-device agent support, not locked to any ecosystem. The WeChat/Alipay super app model but AI-native.
+**Helm** — a self-hosted SDUI platform with AI-assisted editing. React Native mobile app that dynamically renders rich native UI components (calendar, chat, dashboards, forms, etc.) from server-driven JSON. Self-hosted backend, not locked to any ecosystem. System works without AI — AI is only the editor + chat interface. Value over webapp: push notifications, offline support, native Apple features, MCP/OpenClaw bridge. Value over native app: don't need Swift/Kotlin, SDUI renders natively from JSON.
 
 ---
 
@@ -53,13 +53,14 @@ When new findings emerge from brainstorming sessions or research, **update all r
 - **CopilotKit analysis (2026-03-23, chat):** Evaluated CopilotKit — concluded it's web-only, solves a smaller problem (frontend chat SDK). AG-UI protocol is the only useful piece. Barry's project is a full-stack product (backend platform + protocol + native iOS app) that goes way beyond CopilotKit.
 - **Decision: iOS-first.** Android considered for future.
 - **Framework decision (2026-03-23, chat):** Chose **React Native** over native Swift. Key reasons: (1) full vibe coding workflow works on Linux (Cursor + hot reload + Android emulator), (2) Mac only needed for final App Store build/submission (Barry has a 2017 MacBook at home), (3) cross-platform — Android comes free, (4) AG-UI protocol is framework-agnostic so RN works just as well as Swift for implementing the protocol client. Performance trade-off is acceptable for an SDUI renderer app.
+- **Session 2 — Frontend Infrastructure & Mutability Model (2026-03-29):** Major architecture brainstorm covering terminology, layout system, component catalog, action system, validation, auth, and multi-device. Key outcomes: (1) Project reframed — not "Agentic AI Super App" but **self-hosted SDUI platform with AI-assisted editing**, (2) Flexbox-based responsive layout with semantic grid, no absolute pixels, (3) 4-tier component catalog (structural → atomic → composite → data-bound), (4) Action system is #1 priority — client-side + server-side split with named function registry replacing raw API calls, (5) 3-layer validation (constrained input space → template-first → retry cap + fallback), (6) Human-in-the-loop draft/approval flow for all AI layout changes, (7) Multi-device: same JSON, client adapts via Flexbox, (8) Auth: CLI-only user creation, security fixes deferred. Full details: [Session 2 — 2026-03-29 — Frontend Infrastructure & Mutability Model](Agentic%20AI%20Super%20App%20%E2%80%94%20Project%20Hub/Brainstorming%20Sessions/Session%202%20%E2%80%94%202026-03-29%20%E2%80%94%20Frontend%20Infrastructure%20&%202e4fe87f0d0349abac6a08acced135b7.md)
 </aside>
 
 ---
 
 ## The Vision
 
-**One-line pitch:** An independent, open-source, React Native mobile app that replaces all your apps — AI agents connect to any service via APIs and dynamically render rich native UI, WeChat-style but AI-native.
+**One-line pitch:** A self-hosted SDUI platform with AI-assisted editing — deploy native mobile apps from server-driven JSON, with AI as the editor and chat interface. Push notifications, offline support, and native Apple features without writing Swift or Kotlin.
 
 **Three layers:**
 
@@ -75,6 +76,8 @@ When new findings emerge from brainstorming sessions or research, **update all r
 - NOT voice-only / chat-only (vs OpenClaw, Telegram bots)
 - IS a consumer-friendly native mobile app with rich UI
 - IS open-source and self-hostable
+- **System works without AI** — AI is the editor + chat, not a dependency
+- **Value proposition:** Push notifications + offline + native Apple features (vs webapp). No Swift/Kotlin needed (vs native app).
 
 → *(sub-page TBD — full vision doc)*
 
@@ -151,28 +154,43 @@ When new findings emerge from brainstorming sessions or research, **update all r
 
 ## Architecture & Tech Stack
 
-**TLDR:** React Native (Expo), iOS-first, developed entirely on Linux. Three-layer architecture. AG-UI as the agent↔frontend protocol. Mac only needed for final App Store build.
+**TLDR:** React Native (Expo), iOS-first, developed entirely on Linux. Three-layer architecture. Mac only needed for final App Store build. **Session 2 (2026-03-29) defined the detailed frontend infrastructure** — Flexbox layout, 4-tier component catalog, action system, validation layers, multi-device strategy. See [Session 2 — 2026-03-29 — Frontend Infrastructure & Mutability Model](Agentic%20AI%20Super%20App%20%E2%80%94%20Project%20Hub/Brainstorming%20Sessions/Session%202%20%E2%80%94%202026-03-29%20%E2%80%94%20Frontend%20Infrastructure%20&%202e4fe87f0d0349abac6a08acced135b7.md) for full decisions and the Architecture Decisions doc below for the complete spec.
 
 ### Layer 1 — Self-Hosted Backend Server
 
 - API gateway where users configure service connections (Google Calendar OAuth, email, weather, etc.)
-- AI agent runtime (PydanticAI, LangGraph, or raw LLM API calls)
-- Plugin/connector system for adding new services (MCP-style)
-- Could use CopilotKit's Copilot Runtime (Node.js) as starting point, or build custom
+- AI agent runtime (PydanticAI + OpenRouter + MCP over StreamableHTTP)
+- **Function registry** — backend component mapping named functions → handlers + allowed modules + param schemas. Templates bundle their own functions (e.g., calendar template → `refresh_calendar`, `create_event`, `delete_event`)
+- **Data pipeline:** External API → Backend Sync Layer → Local DB Cache → SDUI JSON Generator → Frontend. Write-back via agent tool calls → re-sync.
+- **API-first UI:** Both AI and future visual editor are clients calling the same module management API
+- **User creation via CLI only** (`python manage.py create_user`) — no public HTTP endpoint
+- Admin panel on backend for user management; later becomes the visual editor (Level B, Retool-like)
 
-### Layer 2 — Protocol (AG-UI)
+### Layer 2 — Protocol
 
-- **AG-UI protocol** — open-source, framework-agnostic message format for agent↔frontend communication
-- Adopted by Google, LangChain, AWS, Microsoft, PydanticAI
-- Protocol doesn't care what renders the UI — works with React, React Native, Swift, anything
-- Backend sends AG-UI events (text streaming, tool calls, state updates, UI component payloads) → RN app parses and renders
+- WebSocket for real-time push (AG-UI events, SDUI updates)
+- REST API for CRUD operations
+- MCP over StreamableHTTP for agent tool calls
+- **Multi-device:** Same SDUI JSON to all devices, client adapts via Flexbox. Device routing infrastructure (device IDs, targeted WS messages) designed in from start, per-device layouts deferred.
 
 ### Layer 3 — React Native App (Expo)
 
-- Pre-built component library: calendar widget, chat view, news feed, charts/dashboards, forms, map, notification cards, list views
-- SDUI renderer that maps JSON payloads → React Native components
-- "Workspace" / home screen where users arrange widgets/screens
-- Connects to user's backend server URL
+- **SDUI renderer** that maps JSON payloads → React Native components
+- **Flexbox-based layout** with semantic grid (4-column compact). No absolute pixel values. All sizing relative (percentages, flex ratios, grid column spans). Semantic text sizing (caption, body, title, headline).
+- **4-tier component catalog:**
+    - Tier 1 — Structural: Container/Row/Column, ScrollView, Spacer
+    - Tier 2 — Atomic: Text, Button, Image, TextInput, Icon, Divider
+    - Tier 3 — Composite: Calendar, List, Card, Chat
+    - Tier 4 — Data-bound: Form, Chart (Map deferred)
+- **Shallow nesting:** Components can have children, no grandchildren
+- **Component variants hardcoded** in app binary (e.g., calendar-compact, calendar-full). Custom components later.
+- **Action system (#1 priority):**
+    - Client-side (no server call): navigate, go_back, open_url, dismiss, open_sheet, copy_text, toggle
+    - Server-side (hit backend): `server_action` (named function registry), `send_to_agent`
+    - `api_call` type deleted, replaced with `server_action` using named functions
+- **3-layer validation:** (1) Constrained input space via grid/schema, (2) Template-first bias, (3) Validation + 2-retry cap then fallback to template
+- **Human-in-the-loop:** All AI layout changes go through draft/approval flow (approve, reject with feedback, reject and revert). Skip/auto-approval available.
+- Connects to user's backend server URL (configurable via iOS Settings app)
 - iOS-first, but Android support comes free from the same codebase
 
 ### Dev Workflow
@@ -183,10 +201,11 @@ When new findings emerge from brainstorming sessions or research, **update all r
 
 ### Starting Point (MVP)
 
-- **Backend:** Python server with AI agent + 2-3 API connectors (Google Calendar + weather)
-- **Protocol:** AG-UI over WebSocket
-- **App:** React Native (Expo) with 3-4 component types (calendar card, text/chat, list, simple chart)
-- **Goal:** End-to-end loop — "What's on my calendar today?" → agent calls API → AG-UI event → native calendar card renders on phone
+- **Backend:** Python FastAPI server with PydanticAI agent + MCP over StreamableHTTP + function registry with starter functions (`refresh_data`, `submit_form`, `send_to_agent`)
+- **Protocol:** WebSocket for real-time push + REST for CRUD
+- **App:** React Native (Expo) with 4-tier component catalog, wired action handlers (replacing current `console.log` stubs), draft/approval flow
+- **Priority #1:** Wire up the action system — client-side dispatch + server-side function registry
+- **Goal:** End-to-end loop — user creates module via AI → template-based layout renders → buttons/actions actually work → server-side functions execute
 
 → Architecture & Tech Stack sub-page (see bottom of page)
 
@@ -265,17 +284,24 @@ AG-UI is just a protocol — a set of message formats (text events, tool calls, 
 
 ## Open Questions
 
-- [ ]  Define MVP scope — which 3-4 components to build first?
-- [ ]  Choose backend framework — PydanticAI vs LangGraph vs raw API calls?
-- [ ]  Protocol decision — custom JSON vs AG-UI from the start?
+- [x]  Define MVP scope — which 3-4 components to build first? → **4-tier catalog defined: Structural (Container/Row/Column, ScrollView, Spacer), Atomic (Text, Button, Image, TextInput, Icon, Divider), Composite (Calendar, List, Card, Chat), Data-bound (Form, Chart). Map deferred.**
+- [x]  Choose backend framework — PydanticAI vs LangGraph vs raw API calls? → **PydanticAI + FastAPI + SQLAlchemy + SQLite. Already built.**
+- [x]  Protocol decision — custom JSON vs AG-UI from the start? → **WebSocket + REST + MCP over StreamableHTTP. Custom SDUI JSON schema.**
 - [ ]  First API integrations — Google Calendar + what else?
 - [ ]  Workspace/home screen UX design
-- [ ]  How to handle user authentication for connected services (OAuth flows)
+- [x]  How to handle user authentication for connected services (OAuth flows) → **OAuth hardcoded/built-in (security-critical). App auth: JWT session-based. User creation: CLI only on server.**
 - [ ]  Self-hosted deployment story — Docker Compose? One-click install?
 - [x]  Android timeline — when to start considering cross-platform? → **Comes free with React Native. Ship iOS first, test Android after.**
 - [x]  Framework choice — Swift vs React Native? → **React Native (Expo). Vibe code on Linux, Mac only for final build. AG-UI works with RN.**
 - [ ]  Open source strategy — license choice, repo structure, contribution model
-- [ ]  Name for the app?
+- [x]  Name for the app? → **Helm**
+- [x]  Layout system? → **Flexbox-based with semantic grid (4-column compact). No absolute pixels. Breakpoints parked.**
+- [x]  Action system architecture? → **Client-side (navigate, open_url, etc.) + server-side (named function registry replacing raw api_call). #1 priority.**
+- [x]  AI validation strategy? → **3-layer: constrained input space → template-first → 2-retry cap + template fallback. Human-in-the-loop approval flow.**
+- [x]  Multi-device strategy? → **Same JSON, client adapts via Flexbox. Device routing infrastructure designed in, per-device layouts deferred.**
+- [x]  What stays hardcoded? → **SDUI component renderers (Apple ToS), auth/OAuth flow, design system. Everything else dynamic.**
+- [ ]  Template bundling spec — how does a template package include SDUI layout JSON + backend functions?
+- [ ]  Push notifications + offline — design into module schema or bolt on later?
 
 ---
 
@@ -315,3 +341,5 @@ The detailed production specifications for this project live in the **Blueprint*
 [Blueprint — Production Spec Documents](Agentic%20AI%20Super%20App%20%E2%80%94%20Project%20Hub/Blueprint%20%E2%80%94%20Production%20Spec%20Documents%20e9900e32563f4777b397c5b698b07870.md)
 
 [[CLAUDE.md](http://CLAUDE.md) — Agentic AI Super App](Agentic%20AI%20Super%20App%20%E2%80%94%20Project%20Hub/CLAUDE%20md%20%E2%80%94%20Agentic%20AI%20Super%20App%2034adc575383d43078bd781085ec13cd2.md)
+
+[Architecture Decisions — Session 2 (2026-03-29)](Agentic%20AI%20Super%20App%20%E2%80%94%20Project%20Hub/Architecture%20Decisions%20%E2%80%94%20Session%202%20(2026-03-29)%208c271ee63ff84db797d10a11214bfd47.md)

@@ -6,7 +6,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
-  const { token, isLoading, initialize } = useAuthStore();
+  const { token, serverUrl, isLoading, initialize } = useAuthStore();
   const initializeSettings = useSettingsStore((state) => state.initialize);
 
   useEffect(() => {
@@ -20,7 +20,12 @@ export default function RootLayout() {
     const inAuthGroup = segments[0] === '(auth)';
 
     if (!token && !inAuthGroup) {
-      router.replace('/(auth)/connect');
+      // If we already have a serverUrl, go directly to login instead of setup
+      if (serverUrl) {
+        router.replace('/(auth)/login');
+      } else {
+        router.replace('/(auth)/connect');
+      }
     } else if (token && inAuthGroup) {
       router.replace('/(tabs)/chat');
     }

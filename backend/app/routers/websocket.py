@@ -12,28 +12,32 @@ from app.services.websocket_manager import manager
 router = APIRouter(tags=["websocket"])
 
 
-async def _authenticate_ws(token: str | None) -> str | None:
-    """Validate WS token and return user_id, or None if invalid."""
+async def _authenticate_ws(token: str | None) -> tuple[str | None, str | None]:
+    """Validate WS token and return (user_id, device_id), or (None, None) if invalid."""
     if not token:
-        return None
+        return None, None
     async with AsyncSessionLocal() as db:
         session = await get_session_by_token(db, token)
         if session is None:
-            return None
-        return str(session.user_id)
+            return None, None
+        return str(session.user_id), session.device_id
 
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     token = websocket.query_params.get("token")
-    user_id = await _authenticate_ws(token)
+    device_id_param = websocket.query_params.get("device_id")
+    user_id, session_device_id = await _authenticate_ws(token)
+    # Use explicit device_id param if provided, else fall back to session's device
+    device_id = device_id_param or session_device_id
 
     if user_id is None:
+        await websocket.accept()
         await websocket.close(code=4001, reason="Unauthorized")
         return
 
-    await manager.connect(websocket, user_id)
-    await manager.send(user_id, {"type": "connected", "user_id": user_id})
+    await manager.connect(websocket, user_id, device_id)
+    await manager.send(user_id, {"type": "connected", "user_id": user_id, "device_id": device_id})
 
     try:
         while True:
@@ -70,7 +74,21 @@ async def _handle_message(websocket: WebSocket, user_id: str, data: dict[str, An
         return
 
     if msg_type == "module_action":
-        await websocket.send_json({"type": "ack", "ref": data.get("ref")})
+        # Execute named function via the action registry
+        from app.services.action_registry import registry
+        func_name = data.get("function", "")
+        params = data.get("params", {})
+        ref = data.get("ref")
+        if not func_name or not registry.is_registered(func_name):
+            await websocket.send_json({"type": "error", "message": f"Unknown action: {func_name}", "ref": ref})
+            return
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await registry.execute(func_name, user_id, params, db)
+                await websocket.send_json({"type": "action_result", "ref": ref, "result": result})
+        except Exception as exc:
+            logger.exception(f"Action '{func_name}' failed for user={user_id}: {exc}")
+            await websocket.send_json({"type": "action_error", "ref": ref, "message": str(exc)})
         return
 
     logger.warning(f"Unknown WS message type '{msg_type}' from user={user_id}")

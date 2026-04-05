@@ -18,6 +18,7 @@ from app.services.auth import (
     authenticate_user,
     create_first_user,
     create_session,
+    get_session_by_token,
     invalidate_session,
     is_setup_complete,
     upsert_device,
@@ -40,8 +41,14 @@ async def auth_status(db: AsyncSession = Depends(get_db)):
 
 @router.post("/setup", response_model=SetupResponse, status_code=status.HTTP_201_CREATED)
 async def setup(body: SetupRequest, db: AsyncSession = Depends(get_db)):
+    """Create the first user.
+
+    Locked after first user is created — returns 409 if server is already set up.
+    Architecture Decision: Session 2, Section 11 — CLI-only user creation preferred.
+    This endpoint is kept for initial setup only; additional users should use CLI.
+    """
     if await is_setup_complete(db):
-        raise HTTPException(status_code=409, detail="Server already set up")
+        raise HTTPException(status_code=409, detail="Server already set up. Use CLI to create additional users.")
     user = await create_first_user(db, body.username, body.password)
     return SetupResponse(user_id=str(user.id), message="Setup complete")
 
@@ -60,6 +67,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
         session_token=session.token,
         expires_at=session.expires_at,
         user_id=str(user.id),
+        username=user.username,
     )
 
 
@@ -69,17 +77,31 @@ async def refresh(
     token: str = Depends(get_token_from_request),
     db: AsyncSession = Depends(get_db),
 ):
-    await invalidate_session(db, token)
-    # Get device_id from old token — create a bare new session
-    from app.services.auth import get_session_by_token as _get  # already invalidated, use new
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
-    new_token = create_access_token(subject=str(current_user.id))
     from app.models.session import Session
     from uuid import uuid4
+
+    # Get device_id from the old session before invalidating
+    old_session = await get_session_by_token(db, token)
+    device_id = old_session.device_id if old_session else None
+
+    await invalidate_session(db, token)
+
+    if device_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot refresh: no device associated with session",
+        )
+
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        hours=settings.access_token_expire_hours
+    )
+    new_token = create_access_token(
+        subject=str(current_user.id), extra={"device_id": device_id}
+    )
     new_session = Session(
         id=str(uuid4()),
         user_id=str(current_user.id),
-        device_id=None,
+        device_id=device_id,
         token=new_token,
         expires_at=expires_at,
         is_active=True,

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0.0",
+  "lastUpdated": "2026-03-30",
+  "components": {
+    "Text": { "since": "1.0.0", "status": "stable" },
+    "Markdown": { "since": "1.0.0", "status": "stable" },
+    "Button": { "since": "1.0.0", "status": "stable" },
+    "Image": { "since": "1.0.0", "status": "stable" },
+    "TextInput": { "since": "1.0.0", "status": "stable" },
+    "Icon": { "since": "1.0.0", "status": "stable" },
+    "Divider": { "since": "1.0.0", "status": "stable" },
+    "Container": { "since": "1.0.0", "status": "stable" },
+    "CalendarModule": { "since": "1.0.0", "status": "stable" },
+    "ChatModule": { "since": "1.0.0", "status": "stable" },
+    "NotesModule": { "since": "1.0.0", "status": "stable" },
+    "InputBar": { "since": "1.0.0", "status": "stable" }
+  },
+  "actions": {
+    "navigate": { "since": "1.0.0" },
+    "go_back": { "since": "1.0.0" },
+    "open_url": { "since": "1.0.0" },
+    "dismiss": { "since": "1.0.0" },
+    "open_sheet": { "since": "1.0.0" },
+    "copy_text": { "since": "1.0.0" },
+    "toggle": { "since": "1.0.0" },
+    "server_action": { "since": "1.0.0" },
+    "send_to_agent": { "since": "1.0.0" }
+  },
+  "deprecations": []
+}

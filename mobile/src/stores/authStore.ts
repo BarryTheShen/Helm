@@ -9,7 +9,7 @@ interface AuthState {
   isLoading: boolean;
 
   setToken: (token: string | null) => Promise<void>;
-  setUser: (user: User | null) => void;
+  setUser: (user: User | null) => Promise<void>;
   setServerUrl: (url: string) => Promise<void>;
   logout: () => Promise<void>;
   initialize: () => Promise<void>;
@@ -30,7 +30,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ token });
   },
 
-  setUser: (user) => set({ user }),
+  setUser: async (user) => {
+    if (user) {
+      await storage.setItem('username', user.username);
+    } else {
+      await storage.removeItem('username');
+    }
+    set({ user });
+  },
 
   setServerUrl: async (url) => {
     await storage.setItem('server_url', url);
@@ -39,16 +46,19 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     await storage.removeItem('auth_token');
+    await storage.removeItem('username');
     set({ token: null, user: null });
   },
 
   initialize: async () => {
     try {
-      const [token, serverUrl] = await Promise.all([
+      const [token, serverUrl, username] = await Promise.all([
         storage.getItem('auth_token'),
         storage.getItem('server_url'),
+        storage.getItem('username'),
       ]);
-      set({ token, serverUrl, isLoading: false });
+      const user = token && username ? { id: '', username, created_at: '' } : null;
+      set({ token, serverUrl, user, isLoading: false });
     } catch (error) {
       console.error('Failed to initialize auth store:', error);
       set({ isLoading: false });

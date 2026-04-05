@@ -5,19 +5,36 @@ import { ApiClient } from '@/services/api';
 import { Card } from '@/components/common/Card';
 import { ErrorBanner } from '@/components/common/ErrorBanner';
 import { useUIStore } from '@/stores/uiStore';
+import { useSDUIScreen } from '@/hooks/useSDUIScreen';
+import { SDUIUniversalRenderer } from '@/components/sdui/SDUIRenderer';
+import { useActionDispatcher } from '@/hooks/useActionDispatcher';
+import { useWebSocket } from '@/contexts/WebSocketContext';
 import { colors, spacing, typography } from '@/theme/colors';
 import type { Notification } from '@/types/api';
 import { format } from 'date-fns';
 
 export default function AlertsScreen() {
+  const handleAction = useActionDispatcher();
   const { token, serverUrl, logout } = useAuthStore();
   const { errorBanner, showError, hideError } = useUIStore();
+  const { screen: sduiScreen } = useSDUIScreen('alerts');
+  const ws = useWebSocket();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadNotifications();
-  }, []);
+  }, [token, serverUrl]);
+
+  // Reload notifications when a live notification arrives via WebSocket.
+  useEffect(() => {
+    if (!ws) return;
+    return ws.onMessage((msg: any) => {
+      if (msg.type === 'notification') {
+        loadNotifications();
+      }
+    });
+  }, [ws]);
 
   const loadNotifications = async () => {
     if (!token || !serverUrl) return;
@@ -34,6 +51,11 @@ export default function AlertsScreen() {
       setIsLoading(false);
     }
   };
+
+  // If the AI has set SDUI content for the alerts tab, render that
+  if (sduiScreen) {
+    return <SDUIUniversalRenderer payload={sduiScreen} onAction={handleAction} />;
+  }
 
   return (
     <View style={styles.container}>
@@ -56,7 +78,7 @@ export default function AlertsScreen() {
           notifications.map((notification) => (
             <Card key={notification.id} style={styles.notificationCard}>
               <Text style={styles.notificationTitle}>{notification.title}</Text>
-              <Text style={styles.notificationBody}>{notification.body}</Text>
+              <Text style={styles.notificationBody}>{notification.message}</Text>
               <Text style={styles.notificationTime}>
                 {format(new Date(notification.created_at), 'MMM d, h:mm a')}
               </Text>

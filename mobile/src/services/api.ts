@@ -82,10 +82,11 @@ export class ApiClient {
   // Calendar
   async getCalendarEvents(start?: string, end?: string): Promise<CalendarEvent[]> {
     const params = new URLSearchParams();
-    if (start) params.append('start', start);
-    if (end) params.append('end', end);
+    if (start) params.append('start_date', start);
+    if (end) params.append('end_date', end);
     const query = params.toString() ? `?${params.toString()}` : '';
-    return this.request<CalendarEvent[]>(`/api/calendar/events${query}`);
+    const res = await this.request<{events: CalendarEvent[]}>(`/api/calendar/events${query}`);
+    return res.events;
   }
 
   async createCalendarEvent(event: Partial<CalendarEvent>): Promise<CalendarEvent> {
@@ -108,20 +109,21 @@ export class ApiClient {
 
   // Notifications
   async getNotifications(): Promise<Notification[]> {
-    return this.request<Notification[]>('/api/notifications');
+    const res = await this.request<{notifications: Notification[], unread_count: number}>('/api/notifications');
+    return res.notifications;
   }
 
-  async deleteNotification(id: string): Promise<void> {
-    return this.request<void>(`/api/notifications/${id}`, { method: 'DELETE' });
+  async markNotificationRead(id: string): Promise<void> {
+    return this.request<void>(`/api/notifications/${id}/read`, { method: 'POST' });
   }
 
   // Agent config
   async getAgentConfig(): Promise<AgentConfig> {
-    return this.request<AgentConfig>('/api/agent');
+    return this.request<AgentConfig>('/api/agent/config');
   }
 
   async updateAgentConfig(config: Partial<AgentConfig>): Promise<AgentConfig> {
-    return this.request<AgentConfig>('/api/agent', {
+    return this.request<AgentConfig>('/api/agent/config', {
       method: 'PUT',
       body: JSON.stringify(config),
     });
@@ -151,17 +153,54 @@ export class ApiClient {
   }
 
   // Modules
-  async getModules(): Promise<Module[]> {
-    return this.request<Module[]>('/api/modules');
+  async getModules(): Promise<{ modules: Module[] }> {
+    return this.request<{ modules: Module[] }>('/api/modules');
+  }
+
+  async hideTab(tabId: string): Promise<void> {
+    return this.request<void>(`/api/modules/${tabId}`, { method: 'DELETE' });
+  }
+
+  async showTab(tabId: string): Promise<void> {
+    return this.request<void>(`/api/modules/${tabId}/show`, { method: 'POST' });
+  }
+
+  async configureModule(tabId: string, config: { name?: string; icon?: string }): Promise<void> {
+    return this.request<void>(`/api/modules/${tabId}/config`, {
+      method: 'PATCH',
+      body: JSON.stringify(config),
+    });
+  }
+
+  // SDUI
+  async getSDUIScreen(moduleId: string): Promise<{ screen: Record<string, unknown> | null; version?: number }> {
+    return this.request(`/api/sdui/${moduleId}`);
+  }
+
+  async getSDUIDraft(moduleId: string): Promise<{ screen: Record<string, unknown> | null; has_draft: boolean }> {
+    return this.request(`/api/sdui/${moduleId}/draft`);
+  }
+
+  async deleteSDUIScreen(moduleId: string): Promise<void> {
+    return this.request<void>(`/api/sdui/${moduleId}`, { method: 'DELETE' });
   }
 
   // Chat history
   async getChatHistory(conversationId?: string): Promise<ChatMessage[]> {
     const query = conversationId ? `?conversation_id=${conversationId}` : '';
-    return this.request<ChatMessage[]>(`/api/chat${query}`);
+    const res = await this.request<{messages: ChatMessage[], has_more: boolean}>(`/api/chat/history${query}`);
+    return res.messages;
   }
 
   async deleteConversation(conversationId: string): Promise<void> {
-    return this.request<void>(`/api/chat/${conversationId}`, { method: 'DELETE' });
+    return this.request<void>(`/api/chat/history`, { method: 'DELETE' });
+  }
+
+  // Server actions (SDUI function registry)
+  async executeAction(functionName: string, params: Record<string, any> = {}): Promise<any> {
+    return this.request<any>('/api/actions/execute', {
+      method: 'POST',
+      body: JSON.stringify({ function: functionName, params }),
+    });
   }
 }

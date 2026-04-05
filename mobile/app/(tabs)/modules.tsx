@@ -13,24 +13,29 @@ import { ApiClient } from '@/services/api';
 import { Card } from '@/components/common/Card';
 import { ErrorBanner } from '@/components/common/ErrorBanner';
 import { colors, spacing, typography } from '@/theme/colors';
+import { useSDUIScreen } from '@/hooks/useSDUIScreen';
+import { SDUIUniversalRenderer } from '@/components/sdui/SDUIRenderer';
+import { useActionDispatcher } from '@/hooks/useActionDispatcher';
 
 interface Module {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   icon: string;
-  enabled: boolean;
+  enabled?: boolean;
 }
 
 export default function ModulesScreen() {
+  const handleAction = useActionDispatcher();
   const { token, serverUrl, logout } = useAuthStore();
   const { errorBanner, showError, hideError } = useUIStore();
   const [modules, setModules] = useState<Module[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const { screen: sduiScreen } = useSDUIScreen('modules');
 
   useEffect(() => {
-    loadModules();
-  }, []);
+    if (token && serverUrl) loadModules();
+  }, [token, serverUrl]);
 
   const loadModules = async () => {
     if (!token || !serverUrl) return;
@@ -39,7 +44,7 @@ export default function ModulesScreen() {
       setLoading(true);
       const api = new ApiClient(serverUrl, token, logout);
       const data = await api.getModules();
-      setModules(data);
+      setModules(data.modules);
       hideError();
     } catch (error) {
       showError('Failed to load modules', loadModules);
@@ -79,6 +84,10 @@ export default function ModulesScreen() {
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
+  }
+
+  if (sduiScreen) {
+    return <SDUIUniversalRenderer payload={sduiScreen} onAction={handleAction} />;
   }
 
   return (
@@ -147,7 +156,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   moduleDescription: {
-    ...typography.caption,
+    ...typography.caption1,
     color: colors.textSecondary,
   },
   statusBadge: {
@@ -160,7 +169,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary + '20',
   },
   statusText: {
-    ...typography.caption,
+    ...typography.caption1,
     color: colors.textSecondary,
     fontWeight: '600',
   },

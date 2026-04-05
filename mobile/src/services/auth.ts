@@ -8,14 +8,15 @@ export class AuthService {
   }
 
   async setup(data: SetupRequest): Promise<SetupResponse> {
-    const response = await fetch(`${data.server_url}/auth/setup`, {
+    const response = await fetch(`${this.baseUrl}/auth/setup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
 
     if (!response.ok) {
-      throw new Error(`Setup failed: ${response.statusText}`);
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || `Setup failed: ${response.status} ${response.statusText}`);
     }
 
     return response.json();

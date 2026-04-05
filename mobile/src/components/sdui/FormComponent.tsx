@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import type { FormProps } from '@/types/sdui';
+import type { FormField } from '@/types/sdui';
 import { Input } from '@/components/common/Input';
 import { Button } from '@/components/common/Button';
 import { colors, spacing, typography } from '@/theme/colors';
 
-interface FormComponentProps extends FormProps {
+interface FormComponentProps {
+  fields: FormField[];
+  submit_label?: string;
+  onSubmit?: (data: Record<string, any>) => void;
   onAction?: (action: string, data: any) => void;
 }
 
-export function FormComponent({ fields, submitLabel, onSubmit, onAction }: FormComponentProps) {
+export function FormComponent({ fields, submit_label: submitLabel = 'Submit', onSubmit, onAction }: FormComponentProps) {
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -87,7 +90,7 @@ const styles = StyleSheet.create({
     color: colors.error,
   },
   error: {
-    ...typography.caption,
+    ...typography.caption1,
     color: colors.error,
     marginTop: spacing.xs,
   },
