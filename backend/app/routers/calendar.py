@@ -260,6 +260,7 @@ async def add_meeting(
     }
 
 
+@router.put("/events/{event_id}", response_model=CalendarEventOut)
 async def update_event(
     event_id: str,
     body: CalendarEventUpdate,

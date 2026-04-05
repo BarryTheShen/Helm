@@ -34,14 +34,15 @@ async def lifespan(app: FastAPI):
         logger.warning(f"MCP session manager not started: {exc}")
         _mcp_session_cm = None
 
-    # Start the 2-minute time alert task
+    # Start the 2-minute time alert task (opt-in via DEMO_TIME_ALERTS=true in .env)
     import asyncio as _asyncio
-    _alert_task = _asyncio.create_task(_run_time_alerts())
+    _alert_task = _asyncio.create_task(_run_time_alerts()) if settings.demo_time_alerts else None
 
     try:
         yield
     finally:
-        _alert_task.cancel()
+        if _alert_task is not None:
+            _alert_task.cancel()
         if _mcp_session_cm is not None:
             with suppress(Exception):
                 await _mcp_session_cm.__aexit__(None, None, None)

@@ -22,10 +22,10 @@ This repository enforces the following mandatory behavior rules for contributors
 
 Follow this exact cycle for every bug fix or feature:
 
-1. **Reproduce:** Produce a failing test or minimal reproduction first. Always use the **Browser MCP to live test** — do NOT use simulations or mocked browser behavior, because simulations frequently produce false passes.
+1. **Reproduce:** Produce a failing test or minimal reproduction first. Always use the **Playwright to live test** — do NOT use simulations or mocked browser behavior, because simulations frequently produce false passes.
 2. **Diagnose:** Gather evidence. Read relevant source code AND documentation before proposing a fix — see the Documentation Reference section below.
 3. **Fix:** Implement an elegant, minimal fix targeting the root cause.
-4. **Verify:** Live test again with Browser MCP. Run all relevant unit/integration tests.
+4. **Verify:** Live test again with Playwright. Run all relevant unit/integration tests.
    - **If verification still fails:** Immediately **revert your change**, reassess the situation, and try a different approach. Do not keep patching a failing path — backtrack and find a better method.
 5. **Document:** Document the root cause and rationale. Add or update short docstrings or docs explaining WHY non-obvious decisions were made.
 6. **Prevent:** Add tests or guards to prevent regression.
@@ -37,7 +37,7 @@ Follow this exact cycle for every bug fix or feature:
 Do NOT stop after fixing one bug. Follow this loop:
 
 1. Fix the current bug using the workflow above.
-2. After fixing, run a **full test suite** (live test with Browser MCP + unit/integration tests).
+2. After fixing, run a **full test suite** (live test with Playwright + unit/integration tests).
 3. Identify any additional bugs or regressions.
 4. Fix them — repeat from step 1.
 5. Continue until there are **zero bugs** you can find. Only then move on.
@@ -48,9 +48,9 @@ The goal is a clean, fully working state — not a partial fix.
 
 ## Live Testing (Mandatory)
 
-- **Always use Browser MCP for live testing.** This is non-negotiable.
+- **Always use Playwright for live testing.** This is non-negotiable.
 - Do not rely on simulated environments, mocked browsers, or headless assumptions. Real browser testing catches issues that simulations miss.
-- After every change, open the app in Browser MCP, verify the fix visually and functionally, and confirm no regressions.
+- After every change, open the app in Playwright, verify the fix visually and functionally, and confirm no regressions.
 
 ---
 

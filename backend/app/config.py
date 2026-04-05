@@ -49,5 +49,10 @@ class Settings(BaseSettings):
     # Example: EXTERNAL_AGENT_URL=http://localhost:7860
     external_agent_url: str = ""
 
+    # Demo features
+    # Set to false to disable the 2-minute "Time Check" notification broadcast.
+    # Enabled by default in dev so the Alerts tab shows live WebSocket push demos.
+    demo_time_alerts: bool = True
+
 
 settings = Settings()

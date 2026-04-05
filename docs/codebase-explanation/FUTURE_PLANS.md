@@ -1,7 +1,9 @@
 # Helm — Future Plans
 
 This document captures planned improvements and features beyond the MVP.
-Items are grouped by area.
+Items are grouped by area and contain detailed implementation notes.
+
+> For a concise feature registry (every feature with status, location, and coded/not-started flag), see **`FEATURES.md`** in this folder.
 
 ---
 

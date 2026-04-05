@@ -170,7 +170,7 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 
 No active bugs known as of 2026-04-03.  All previously filed bugs (`connected_user_ids`, calendar `PUT` decorator, `helm_hide_tab` registration) have been resolved.
 
-The following **incomplete features** exist (tracked in `docs/codebase-explanation/FUTURE_PLANS.md`):
+The following **incomplete features** exist (tracked in `docs/codebase-explanation/FEATURES.md` for the full registry, `docs/codebase-explanation/FUTURE_PLANS.md` for implementation plans):
 
 | # | Area | Description |
 |---|------|-------------|

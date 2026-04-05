@@ -18,15 +18,18 @@ async def execute_tool(name: str, args: dict[str, Any], user_id: str) -> Any:
     """Dispatch a tool call by name."""
     handlers: dict[str, Any] = {
         "read_calendar": read_calendar,
+        "read_all_calendar": read_all_calendar,
         "create_event": create_event,
         "update_event": update_event,
         "delete_event": delete_event,
+        "delete_all_events": delete_all_events,
         "send_notification": send_notification,
         "get_chat_history": get_chat_history,
         "send_chat_message": send_chat_message,
         "update_module_state": update_module_state,
         "get_form_data": get_form_data,
         "set_screen": set_screen,
+        "get_screen": get_screen,
         "delete_screen": delete_screen,
         "list_screens": list_screens,
         "hide_tab": hide_tab,
@@ -354,6 +357,66 @@ _SDUI_PROPS_FIELDS: dict[str, set[str]] = {
 
 _SDUI_STRUCTURAL_KEYS = {'type', 'id', 'children', 'props'}
 
+# V2 component types registered in the frontend componentRegistry.ts
+# Any type not in this set will render as a blank fallback on the frontend.
+_VALID_V2_COMPONENT_TYPES: frozenset[str] = frozenset({
+    "Text", "Markdown", "Button", "Image", "TextInput",
+    "Icon", "Divider", "Container",
+    "CalendarModule", "ChatModule", "NotesModule", "InputBar",
+})
+
+
+def _validate_sdui_v2(screen: dict[str, Any]) -> list[str]:
+    """Return a list of validation error strings for a V2 SDUIPage.
+
+    Returns an empty list if the screen is valid.
+    Checks: required top-level fields, row/cell structure, and component types.
+    """
+    errors: list[str] = []
+
+    if not isinstance(screen.get("rows"), list):
+        errors.append("Missing or invalid 'rows' field — V2 requires rows: [...]")
+        return errors
+
+    for row_idx, row in enumerate(screen["rows"]):
+        if not isinstance(row, dict):
+            errors.append(f"Row {row_idx} is not an object")
+            continue
+        if not row.get("id"):
+            errors.append(f"Row {row_idx} missing 'id'")
+        cells = row.get("cells")
+        if not isinstance(cells, list):
+            errors.append(f"Row '{row.get('id', row_idx)}' missing 'cells' list")
+            continue
+        for cell_idx, cell in enumerate(cells):
+            if not isinstance(cell, dict):
+                errors.append(f"Row '{row.get('id', row_idx)}' cell {cell_idx} is not an object")
+                continue
+            if not cell.get("id"):
+                errors.append(f"Row '{row.get('id', row_idx)}' cell {cell_idx} missing 'id'")
+            content = cell.get("content")
+            if not isinstance(content, dict):
+                errors.append(f"Cell '{cell.get('id', cell_idx)}' missing 'content' object")
+                continue
+            comp_type = content.get("type", "")
+            if comp_type and comp_type not in _VALID_V2_COMPONENT_TYPES:
+                errors.append(
+                    f"Unknown component type '{comp_type}' in cell '{cell.get('id', cell_idx)}'. "
+                    f"Valid types: {', '.join(sorted(_VALID_V2_COMPONENT_TYPES))}"
+                )
+            # Recursively check Container children
+            if comp_type == "Container" and isinstance(content.get("children"), list):
+                for child in content["children"]:
+                    if isinstance(child, dict):
+                        child_type = child.get("type", "")
+                        if child_type and child_type not in _VALID_V2_COMPONENT_TYPES:
+                            errors.append(
+                                f"Unknown child component type '{child_type}' inside Container "
+                                f"'{content.get('id', 'unknown')}'. "
+                                f"Valid types: {', '.join(sorted(_VALID_V2_COMPONENT_TYPES))}"
+                            )
+    return errors
+
 
 def _normalize_sdui_component(comp: dict[str, Any]) -> dict[str, Any]:
     """Convert a flat AI-generated component to the props-based schema the frontend expects.
@@ -464,6 +527,16 @@ async def set_screen(module_id: str, screen: dict[str, Any], user_id: str, draft
 
     # Normalise before storage so flat AI-generated components become props-based
     screen = normalize_sdui_screen(screen)
+
+    # Validate V2 component types against the frontend registry
+    if screen.get("schema_version") == "1.0.0":
+        validation_errors = _validate_sdui_v2(screen)
+        if validation_errors:
+            error_summary = "; ".join(validation_errors[:5])  # cap at 5 errors
+            raise ValueError(
+                f"SDUI V2 validation failed for module '{module_id}': {error_summary}. "
+                "Fix the component types and try again."
+            )
 
     if draft:
         # Store as draft, don't overwrite live screen
