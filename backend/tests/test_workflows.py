@@ -11,7 +11,9 @@ WORKFLOWS = "/api/workflows"
 async def test_list_workflows_empty(auth_client):
     resp = await auth_client.get(WORKFLOWS)
     assert resp.status_code == 200
-    assert resp.json() == []
+    data = resp.json()
+    assert data["items"] == []
+    assert data["total"] == 0
 
 
 async def test_workflows_requires_auth(client):
@@ -72,7 +74,7 @@ async def test_list_workflows_after_create(auth_client):
     )
     resp = await auth_client.get(WORKFLOWS)
     assert resp.status_code == 200
-    assert len(resp.json()) == 2
+    assert len(resp.json()["items"]) == 2
 
 
 async def test_get_workflow_by_id_via_list(auth_client):
@@ -87,7 +89,7 @@ async def test_get_workflow_by_id_via_list(auth_client):
     )
     wf_id = create_resp.json()["id"]
     list_resp = await auth_client.get(WORKFLOWS)
-    wfs = list_resp.json()
+    wfs = list_resp.json()["items"]
     assert any(w["id"] == wf_id and w["name"] == "Fetch me" for w in wfs)
 
 
@@ -126,7 +128,7 @@ async def test_delete_workflow(auth_client):
     del_resp = await auth_client.delete(f"{WORKFLOWS}/{wf_id}")
     assert del_resp.status_code == 204
     list_resp = await auth_client.get(WORKFLOWS)
-    ids = [w["id"] for w in list_resp.json()]
+    ids = [w["id"] for w in list_resp.json()["items"]]
     assert wf_id not in ids
 
 

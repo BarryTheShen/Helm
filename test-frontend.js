@@ -1,3 +1,4 @@
+const fs = require('fs');
 const puppeteer = require('puppeteer-core');
 
 (async () => {
@@ -39,7 +40,9 @@ const puppeteer = require('puppeteer-core');
   await new Promise(resolve => setTimeout(resolve, 5000));
 
   // Take a screenshot
-  await page.screenshot({ path: 'frontend-screenshot.png', fullPage: true });
+  const screenshotPath = 'test-results/frontend-screenshot.png';
+  fs.mkdirSync('test-results', { recursive: true });
+  await page.screenshot({ path: screenshotPath, fullPage: true });
 
   // Get page content
   const bodyText = await page.evaluate(() => document.body.innerText);

@@ -1,6 +1,6 @@
 # Frontend — React Native (Expo) Mobile App
 
-> Last updated: 2026-04-03
+> Last updated: 2026-04-06
 
 ## Tier 1: TLDR
 
@@ -56,7 +56,7 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 
 ### `app/(auth)/connect.tsx` — Server Setup
 - **Shows:** Server URL field, username, password, Setup button, "Already have an account?" link
-- **Default values:** URL = `http://localhost:8000`, username = `testuser`, password = `testpass123`
+- **Default values:** URL = `http://localhost:8000`; username and password are blank by default
 - **API:** `POST /auth/setup` via `AuthService.setup()`. On 409 → saves server URL, navigates to login
 - **State written:** `authStore.serverUrl` (persisted to SecureStore)
 
@@ -110,7 +110,7 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 | `useTabsStore` | `src/stores/tabsStore.ts` | `hiddenTabs: string[]`, `moduleConfigs: Record<string, {name, icon}>` | No (reloaded from server) |
 
 **Critical notes:**
-- `authStore.logout()` clears client-side token but **does NOT call `/auth/logout`**
+- `authStore.logout()` calls `POST /auth/logout` to invalidate the server session, then clears client-side token
 - `settingsStore.navigationMode` and `settingsStore.theme` are stored but **neither has any effect** on the UI
 - `settingsStore` uses `AsyncStorage` directly instead of the `storage` utility (inconsistency)
 - `tabsStore.hiddenTabs` is repopulated from `GET /api/modules` on every app launch
@@ -390,3 +390,72 @@ ChatMessage, CalendarEvent, Notification, AgentConfig, Workflow, Module, Device
 | `react-native-gesture-handler` | ^2.30.0 |
 | `react-native-reanimated` | ^4.2.3 |
 | `typescript` | ~5.9.2 |
+
+---
+
+## Web Admin Panel (`web/`)
+
+A separate React + TypeScript web application for backend administration. **Not part of the mobile app** — this is a standalone Vite SPA that communicates with the same backend API.
+
+### Tech Stack
+
+| Tech | Purpose |
+|------|---------|
+| Vite | Build tool + dev server |
+| React 19 + TypeScript | UI framework |
+| Tailwind CSS | Styling |
+| Zustand | Auth state management |
+| React Router | Client-side routing |
+| Puck | Visual drag-and-drop SDUI editor |
+
+### Architecture
+
+```
+web/src/
+├── main.tsx              → React entry point
+├── App.tsx               → React Router + auth guard + AdminLayout
+├── index.css             → Tailwind globals
+├── components/
+│   └── AdminLayout.tsx   → Sidebar nav + top bar
+├── pages/
+│   ├── LoginPage.tsx     → Auth against /auth/login
+│   ├── DashboardPage.tsx → GET /api/admin/stats
+│   ├── UsersPage.tsx     → CRUD /api/admin/users
+│   ├── SessionsPage.tsx  → GET /api/sessions, DELETE /api/sessions/{id}
+│   ├── AuditPage.tsx     → GET /api/audit
+│   ├── WorkflowsPage.tsx → Workflow management
+│   ├── TemplatesPage.tsx → SDUI template CRUD + import/export
+│   ├── ComponentsPage.tsx→ Component registry viewer
+│   └── EditorPage.tsx    → Puck visual SDUI editor
+├── lib/
+│   ├── api.ts            → Typed fetch wrapper for all admin endpoints
+│   ├── puckConfig.tsx    → 11 Puck component renderers matching V2 SDUI types
+│   ├── sduiAdapter.ts    → puckToHelm() and helmToPuck() translation layer
+│   └── utils.ts          → Shared helpers
+└── stores/
+    └── authStore.ts      → Zustand auth store (token, user, serverUrl)
+```
+
+### Puck Visual SDUI Editor
+
+The editor page (`/editor`) uses [Puck](https://github.com/measuredco/puck) v0.21.2 to provide a visual drag-and-drop interface for building SDUI screens. **All features verified working via Playwright live testing (2026-04-06).**
+
+**Components:**
+- **11 component renderers** in `puckConfig.tsx` matching Helm's V2 types: Text, Markdown, Button, Image, TextInput, Icon, Divider, Container, CalendarModule, ChatModule, NotesModule
+- **Row component** uses `<DropZone>` (from `@puckeditor/core`) with `style={{ display: 'flex', flexDirection: 'row', gap: 8 }}` for horizontal multi-cell layout
+
+**Bidirectional translation** between Puck's internal format and Helm SDUI V2 JSON:
+- `puckToHelm(puckData)` → converts Puck output to `{schema_version, module_id, rows: [{cells: [...]}]}` format
+- `helmToPuck(sduiJson)` → converts Helm SDUI V2 JSON back to Puck format for editing existing screens
+- Translation layer in `web/src/lib/sduiAdapter.ts`
+
+**EditorPage features:**
+- **Module switching** — dropdown selects module; Puck re-mounts via `key={selectedModule}-${puckVersion}` to reset editor state on switch
+- **Push Live** — two-step save→approve flow (handles `auto_approve_drafts=false` default): saves SDUI draft via `POST /api/sdui/{module}`, then auto-approves via `POST /api/sdui/{module}/approve`
+- **Draft management** — shows "Draft pending (vN)" badge with Approve/Reject buttons when a draft exists
+- **Save as Template** — saves current Puck state as a reusable SDUI template
+- **Load Template** — loads a saved template into the editor
+- **Error surfacing** — API errors displayed properly (no more silent failures)
+- **Config stability** — Puck config wrapped in `useRef` for render stability
+
+**Known cosmetic issue:** Puck v0.21.2 emits deprecation warnings for `renderHeaderActions` and `DropZones` (recommending the newer slots API). Non-blocking.

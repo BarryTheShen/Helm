@@ -1,16 +1,16 @@
 # Agents, MCP, Workflows & Additional Systems
 
-> Last updated: 2026-04-03
+> Last updated: 2026-04-06
 
 ## Tier 1: TLDR
 
 Helm has four "intelligence" systems beyond basic CRUD:
 
-1. **AI Agent Proxy** (`backend/app/services/agent_proxy.py`) — Connects to any OpenAI-compatible LLM. Streams responses in real-time and can call tools mid-conversation. Handles XML tool-call fallback for non-function-calling models.
+1. **AI Agent Proxy** (`backend/app/services/agent_proxy.py`) — Connects to any OpenAI-compatible LLM. Streams responses in real-time and can call tools mid-conversation. Handles XML tool-call fallback for non-function-calling models. Fires `MESSAGE_RECEIVED` trigger for workflow automation.
 
 2. **MCP Server** (`backend/app/mcp/`) — Exposes Helm's tools to external AI agents via the MCP standard protocol. Any MCP-compatible agent (Claude Desktop, custom agents, etc.) can read/write calendar, send notifications, set SDUI screens, etc.
 
-3. **Workflow Engine** (`backend/app/services/workflow_engine.py`) — Simple automation: "When X happens → do Y". Supports cron schedules and event triggers. Runs automatically via APScheduler.
+3. **Workflow Engine** (`backend/app/services/workflow_engine.py`) — Simple automation: "When X happens → do Y". Supports cron schedules and event triggers. Runs automatically via APScheduler. Event triggers (`EVENT_CREATED`, `EVENT_UPDATED`, `FORM_SUBMITTED`, `MESSAGE_RECEIVED`) are now wired into their respective routers/services.
 
 4. **Standalone PydanticAI Agent** (`agent/`) — An independent developer/admin agent. Runs outside the backend. Connects to Helm's MCP server over HTTP and can read/write React Native frontend source code. Has two entry points:
    - `helm_agent.py` — REPL / web UI / one-shot mode via pydantic-ai
@@ -180,12 +180,12 @@ All functions are `async`. Main `execute_tool(name, args, user_id)` dispatcher.
 | TriggerType | Config | When it fires |
 |------------|--------|---------------|
 | `SCHEDULE` | `trigger_config.cron` (crontab string) | On cron schedule |
-| `EVENT_CREATED` | — | `fire_trigger()` called from calendar router |
-| `EVENT_UPDATED` | — | Same |
-| `FORM_SUBMITTED` | — | `fire_trigger()` called from action registry |
-| `MESSAGE_RECEIVED` | — | `fire_trigger()` called from agent_proxy (not yet wired) |
+| `EVENT_CREATED` | — | `fire_trigger()` called from calendar router (POST create event) |
+| `EVENT_UPDATED` | — | `fire_trigger()` called from calendar router (PUT update event) |
+| `FORM_SUBMITTED` | — | `fire_trigger()` called from action registry (`submit_form` handler) |
+| `MESSAGE_RECEIVED` | — | `fire_trigger()` called from agent_proxy (`handle_chat_message`) |
 
-**⚠️ Outstanding:** `fire_trigger()` for non-SCHEDULE trigger types is not called from any router yet.
+**⚠️ Outstanding:** All event-based trigger types are now wired. `fire_trigger()` is called from calendar router (EVENT_CREATED, EVENT_UPDATED), action registry (FORM_SUBMITTED), and agent_proxy (MESSAGE_RECEIVED).
 
 ### Workflow Action
 `action_config.tool` + `action_config.params` → `execute_tool(tool, merged_args, user_id)` in `mcp/tools.py`.

@@ -14,6 +14,9 @@ from typing import Any, Callable, Awaitable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.workflow import TriggerType
+from app.services.workflow_engine import fire_trigger
+
 logger = logging.getLogger(__name__)
 
 # Type for action handler: receives (user_id, params, db_session) -> result dict
@@ -104,6 +107,10 @@ async def _submit_form(user_id: str, params: dict[str, Any], db: AsyncSession) -
         state.version += 1
 
     await db.commit()
+
+    await fire_trigger(TriggerType.FORM_SUBMITTED, user_id, {
+        "form_id": form_id, "submission_data": params
+    })
 
     # Send notification confirming submission
     from app.services.websocket_manager import manager

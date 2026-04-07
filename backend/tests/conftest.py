@@ -5,7 +5,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.database import get_db
+from app.database import get_db, is_sandbox_mode
 from app.main import app
 from app.models.base import Base
 
@@ -49,18 +49,43 @@ async def client(db_engine):
 
     async def override_get_db():
         async with factory() as session:
-            try:
-                yield session
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
+            if is_sandbox_mode():
+                _original_commit = session.commit
+
+                async def _sandbox_commit() -> None:
+                    await session.flush()
+
+                session.commit = _sandbox_commit  # type: ignore[assignment]
+                try:
+                    yield session
+                finally:
+                    session.commit = _original_commit  # type: ignore[assignment]
+                    await session.rollback()
+            else:
+                try:
+                    yield session
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                    raise
 
     app.dependency_overrides[get_db] = override_get_db
+
+    # Also patch AsyncSessionLocal so that services opening their own sessions
+    # (e.g. fire_trigger in workflow_engine) use the test DB.
+    import app.database as _db_mod
+    import app.services.workflow_engine as _wf_mod
+    original_session_local = _db_mod.AsyncSessionLocal
+    _db_mod.AsyncSessionLocal = factory
+    _wf_mod.AsyncSessionLocal = factory
+
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         yield ac
+
+    _db_mod.AsyncSessionLocal = original_session_local
+    _wf_mod.AsyncSessionLocal = original_session_local
     app.dependency_overrides.clear()
 
 

@@ -165,8 +165,12 @@ function CellRenderer({
   cell: SDUICell;
   dispatch: ActionDispatcher;
 }) {
+  // Support old format (cell.component) and new format (cell.content) for backward compat.
+  // The canonical format uses `content`; old AI-generated and pre-fix editor screens use `component`.
+  const cellContent = cell.content ?? (cell as any).component ?? null;
+
   // Skip malformed cells (metadata objects, missing content)
-  if (!cell.content) {
+  if (!cellContent) {
     // Detect nested row objects masquerading as cells (agent error)
     if ((cell as any).cells && Array.isArray((cell as any).cells)) {
       return <RowRenderer row={cell as any} dispatch={dispatch} breakpoint="compact" />;
@@ -181,7 +185,7 @@ function CellRenderer({
 
   return (
     <View style={flexStyle}>
-      <V2ComponentRenderer component={cell.content} dispatch={dispatch} />
+      <V2ComponentRenderer component={cellContent} dispatch={dispatch} />
     </View>
   );
 }

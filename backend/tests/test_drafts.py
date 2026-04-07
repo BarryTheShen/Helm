@@ -75,34 +75,15 @@ async def test_draft_full_approve_lifecycle(auth_client):
     # Actually, let's just test the REST draft endpoints assuming a draft exists.
     # We'll set up the draft by storing via module action.
 
-    # Simplest approach: store draft via set_sdui for draft key using raw module state
-    from app.database import get_db
-    from app.main import app as fastapi_app
-
-    # Instead, let's use the action registry approach since we already tested that
-    # The approve_draft handler in action_registry calls mcp/tools.approve_draft
-    # which needs context. Let's test the REST endpoints with direct DB setup.
-
-    # Alternative: Just POST to a known endpoint to create the draft state.
-    # The draft key is: sdui__home__draft
-    # Let's use the generic set_sdui endpoint with "home__draft" as module_id
-    # This is a hack but lets us test the approve endpoint correctly.
-
-    # Actually we should just POST raw module state. Let's use a simpler approach:
-    # /api/sdui/home__draft endpoint (since module_id accepts any string)
+    # POST /api/sdui/home now creates a draft by default (auto_approve_drafts=False)
     resp = await auth_client.post(
-        "/api/sdui/home__draft",
+        "/api/sdui/home",
         json={"screen": draft_screen},
     )
     assert resp.status_code == 200
+    assert resp.json()["draft"] is True
 
     # 2. Get draft — it should exist now
-    # The draft endpoint looks for sdui__home__draft which = sdui__ + "home" + __draft
-    # But we wrote to sdui__home__draft (which is sdui__ + "home__draft")
-    # Those are different keys! Let me reconsider.
-    # GET /api/sdui/home/draft -> looks for module_type = "sdui__home__draft"
-    # POST /api/sdui/home__draft -> stores at module_type = "sdui__home__draft"
-    # These ARE the same! ✓
 
     resp = await auth_client.get("/api/sdui/home/draft")
     assert resp.status_code == 200
@@ -138,9 +119,9 @@ async def test_draft_full_reject_lifecycle(auth_client):
         "sections": [],
     }
 
-    # Create draft via module_id hack
+    # POST /api/sdui/calendar now creates a draft by default
     await auth_client.post(
-        "/api/sdui/calendar__draft",
+        "/api/sdui/calendar",
         json={"screen": draft_screen},
     )
 
@@ -167,7 +148,8 @@ async def test_draft_full_reject_lifecycle(auth_client):
 async def test_approve_draft_overwrites_live(auth_client):
     """If a live screen already exists, approving a draft replaces it."""
 
-    # Set initial live screen
+    # Set initial live screen (auto-approve so it goes live)
+    await auth_client.put("/api/sdui/forms/config", json={"auto_approve_drafts": True})
     await auth_client.post(
         "/api/sdui/forms",
         json={"screen": {"title": "Old Screen", "sections": []}},
@@ -175,9 +157,10 @@ async def test_approve_draft_overwrites_live(auth_client):
     resp = await auth_client.get("/api/sdui/forms")
     assert resp.json()["screen"]["title"] == "Old Screen"
 
-    # Create draft
+    # Disable auto-approve, then create a draft via POST
+    await auth_client.put("/api/sdui/forms/config", json={"auto_approve_drafts": False})
     await auth_client.post(
-        "/api/sdui/forms__draft",
+        "/api/sdui/forms",
         json={"screen": {"title": "New Draft Screen", "sections": [{"id": "s1", "components": []}]}},
     )
 
@@ -197,13 +180,13 @@ async def test_approve_draft_overwrites_live(auth_client):
 async def test_drafts_independent_per_module(auth_client):
     """Drafts for different modules don't interfere with each other."""
 
-    # Create drafts for two modules
+    # Create drafts for two modules (default behavior: POST creates a draft)
     await auth_client.post(
-        "/api/sdui/home__draft",
+        "/api/sdui/home",
         json={"screen": {"title": "Home Draft", "sections": []}},
     )
     await auth_client.post(
-        "/api/sdui/alerts__draft",
+        "/api/sdui/alerts",
         json={"screen": {"title": "Alerts Draft", "sections": []}},
     )
 

@@ -15,7 +15,7 @@ interface AuthState {
   initialize: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
   user: null,
   serverUrl: null,
@@ -45,6 +45,17 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
+    const { token, serverUrl } = get();
+    if (token && serverUrl) {
+      try {
+        await fetch(`${serverUrl}/auth/logout`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+      } catch {
+        // Server unreachable — still clear local state
+      }
+    }
     await storage.removeItem('auth_token');
     await storage.removeItem('username');
     set({ token: null, user: null });

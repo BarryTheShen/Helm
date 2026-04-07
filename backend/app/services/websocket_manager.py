@@ -1,8 +1,20 @@
 import asyncio
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import WebSocket
 from loguru import logger
+
+
+class ConnectionInfo:
+    """Metadata for a single WebSocket connection."""
+
+    __slots__ = ("device_id", "websocket", "connected_since")
+
+    def __init__(self, device_id: str | None, websocket: WebSocket) -> None:
+        self.device_id = device_id
+        self.websocket = websocket
+        self.connected_since: datetime = datetime.now(timezone.utc)
 
 
 class ConnectionManager:
@@ -15,17 +27,17 @@ class ConnectionManager:
     """
 
     def __init__(self) -> None:
-        # user_id -> list of (device_id, websocket) tuples
-        self._connections: dict[str, list[tuple[str | None, WebSocket]]] = {}
+        self._connections: dict[str, list[ConnectionInfo]] = {}
 
     async def connect(self, websocket: WebSocket, user_id: str, device_id: str | None = None) -> None:
         await websocket.accept()
-        self._connections.setdefault(user_id, []).append((device_id, websocket))
+        info = ConnectionInfo(device_id, websocket)
+        self._connections.setdefault(user_id, []).append(info)
         logger.info(f"WS connected: user={user_id} device={device_id} total={len(self._connections[user_id])}")
 
     def disconnect(self, websocket: WebSocket, user_id: str) -> None:
         conns = self._connections.get(user_id, [])
-        self._connections[user_id] = [(did, ws) for did, ws in conns if ws is not websocket]
+        self._connections[user_id] = [c for c in conns if c.websocket is not websocket]
         if not self._connections[user_id]:
             self._connections.pop(user_id, None)
         logger.info(f"WS disconnected: user={user_id}")
@@ -33,23 +45,23 @@ class ConnectionManager:
     async def send(self, user_id: str, message: dict[str, Any]) -> None:
         """Send a message to all connections for a user (all devices)."""
         dead: list[WebSocket] = []
-        for device_id, ws in self._connections.get(user_id, []):
+        for conn in self._connections.get(user_id, []):
             try:
-                await ws.send_json(message)
+                await conn.websocket.send_json(message)
             except Exception:
-                dead.append(ws)
+                dead.append(conn.websocket)
         for ws in dead:
             self.disconnect(ws, user_id)
 
     async def send_to_device(self, user_id: str, device_id: str, message: dict[str, Any]) -> None:
         """Send a message to a specific device for a user."""
         dead: list[WebSocket] = []
-        for did, ws in self._connections.get(user_id, []):
-            if did == device_id:
+        for conn in self._connections.get(user_id, []):
+            if conn.device_id == device_id:
                 try:
-                    await ws.send_json(message)
+                    await conn.websocket.send_json(message)
                 except Exception:
-                    dead.append(ws)
+                    dead.append(conn.websocket)
         for ws in dead:
             self.disconnect(ws, user_id)
 
@@ -67,7 +79,15 @@ class ConnectionManager:
 
     def get_device_ids(self, user_id: str) -> list[str | None]:
         """Return list of device IDs connected for a user."""
-        return [did for did, _ in self._connections.get(user_id, [])]
+        return [c.device_id for c in self._connections.get(user_id, [])]
+
+    def get_all_connections(self) -> list[tuple[str, ConnectionInfo]]:
+        """Return all active (user_id, connection_info) pairs (for admin stats)."""
+        result: list[tuple[str, ConnectionInfo]] = []
+        for user_id, conns in self._connections.items():
+            for conn in conns:
+                result.append((user_id, conn))
+        return result
 
 
 # Singleton shared across the app

@@ -2,7 +2,7 @@
 
 How to run, configure, and edit every part of the stack.
 
-> Last updated: 2026-04-03
+> Last updated: 2026-04-06
 
 ---
 
@@ -23,6 +23,11 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 cd mobile
 npm install                    # first time only
 npx expo start
+
+# Terminal 3 — Web Admin Panel (optional)
+cd web
+npm install                    # first time only
+npm run dev                    # http://localhost:5173
 ```
 
 Then open the Expo Go app on your phone and scan the QR code **or** press `i` for iOS Simulator.
@@ -39,6 +44,7 @@ At first launch the app shows a **Connect** screen. Enter your backend URL:
 | Service | Default Port | How to change |
 |---------|-------------|---------------|
 | Backend FastAPI | `8000` | `SERVER_PORT` env var or uvicorn `--port` arg |
+| Web Admin Panel (Vite) | `5173` | `web/vite.config.ts` or `--port` arg |
 | Standalone agent web UI / api_server | `7860` | `AGENT_WEB_PORT` env var or `--port` CLI arg |
 | WebSocket | Same as backend (`8000`) | `ws://<host>:8000/ws?token=...` |
 | MCP endpoint | Same as backend (`8000`) | `http://<host>:8000/mcp/` |
@@ -102,7 +108,7 @@ The database file lives at `backend/helm.db`. Delete it and re-run `alembic upgr
 ```bash
 cd backend
 source .venv/bin/activate
-pytest                         # all 59 tests
+pytest                         # all 113 tests
 pytest -v                      # verbose
 pytest tests/test_auth.py      # single file
 pytest --cov=app               # with coverage
@@ -117,6 +123,11 @@ Test files:
 | `tests/test_workflows.py` | 10 | Workflow CRUD, cron scheduling |
 | `tests/test_actions.py` | 15 | Action registry, endpoint auth, each handler |
 | `tests/test_drafts.py` | 8 | Draft lifecycle (set/approve/reject/overwrite) |
+| `tests/test_users.py` | — | User management CRUD (admin-only) |
+| `tests/test_sessions.py` | — | Session listing, revocation |
+| `tests/test_templates.py` | — | SDUI template CRUD, apply, import |
+| `tests/test_sandbox.py` | — | Sandbox mode commit interception |
+| `tests/test_admin.py` | — | Admin stats endpoints |
 
 ### User management (CLI)
 
@@ -194,6 +205,99 @@ Requires Mac + Xcode installed. With Expo running, press `i`.
 npm install -g eas-cli             # requires EAS CLI + Apple Developer account
 eas build --platform ios
 ```
+
+---
+
+## Web Admin Panel (`web/`)
+
+A React + TypeScript web application for administering the Helm backend. Built with Vite, Tailwind CSS, Zustand, and React Router. Includes a Puck-based visual SDUI editor.
+
+### One-time setup
+
+```bash
+cd web
+npm install
+```
+
+### Run the dev server
+
+```bash
+cd web
+npm run dev
+```
+
+Opens at `http://localhost:5173` by default. Requires the backend to be running at `http://localhost:8000`.
+
+> **Port note:** If 5173 is already in use, Vite auto-assigns the next available port (e.g., 5174). The backend always runs on 8000 regardless.
+
+### Vite proxy (dev mode)
+
+In dev mode, `vite.config.ts` proxies these paths to the backend so there are no CORS issues:
+
+| Prefix | Target |
+|--------|--------|
+| `/api/*` | `http://localhost:8000` |
+| `/auth/*` | `http://localhost:8000` |
+| `/ws` | `ws://localhost:8000` |
+
+All `fetch('/api/...')` calls in the web panel go through this proxy. In production, deploy the web panel behind the same reverse proxy as the backend.
+
+### Authentication
+
+**Login flow:**
+1. `POST /auth/login` → returns `{ session_token, user_id, username, role }`
+2. Token is stored in `localStorage` as `admin_token`
+3. `ApiClient` in `web/src/lib/api.ts` reads `admin_token` and injects `Authorization: Bearer <token>` on every request automatically
+4. `authStore` (`web/src/stores/authStore.ts`, Zustand) holds the decoded user state in memory
+5. `ProtectedRoute` in `App.tsx` redirects to `/login` if no token is present
+
+### First-time login / credentials
+
+There are **no hardcoded default credentials** in the codebase (intentional security practice). The first admin user must be created via CLI before the web panel can be used:
+
+```bash
+cd backend
+source .venv/bin/activate
+
+# Create first admin user:
+python manage.py create_user --username admin --password yourpassword
+
+# Reset a forgotten password:
+python manage.py reset_password --username admin
+```
+
+After the first user is created, `POST /auth/setup` is permanently locked (returns 409).
+
+> **Tests:** `conftest.py` creates a test user programmatically via hashed password — no CLI step needed for the test suite.
+
+### Build for production
+
+```bash
+cd web
+npm run build    # outputs to web/dist/
+```
+
+### Pages
+
+| Page | URL | Description |
+|------|-----|-------------|
+| Login | `/login` | Authenticates against backend `/auth/login` |
+| Dashboard | `/` | Admin stats overview (users, sessions, events, workflows) |
+| Users | `/users` | CRUD user management (admin-only) |
+| Sessions | `/sessions` | View and revoke active sessions |
+| Audit | `/audit` | Filterable audit log viewer |
+| Workflows | `/workflows` | Manage automation workflows |
+| Templates | `/templates` | SDUI template library (CRUD + import/export) |
+| Components | `/components` | View/edit registered SDUI component definitions |
+| Editor | `/editor` | Puck-based drag-and-drop visual SDUI screen builder |
+
+### Puck Visual Editor
+
+The editor at `/editor` uses [Puck](https://github.com/measuredco/puck) for drag-and-drop SDUI screen building:
+- **11 component renderers** matching Helm's V2 SDUI types (Text, Button, Image, Container, etc.)
+- **`puckToHelm()`** — converts Puck editor output → Helm SDUI V2 JSON (rows + cells)
+- **`helmToPuck()`** — converts Helm SDUI V2 JSON → Puck editor format (for editing existing screens)
+- Translation layer in `web/src/lib/sduiAdapter.ts`; component config in `web/src/lib/puckConfig.tsx`
 
 ---
 

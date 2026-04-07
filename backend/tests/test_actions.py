@@ -69,6 +69,8 @@ async def test_execute_refresh_data_no_existing_screen(auth_client):
 
 async def test_execute_refresh_data_with_existing_screen(auth_client):
     """refresh_data after setting a screen returns refreshed=True."""
+    # Enable auto-approve so the screen goes live directly
+    await auth_client.put("/api/sdui/home/config", json={"auto_approve_drafts": True})
     # First set a screen
     await auth_client.post(
         "/api/sdui/home",

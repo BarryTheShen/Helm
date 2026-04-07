@@ -25,6 +25,7 @@ class LoginResponse(BaseModel):
     expires_at: datetime
     user_id: str
     username: str
+    role: str
 
 
 class RefreshResponse(BaseModel):

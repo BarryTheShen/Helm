@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,7 +46,23 @@ async def get_token_from_request(
     return credentials.credentials
 
 
+async def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
+
+
 async def get_current_user_id(
     user: User = Depends(get_current_user),
 ) -> str:
     return str(user.id)
+
+
+class PaginationParams:
+    def __init__(
+        self,
+        limit: int = Query(default=50, le=200),
+        offset: int = Query(default=0, ge=0),
+    ):
+        self.limit = limit
+        self.offset = offset

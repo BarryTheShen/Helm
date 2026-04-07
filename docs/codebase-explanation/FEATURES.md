@@ -6,7 +6,7 @@
 > Update this file whenever a feature is completed, added, or deprioritised.
 >
 > For detailed implementation plans see `FUTURE_PLANS.md`.
-> Last updated: 2026-04-04 (verified against full codebase read)
+> Last updated: 2026-04-06 (verified against targeted source read)
 
 ---
 
@@ -30,6 +30,7 @@
 | ✅ | pydantic-settings configuration (`.env` at repo root) | `backend/app/config.py` | All secrets via env vars |
 | ✅ | Alembic database migrations | `backend/alembic/` | Run `alembic upgrade head` after model changes |
 | ✅ | CORS middleware (allow all origins for dev) | `backend/app/main.py` | Configured for mobile + web |
+| ✅ | Sandbox mode middleware (`X-Helm-Sandbox`) | `backend/app/middleware/sandbox.py`, `backend/app/database.py` | Runs requests in rollback-only mode and logs sandbox actions separately |
 | ✅ | `manage.py` CLI for user management | `backend/manage.py` | Create/list/delete users outside the locked setup endpoint |
 | ✅ | pytest test suite | `backend/tests/` | Auth, calendar, notifications, workflows, drafts |
 | ❌ | Docker deployment (Dockerfile + docker-compose) | — | Spec defined in Backend Spec §8; not yet created |
@@ -39,7 +40,7 @@
 
 ---
 
-## 2. Backend — Authentication
+## 2. Backend — Authentication & Admin Access
 
 | Status | Feature | Location | Notes |
 |--------|---------|----------|-------|
@@ -51,7 +52,11 @@
 | ✅ | Session-based JWT validation on every request | `backend/app/dependencies.py` | `get_current_user` checks sessions table |
 | ✅ | bcrypt password hashing | `backend/app/utils/security.py` | passlib + bcrypt |
 | ✅ | Fernet-encrypted API key storage | `backend/app/utils/security.py` | Agent API keys encrypted at rest |
-| ❌ | Multiple user accounts beyond single admin | — | Architecture allows it; needs role-based access control |
+| ✅ | Multiple local user accounts with admin/user roles | `backend/app/routers/users.py`, `backend/manage.py` | Admin can create and manage additional users via API or CLI |
+| ✅ | Admin users CRUD (`GET/POST/GET/{id}/PUT/DELETE /api/users`) | `backend/app/routers/users.py` | Admin-only list/search, create, inspect device/session counts, update, and delete users |
+| ✅ | Session management (`GET /api/sessions`, `GET /api/sessions/me`, revoke endpoints) | `backend/app/routers/sessions.py` | Admin can list all active sessions; users can inspect and revoke their own sessions |
+| ✅ | Audit log query APIs (`GET /api/audit`, `GET /api/audit/me`) | `backend/app/routers/audit.py` | Pagination plus filters for action type, user, resource type, and date range |
+| ✅ | Admin stats / analytics (`GET /api/admin/stats`, `/stats/workflows`, `/stats/websocket`) | `backend/app/routers/admin.py` | Dashboard counts, workflow analytics, and live WebSocket connection info |
 | ❌ | OAuth 2.0 providers (Google, GitHub) | — | Post-MVP; needs OAuth flow + token management |
 | ❌ | Per-user data isolation (multi-tenant) | — | Partially architected (user_id FK everywhere) |
 | 🚫 | Biometric auth (Face ID / Touch ID) | — | Out of scope for MVP |
@@ -150,7 +155,7 @@
 
 ---
 
-## 8. Backend — SDUI / Modules
+## 8. Backend — SDUI / Modules / Content
 
 | Status | Feature | Location | Notes |
 |--------|---------|----------|-------|
@@ -165,9 +170,15 @@
 | ✅ | Reject / discard draft (`POST /api/sdui/{module_id}/draft/reject`) | `backend/app/routers/modules.py` | Optional feedback body |
 | ✅ | Delete SDUI screen (`DELETE /api/sdui/{module_id}`) | `backend/app/routers/modules.py` | Clears AI-set screen |
 | ✅ | List all SDUI screens (`GET /api/sdui`) | `backend/app/routers/modules.py` | All AI-set screens across modules |
+| ✅ | Validate SDUI payloads (`POST /api/sdui/validate`) | `backend/app/routers/modules.py` | Validates `screen_json` against the component registry before save/apply |
+| ✅ | Screen history API (`GET /api/sdui/{module_id}/history`, `GET /api/sdui/{module_id}/history/{version}`, `POST /api/sdui/{module_id}/history/{version}/restore`, `PUT /api/sdui/{module_id}/history/{version}/star`) | `backend/app/routers/modules.py` | Versioned history with restore-to-draft and star/unstar support |
+| ✅ | Duplicate screen to another module (`POST /api/sdui/{module_id}/duplicate`) | `backend/app/routers/modules.py` | Copies a live screen into another module and records history for the target |
 | ✅ | Device tab config (`GET/PUT /api/devices/config`) | `backend/app/routers/modules.py` | Per-device tab bar + nav mode config |
 | ✅ | Mini-app module actions (`POST /api/modules/{id}/action`) | `backend/app/routers/modules.py` | random_number, play_rps, create_note, delete_note |
-| ❌ | Visual drag-and-drop UI editor (web panel at `/editor`) | — | Detailed in FUTURE_PLANS §2 |
+| ✅ | Component registry CRUD (`GET/POST/PUT/DELETE /api/components/registry...`) | `backend/app/routers/components.py` | List/get for authenticated users; create, update, and soft-delete for admins |
+| ✅ | Template library CRUD (`GET/POST/GET/{id}/PUT/DELETE /api/templates`) | `backend/app/routers/templates.py` | Public/private templates with category and search filters |
+| ✅ | Apply/import template utilities (`POST /api/templates/{id}/apply`, `POST /api/templates/import`, `GET /api/templates/{id}/rows`) | `backend/app/routers/templates.py` | Apply templates as drafts, import raw JSON, or fetch reusable rows/sections |
+| ✅ | Visual drag-and-drop SDUI editor (web panel at `/editor`) | `web/src/pages/EditorPage.tsx`, `web/src/lib/sduiAdapter.ts` | Puck-based editor loads module screens, saves drafts, and can save templates |
 
 ---
 
@@ -222,6 +233,22 @@
 | ✅ | Filesystem tools (read/write/list mobile source) | `agent/helm_agent.py` | Path-validated to `mobile/` directory |
 | ✅ | SDUI V2 schema + all module IDs in system prompt | `agent/helm_agent.py` (`_SYSTEM_PROMPT`) | Agent knows component types, actions, module names |
 | ✅ | Connects to backend MCP server | `agent/helm_agent.py` | Over HTTP; uses session token |
+
+---
+
+## 11A. Web Admin Panel
+
+| Status | Feature | Location | Notes |
+|--------|---------|----------|-------|
+| ✅ | Login page + protected admin routing | `web/src/App.tsx`, `web/src/pages/LoginPage.tsx`, `web/src/stores/authStore.ts` | Admin routes are guarded; unauthenticated users are redirected to `/login` |
+| ✅ | Dashboard page | `web/src/pages/DashboardPage.tsx` | Surfaces aggregate admin stats from `/api/admin/stats` |
+| ✅ | Users page | `web/src/pages/UsersPage.tsx` | Create, inspect, edit, and delete users via `/api/users` |
+| ✅ | Sessions page | `web/src/pages/SessionsPage.tsx` | View active sessions and revoke them via `/api/sessions` |
+| ✅ | Audit page | `web/src/pages/AuditPage.tsx` | Filterable audit log viewer backed by `/api/audit` |
+| ✅ | Workflows page | `web/src/pages/WorkflowsPage.tsx` | Manage workflow records and status |
+| ✅ | Templates page | `web/src/pages/TemplatesPage.tsx` | Browse, create, edit, delete, apply, and import templates |
+| ✅ | Components page | `web/src/pages/ComponentsPage.tsx` | View and manage SDUI component registry entries |
+| ✅ | Editor page | `web/src/pages/EditorPage.tsx`, `web/src/lib/puckConfig.tsx`, `web/src/lib/sduiAdapter.ts` | Puck-based drag-and-drop SDUI builder with draft save and "save as template" flows |
 
 ---
 
@@ -310,8 +337,6 @@
 | ✅ | SDUI fallback on all 7 tabs (AI can override any tab) | All tab screens | `home`, `chat`, `calendar`, `forms`, `alerts`, `modules`, `settings` |
 | ❌ | `open_sheet` action fully implemented | `mobile/src/hooks/useActionDispatcher.ts` | Case exists but is a stub — no modal routing system built yet |
 | ❌ | SDUI component theme system (`update_theme` MCP tool) | — | FUTURE_PLANS §1.1 |
-| ❌ | Widget/card builder UI (human drag-and-drop editor) | — | FUTURE_PLANS §2 |
-| ❌ | Template library (pre-built SDUI layouts) | — | FUTURE_PLANS §2.3 |
 | ⚠️ | Dead V1 component files still present | `mobile/src/components/sdui/` | `AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx` all still exist and are unused |
 
 ---
@@ -455,9 +480,9 @@ The settings screen is read-only — it shows current values but provides no con
 | ✅ | MCP auth middleware (Bearer token required) | `backend/app/mcp/server.py` | |
 | ✅ | Action registry whitelist (prevents SSRF from SDUI actions) | `backend/app/services/action_registry.py` | |
 | ✅ | Filesystem tool path validation (mobile/ only) | `agent/helm_agent.py` | |
+| ✅ | Audit logging + query APIs | `backend/app/services/audit.py`, `backend/app/routers/audit.py` | Queryable audit history exists for major auth, admin, template, component, workflow, and session actions |
 | ⚠️ | HTTPS / TLS | — | Backend runs HTTP; needs reverse proxy (nginx/Caddy) in front |
 | ❌ | Rate limiting | — | Not needed for MVP (self-hosted, single user); needed for multi-user |
-| ❌ | Audit logging | — | MCP call logs, workflow run history |
 | 🚫 | CORS locked to specific origin | — | Currently `allow_origins=["*"]`; acceptable for self-hosted |
 
 ---
@@ -470,9 +495,9 @@ The settings screen is read-only — it shows current values but provides no con
 | ✅ | Alembic migration workflow | `backend/alembic/` | `alembic upgrade head` |
 | ✅ | `.env` configuration file | repo root | `OPERATIONS.md` documents all variables |
 | ✅ | `manage.py` CLI | `backend/manage.py` | `python manage.py create-user` etc. |
+| ✅ | Web Admin Panel (separate Vite app) | `web/` | Routes include `/login`, `/`, `/users`, `/sessions`, `/audit`, `/workflows`, `/templates`, `/components`, `/editor` |
 | ❌ | Dockerfile | — | Backend Spec §8; not yet created |
 | ❌ | docker-compose.yml | — | Backend Spec §8; not yet created |
-| ❌ | Admin dashboard web UI (`/admin`) | — | FUTURE_PLANS §10 |
 | ❌ | Production backup / restore system | — | 🚫 Out of scope for MVP |
 
 ---
@@ -494,13 +519,13 @@ The settings screen is read-only — it shows current values but provides no con
 
 ## Summary Counts
 
-> All ✅ entries verified by reading source files on 2026-04-04.
+> All ✅ entries verified by reading source files on 2026-04-06.
 
 | Status | Count |
 |--------|-------|
-| ✅ Coded and working | ~105 |
+| ✅ Coded and working | ~129 |
 | ⚠️ Coded but incomplete / partial | ~12 |
-| ❌ Planned / not started | ~55 |
+| ❌ Planned / not started | ~49 |
 | 🚫 Explicitly out of scope (MVP) | ~8 |
 
 ---

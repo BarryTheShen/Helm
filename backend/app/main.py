@@ -34,6 +34,14 @@ async def lifespan(app: FastAPI):
         logger.warning(f"MCP session manager not started: {exc}")
         _mcp_session_cm = None
 
+    # Seed component registry with defaults (no-op if already populated)
+    from app.database import AsyncSessionLocal  # noqa: PLC0415
+    from app.services.component_seed import seed_components  # noqa: PLC0415
+    from app.services.template_seed import seed_templates  # noqa: PLC0415
+    async with AsyncSessionLocal() as seed_db:
+        await seed_components(seed_db)
+        await seed_templates(seed_db)
+
     # Start the 2-minute time alert task (opt-in via DEMO_TIME_ALERTS=true in .env)
     import asyncio as _asyncio
     _alert_task = _asyncio.create_task(_run_time_alerts()) if settings.demo_time_alerts else None
@@ -109,6 +117,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Sandbox middleware must be added BEFORE CORS so it wraps the full request lifecycle
+from app.middleware.sandbox import SandboxMiddleware  # noqa: E402
+app.add_middleware(SandboxMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -124,16 +136,22 @@ async def health():
 
 
 # Register routers
-from app.routers import auth, modules, chat, calendar, notifications, agent_config, websocket, workflows, actions  # noqa: E402
+from app.routers import auth, modules, chat, calendar, notifications, agent_config, websocket, workflows, actions, users, sessions, audit, components, templates, admin  # noqa: E402
 
 app.include_router(auth.router)
 app.include_router(modules.router)
+app.include_router(templates.router)
 app.include_router(chat.router)
 app.include_router(calendar.router)
 app.include_router(notifications.router)
 app.include_router(agent_config.router)
 app.include_router(workflows.router)
 app.include_router(actions.router)
+app.include_router(users.router)
+app.include_router(sessions.router)
+app.include_router(audit.router)
+app.include_router(components.router)
+app.include_router(admin.router)
 app.include_router(websocket.router)
 
 # Mount MCP server
@@ -144,3 +162,11 @@ try:
     logger.info(f"MCP server mounted at {settings.mcp_path}")
 except Exception as exc:
     logger.warning(f"MCP server not mounted: {exc}")
+
+# Mount admin panel static files if built
+import os
+from fastapi.staticfiles import StaticFiles
+
+admin_dist = os.path.join(os.path.dirname(__file__), '..', '..', 'web', 'dist')
+if os.path.isdir(admin_dist):
+    app.mount("/admin", StaticFiles(directory=admin_dist, html=True), name="admin")

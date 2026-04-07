@@ -1,14 +1,16 @@
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user_id
+from app.dependencies import PaginationParams, get_current_user_id
 from app.models.workflow import Workflow, TriggerType
+from app.schemas.common import BulkDeleteRequest, PaginatedResponse
+from app.services.audit import log_audit
 from app.services.workflow_engine import register_workflow, unregister_workflow
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
@@ -41,16 +43,25 @@ class WorkflowResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-@router.get("", response_model=list[WorkflowResponse])
+@router.get("", response_model=PaginatedResponse[WorkflowResponse])
 async def list_workflows(
+    pagination: PaginationParams = Depends(),
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
+    total = (await db.execute(
+        select(func.count()).select_from(Workflow).where(Workflow.user_id == user_id)
+    )).scalar_one()
+
     result = await db.execute(
-        select(Workflow).where(Workflow.user_id == user_id).order_by(Workflow.created_at)
+        select(Workflow)
+        .where(Workflow.user_id == user_id)
+        .order_by(Workflow.created_at)
+        .offset(pagination.offset)
+        .limit(pagination.limit)
     )
     workflows = result.scalars().all()
-    return [
+    items = [
         WorkflowResponse(
             id=str(w.id),
             name=w.name,
@@ -64,10 +75,19 @@ async def list_workflows(
         for w in workflows
     ]
 
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        limit=pagination.limit,
+        offset=pagination.offset,
+        has_more=pagination.offset + pagination.limit < total,
+    )
+
 
 @router.post("", response_model=WorkflowResponse, status_code=status.HTTP_201_CREATED)
 async def create_workflow(
     body: WorkflowCreate,
+    request: Request,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -80,6 +100,7 @@ async def create_workflow(
         action_config=body.action_config,
     )
     db.add(wf)
+    await log_audit(db, user_id, "WORKFLOW_CREATED", "workflow", str(wf.id), ip=request.client.host if request.client else None)
     await db.commit()
     await register_workflow(wf)
     return WorkflowResponse(
@@ -98,6 +119,7 @@ async def create_workflow(
 async def update_workflow(
     workflow_id: str,
     body: WorkflowUpdate,
+    request: Request,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -119,6 +141,7 @@ async def update_workflow(
             await unregister_workflow(workflow_id)
         else:
             await register_workflow(wf)
+    await log_audit(db, user_id, "WORKFLOW_UPDATED", "workflow", str(wf.id), ip=request.client.host if request.client else None)
     await db.commit()
     return WorkflowResponse(
         id=str(wf.id),
@@ -135,6 +158,7 @@ async def update_workflow(
 @router.delete("/{workflow_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_workflow(
     workflow_id: str,
+    request: Request,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -145,5 +169,22 @@ async def delete_workflow(
     if wf is None:
         raise HTTPException(status_code=404, detail="Workflow not found")
     await unregister_workflow(workflow_id)
+    await log_audit(db, user_id, "WORKFLOW_DELETED", "workflow", workflow_id, ip=request.client.host if request.client else None)
     await db.delete(wf)
     await db.commit()
+
+
+@router.post("/bulk-delete")
+async def bulk_delete_workflows(
+    body: BulkDeleteRequest,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        delete(Workflow).where(
+            Workflow.id.in_(body.ids),
+            Workflow.user_id == user_id,
+        )
+    )
+    await db.commit()
+    return {"deleted": result.rowcount}

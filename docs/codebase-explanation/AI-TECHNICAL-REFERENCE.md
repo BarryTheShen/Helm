@@ -4,7 +4,7 @@
 > Read this FIRST before making any changes. It tells you exactly where everything is,
 > what connects to what, and what the known pitfalls are.
 >
-> Last updated: 2026-04-03
+> Last updated: 2026-04-06
 
 ---
 
@@ -16,11 +16,13 @@ Helm is a self-hosted AI super app with three layers:
 |-------|------|----------|------------|
 | Backend | Python FastAPI | `backend/` | `backend/app/main.py` |
 | Frontend | React Native (Expo) | `mobile/` | `mobile/index.ts` → `mobile/app/_layout.tsx` |
+| Web Admin | React + Vite + Tailwind | `web/` | `web/src/main.tsx` |
 | Protocol | WebSocket + REST + MCP | Embedded in backend | `backend/app/routers/websocket.py` |
 | Standalone Agent | PydanticAI | `agent/` | `agent/helm_agent.py` |
 
 **To run backend:** `cd backend && uvicorn app.main:app --reload`
 **To run frontend:** `cd mobile && npx expo start`
+**To run web admin:** `cd web && npm run dev`
 **To run tests:** `cd backend && pytest`
 **To run standalone agent:** `source backend/.venv/bin/activate && cd agent && python helm_agent.py`
 **To run agent web UI:** `source backend/.venv/bin/activate && cd agent && python helm_agent.py --web`
@@ -33,10 +35,11 @@ Helm is a self-hosted AI super app with three layers:
 
 | Need to change... | Edit this file | Notes |
 |-------------------|---------------|-------|
-| API endpoints | `routers/{domain}.py` | 9 router files |
-| Database models | `models/{model}.py` | 9 model files, all import in `models/__init__.py` |
-| Request/response types | `schemas/{domain}.py` | Exception: workflow schemas are inline in `routers/workflows.py` |
+| API endpoints | `routers/{domain}.py` | 15 router files |
+| Database models | `models/{model}.py` | 14 model files, all import in `models/__init__.py` |
+| Request/response types | `schemas/{domain}.py` | 15 schema files; workflow schemas inline in `routers/workflows.py` |
 | Auth logic | `services/auth.py` + `utils/security.py` | Session-based with JWT tokens |
+| Admin-only guard | `dependencies.py::require_admin` | Raises 403 if `user.role != "admin"` |
 | AI chat streaming | `services/agent_proxy.py` | Core feature — LLM streaming + tool calls + XML fallback |
 | External agent routing | `services/agent_proxy.py` | When `settings.external_agent_url` is set, all chat is forwarded to `api_server.py` |
 | WebSocket handling | `routers/websocket.py` + `services/websocket_manager.py` | token in query param; device_id tracked; `module_action` dispatches to action registry |
@@ -48,9 +51,19 @@ Helm is a self-hosted AI super app with three layers:
 | Workflow automation | `services/workflow_engine.py` | APScheduler-based |
 | App config | `config.py` | pydantic-settings, reads `.env` from repo root |
 | Database engine | `database.py` | SQLAlchemy async, SQLite default |
-| Auth dependencies | `dependencies.py` | `get_current_user`, `get_current_user_id` |
+| Auth dependencies | `dependencies.py` | `get_current_user`, `get_current_user_id`, `require_admin`, `PaginationParams` |
 | DB migrations | `../alembic/versions/` | Run `alembic upgrade head` after model changes |
-| SDUI module endpoints | `routers/modules.py` | `GET/POST/DELETE /api/sdui/{module_id}`, tabs management |
+| SDUI module endpoints | `routers/modules.py` | `GET/POST/DELETE /api/sdui/{module_id}`, tabs management, screen history, validate, duplicate |
+| User management (admin) | `routers/users.py` | CRUD + list, all admin-only |
+| Session management | `routers/sessions.py` | List (admin/mine), revoke, revoke-others |
+| Audit log | `routers/audit.py` | Admin list + my list |
+| Component registry | `routers/components.py` | CRUD for SDUI component definitions |
+| SDUI templates | `routers/templates.py` | CRUD + apply + import + rows |
+| Admin stats | `routers/admin.py` | System stats, workflow stats, WebSocket stats |
+| Audit service | `services/audit.py` | `log_audit()` helper — wired into auth, calendar, workflows, etc. |
+| Component seed | `services/component_seed.py` | Seeds 11 default components (7 atomic + 4 hardcoded) |
+| Sandbox middleware | `middleware/sandbox.py` | ASGI middleware; `X-Helm-Sandbox` header → intercepts DB commits |
+| Sandbox DB support | `database.py` | `contextvars sandbox_mode`; `get_db` intercepts commits in sandbox mode |
 
 ### Frontend (`mobile/`)
 
@@ -101,6 +114,29 @@ Helm is a self-hosted AI super app with three layers:
 | System prompt | `agent/helm_agent.py` (`_SYSTEM_PROMPT`) | SDUI V2 schema, all module IDs, action types |
 | One-shot prompt CLI | `agent/send_prompt.py` | CLI tool to POST a message to `api_server.py /api/run` and print the streamed response |
 | Agent docs | `agent/README.md` | |
+
+### Web Admin Panel (`web/`)
+
+| Need to change... | Edit this file | Notes |
+|-------------------|---------------|-------|
+| App entry / routing | `web/src/App.tsx` | React Router; login guard; `AdminLayout` wrapper |
+| Login page | `web/src/pages/LoginPage.tsx` | Authenticates against backend `/auth/login` |
+| Dashboard (stats) | `web/src/pages/DashboardPage.tsx` | Admin stats from `/api/admin/stats` |
+| User management | `web/src/pages/UsersPage.tsx` | CRUD via `/api/admin/users` |
+| Session management | `web/src/pages/SessionsPage.tsx` | List + revoke via `/api/sessions` |
+| Audit log viewer | `web/src/pages/AuditPage.tsx` | Filterable list from `/api/audit` |
+| Workflow management | `web/src/pages/WorkflowsPage.tsx` | Manage workflows |
+| SDUI template management | `web/src/pages/TemplatesPage.tsx` | CRUD + import/export templates |
+| Component registry | `web/src/pages/ComponentsPage.tsx` | View/edit registered SDUI components |
+| Visual SDUI editor | `web/src/pages/EditorPage.tsx` | Puck-based drag-and-drop SDUI screen builder |
+| Puck component config | `web/src/lib/puckConfig.tsx` | 11 Puck component renderers matching SDUI V2 types |
+| SDUI ↔ Puck translation | `web/src/lib/sduiAdapter.ts` | `puckToHelm()` and `helmToPuck()` converters |
+| API client | `web/src/lib/api.ts` | Typed fetch wrapper for all admin endpoints |
+| Utilities | `web/src/lib/utils.ts` | Shared helpers |
+| Auth store | `web/src/stores/authStore.ts` | Zustand store for admin auth state |
+| Nav layout | `web/src/components/AdminLayout.tsx` | Sidebar navigation + top bar |
+| Tailwind styles | `web/src/index.css` | Global Tailwind CSS |
+| Vite config | `web/vite.config.ts` | Dev server + build config |
 
 ---
 
@@ -168,19 +204,23 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 
 ## Known Gaps / Outstanding Work
 
-No active bugs known as of 2026-04-03.  All previously filed bugs (`connected_user_ids`, calendar `PUT` decorator, `helm_hide_tab` registration) have been resolved.
+No active bugs known as of 2026-04-06. All previously filed bugs (`connected_user_ids`, calendar `PUT` decorator, `helm_hide_tab` registration, `logout()` not calling server, `fire_trigger()` never called) have been resolved.
+
+The following **cosmetic issues** exist:
+
+| # | Area | Description | Impact |
+|---|------|-------------|--------|
+| 1 | Web Admin | Puck v0.21.2 emits deprecation warnings for `renderHeaderActions` and `DropZones` (recommending slots API) | Cosmetic — console warnings only, all functionality works |
 
 The following **incomplete features** exist (tracked in `docs/codebase-explanation/FEATURES.md` for the full registry, `docs/codebase-explanation/FUTURE_PLANS.md` for implementation plans):
 
 | # | Area | Description |
 |---|------|-------------|
-| 1 | Frontend | `logout()` in settings screen doesn't call `DELETE /auth/logout` — server-side sessions are never invalidated |
-| 2 | Frontend | `handleModulePress` in modules.tsx is a stub — tab presses do nothing |
-| 3 | Frontend | Calendar tab is read-only — no create/edit/delete UI in the frontend |
-| 4 | Frontend | `conversation_id: 'default'` is hardcoded — no multi-conversation support |
-| 5 | Frontend | Four dead SDUI component files (`AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx`) — unused, should be cleaned up |
-| 6 | Backend | `fire_trigger()` for non-SCHEDULE trigger types (event-based workflows) is never called from any router — event-triggered workflows are dead code |
-| 7 | Frontend | `settingsStore.navigationMode` and `.theme` are persisted but neither value is applied to the UI |
+| 1 | Frontend | `handleModulePress` in modules.tsx is a stub — tab presses do nothing |
+| 2 | Frontend | Calendar tab is read-only — no create/edit/delete UI in the frontend |
+| 3 | Frontend | `conversation_id: 'default'` is hardcoded — no multi-conversation support |
+| 4 | Frontend | Four dead SDUI component files (`AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx`) — unused, should be cleaned up |
+| 5 | Frontend | `settingsStore.navigationMode` and `.theme` are persisted but neither value is applied to the UI |
 
 ---
 
@@ -193,6 +233,14 @@ The following **incomplete features** exist (tracked in `docs/codebase-explanati
 | MCP tools shared between proxy+server | `mcp/tools.py` + `execute_tool()` | Single source of truth for all tool logic |
 | Frontend state: Zustand | `src/stores/*.ts` | 4 stores: auth, ui, settings, tabs |
 | Frontend routing: Expo Router | `app/` file-based | `(auth)/` and `(tabs)/` groups |
+| Web Admin state: Zustand | `web/src/stores/authStore.ts` | Single auth store; pages are self-contained |
+| Web Admin routing: React Router | `web/src/App.tsx` | Login guard; sidebar nav via `AdminLayout` |
+| Puck visual editor | `web/src/pages/EditorPage.tsx` | Drag-and-drop SDUI builder; Row uses `<DropZone>` for horizontal cells; Push Live = save→approve two-step; draft badge + approve/reject; `puckToHelm()` / `helmToPuck()` in `sduiAdapter.ts` |
+| Pagination pattern | `dependencies.py::PaginationParams` | `skip`, `limit`, `search` — used by workflows, notifications, calendar, audit |
+| Bulk delete pattern | `DELETE /api/{resource}/bulk` | JSON body `{ids: [...]}` — calendar, notifications, workflows |
+| Audit logging | `services/audit.py::log_audit()` | Wired into auth, calendar, workflows, notifications, modules, agent_config, users, sessions |
+| Sandbox mode | `middleware/sandbox.py` + `database.py` | `X-Helm-Sandbox: true` header → DB commits intercepted, recorded |
+| Admin-only endpoints | `dependencies.py::require_admin` | Raises 403 for non-admin users |
 | WS message validation: Zod `.passthrough()` | `utils/validation.ts` | Never strip unknown fields from backend! |
 | SDUI V2 (preferred) | `SDUIPage` with rows+cells | Responsive, compositional; use PascalCase component types |
 | SDUI V1 (legacy) | `SDUIScreen` with sections | Still supported; lowercase component types |
@@ -207,6 +255,7 @@ The following **incomplete features** exist (tracked in `docs/codebase-explanati
 | Service | Default Port | How to change |
 |---------|-------------|---------------|
 | Backend FastAPI | `8000` | `SERVER_PORT` in `.env` |
+| Web Admin Panel (Vite) | `5173` | `web/vite.config.ts` or `--port` CLI arg |
 | Standalone agent web UI / api_server | `7860` | `AGENT_WEB_PORT` in `.env` or `--port` CLI arg |
 | WebSocket | Same as backend (`8000`) | `ws://host:8000/ws?token=...` |
 | MCP endpoint | Same as backend (`8000`) | `http://host:8000/mcp/` |

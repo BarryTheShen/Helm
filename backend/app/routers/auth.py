@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user, get_token_from_request
+from app.services.audit import log_audit
 from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
@@ -54,7 +55,7 @@ async def setup(body: SetupRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
     user = await authenticate_user(db, body.username, body.password)
     if user is None:
         raise HTTPException(
@@ -63,11 +64,13 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
         )
     device = await upsert_device(db, str(user.id), body.device_id, body.device_name)
     session = await create_session(db, str(user.id), str(device.id))
+    await log_audit(db, str(user.id), "USER_LOGIN", "session", str(session.id), ip=request.client.host if request.client else None)
     return LoginResponse(
         session_token=session.token,
         expires_at=session.expires_at,
         user_id=str(user.id),
         username=user.username,
+        role=user.role,
     )
 
 
@@ -112,8 +115,11 @@ async def refresh(
 
 @router.post("/logout", response_model=LogoutResponse)
 async def logout(
+    request: Request,
+    current_user: User = Depends(get_current_user),
     token: str = Depends(get_token_from_request),
     db: AsyncSession = Depends(get_db),
 ):
     await invalidate_session(db, token)
+    await log_audit(db, str(current_user.id), "USER_LOGOUT", "session", ip=request.client.host if request.client else None)
     return LogoutResponse(message="Logged out")

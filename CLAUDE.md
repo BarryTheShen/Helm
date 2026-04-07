@@ -62,19 +62,38 @@ Helm/
 │   │   ├── main.py             # FastAPI app, lifespan, middleware
 │   │   ├── config.py           # Settings (pydantic-settings)
 │   │   ├── database.py         # SQLAlchemy async engine + session
-│   │   ├── dependencies.py     # get_current_user, get_db
-│   │   ├── models/             # SQLAlchemy ORM models
-│   │   ├── schemas/            # Pydantic request/response schemas
-│   │   ├── routers/            # FastAPI routers (auth, calendar, chat, etc.)
-│   │   ├── services/           # Business logic (auth, agent_proxy, ws_manager, workflow_engine)
+│   │   ├── dependencies.py     # get_current_user, get_db, require_admin, PaginationParams
+│   │   ├── models/             # SQLAlchemy ORM models (14 models)
+│   │   ├── schemas/            # Pydantic request/response schemas (15 files)
+│   │   ├── routers/            # FastAPI routers (15 route files)
+│   │   ├── services/           # Business logic (auth, agent_proxy, ws_manager, workflow_engine, audit, component_seed)
 │   │   ├── mcp/                # MCP server (FastMCP) + tool implementations
+│   │   ├── middleware/         # ASGI middleware (sandbox.py)
 │   │   └── utils/              # security.py (JWT, bcrypt)
 │   └── tests/
 │       ├── conftest.py         # Shared fixtures (in-memory DB, auth_client)
 │       ├── test_auth.py
 │       ├── test_calendar.py
 │       ├── test_notifications.py
-│       └── test_workflows.py
+│       ├── test_workflows.py
+│       ├── test_actions.py
+│       ├── test_drafts.py
+│       ├── test_users.py
+│       ├── test_sessions.py
+│       ├── test_templates.py
+│       ├── test_sandbox.py
+│       └── test_admin.py
+├── web/                          # Web Admin Panel (Vite + React + TypeScript + Tailwind)
+│   ├── src/
+│   │   ├── App.tsx               # React Router, auth guard, AdminLayout
+│   │   ├── pages/                # Login, Dashboard, Users, Sessions, Audit, Workflows, Templates, Components, Editor
+│   │   ├── lib/
+│   │   │   ├── api.ts            # Typed fetch wrapper for admin endpoints
+│   │   │   ├── puckConfig.tsx    # Puck visual editor component renderers
+│   │   │   └── sduiAdapter.ts    # puckToHelm() / helmToPuck() translation
+│   │   ├── stores/authStore.ts   # Zustand auth state
+│   │   └── components/           # AdminLayout sidebar + top bar
+│   └── vite.config.ts
 └── docs/
     ├── codebase-explanation/   # ← AI agents: read this folder first every session
     │   ├── AI-TECHNICAL-REFERENCE.md
@@ -101,7 +120,18 @@ npx expo start --tunnel     # Tunnel mode (works across networks, uses ngrok)
 
 ### Backend
 cd backend && uvicorn app.main:app --reload   # FastAPI dev server
-cd backend && pytest                           # Run backend tests
+cd backend && pytest                           # Run backend tests (113 tests)
+
+### Web Admin Panel
+cd web && npm run dev                          # Vite dev server at http://localhost:5173 (auto-increments if busy)
+cd web && npm run build                        # Production build to web/dist/
+# Vite dev proxy: /api/* and /auth/* → http://localhost:8000, /ws → ws://localhost:8000 (no CORS in dev)
+# Auth: POST /auth/login → {session_token,...} stored as admin_token in localStorage
+# ApiClient (web/src/lib/api.ts) injects Authorization: Bearer <token> on every request
+# authStore (web/src/stores/authStore.ts, Zustand) holds user state; ProtectedRoute redirects /login if no token
+# First-time setup — NO hardcoded defaults. Create admin via:
+#   python manage.py create_user --username admin --password yourpassword
+#   python manage.py reset_password --username admin
 
 ### Standalone Agent
 source backend/.venv/bin/activate

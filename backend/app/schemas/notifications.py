@@ -19,3 +19,7 @@ class NotificationOut(BaseModel):
 class NotificationsResponse(BaseModel):
     notifications: list[NotificationOut]
     unread_count: int
+    total: int
+    limit: int
+    offset: int
+    has_more: bool

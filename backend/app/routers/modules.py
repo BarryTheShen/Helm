@@ -2,14 +2,17 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import PaginationParams, get_current_user, get_current_user_id
 from app.models.module_state import ModuleState
 from app.models.user import User
+from app.models.screen_history import ScreenHistory
+from app.schemas.common import PaginatedResponse
 from app.schemas.modules import (
     DeviceConfigResponse,
     DeviceConfigUpdate,
@@ -20,6 +23,8 @@ from app.schemas.modules import (
     SDUIScreenRequest,
     TabConfigRequest,
 )
+from app.schemas.screen_history import ScreenHistoryDetailOut, ScreenHistoryOut
+from app.services.audit import log_audit
 
 router = APIRouter(prefix="/api", tags=["modules"])
 
@@ -538,6 +543,124 @@ async def update_device_config(
 # The frontend polls GET /api/sdui/{module_id} and renders it natively.
 
 _SDUI_MODULE_PREFIX = "sdui__"
+_CONFIG_PREFIX = "config__"
+
+
+async def _get_module_config(db: AsyncSession, user_id: str, module_id: str) -> dict:
+    """Return the config dict for a module (auto_approve_drafts, etc.)."""
+    config_key = _CONFIG_PREFIX + module_id
+    result = await db.execute(
+        select(ModuleState).where(
+            ModuleState.user_id == user_id,
+            ModuleState.module_type == config_key,
+        )
+    )
+    state = result.scalar_one_or_none()
+    if state is None:
+        return {"auto_approve_drafts": False}
+    cfg = state.state_json or {}
+    cfg.setdefault("auto_approve_drafts", False)
+    return cfg
+
+
+async def record_screen_history(
+    db: AsyncSession,
+    user_id: str,
+    module_id: str,
+    screen_json: dict,
+    source: str,
+) -> ScreenHistory:
+    """Record a screen history entry with the next version number."""
+    max_version = await db.execute(
+        select(func.max(ScreenHistory.version)).where(
+            ScreenHistory.module_id == module_id,
+            ScreenHistory.user_id == user_id,
+        )
+    )
+    version = (max_version.scalar() or 0) + 1
+    entry = ScreenHistory(
+        id=str(uuid4()),
+        user_id=user_id,
+        module_id=module_id,
+        screen_json=screen_json,
+        version=version,
+        source=source,
+    )
+    db.add(entry)
+    return entry
+
+
+# ── Static SDUI routes (must come BEFORE /sdui/{module_id} to avoid path conflicts) ──
+
+
+class ValidateScreenRequest(BaseModel):
+    screen_json: dict
+
+
+@router.post("/sdui/validate", status_code=200)
+async def validate_screen(
+    body: ValidateScreenRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Validate screen_json against the component registry."""
+    from app.models.component_registry import ComponentRegistry
+
+    # Load valid component types
+    result = await db.execute(select(ComponentRegistry.type))
+    valid_types = {r[0] for r in result.all()}
+
+    errors: list[str] = []
+    screen = body.screen_json
+
+    # Walk sections/rows and check component types
+    sections = screen.get("sections", []) + screen.get("rows", [])
+    for i, section in enumerate(sections):
+        components = section.get("components", [])
+        if "component" in section:
+            components = [section["component"]] + components
+        for j, comp in enumerate(components):
+            comp_type = comp.get("type")
+            if comp_type and valid_types and comp_type not in valid_types:
+                errors.append(f"sections[{i}].components[{j}]: unknown type '{comp_type}'")
+
+    return {
+        "valid": len(errors) == 0,
+        "errors": errors,
+        "component_count": sum(
+            len(s.get("components", [])) + (1 if "component" in s else 0)
+            for s in sections
+        ),
+    }
+
+
+@router.get("/sdui/modules")
+async def list_sdui_modules(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all modules available for SDUI editing (used by web admin editor)."""
+    # Find which modules already have a saved SDUI screen
+    result = await db.execute(
+        select(ModuleState.module_type).where(
+            ModuleState.user_id == str(current_user.id),
+            ModuleState.module_type.like(_SDUI_MODULE_PREFIX + "%"),
+            ~ModuleState.module_type.like("%__draft"),
+            ~ModuleState.module_type.like("%__config"),
+        )
+    )
+    existing_keys = {row[0] for row in result.all()}
+
+    items = []
+    for tab in _ALL_TABS:
+        sdui_key = _SDUI_MODULE_PREFIX + tab.id
+        items.append({
+            "module_id": tab.id,
+            "name": tab.name,
+            "icon": tab.icon,
+            "has_screen": sdui_key in existing_keys,
+        })
+    return {"items": items}
 
 
 @router.get("/sdui/{module_id}")
@@ -564,6 +687,7 @@ async def get_sdui_screen(
 async def set_sdui_screen(
     module_id: str,
     body: SDUIScreenRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -571,23 +695,68 @@ async def set_sdui_screen(
 
     Called by the AI via the helm_set_screen MCP tool.  The frontend receives
     the screen via WebSocket and re-renders immediately without polling.
+
+    If auto_approve_drafts is False (default) for this module, the screen is
+    saved as a draft requiring approval.  If True, the screen goes live directly.
     """
     from app.services.websocket_manager import manager
 
+    user_id = str(current_user.id)
+    screen_json = body.screen
+
+    # Check auto-approve config for this module
+    config = await _get_module_config(db, user_id, module_id)
+    auto_approve = config.get("auto_approve_drafts", False)
+
+    if not auto_approve:
+        # Save as draft — requires human approval
+        draft_key = _SDUI_MODULE_PREFIX + module_id + "__draft"
+        result = await db.execute(
+            select(ModuleState).where(
+                ModuleState.user_id == user_id,
+                ModuleState.module_type == draft_key,
+            )
+        )
+        draft = result.scalar_one_or_none()
+        if draft is None:
+            draft = ModuleState(
+                id=str(uuid4()),
+                user_id=user_id,
+                module_type=draft_key,
+                state_json=screen_json,
+                version=1,
+            )
+            db.add(draft)
+        else:
+            draft.state_json = screen_json
+            draft.version += 1
+
+        await log_audit(db, user_id, "SCREEN_DRAFT_CREATED", "screen", module_id, ip=request.client.host if request.client else None)
+        await record_screen_history(db, user_id, module_id, screen_json, source="draft")
+        await db.commit()
+
+        # Notify frontend a new draft is available
+        await manager.send(user_id, {
+            "type": "sdui_draft_available",
+            "module_id": module_id,
+            "version": draft.version,
+        })
+
+        return {"module_id": module_id, "version": draft.version, "draft": True, "updated": True}
+
+    # Auto-approve: set screen live directly
     result = await db.execute(
         select(ModuleState).where(
-            ModuleState.user_id == str(current_user.id),
+            ModuleState.user_id == user_id,
             ModuleState.module_type == _SDUI_MODULE_PREFIX + module_id,
         )
     )
     state = result.scalar_one_or_none()
-    screen_json = body.screen
 
     if state is None:
-        from uuid import uuid4
         state = ModuleState(
             id=str(uuid4()),
-            user_id=str(current_user.id),
+            user_id=user_id,
             module_type=_SDUI_MODULE_PREFIX + module_id,
             state_json=screen_json,
             version=1,
@@ -597,10 +766,12 @@ async def set_sdui_screen(
         state.state_json = screen_json
         state.version += 1
 
+    await log_audit(db, user_id, "SCREEN_SET", "screen", module_id, ip=request.client.host if request.client else None)
+    await record_screen_history(db, user_id, module_id, screen_json, source="api")
     await db.commit()
 
     # Push to connected frontend over WebSocket so it re-renders immediately
-    await manager.send(str(current_user.id), {
+    await manager.send(user_id, {
         "type": "sdui_screen_update",
         "module_id": module_id,
         "screen": screen_json,
@@ -613,6 +784,7 @@ async def set_sdui_screen(
 @router.delete("/sdui/{module_id}", status_code=200)
 async def delete_sdui_screen(
     module_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -630,6 +802,7 @@ async def delete_sdui_screen(
     )
     state = result.scalar_one_or_none()
     if state is not None:
+        await log_audit(db, str(current_user.id), "SCREEN_DELETED", "screen", module_id, ip=request.client.host if request.client else None)
         await db.delete(state)
         await db.commit()
 
@@ -668,6 +841,56 @@ async def list_sdui_screens(
     }
 
 
+# ── Module config endpoints (auto-approve toggle) ─────────────────────────
+
+
+class ModuleConfigRequest(BaseModel):
+    auto_approve_drafts: bool = False
+
+
+@router.get("/sdui/{module_id}/config")
+async def get_module_config(
+    module_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the config for a module (auto_approve_drafts, etc.)."""
+    return await _get_module_config(db, current_user_id, module_id)
+
+
+@router.put("/sdui/{module_id}/config")
+async def set_module_config(
+    module_id: str,
+    body: ModuleConfigRequest,
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Store/update config for a module."""
+    config_key = _CONFIG_PREFIX + module_id
+    result = await db.execute(
+        select(ModuleState).where(
+            ModuleState.user_id == current_user_id,
+            ModuleState.module_type == config_key,
+        )
+    )
+    state = result.scalar_one_or_none()
+    config_data = {"auto_approve_drafts": body.auto_approve_drafts}
+    if state is None:
+        state = ModuleState(
+            id=str(uuid4()),
+            user_id=current_user_id,
+            module_type=config_key,
+            state_json=config_data,
+            version=1,
+        )
+        db.add(state)
+    else:
+        state.state_json = config_data
+        state.version += 1
+    await db.commit()
+    return config_data
+
+
 # ── Draft management endpoints ─────────────────────────────────────────────
 # Architecture Decision: Session 2, Section 8 — Human-in-the-Loop.
 
@@ -694,6 +917,7 @@ async def get_draft(
 @router.post("/sdui/{module_id}/draft/approve")
 async def approve_draft(
     module_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -738,6 +962,7 @@ async def approve_draft(
         live_state.state_json = screen_json
         live_state.version += 1
 
+    await log_audit(db, str(current_user.id), "SCREEN_APPROVED", "screen", module_id, ip=request.client.host if request.client else None)
     await db.commit()
 
     # Push live screen update
@@ -753,6 +978,7 @@ async def approve_draft(
 @router.post("/sdui/{module_id}/draft/reject")
 async def reject_draft(
     module_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -771,6 +997,7 @@ async def reject_draft(
         raise HTTPException(status_code=404, detail=f"No draft found for module '{module_id}'")
 
     await db.delete(draft)
+    await log_audit(db, str(current_user.id), "SCREEN_REJECTED", "screen", module_id, ip=request.client.host if request.client else None)
     await db.commit()
 
     await manager.send(str(current_user.id), {
@@ -778,3 +1005,201 @@ async def reject_draft(
         "module_id": module_id,
     })
     return {"module_id": module_id, "rejected": True}
+
+
+# ── Screen History endpoints ──────────────────────────────────────────────
+
+
+@router.get("/sdui/{module_id}/history", response_model=PaginatedResponse[ScreenHistoryOut])
+async def list_screen_history(
+    module_id: str,
+    pagination: PaginationParams = Depends(),
+    source: str | None = Query(default=None),
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """List version history for a module, sorted by version DESC."""
+    query = select(ScreenHistory).where(
+        ScreenHistory.module_id == module_id,
+        ScreenHistory.user_id == current_user_id,
+    )
+    if source:
+        query = query.where(ScreenHistory.source == source)
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar() or 0
+
+    query = query.order_by(ScreenHistory.version.desc())
+    query = query.offset(pagination.offset).limit(pagination.limit)
+    results = (await db.execute(query)).scalars().all()
+
+    return PaginatedResponse[ScreenHistoryOut](
+        items=[ScreenHistoryOut.model_validate(r) for r in results],
+        total=total,
+        limit=pagination.limit,
+        offset=pagination.offset,
+        has_more=(pagination.offset + pagination.limit) < total,
+    )
+
+
+@router.get("/sdui/{module_id}/history/{version}", response_model=ScreenHistoryDetailOut)
+async def get_screen_history_version(
+    module_id: str,
+    version: int,
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get full screen_json for a specific history version."""
+    result = await db.execute(
+        select(ScreenHistory).where(
+            ScreenHistory.module_id == module_id,
+            ScreenHistory.user_id == current_user_id,
+            ScreenHistory.version == version,
+        )
+    )
+    entry = result.scalar_one_or_none()
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"Version {version} not found for module '{module_id}'")
+    return ScreenHistoryDetailOut.model_validate(entry)
+
+
+@router.post("/sdui/{module_id}/history/{version}/restore", status_code=200)
+async def restore_screen_version(
+    module_id: str,
+    version: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Restore a historical version by creating a draft from it."""
+    user_id = str(current_user.id)
+    result = await db.execute(
+        select(ScreenHistory).where(
+            ScreenHistory.module_id == module_id,
+            ScreenHistory.user_id == user_id,
+            ScreenHistory.version == version,
+        )
+    )
+    entry = result.scalar_one_or_none()
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"Version {version} not found for module '{module_id}'")
+
+    screen_json = entry.screen_json
+    draft_key = _SDUI_MODULE_PREFIX + module_id + "__draft"
+    result = await db.execute(
+        select(ModuleState).where(
+            ModuleState.user_id == user_id,
+            ModuleState.module_type == draft_key,
+        )
+    )
+    draft = result.scalar_one_or_none()
+    if draft is None:
+        draft = ModuleState(
+            id=str(uuid4()),
+            user_id=user_id,
+            module_type=draft_key,
+            state_json=screen_json,
+            version=1,
+        )
+        db.add(draft)
+    else:
+        draft.state_json = screen_json
+        draft.version += 1
+
+    await db.commit()
+
+    from app.services.websocket_manager import manager
+    await manager.send(user_id, {
+        "type": "sdui_draft_ready",
+        "module_id": module_id,
+        "screen": screen_json,
+        "version": draft.version,
+    })
+    return {"module_id": module_id, "restored_version": version, "draft_version": draft.version}
+
+
+@router.put("/sdui/{module_id}/history/{version}/star", status_code=200)
+async def toggle_star_version(
+    module_id: str,
+    version: int,
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Toggle is_starred on a history entry."""
+    result = await db.execute(
+        select(ScreenHistory).where(
+            ScreenHistory.module_id == module_id,
+            ScreenHistory.user_id == current_user_id,
+            ScreenHistory.version == version,
+        )
+    )
+    entry = result.scalar_one_or_none()
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"Version {version} not found for module '{module_id}'")
+
+    entry.is_starred = not entry.is_starred
+    await db.commit()
+    return {"module_id": module_id, "version": version, "is_starred": entry.is_starred}
+
+
+class DuplicateRequest(BaseModel):
+    target_module_id: str
+
+
+@router.post("/sdui/{module_id}/duplicate", status_code=200)
+async def duplicate_screen(
+    module_id: str,
+    body: DuplicateRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Clone a module's live screen to a target module as a draft."""
+    user_id = str(current_user.id)
+
+    # Get source screen
+    result = await db.execute(
+        select(ModuleState).where(
+            ModuleState.user_id == user_id,
+            ModuleState.module_type == _SDUI_MODULE_PREFIX + module_id,
+        )
+    )
+    source_state = result.scalar_one_or_none()
+    if source_state is None or not source_state.state_json:
+        raise HTTPException(status_code=404, detail=f"No screen found for module '{module_id}'")
+
+    screen_json = source_state.state_json
+    target = body.target_module_id
+
+    # Create draft on target
+    draft_key = _SDUI_MODULE_PREFIX + target + "__draft"
+    result = await db.execute(
+        select(ModuleState).where(
+            ModuleState.user_id == user_id,
+            ModuleState.module_type == draft_key,
+        )
+    )
+    draft = result.scalar_one_or_none()
+    if draft is None:
+        draft = ModuleState(
+            id=str(uuid4()),
+            user_id=user_id,
+            module_type=draft_key,
+            state_json=screen_json,
+            version=1,
+        )
+        db.add(draft)
+    else:
+        draft.state_json = screen_json
+        draft.version += 1
+
+    await record_screen_history(db, user_id, target, screen_json, source="api")
+    await db.commit()
+
+    from app.services.websocket_manager import manager
+    await manager.send(user_id, {
+        "type": "sdui_draft_ready",
+        "module_id": target,
+        "screen": screen_json,
+        "version": draft.version,
+    })
+    return {"source_module_id": module_id, "target_module_id": target, "draft_version": draft.version}

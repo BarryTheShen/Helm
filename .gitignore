@@ -29,6 +29,7 @@ build/
 # Playwright / test artifacts
 .playwright-mcp/
 test-results/
+playwright-report/
 .pytest_cache/
 
 # Virtualenvs

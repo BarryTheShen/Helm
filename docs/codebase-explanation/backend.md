@@ -1,19 +1,22 @@
 # Backend — Python FastAPI Server
 
-> Last updated: 2026-04-03
+> Last updated: 2026-04-06
 
 ## Tier 1: TLDR
 
 The backend is a **Python FastAPI** server that serves as the brain of the Helm super app. It handles:
 
 - **User authentication** (signup, login, logout with JWT tokens + device tracking)
-- **REST APIs** for calendar events, chat history, notifications, workflows, modules, and AI agent configuration
+- **REST APIs** for calendar events, chat history, notifications, workflows, modules, AI agent configuration, user management, session management, audit logs, SDUI templates, and component registry
 - **WebSocket server** for real-time chat streaming between the mobile app and AI
 - **AI Agent Proxy** that streams LLM responses (OpenAI-compatible API) back to the app with tool-calling support
 - **MCP Server** mounted at `/mcp` — exposes tools to external AI agents
 - **Workflow Engine** — simple trigger→action automation system using APScheduler
 - **SQLite database** (async via aiosqlite + SQLAlchemy)
 - **Action Registry** — named function whitelist callable from SDUI `server_action` events
+- **Audit logging** — automatic audit trail for security-relevant operations
+- **Sandbox mode** — ASGI middleware that intercepts DB commits for safe testing
+- **Admin panel APIs** — system stats, user/session management, component registry
 
 **To run it:** `cd backend && uvicorn app.main:app --reload`
 **To run tests:** `cd backend && pytest`
@@ -55,11 +58,12 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | FastAPI App | `app/main.py` | Entry point, middleware, router registration, lifespan |
 | Config | `app/config.py` | pydantic-settings loading from `.env` (resolves from repo root) |
 | Database | `app/database.py` | Async SQLAlchemy engine + session factory |
-| Auth dependencies | `app/dependencies.py` | `get_current_user`, `get_current_user_id`, `get_token_from_request` |
-| Models | `app/models/` | 9 SQLAlchemy ORM models |
-| Schemas | `app/schemas/` | Pydantic request/response models |
-| Routers | `app/routers/` | 9 route files |
-| Services | `app/services/` | auth, agent_proxy, websocket_manager, workflow_engine, action_registry |
+| Auth dependencies | `app/dependencies.py` | `get_current_user`, `get_current_user_id`, `get_token_from_request`, `require_admin`, `PaginationParams` |
+| Models | `app/models/` | 14 SQLAlchemy ORM models |
+| Schemas | `app/schemas/` | Pydantic request/response models (15 files) |
+| Routers | `app/routers/` | 15 route files |
+| Services | `app/services/` | auth, agent_proxy, websocket_manager, workflow_engine, action_registry, audit, component_seed |
+| Middleware | `app/middleware/sandbox.py` | Sandbox mode ASGI middleware |
 | MCP | `app/mcp/` | MCP server + shared tool implementations |
 | Utils | `app/utils/security.py` | JWT + bcrypt password helpers |
 | CLI | `manage.py` (backend root) | User management CLI |
@@ -69,20 +73,21 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 
 **Middleware:**
 - `CORSMiddleware`: `allow_origins=["*"]`, `allow_credentials=True`, `allow_methods=["*"]`, `allow_headers=["*"]`
+- `SandboxMiddleware`: Checks `X-Helm-Sandbox` header; intercepts DB commits in sandbox mode
 
 **Lifespan events:**
-- Startup: `start_scheduler()`, starts MCP session manager, creates `_run_time_alerts()` background task
+- Startup: `start_scheduler()`, starts MCP session manager, creates `_run_time_alerts()` background task, seeds component registry
 - Shutdown: cancels alert task, stops MCP session manager, `stop_scheduler()`
 
 **Background task `_run_time_alerts()`**: Every 2 minutes, saves a Notification to DB for every connected user and broadcasts a notification via WebSocket. Controlled by `DEMO_TIME_ALERTS=true` env var.
 
-**Routers registered:** auth, modules, chat, calendar, notifications, agent_config, workflows, actions, websocket
+**Routers registered:** auth, modules, chat, calendar, notifications, agent_config, workflows, actions, websocket, users, sessions, audit, components, templates, admin
 
 **MCP mounted:** `app.mount(settings.mcp_path, _MCPAuthMiddleware(mcp.streamable_http_app()))` → at `/mcp`
 
 ---
 
-## Database Tables (9 total)
+## Database Tables (14 total)
 
 | Table | Key Fields |
 |-------|-----------|
@@ -95,6 +100,11 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | `workflows` | id, user_id (FK), name, trigger_type (enum), trigger_config, action_config, is_active, run_count, last_run_at |
 | `agent_configs` | id, user_id (FK, unique), provider, model, api_key_encrypted, base_url, system_prompt, temperature, max_tokens, is_active |
 | `module_states` | id, user_id (FK), module_type (string key), state_json, version |
+| `audit_logs` | id, user_id (FK), action (string), resource_type, resource_id, details (JSON), ip_address, created_at |
+| `component_registry` | id, type (unique), category (atomic/structural/composite/hardcoded), display_name, description, props_schema (JSON), is_active |
+| `sdui_templates` | id, name, description, module_id, screen_json, tags (JSON), is_public, user_id (FK), created_at, updated_at |
+| `sdui_screen_history` | id, module_id, user_id (FK), screen_json, version, source (user/ai/template), created_at |
+| `sandbox_actions` | id, user_id, method, path, request_body, timestamp |
 
 **`module_states` key naming conventions:**
 | Key | Content |
@@ -152,19 +162,21 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/calendar/events` | ✅ | List events; optional `start_date`, `end_date` query params |
-| POST | `/api/calendar/events` | ✅ | Create event; auto-refreshes SDUI calendar screen |
+| GET | `/api/calendar/events` | ✅ | List events; optional `start_date`, `end_date`, pagination (`skip`, `limit`, `search`) |
+| POST | `/api/calendar/events` | ✅ | Create event; auto-refreshes SDUI calendar screen; fires `EVENT_CREATED` trigger |
 | POST | `/api/calendar/add-meeting` | ✅ | User-friendly meeting creation `{title, date, start_time, end_time, description?, color?}` |
 | DELETE | `/api/calendar/events/{event_id}` | ✅ | Delete event; auto-refreshes SDUI calendar screen |
-| PUT | `/api/calendar/events/{event_id}` | ✅ | Update event fields (title, times, description, color, location) |
+| DELETE | `/api/calendar/events/bulk` | ✅ | Bulk delete events `{ids: [...]}` |
+| PUT | `/api/calendar/events/{event_id}` | ✅ | Update event fields; fires `EVENT_UPDATED` trigger |
 
 ### Notifications (`/api/notifications`)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/notifications` | ✅ | List notifications; params: `unread_only=False`, `limit=50` |
+| GET | `/api/notifications` | ✅ | List notifications; params: `unread_only=False`, pagination (`skip`, `limit`, `search`) |
 | POST | `/api/notifications/{id}/read` | ✅ | Mark one notification as read |
 | POST | `/api/notifications/read-all` | ✅ | Mark all notifications as read |
+| DELETE | `/api/notifications/bulk` | ✅ | Bulk delete notifications `{ids: [...]}` |
 
 ### Agent Config (`/api/agent`)
 
@@ -177,10 +189,11 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/workflows` | ✅ | List all user workflows |
+| GET | `/api/workflows` | ✅ | List user workflows; pagination (`skip`, `limit`, `search`) |
 | POST | `/api/workflows` | ✅ | Create workflow; auto-registers with APScheduler if SCHEDULE type |
 | PUT | `/api/workflows/{id}` | ✅ | Update; manages scheduler registration |
 | DELETE | `/api/workflows/{id}` | ✅ 204 | Delete; unregisters from scheduler |
+| DELETE | `/api/workflows/bulk` | ✅ | Bulk delete workflows `{ids: [...]}` |
 
 ### Actions (`/api/actions`)
 
@@ -195,6 +208,74 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 |------|------|-------------|
 | `WS /ws` | `?token=` query param | Main app WebSocket |
 | `GET /health` | ❌ | `{"status": "ok", "version": ...}` |
+
+### User Management (`/api/admin/users`) — Admin Only
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/admin/users` | ✅ Admin | List all users with pagination |
+| POST | `/api/admin/users` | ✅ Admin | Create a new user `{username, password, role?}` |
+| GET | `/api/admin/users/{id}` | ✅ Admin | Get user by ID |
+| PUT | `/api/admin/users/{id}` | ✅ Admin | Update user `{username?, password?, role?}` |
+| DELETE | `/api/admin/users/{id}` | ✅ Admin | Delete user |
+
+### Session Management (`/api/sessions`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/sessions` | ✅ Admin | List all sessions (admin view) |
+| GET | `/api/sessions/mine` | ✅ | List current user's sessions |
+| DELETE | `/api/sessions/{id}` | ✅ | Revoke a session |
+| DELETE | `/api/sessions/revoke-others` | ✅ | Revoke all sessions except current |
+
+### Audit Log (`/api/audit`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/audit` | ✅ Admin | List all audit logs with pagination; filterable by action, resource_type |
+| GET | `/api/audit/mine` | ✅ | List current user's audit logs |
+
+### Component Registry (`/api/components`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/components` | ✅ | List all registered SDUI components |
+| POST | `/api/components` | ✅ Admin | Register a new component `{type, category, display_name, ...}` |
+| GET | `/api/components/{id}` | ✅ | Get component by ID |
+| PUT | `/api/components/{id}` | ✅ Admin | Update component |
+| DELETE | `/api/components/{id}` | ✅ Admin | Delete component |
+
+### SDUI Templates (`/api/templates`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/templates` | ✅ | List templates (public + own); pagination |
+| POST | `/api/templates` | ✅ | Create template from SDUI JSON |
+| GET | `/api/templates/{id}` | ✅ | Get template by ID |
+| PUT | `/api/templates/{id}` | ✅ | Update template |
+| DELETE | `/api/templates/{id}` | ✅ | Delete template |
+| POST | `/api/templates/{id}/apply` | ✅ | Apply template to a module (sets SDUI screen) |
+| POST | `/api/templates/import` | ✅ | Import template from JSON export |
+| GET | `/api/templates/{id}/rows` | ✅ | Get template rows only |
+
+### Admin Stats (`/api/admin`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/admin/stats` | ✅ Admin | System stats (user count, sessions, events, etc.) |
+| GET | `/api/admin/workflows/stats` | ✅ Admin | Workflow execution statistics |
+| GET | `/api/admin/websocket/stats` | ✅ Admin | Active WebSocket connection info |
+
+### Modules — Screen History & Utilities (added to `/api/sdui`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/sdui/{module_id}/history` | ✅ | List screen history for module |
+| GET | `/api/sdui/{module_id}/history/{version}` | ✅ | Get specific history entry |
+| POST | `/api/sdui/{module_id}/history/{version}/restore` | ✅ | Restore a historical screen version |
+| DELETE | `/api/sdui/{module_id}/history` | ✅ | Clear screen history |
+| POST | `/api/sdui/{module_id}/validate` | ✅ | Validate SDUI JSON without saving |
+| POST | `/api/sdui/{module_id}/duplicate` | ✅ | Duplicate a screen to another module |
 
 ---
 
@@ -255,7 +336,7 @@ Registered built-in actions (singleton `registry`):
 | Name | What it does |
 |------|-------------|
 | `refresh_data` | Re-reads SDUI screen from DB for `params.module_id`, pushes `sdui_screen_update` |
-| `submit_form` | Stores form submission in `ModuleState` keyed by `form_data__{form_id}`; sends notification |
+| `submit_form` | Stores form submission in `ModuleState` keyed by `form_data__{form_id}`; sends notification; fires `FORM_SUBMITTED` trigger |
 | `send_to_agent` | Fires `handle_chat_message()` as background task |
 | `mark_notification_read` | Sets `is_read=True` on notification |
 | `create_calendar_event` | Creates `CalendarEvent` ORM row |
@@ -276,6 +357,31 @@ APScheduler (`AsyncIOScheduler(timezone="UTC")`)-based automation engine.
 | `_schedule_workflow(workflow)` | Registers/replaces APScheduler cron job (`misfire_grace_time=300`) |
 | `fire_trigger(trigger_type, user_id, event_data)` | Called by routers when events occur; finds matching workflows |
 | `register_workflow(workflow)` / `unregister_workflow(workflow_id)` | Called by workflow router after DB insert/delete |
+
+### `services/audit.py`
+
+| Function | Purpose |
+|----------|---------|
+| `log_audit(db, user_id, action, resource_type, resource_id, details?, ip_address?)` | Creates an `AuditLog` row. Wired into auth (login/logout/setup), calendar, workflows, notifications, modules, agent_config, users, sessions |
+
+### `services/component_seed.py`
+
+Seeds the `component_registry` table on startup with 11 default components:
+- **7 Atomic:** Text, Markdown, Button, Image, TextInput, Icon, Divider
+- **4 Hardcoded/Composite:** Container, CalendarModule, ChatModule, NotesModule
+
+Only inserts if the component type doesn't already exist.
+
+### `services/websocket_manager.py` (updated)
+
+Added `ConnectionInfo` dataclass and `get_all_connections()` method for the admin WebSocket stats endpoint.
+
+### `middleware/sandbox.py`
+
+ASGI middleware that checks for `X-Helm-Sandbox: true` header. When active:
+- Sets `sandbox_mode` context var in `database.py`
+- `get_db()` intercepts `commit()` calls, recording them to `sandbox_actions` table instead
+- Responses succeed but DB state is not permanently changed
 
 ---
 

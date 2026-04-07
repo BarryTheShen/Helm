@@ -1,12 +1,14 @@
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.calendar_event import CalendarEvent
+from app.models.workflow import TriggerType
+from app.services.workflow_engine import fire_trigger
 from app.models.module_state import ModuleState
 from app.models.user import User
 from app.schemas.calendar import (
@@ -15,6 +17,8 @@ from app.schemas.calendar import (
     CalendarEventsResponse,
     CalendarEventUpdate,
 )
+from app.schemas.common import BulkDeleteRequest
+from app.services.audit import log_audit
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
@@ -144,6 +148,7 @@ async def list_events(
 @router.post("/events", response_model=CalendarEventOut, status_code=201)
 async def create_event(
     body: CalendarEventCreate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -160,7 +165,13 @@ async def create_event(
     )
     db.add(event)
     await db.flush()
+    await log_audit(db, str(current_user.id), "EVENT_CREATED", "event", str(event.id), ip=request.client.host if request.client else None)
     await db.commit()
+
+    await fire_trigger(TriggerType.EVENT_CREATED, str(current_user.id), {
+        "event_id": str(event.id), "title": event.title,
+        "start_time": str(event.start_time), "end_time": str(event.end_time)
+    })
 
     # Auto-refresh the SDUI calendar screen so the frontend updates live
     await _update_sdui_calendar(db, str(current_user.id))
@@ -248,6 +259,11 @@ async def add_meeting(
     await db.flush()
     await db.commit()
 
+    await fire_trigger(TriggerType.EVENT_CREATED, str(current_user.id), {
+        "event_id": str(event.id), "title": event.title,
+        "start_time": str(event.start_time), "end_time": str(event.end_time)
+    })
+
     # Auto-refresh the SDUI calendar screen
     await _update_sdui_calendar(db, str(current_user.id))
 
@@ -264,6 +280,7 @@ async def add_meeting(
 async def update_event(
     event_id: str,
     body: CalendarEventUpdate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -277,9 +294,17 @@ async def update_event(
     if event is None:
         raise HTTPException(status_code=404, detail="Event not found")
     field_map = {"all_day": "is_all_day"}
-    for field, value in body.model_dump(exclude_none=True).items():
+    update_data = body.model_dump(exclude_none=True)
+    for field, value in update_data.items():
         setattr(event, field_map.get(field, field), value)
     await db.flush()
+    await log_audit(db, str(current_user.id), "EVENT_UPDATED", "event", str(event.id), ip=request.client.host if request.client else None)
+    await db.commit()
+
+    await fire_trigger(TriggerType.EVENT_UPDATED, str(current_user.id), {
+        "event_id": str(event.id), "changed_fields": list(update_data.keys())
+    })
+
     return CalendarEventOut(
         id=str(event.id),
         title=event.title,
@@ -296,6 +321,7 @@ async def update_event(
 @router.delete("/events/{event_id}")
 async def delete_event(
     event_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -308,7 +334,24 @@ async def delete_event(
     event = result.scalar_one_or_none()
     if event is None:
         raise HTTPException(status_code=404, detail="Event not found")
+    await log_audit(db, str(current_user.id), "EVENT_DELETED", "event", event_id, ip=request.client.host if request.client else None)
     await db.delete(event)
     await db.commit()
     await _update_sdui_calendar(db, str(current_user.id))
     return {"message": "Event deleted"}
+
+
+@router.post("/events/bulk-delete")
+async def bulk_delete_events(
+    body: BulkDeleteRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        delete(CalendarEvent).where(
+            CalendarEvent.id.in_(body.ids),
+            CalendarEvent.user_id == str(current_user.id),
+        )
+    )
+    await db.commit()
+    return {"deleted": result.rowcount}

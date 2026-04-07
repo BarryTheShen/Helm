@@ -3,7 +3,7 @@ import hashlib
 from uuid import uuid4
 
 from cryptography.fernet import Fernet
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from app.dependencies import get_current_user
 from app.models.agent_config import AgentConfig
 from app.models.user import User
 from app.schemas.agent_config import AgentConfigOut, AgentConfigUpdate
+from app.services.audit import log_audit
 
 
 def _get_fernet() -> Fernet:
@@ -81,6 +82,7 @@ async def get_agent_config(
 @router.put("/config", response_model=AgentConfigOut)
 async def update_agent_config(
     body: AgentConfigUpdate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -99,6 +101,7 @@ async def update_agent_config(
         config.temperature = body.temperature
     if body.max_tokens is not None:
         config.max_tokens = body.max_tokens
+    await log_audit(db, str(current_user.id), "AGENT_CONFIG_UPDATED", "agent_config", ip=request.client.host if request.client else None)
     await db.flush()
     return AgentConfigOut(
         id=str(config.id),
