@@ -1,57 +1,17 @@
-// ── Internal Helm cell/row format (what backend stores and mobile renders) ──
+// SDUI Adapter — Simplified post-Puck removal
+// The editor now works directly with Helm SDUI format.
+// This file provides helpers for action prop conversion and legacy format support.
 
-interface HelmCell {
-  id: string;
-  content: {
-    type: string;
-    props: Record<string, unknown>;
-  } | null;
-}
+// ── Type name normalization ──────────────────────────────────────────────────
 
-interface HelmRow {
-  id: string;
-  height: string | number;
-  cells: HelmCell[];
-}
-
-interface HelmScreen {
-  rows: HelmRow[];
-}
-
-// ── Puck internal format (what the editor uses) ──────────────────────────────
-
-interface PuckContent {
-  type: string;
-  props: Record<string, unknown> & { id: string };
-}
-
-interface PuckData {
-  content: PuckContent[];
-  root: { props: Record<string, unknown> };
-  zones?: Record<string, PuckContent[]>;
-}
-
-// ── Type name mappings ───────────────────────────────────────────────────────
-
-// Puck component type → mobile SDUI type.
-// Most are the same PascalCase. Only hardcoded composites differ:
-// Puck uses short names; mobile registry uses *Module suffix.
-const PUCK_TO_MOBILE: Record<string, string> = {
+// Short names (used by some old Puck-era data) → mobile registry names
+const LEGACY_TYPE_MAP: Record<string, string> = {
   Calendar: 'CalendarModule',
   Chat: 'ChatModule',
   Notes: 'NotesModule',
-  // Text, Button, Image, TextInput, Icon, Divider, Markdown, InputBar → same in both
-};
-
-// Mobile SDUI type → Puck component type
-const MOBILE_TO_PUCK: Record<string, string> = {
-  CalendarModule: 'Calendar',
-  ChatModule: 'Chat',
-  NotesModule: 'Notes',
-};
-
-// Legacy lowercase type → Puck PascalCase (for loading old AI-generated screens)
-const LEGACY_TO_PUCK: Record<string, string> = {
+  calendar: 'CalendarModule',
+  chat: 'ChatModule',
+  notes: 'NotesModule',
   text: 'Text',
   markdown: 'Markdown',
   button: 'Button',
@@ -59,25 +19,20 @@ const LEGACY_TO_PUCK: Record<string, string> = {
   textinput: 'TextInput',
   icon: 'Icon',
   divider: 'Divider',
-  calendar: 'Calendar',
-  chat: 'Chat',
-  notes: 'Notes',
   inputbar: 'InputBar',
 };
 
-function puckTypeToMobile(type: string): string {
-  return PUCK_TO_MOBILE[type] ?? type;
+export function normalizeTypeName(type: string): string {
+  return LEGACY_TYPE_MAP[type] ?? type;
 }
 
-function anyTypeToPuck(type: string): string {
-  // Handles: mobile module names (CalendarModule→Calendar),
-  // legacy lowercase (text→Text), or already-correct PascalCase (Text→Text)
-  return MOBILE_TO_PUCK[type] ?? LEGACY_TO_PUCK[type] ?? type;
-}
+// ── Action prop helpers ──────────────────────────────────────────────────────
 
-// ── Action prop converters ───────────────────────────────────────────────────
-
-function buildActionProp(props: Record<string, unknown>): Record<string, unknown> {
+/**
+ * Build nested action prop from flat fields (legacy Puck format → Helm format).
+ * Used when loading screens that were saved with the old Puck editor.
+ */
+export function buildActionProp(props: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(props)) {
     if (key === 'actionType' || key === 'actionTarget' || key === 'actionParams') continue;
@@ -107,167 +62,56 @@ function buildActionProp(props: Record<string, unknown>): Record<string, unknown
   return result;
 }
 
-function extractActionFields(props: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = { ...props };
-  const action = props.action as Record<string, unknown> | null | undefined;
-  if (action && typeof action === 'object') {
-    result.actionType = action.type || 'none';
-    if (action.type === 'navigate') {
-      result.actionTarget = action.target || '';
-    } else if (action.type === 'server_action') {
-      result.actionTarget = action.function || '';
-      if (action.params) result.actionParams = JSON.stringify(action.params);
-    } else if (action.type === 'open_url') {
-      result.actionTarget = action.url || '';
-    } else if (action.type === 'send_to_agent') {
-      const p = action.params as Record<string, unknown> | undefined;
-      result.actionTarget = p?.message || '';
-    }
-    delete result.action;
-  } else {
-    result.actionType = 'none';
-    result.actionTarget = '';
-    result.actionParams = '';
-  }
-  return result;
-}
-
-// ── ID generator ─────────────────────────────────────────────────────────────
-
-let _idCounter = 0;
-function nextId(): string {
-  return `helm-${++_idCounter}`;
-}
-
-// ── puckToHelm ───────────────────────────────────────────────────────────────
 /**
- * Convert Puck editor output → Helm SDUI format (stored in backend, rendered by mobile).
- *
- * Output format matches mobile's SDUIRow/SDUICell interfaces:
- *   rows[].cells[].content.type  → PascalCase, mobile registry keys
- *   rows[].cells[].content.props → component props
+ * Normalize a screen loaded from the backend.
+ * Handles legacy formats (flat action fields, old type names, v1 sections format).
  */
-export function puckToHelm(puckData: PuckData): HelmScreen {
-  const items = puckData.content || [];
-  const zones = puckData.zones || {};
-  const rows: HelmRow[] = [];
-  let rowIdx = 0;
+export function normalizeScreen(screen: any): { rows: any[] } | null {
+  if (!screen) return null;
 
-  for (const item of items) {
-    if (item.type === 'Row') {
-      const rowId = item.props.id as string;
-      const height = (item.props.height as string) || 'auto';
-
-      // Slot format: cells inline in props (Puck v0.21+ with slot fields)
-      const slotCells = Array.isArray(item.props.cells)
-        ? (item.props.cells as PuckContent[])
-        : [];
-      // Zone format fallback (legacy Puck DropZone format)
-      const zoneKey = `${rowId}:cells`;
-      const zoneCells = (zones[zoneKey] || []) as PuckContent[];
-      const rowCells = slotCells.length > 0 ? slotCells : zoneCells;
-
-      let cellIdx = 0;
-      const cells: HelmCell[] = rowCells.map((zoneItem) => {
-        const { id: _id, ...rawProps } = zoneItem.props;
-        const mobileType = puckTypeToMobile(zoneItem.type);
-        const props = (zoneItem.type === 'Button') ? buildActionProp(rawProps) : rawProps;
-        cellIdx++;
-        return {
-          id: `${rowId}-cell-${cellIdx}`,
-          content: { type: mobileType, props },
-        };
-      });
-
-      rows.push({ id: `row-${rowIdx++}`, height, cells });
-    } else {
-      // Non-Row top-level component → wrap in single-cell row
-      const { id: _id, ...rawProps } = item.props;
-      const mobileType = puckTypeToMobile(item.type);
-      const props = (item.type === 'Button') ? buildActionProp(rawProps) : rawProps;
-      const rowId = `row-${rowIdx++}`;
-      rows.push({
-        id: rowId,
-        height: 'auto',
-        cells: [{
-          id: `${rowId}-cell-1`,
-          content: { type: mobileType, props },
-        }],
-      });
-    }
+  // Current format: { rows: [...] }
+  if (screen.rows && Array.isArray(screen.rows)) {
+    return {
+      rows: screen.rows.map((row: any) => ({
+        ...row,
+        cells: (row.cells || []).map((cell: any) => {
+          const comp = cell.content ?? cell.component;
+          if (!comp?.type) return { ...cell, content: null };
+          const type = normalizeTypeName(comp.type);
+          let props = comp.props || {};
+          // Convert flat action fields to nested if present (legacy Puck format)
+          if (props.actionType && props.actionType !== 'none') {
+            props = buildActionProp(props);
+          }
+          return { ...cell, content: { type, props } };
+        }),
+      })),
+    };
   }
 
-  return { rows };
-}
-
-// ── helmToPuck ───────────────────────────────────────────────────────────────
-/**
- * Convert Helm SDUI (from backend) → Puck editor format for loading into editor.
- *
- * Handles three input formats:
- *   1. New format: rows[].cells[].content (PascalCase types including CalendarModule)
- *   2. Old format: rows[].cells[].component (lowercase types, saved by old editor)
- *   3. V1 format: sections[].components[] (AI-generated legacy screens)
- */
-export function helmToPuck(helmScreen: any): PuckData {
-  _idCounter = 0;
-  const content: PuckContent[] = [];
-
-  // V2: rows format
-  if (helmScreen?.rows && Array.isArray(helmScreen.rows)) {
-    for (const row of helmScreen.rows) {
-      const rowId = nextId();
-      const rowHeight = row.height ?? 'auto';
-      const zoneChildren: PuckContent[] = [];
-
-      for (const cell of row.cells || []) {
-        // Support new `content` key and old `component` key
-        const cellComp = cell.content ?? cell.component;
-        if (!cellComp?.type) continue;
-
-        const puckType = anyTypeToPuck(cellComp.type);
-        const rawProps = cellComp.props || {};
-        const props = (puckType === 'Button') ? extractActionFields(rawProps) : rawProps;
-        zoneChildren.push({
-          type: puckType,
-          props: { id: nextId(), ...props },
-        });
-      }
-
-      content.push({
-        type: 'Row',
-        props: { id: rowId, height: String(rowHeight), cells: zoneChildren },
-      });
-    }
-    return { content, root: { props: {} }, zones: {} };
-  }
-
-  // V1: sections format (old AI-generated screens with sections/components)
-  if (helmScreen?.sections && Array.isArray(helmScreen.sections)) {
-    for (const section of helmScreen.sections) {
+  // V1 format: { sections: [{ components: [...] }] }
+  if (screen.sections && Array.isArray(screen.sections)) {
+    const rows = screen.sections.map((section: any, i: number) => {
       const comps = section.components ?? (section.component ? [section.component] : []);
-      if (!comps.length) continue;
-
-      const sectionCells: PuckContent[] = [];
-      for (const comp of comps) {
-        if (!comp?.type) continue;
-        const puckType = anyTypeToPuck(comp.type);
-        const rawProps = comp.props || {};
-        const props = (puckType === 'Button') ? extractActionFields(rawProps) : rawProps;
-        sectionCells.push({
-          type: puckType,
-          props: { id: nextId(), ...props },
-        });
-      }
-
-      const rowId = nextId();
-      content.push({
-        type: 'Row',
-        props: { id: rowId, height: 'auto', cells: sectionCells },
-      });
-    }
-    return { content, root: { props: {} }, zones: {} };
+      return {
+        id: `row-${i}`,
+        height: 'auto',
+        cells: comps.filter((c: any) => c?.type).map((comp: any, j: number) => {
+          const type = normalizeTypeName(comp.type);
+          let props = comp.props || {};
+          if (props.actionType && props.actionType !== 'none') {
+            props = buildActionProp(props);
+          }
+          return {
+            id: `cell-${i}-${j}`,
+            width: 1,
+            content: { type, props },
+          };
+        }),
+      };
+    });
+    return { rows };
   }
 
-  return { content: [], root: { props: {} }, zones: {} };
+  return null;
 }

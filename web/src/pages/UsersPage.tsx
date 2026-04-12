@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { Plus, Trash2, Pencil, X } from 'lucide-react';
 
@@ -30,6 +30,8 @@ export function UsersPage() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editRole, setEditRole] = useState('');
   const [error, setError] = useState('');
+  const usernameRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   const loadUsers = () => {
     api.get<PaginatedResponse<User>>('/api/users').then(data => {
@@ -41,6 +43,16 @@ export function UsersPage() {
   useEffect(() => { loadUsers(); }, []);
 
   const createUser = async () => {
+    if (!newUser.username.trim()) {
+      setError('Username is required');
+      usernameRef.current?.focus();
+      return;
+    }
+    if (!newUser.password || newUser.password.length < 6) {
+      setError('Password must be at least 6 characters');
+      passwordRef.current?.focus();
+      return;
+    }
     try {
       await api.post('/api/users', newUser);
       setShowCreate(false);
@@ -93,12 +105,12 @@ export function UsersPage() {
         <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg mb-4 flex flex-wrap items-end gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Username</label>
-            <input placeholder="Username" value={newUser.username} onChange={e => setNewUser(u => ({ ...u, username: e.target.value }))}
+            <input ref={usernameRef} placeholder="Username" value={newUser.username} onChange={e => setNewUser(u => ({ ...u, username: e.target.value }))}
               className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Password</label>
-            <input placeholder="Password" type="password" value={newUser.password} onChange={e => setNewUser(u => ({ ...u, password: e.target.value }))}
+            <input ref={passwordRef} placeholder="Password" type="password" value={newUser.password} onChange={e => setNewUser(u => ({ ...u, password: e.target.value }))}
               className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>

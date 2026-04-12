@@ -12,6 +12,12 @@ interface Template {
   created_at: string;
 }
 
+interface ModuleInfo {
+  module_id: string;
+  name: string;
+  icon: string;
+}
+
 interface TemplateDetail extends Template {
   screen_json: any;
 }
@@ -41,7 +47,8 @@ export function TemplatesPage() {
 
   // Apply modal
   const [applyingTemplate, setApplyingTemplate] = useState<string | null>(null);
-  const [applyModuleId, setApplyModuleId] = useState('home');
+  const [applyModuleId, setApplyModuleId] = useState('');
+  const [modules, setModules] = useState<ModuleInfo[]>([]);
 
   const navigate = useNavigate();
 
@@ -70,6 +77,13 @@ export function TemplatesPage() {
   useEffect(() => {
     fetchTemplates();
   }, [fetchTemplates]);
+
+  useEffect(() => {
+    if (!applyingTemplate) return;
+    api.get<{ items: ModuleInfo[] }>('/api/sdui/modules')
+      .then(data => setModules(data.items || []))
+      .catch(() => setModules([]));
+  }, [applyingTemplate]);
 
   const handleDelete = useCallback(async (id: string, name: string) => {
     if (!confirm(`Delete template "${name}"?`)) return;
@@ -284,13 +298,12 @@ export function TemplatesPage() {
                 onChange={(e) => setApplyModuleId(e.target.value)}
                 className="w-full px-3 py-2 border rounded-md text-sm"
               >
-                <option value="home">🏠 Home</option>
-                <option value="chat">💬 Chat</option>
-                <option value="modules">🧩 Modules</option>
-                <option value="calendar">📅 Calendar</option>
-                <option value="forms">📝 Forms</option>
-                <option value="alerts">🔔 Alerts</option>
-                <option value="settings">⚙️ Settings</option>
+                <option value="">Select a module...</option>
+                {modules.map(m => (
+                  <option key={m.module_id} value={m.module_id}>
+                    {m.icon ? `${m.icon} ` : ''}{m.name}
+                  </option>
+                ))}
               </select>
             </div>
             <p className="text-xs text-gray-500 mb-4">
@@ -305,7 +318,8 @@ export function TemplatesPage() {
               </button>
               <button
                 onClick={() => handleApply(applyingTemplate, applyModuleId)}
-                className="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-md"
+                disabled={!applyModuleId}
+                className={`px-4 py-2 text-sm rounded-md ${applyModuleId ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
               >
                 Apply as Draft
               </button>

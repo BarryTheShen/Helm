@@ -30,6 +30,9 @@ export function ComponentsPage() {
   return (
     <div>
       <h2 className="text-xl font-semibold mb-6">Component Registry</h2>
+      {components.length === 0 && (
+        <p className="text-gray-500 text-center py-8">No components found in the registry.</p>
+      )}
       {tiers.map(tier => {
         const meta = tierMeta[tier] || { label: `${tier} Components`, color: 'text-gray-700', border: 'border-gray-200' };
         const comps = components.filter(c => c.tier === tier);
