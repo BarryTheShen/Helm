@@ -100,13 +100,13 @@ export function SDUIButton({
         <ActivityIndicator size="small" color={resolveColor(variantStyle.text)} />
       ) : (
         <View style={styles.content}>
-          {icon && iconPosition === 'left' && (
+          {!!icon && iconPosition === 'left' && (
             <Text style={[styles.btnIcon, { fontSize, color: resolveColor(variantStyle.text) }]}>{resolveIconName(icon)}</Text>
           )}
           {label && (
             <Text style={[styles.label, { fontSize, color: resolveColor(variantStyle.text) }]}>{label}</Text>
           )}
-          {icon && iconPosition === 'right' && (
+          {!!icon && iconPosition === 'right' && (
             <Text style={[styles.btnIcon, { fontSize, color: resolveColor(variantStyle.text) }]}>{resolveIconName(icon)}</Text>
           )}
         </View>

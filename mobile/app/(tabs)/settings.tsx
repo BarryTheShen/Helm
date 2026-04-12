@@ -1,7 +1,6 @@
 import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
-import { useSettingsStore } from '@/stores/settingsStore';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { colors, spacing, typography } from '@/theme/colors';
@@ -14,7 +13,6 @@ export default function SettingsScreen() {
   const handleAction = useActionDispatcher();
   const router = useRouter();
   const { user, token, serverUrl, logout } = useAuthStore();
-  const { navigationMode, theme, setNavigationMode, setTheme } = useSettingsStore();
   const { screen: sduiScreen } = useSDUIScreen('settings');
 
   const handleLogout = async () => {
@@ -68,28 +66,6 @@ export default function SettingsScreen() {
           </Card>
         </View>
 
-        {/* Navigation Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Navigation</Text>
-          <Card>
-            <Text style={styles.label}>Mode</Text>
-            <Text style={styles.value}>
-              {navigationMode === 'tabs' ? 'Bottom Tabs' : 'Drawer'}
-            </Text>
-          </Card>
-        </View>
-
-        {/* Appearance Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Appearance</Text>
-          <Card>
-            <Text style={styles.label}>Theme</Text>
-            <Text style={styles.value}>
-              {theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'Auto'}
-            </Text>
-          </Card>
-        </View>
-
         {/* About Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
@@ -105,12 +81,12 @@ export default function SettingsScreen() {
           <Card>
             <Text style={styles.label}>Username</Text>
             <Text style={styles.value}>{user?.username || 'Not logged in'}</Text>
-            {user?.email && (
+            {user?.email ? (
               <>
                 <Text style={[styles.label, styles.labelSpacing]}>Email</Text>
                 <Text style={styles.value}>{user.email}</Text>
               </>
-            )}
+            ) : null}
           </Card>
           <Button
             title="Logout"

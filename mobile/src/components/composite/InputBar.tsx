@@ -1,87 +1,147 @@
 /**
  * InputBar — Tier 3 composite module.
- * Universal input strip: [Settings] [TextInput] [Send]
+ * Universal input strip: [TextInput] [Send]
  */
 import React, { useState } from 'react';
 import { View, TextInput, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { themeColors } from '@/theme/tokens';
 import type { SDUIAction } from '@/types/sdui';
 
-interface SettingsItem {
-  label: string;
-  value: string;
-  options: string[];
+const INPUT_TEMPLATE_TOKEN = '{{input}}';
+
+function replaceInputTemplate(value: string, input: string): string {
+  return value.split(INPUT_TEMPLATE_TOKEN).join(input);
+}
+
+function hasInputTemplate(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.includes(INPUT_TEMPLATE_TOKEN);
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasInputTemplate(entry));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some((entry) => hasInputTemplate(entry));
+  }
+
+  return false;
+}
+
+function replaceInputTemplateDeep(value: unknown, input: string): unknown {
+  if (typeof value === 'string') {
+    return value.includes(INPUT_TEMPLATE_TOKEN) ? replaceInputTemplate(value, input) : value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => replaceInputTemplateDeep(entry, input));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).reduce<Record<string, unknown>>((accumulator, [key, entry]) => {
+      accumulator[key] = replaceInputTemplateDeep(entry, input);
+      return accumulator;
+    }, {});
+  }
+
+  return value;
+}
+
+function resolveActionWithInput(action: SDUIAction, input: string): SDUIAction {
+  if (action.type === 'send_to_agent') {
+    if (typeof action.message === 'string' && action.message.includes(INPUT_TEMPLATE_TOKEN)) {
+      return { ...action, message: replaceInputTemplate(action.message, input) };
+    }
+
+    return { ...action, message: input };
+  }
+
+  if (action.type === 'server_action') {
+    if (hasInputTemplate(action.params)) {
+      return {
+        ...action,
+        params: replaceInputTemplateDeep(action.params, input) as Record<string, unknown>,
+      };
+    }
+
+    return {
+      ...action,
+      params: { ...(action.params ?? {}), text: input },
+    };
+  }
+
+  return action;
 }
 
 interface InputBarProps {
   placeholder?: string;
-  settingsItems?: SettingsItem[] | null;
   maxLines?: number;
   onSend?: SDUIAction;
   disabled?: boolean;
   dispatch?: (action: SDUIAction) => void;
 }
 
+const INPUT_LINE_HEIGHT = 22;
+const INPUT_VERTICAL_PADDING = 8;
+const INPUT_MIN_HEIGHT = INPUT_LINE_HEIGHT + INPUT_VERTICAL_PADDING * 2;
+
 export function InputBar({
   placeholder = 'Message...',
-  settingsItems,
   maxLines = 6,
   onSend,
   disabled,
   dispatch,
 }: InputBarProps) {
   const [text, setText] = useState('');
-  const [showSettings, setShowSettings] = useState(false);
+  const [contentHeight, setContentHeight] = useState(INPUT_MIN_HEIGHT);
+
+  const normalizedMaxLines = Number.isFinite(maxLines) ? Math.max(1, Math.trunc(maxLines)) : 6;
+  const maxInputHeight = INPUT_LINE_HEIGHT * normalizedMaxLines + INPUT_VERTICAL_PADDING * 2;
+  const inputHeight = Math.min(Math.max(contentHeight, INPUT_MIN_HEIGHT), maxInputHeight);
+  const inputShouldScroll = contentHeight > maxInputHeight;
+  const trimmedText = text.trim();
+  const hasActionableSendPath = Boolean(onSend && dispatch);
+  const canSend = Boolean(trimmedText) && !disabled && hasActionableSendPath;
 
   const handleSend = () => {
-    if (!text.trim() || disabled) return;
-    if (onSend && dispatch) {
-      // Inject the typed text into the action
-      if (onSend.type === 'send_to_agent') {
-        dispatch({ ...onSend, message: text.trim() });
-      } else if (onSend.type === 'server_action') {
-        dispatch({ ...onSend, params: { ...(onSend.params ?? {}), text: text.trim() } });
-      } else {
-        dispatch(onSend);
-      }
-    }
-    setText('');
-  };
+    if (!canSend || !onSend || !dispatch) return;
 
-  const hasSettings = settingsItems && settingsItems.length > 0;
+    dispatch(resolveActionWithInput(onSend, trimmedText));
+
+    setText('');
+    setContentHeight(INPUT_MIN_HEIGHT);
+  };
 
   return (
     <View style={styles.container}>
-      {/* Settings Button */}
-      {hasSettings && (
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => setShowSettings(!showSettings)}
-        >
-          <Text style={styles.settingsIcon}>⚙️</Text>
-        </TouchableOpacity>
-      )}
-
       {/* Text Input */}
       <TextInput
-        style={[styles.input, !hasSettings && styles.inputNoSettings]}
+        style={[
+          styles.input,
+          { height: inputHeight, maxHeight: maxInputHeight },
+        ]}
         value={text}
         onChangeText={setText}
+        onContentSizeChange={(event) => {
+          setContentHeight(Math.max(INPUT_MIN_HEIGHT, event.nativeEvent.contentSize.height));
+        }}
         placeholder={placeholder}
         placeholderTextColor={themeColors.textTertiary}
         multiline
         numberOfLines={1}
         maxLength={4000}
         editable={!disabled}
+        scrollEnabled={inputShouldScroll}
       />
 
       {/* Send Button */}
       <TouchableOpacity
-        style={[styles.sendBtn, (!text.trim() || disabled) && styles.sendBtnDisabled]}
+        style={[styles.sendBtn, !canSend && styles.sendBtnDisabled]}
         onPress={handleSend}
-        disabled={!text.trim() || disabled}
+        disabled={!canSend}
       >
-        <Text style={[styles.sendIcon, (!text.trim() || disabled) && styles.sendIconDisabled]}>➤</Text>
+        <Text style={[styles.sendIcon, !canSend && styles.sendIconDisabled]}>➤</Text>
       </TouchableOpacity>
     </View>
   );
@@ -98,26 +158,18 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     gap: 6,
   },
-  settingsBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 2,
-  },
-  settingsIcon: { fontSize: 20 },
   input: {
     flex: 1,
     fontSize: 16,
-    lineHeight: 22,
+    lineHeight: INPUT_LINE_HEIGHT,
     color: '#000',
     backgroundColor: '#F2F2F7',
     borderRadius: 20,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    maxHeight: 132, // ~6 lines
+    paddingVertical: INPUT_VERTICAL_PADDING,
+    minHeight: INPUT_MIN_HEIGHT,
+    textAlignVertical: 'top',
   },
-  inputNoSettings: {},
   sendBtn: {
     width: 36,
     height: 36,

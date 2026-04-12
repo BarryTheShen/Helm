@@ -154,6 +154,8 @@ export default function ChatScreen() {
   const [isTyping, setIsTyping] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [apiClient, setApiClient] = useState<ApiClient | null>(null);
+  const [apiKeyMissing, setApiKeyMissing] = useState(false);
+  const [agentOffline, setAgentOffline] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
   // Stable ref so the WS subscription (set up when ws changes) always calls the
@@ -309,7 +311,23 @@ export default function ChatScreen() {
 
       case 'chat_error': {
         setIsTyping(false);
-        showError(message.message || 'Chat error occurred');
+        const errMsg: string = message.message || 'Chat error occurred';
+        if (message.code === 'no_api_key') {
+          setApiKeyMissing(true);
+          setAgentOffline(false);
+          // Remove the empty streaming bubble created by the preceding chat_start
+          setMessages((prev) => prev.filter(
+            (m) => !(m.kind === 'text' && m.role === 'assistant' && (m as TextMessage).isStreaming && !m.content),
+          ));
+        } else if (errMsg.includes('connection attempts failed')) {
+          setAgentOffline(true);
+          setApiKeyMissing(false);
+          setMessages((prev) => prev.filter(
+            (m) => !(m.kind === 'text' && m.role === 'assistant' && (m as TextMessage).isStreaming && !m.content),
+          ));
+        } else {
+          showError(errMsg);
+        }
         break;
       }
     }
@@ -337,6 +355,8 @@ export default function ChatScreen() {
       }
       setMessages([]);
       setIsTyping(false);
+      setApiKeyMissing(false);
+      setAgentOffline(false);
     };
 
     if (Platform.OS === 'web') {
@@ -361,7 +381,7 @@ export default function ChatScreen() {
     return <SDUIUniversalRenderer payload={sduiScreen} onAction={handleAction} />;
   }
 
-  const canSend = !!input.trim() && isConnected;
+  const canSend = !!input.trim() && isConnected && !apiKeyMissing && !agentOffline;
 
   return (
     <KeyboardAvoidingView
@@ -379,6 +399,22 @@ export default function ChatScreen() {
           <Text style={styles.newChatButtonText}>New chat</Text>
         </TouchableOpacity>
       </View>
+
+      {apiKeyMissing && (
+        <View style={styles.apiKeyBanner}>
+          <Text style={styles.apiKeyBannerText}>
+            AI Chat requires an API key. Ask your administrator to configure OPENROUTER_API_KEY or OPENAI_API_KEY on the server.
+          </Text>
+        </View>
+      )}
+
+      {agentOffline && (
+        <View style={styles.agentOfflineBanner}>
+          <Text style={styles.agentOfflineBannerText}>
+            AI Agent is offline. Please try again later.
+          </Text>
+        </View>
+      )}
 
       {errorBanner && (
         <ErrorBanner
@@ -485,6 +521,34 @@ const styles = StyleSheet.create({
   newChatButtonText: {
     ...typography.callout,
     color: colors.primary,
+  },
+
+  // API key missing banner
+  apiKeyBanner: {
+    backgroundColor: '#FFF3CD',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#FFECB5',
+  },
+  apiKeyBannerText: {
+    ...typography.footnote,
+    color: '#664D03',
+    textAlign: 'center',
+  },
+
+  // Agent offline banner
+  agentOfflineBanner: {
+    backgroundColor: '#F8D7DA',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#F1AEB5',
+  },
+  agentOfflineBannerText: {
+    ...typography.footnote,
+    color: '#58151C',
+    textAlign: 'center',
   },
 
   // Message list

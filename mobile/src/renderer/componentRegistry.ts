@@ -53,14 +53,22 @@ const registry: Record<string, ComponentType<any>> = {
   Alert: AlertComponent,
 };
 
-/** Look up a component by its SDUI type string. Returns null if not found. */
+// Build a case-insensitive index: lowercase key → canonical PascalCase key
+const lowercaseIndex: Record<string, string> = {};
+for (const key of Object.keys(registry)) {
+  lowercaseIndex[key.toLowerCase()] = key;
+}
+
+/** Look up a component by its SDUI type string (case-insensitive). Returns null if not found. */
 export function resolveComponent(type: string): ComponentType<any> | null {
-  return registry[type] ?? null;
+  // Try exact match first, then fall back to case-insensitive lookup
+  return registry[type] ?? registry[lowercaseIndex[type.toLowerCase()]] ?? null;
 }
 
 /** Register a new component type at runtime (for plugins/extensions). */
 export function registerComponent(type: string, component: ComponentType<any>) {
   registry[type] = component;
+  lowercaseIndex[type.toLowerCase()] = type;
 }
 
 /** Get all registered type names. */

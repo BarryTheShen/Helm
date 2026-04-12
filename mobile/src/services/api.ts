@@ -8,6 +8,7 @@ import type {
   Module,
   ChatMessage,
 } from '@/types/api';
+import type { SDUIDraftResponse, SDUIScreenResponse } from '@/types/sdui';
 
 export class ApiError extends Error {
   constructor(
@@ -173,12 +174,12 @@ export class ApiClient {
   }
 
   // SDUI
-  async getSDUIScreen(moduleId: string): Promise<{ screen: Record<string, unknown> | null; version?: number }> {
-    return this.request(`/api/sdui/${moduleId}`);
+  async getSDUIScreen(moduleId: string): Promise<SDUIScreenResponse> {
+    return this.request<SDUIScreenResponse>(`/api/sdui/${moduleId}`);
   }
 
-  async getSDUIDraft(moduleId: string): Promise<{ screen: Record<string, unknown> | null; has_draft: boolean }> {
-    return this.request(`/api/sdui/${moduleId}/draft`);
+  async getSDUIDraft(moduleId: string): Promise<SDUIDraftResponse> {
+    return this.request<SDUIDraftResponse>(`/api/sdui/${moduleId}/draft`);
   }
 
   async deleteSDUIScreen(moduleId: string): Promise<void> {

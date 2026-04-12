@@ -4,8 +4,75 @@
  */
 import React, { useState } from 'react';
 import { TextInput, StyleSheet } from 'react-native';
-import { resolveColor, themeColors } from '@/theme/tokens';
+import { themeColors } from '@/theme/tokens';
 import type { SDUIAction } from '@/types/sdui';
+
+const INPUT_TEMPLATE_TOKEN = '{{input}}';
+
+function replaceInputTemplate(value: string, input: string): string {
+  return value.split(INPUT_TEMPLATE_TOKEN).join(input);
+}
+
+function hasInputTemplate(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.includes(INPUT_TEMPLATE_TOKEN);
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasInputTemplate(entry));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some((entry) => hasInputTemplate(entry));
+  }
+
+  return false;
+}
+
+function replaceInputTemplateDeep(value: unknown, input: string): unknown {
+  if (typeof value === 'string') {
+    return value.includes(INPUT_TEMPLATE_TOKEN) ? replaceInputTemplate(value, input) : value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => replaceInputTemplateDeep(entry, input));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).reduce<Record<string, unknown>>((accumulator, [key, entry]) => {
+      accumulator[key] = replaceInputTemplateDeep(entry, input);
+      return accumulator;
+    }, {});
+  }
+
+  return value;
+}
+
+function resolveActionWithInput(action: SDUIAction, input: string): SDUIAction {
+  if (action.type === 'send_to_agent') {
+    if (typeof action.message === 'string' && action.message.includes(INPUT_TEMPLATE_TOKEN)) {
+      return { ...action, message: replaceInputTemplate(action.message, input) };
+    }
+
+    return { ...action, message: input };
+  }
+
+  if (action.type === 'server_action') {
+    if (hasInputTemplate(action.params)) {
+      return {
+        ...action,
+        params: replaceInputTemplateDeep(action.params, input) as Record<string, unknown>,
+      };
+    }
+
+    return {
+      ...action,
+      params: { ...(action.params ?? {}), text: input },
+    };
+  }
+
+  return action;
+}
 
 interface SDUITextInputProps {
   value?: string;
@@ -45,14 +112,8 @@ export function SDUITextInput({
 
   const handleSubmitEditing = () => {
     if (!onSubmit || !dispatch || !localValue.trim()) return;
-    // For send_to_agent actions, inject the input text as the message
-    if (onSubmit.type === 'send_to_agent') {
-      dispatch({ ...onSubmit, message: localValue.trim() });
-    } else if (onSubmit.type === 'server_action') {
-      dispatch({ ...onSubmit, params: { ...(onSubmit.params ?? {}), text: localValue.trim() } });
-    } else {
-      dispatch(onSubmit);
-    }
+
+    dispatch(resolveActionWithInput(onSubmit, localValue.trim()));
     setLocalValue('');
   };
 

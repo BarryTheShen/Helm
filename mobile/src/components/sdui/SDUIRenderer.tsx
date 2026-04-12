@@ -16,6 +16,7 @@ import {
   TextInput,
   Image,
 } from 'react-native';
+import type { ViewStyle } from 'react-native';
 import type {
   SDUIComponent,
   SDUIScreen,
@@ -52,6 +53,18 @@ function extractFlatProps(comp: SDUIComponentV2): Record<string, any> {
 
 export type ActionDispatcher = (action: SDUIAction) => void;
 
+// ── Empty state fallback ─────────────────────────────────────────────────
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <View style={styles.screenContainer}>
+      <View style={styles.screenContent}>
+        <Text style={styles.emptyText}>{message}</Text>
+      </View>
+    </View>
+  );
+}
+
 // ── Screen renderer (V1 — section-based) ────────────────────────────────
 
 interface SDUIScreenRendererProps {
@@ -61,6 +74,9 @@ interface SDUIScreenRendererProps {
 
 export function SDUIScreenRenderer({ screen, onAction }: SDUIScreenRendererProps) {
   const dispatch: ActionDispatcher = onAction ?? (() => {});
+  if (!screen.sections || !Array.isArray(screen.sections) || screen.sections.length === 0) {
+    return <EmptyState message="No content available" />;
+  }
   return (
     <ScrollView style={styles.screenContainer} contentContainerStyle={styles.screenContent}>
       {screen.sections.map((section: SDUISection) => {
@@ -93,6 +109,10 @@ export function SDUIPageRenderer({ page, onAction }: SDUIPageRendererProps) {
   const dispatch: ActionDispatcher = onAction ?? (() => {});
   const breakpoint = useBreakpoint();
 
+  if (!page.rows || !Array.isArray(page.rows) || page.rows.length === 0) {
+    return <EmptyState message="No content available" />;
+  }
+
   return (
     <ScrollView style={styles.screenContainer} contentContainerStyle={styles.screenContent}>
       {page.rows.map((row, idx) => (
@@ -100,6 +120,95 @@ export function SDUIPageRenderer({ page, onAction }: SDUIPageRendererProps) {
       ))}
     </ScrollView>
   );
+}
+
+type RuntimePaddingAwareRow = SDUIRow & {
+  height?: number | string;
+  paddingTop?: number | string;
+  paddingBottom?: number | string;
+  paddingLeft?: number | string;
+  paddingRight?: number | string;
+};
+
+function resolveSpacingValue(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+function getRowPaddingStyle(row: SDUIRow): ViewStyle {
+  const runtimeRow = row as RuntimePaddingAwareRow;
+  const uniformPadding = resolveSpacingValue(runtimeRow.padding);
+  const paddingTop = resolveSpacingValue(runtimeRow.paddingTop) ?? uniformPadding;
+  const paddingBottom = resolveSpacingValue(runtimeRow.paddingBottom) ?? uniformPadding;
+  const paddingLeft = resolveSpacingValue(runtimeRow.paddingLeft) ?? uniformPadding;
+  const paddingRight = resolveSpacingValue(runtimeRow.paddingRight) ?? uniformPadding;
+
+  const style: ViewStyle = {};
+
+  if (paddingTop !== undefined) {
+    style.paddingTop = paddingTop;
+  }
+
+  if (paddingBottom !== undefined) {
+    style.paddingBottom = paddingBottom;
+  }
+
+  if (paddingLeft !== undefined) {
+    style.paddingLeft = paddingLeft;
+  }
+
+  if (paddingRight !== undefined) {
+    style.paddingRight = paddingRight;
+  }
+
+  return style;
+}
+
+function getRowHeightStyle(row: SDUIRow): ViewStyle {
+  const runtimeRow = row as RuntimePaddingAwareRow;
+  const minimumHeight = resolveSpacingValue(runtimeRow.height);
+
+  if (minimumHeight === undefined || minimumHeight <= 0) {
+    return {};
+  }
+
+  // Treat authored row heights as minimums so tall native content can expand the row.
+  return {
+    minHeight: minimumHeight,
+  };
+}
+
+const SCROLLABLE_CELL_WIDTH = 160;
+const SCROLLABLE_CELL_MIN_WIDTH = 120;
+
+function getNumericCellWidth(width: SDUICell['width']): number {
+  return typeof width === 'number' && Number.isFinite(width) ? width : 1;
+}
+
+function getCellContainerStyle(width: SDUICell['width'], scrollable: boolean): ViewStyle {
+  if (scrollable) {
+    return {
+      width: Math.max(getNumericCellWidth(width) * SCROLLABLE_CELL_WIDTH, SCROLLABLE_CELL_MIN_WIDTH),
+      minWidth: SCROLLABLE_CELL_MIN_WIDTH,
+      flexShrink: 0,
+    };
+  }
+
+  if (width === 'auto' || width === undefined) {
+    return { flex: 1 };
+  }
+
+  return { flex: width };
 }
 
 function RowRenderer({
@@ -121,20 +230,26 @@ function RowRenderer({
   // Stack cells vertically on compact if specified
   const shouldStack = breakpoint === 'compact' && row.compact?.stack;
   const gap = row.gap ?? 12;
+  const paddingStyle = getRowPaddingStyle(row);
+  const heightStyle = getRowHeightStyle(row);
 
   const cellElements = row.cells.map((cell, ci) => (
-    <CellRenderer key={cell.id ?? `cell-${ci}`} cell={cell} dispatch={dispatch} />
+    <CellRenderer
+      key={cell.id ?? `cell-${ci}`}
+      cell={cell}
+      dispatch={dispatch}
+      scrollable={Boolean(row.scrollable)}
+    />
   ));
 
-  // Scrollable row (horizontal carousel with snap)
+  // Scrollable row (horizontal card rail)
   if (row.scrollable) {
     return (
       <ScrollView
         horizontal
-        pagingEnabled
         showsHorizontalScrollIndicator={false}
-        style={[rowStyles.scrollableRow, row.backgroundColor ? { backgroundColor: row.backgroundColor } : null]}
-        contentContainerStyle={{ gap }}
+        style={[rowStyles.scrollableRow, heightStyle, row.backgroundColor ? { backgroundColor: row.backgroundColor } : null]}
+        contentContainerStyle={[paddingStyle, { gap }]}
       >
         {cellElements}
       </ScrollView>
@@ -145,12 +260,13 @@ function RowRenderer({
     <View
       style={[
         rowStyles.row,
+        heightStyle,
         {
           flexDirection: shouldStack ? 'column' : 'row',
           gap,
         },
         row.backgroundColor ? { backgroundColor: row.backgroundColor } : null,
-        row.padding ? { padding: typeof row.padding === 'number' ? row.padding : 0 } : null,
+        paddingStyle,
       ]}
     >
       {cellElements}
@@ -161,9 +277,11 @@ function RowRenderer({
 function CellRenderer({
   cell,
   dispatch,
+  scrollable,
 }: {
   cell: SDUICell;
   dispatch: ActionDispatcher;
+  scrollable: boolean;
 }) {
   // Support old format (cell.component) and new format (cell.content) for backward compat.
   // The canonical format uses `content`; old AI-generated and pre-fix editor screens use `component`.
@@ -178,13 +296,10 @@ function CellRenderer({
     return null;
   }
 
-  const width = cell.width;
-  const flexStyle = width === 'auto' || width === undefined
-    ? { flex: 1 }
-    : { flex: width };
+  const cellStyle = getCellContainerStyle(cell.width, scrollable);
 
   return (
-    <View style={flexStyle}>
+    <View style={cellStyle}>
       <V2ComponentRenderer component={cellContent} dispatch={dispatch} />
     </View>
   );
@@ -226,9 +341,13 @@ function V2ComponentRenderer({
     const kids = component.children
       ?? (component as any).content?.children
       ?? (props as any)?.children;
+    // Filter out non-object children (strings, nulls, numbers) from malformed AI JSON
+    const validKids = kids?.filter((c: unknown): c is SDUIComponentV2 =>
+      c != null && typeof c === 'object' && typeof (c as any).type === 'string'
+    );
     // Strip children from props to avoid passing array as React prop
     const { children: _dropped, ...cleanProps } = (props ?? {}) as any;
-    const childElements = kids?.map((child: SDUIComponentV2, idx: number) => (
+    const childElements = validKids?.map((child: SDUIComponentV2, idx: number) => (
       <V2ComponentRenderer
         key={child.id ?? `${component.id}-child-${idx}`}
         component={child}
@@ -268,10 +387,18 @@ interface SDUIUniversalRendererProps {
 }
 
 export function SDUIUniversalRenderer({ payload, onAction }: SDUIUniversalRendererProps) {
+  if (!payload || typeof payload !== 'object') {
+    return <EmptyState message="No content available" />;
+  }
   if (isSDUIPage(payload)) {
     return <SDUIPageRenderer page={payload} onAction={onAction} />;
   }
-  return <SDUIScreenRenderer screen={payload as SDUIScreen} onAction={onAction} />;
+  // Verify V1 payload actually has sections before rendering
+  const screen = payload as SDUIScreen;
+  if (!screen.sections || !Array.isArray(screen.sections) || screen.sections.length === 0) {
+    return <EmptyState message="No content available" />;
+  }
+  return <SDUIScreenRenderer screen={screen} onAction={onAction} />;
 }
 
 const rowStyles = StyleSheet.create({
@@ -416,7 +543,7 @@ function renderComponent(comp: SDUIComponent, dispatch: ActionDispatcher): React
         >
           {p.title ? <Text style={styles.cardTitle}>{p.title}</Text> : null}
           {p.subtitle ? <Text style={styles.cardSubtitle}>{p.subtitle}</Text> : null}
-          {comp.children?.map(child => (
+          {comp.children?.filter((c): c is SDUIComponent => c != null && typeof c === 'object' && typeof c.type === 'string').map(child => (
             <View key={child.id}>{renderComponent(child, dispatch)}</View>
           ))}
         </TouchableOpacity>
@@ -453,7 +580,7 @@ function renderComponent(comp: SDUIComponent, dispatch: ActionDispatcher): React
             justifyContent: (justifyMap[p.justify ?? 'start'] ?? 'flex-start') as any,
           }}
         >
-          {comp.children?.map(child => (
+          {comp.children?.filter((c): c is SDUIComponent => c != null && typeof c === 'object' && typeof c.type === 'string').map(child => (
             <View key={child.id}>{renderComponent(child, dispatch)}</View>
           ))}
         </View>
@@ -711,7 +838,7 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: colors.divider },
 
   card: { backgroundColor: colors.card, borderRadius: 12, padding: spacing.md, marginVertical: 4, borderWidth: 1, borderColor: colors.border },
-  cardElevated: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
+  cardElevated: { boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.08)', elevation: 3 },
   cardTitle: { ...typography.subheadline, color: colors.text, marginBottom: 4 },
   cardSubtitle: { ...typography.caption1, color: colors.textSecondary, marginBottom: 8 },
 

@@ -8,9 +8,25 @@ import { resolveColor, themeColors } from '@/theme/tokens';
 
 interface SDUIDividerProps {
   direction?: 'horizontal' | 'vertical';
-  thickness?: number;
+  thickness?: number | string;
   color?: string;
-  indent?: number;
+  indent?: number | string;
+  margin?: number | string;
+}
+
+function resolveNumericValue(value: number | string | undefined, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
 }
 
 export function SDUIDivider({
@@ -18,16 +34,21 @@ export function SDUIDivider({
   thickness = 1,
   color,
   indent = 0,
+  margin = 0,
 }: SDUIDividerProps) {
   const resolvedColor = resolveColor(color, themeColors.divider);
+  const resolvedThickness = resolveNumericValue(thickness, 1);
+  const resolvedIndent = resolveNumericValue(indent, 0);
+  const resolvedMargin = resolveNumericValue(margin, 0);
 
   if (direction === 'vertical') {
     return (
       <View
         style={{
-          width: thickness,
+          width: resolvedThickness,
           backgroundColor: resolvedColor,
-          marginVertical: indent,
+          marginVertical: resolvedIndent,
+          marginHorizontal: resolvedMargin,
           alignSelf: 'stretch',
         }}
       />
@@ -37,9 +58,10 @@ export function SDUIDivider({
   return (
     <View
       style={{
-        height: thickness,
+        height: resolvedThickness,
         backgroundColor: resolvedColor,
-        marginHorizontal: indent,
+        marginHorizontal: resolvedIndent,
+        marginVertical: resolvedMargin,
       }}
     />
   );

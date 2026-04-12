@@ -24,7 +24,7 @@ const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
 export function CalendarModule({ defaultView = 'month', events = [] }: CalendarModuleProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [view, setView] = useState(defaultView);
 
   const today = new Date();
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
   container: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden' },
   viewSwitcher: { flexDirection: 'row', padding: 8, gap: 4, backgroundColor: '#F2F2F7', margin: 12, borderRadius: 8 },
   viewTab: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: 6 },
-  viewTabActive: { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 2, elevation: 1 },
+  viewTabActive: { backgroundColor: '#fff', boxShadow: '0px 0px 2px rgba(0, 0, 0, 0.1)', elevation: 1 },
   viewTabText: { fontSize: 14, color: '#8E8E93', fontWeight: '500' },
   viewTabTextActive: { color: '#007AFF', fontWeight: '600' },
   monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },

@@ -96,9 +96,7 @@ export interface Module {
   id: string;
   name: string;
   icon: string;
-  route: string;
-  description?: string;
-  enabled?: boolean;
+  enabled: boolean;
 }
 
 export interface Device {

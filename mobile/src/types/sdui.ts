@@ -27,7 +27,7 @@ export type SDUIAction =
   | { type: 'go_back' }
   | { type: 'api_call'; method: 'GET' | 'POST' | 'PUT' | 'DELETE'; path: string; body?: Record<string, unknown> }
   | { type: 'server_action'; function: string; params?: Record<string, any> }
-  | { type: 'send_to_agent'; message: string }
+  | { type: 'send_to_agent'; message?: string }
   | { type: 'dismiss' }
   | { type: 'open_sheet'; content: SDUIComponent }
   | { type: 'copy_text'; text: string }
@@ -266,6 +266,8 @@ export interface SDUICell {
   content: SDUIComponentV2;
 }
 
+export type SDUIRowHeight = 'auto' | number;
+
 /** A single row containing one or more cells laid out horizontally */
 export interface SDUIRow {
   id: string;
@@ -276,10 +278,17 @@ export interface SDUIRow {
   regular?: { hidden?: boolean };
   /** Horizontal scroll with paging snap (for carousels) */
   scrollable?: boolean;
+  /** Fixed row height from the editor. 'auto' falls back to intrinsic content sizing. */
+  height?: SDUIRowHeight;
   /** Background color for the row */
   backgroundColor?: string;
-  /** Padding inside the row */
+  /** Uniform padding inside the row. Used as a fallback when side-specific padding is omitted. */
   padding?: number | string;
+  /** Side-specific padding inside the row. The renderer falls back to `padding` when omitted. */
+  paddingTop?: number | string;
+  paddingRight?: number | string;
+  paddingBottom?: number | string;
+  paddingLeft?: number | string;
   /** Gap between cells */
   gap?: number;
 }
@@ -288,11 +297,16 @@ export interface SDUIRow {
  * A Row-by-Row page descriptor (v2).
  * Coexists with SDUIScreen (v1) — the renderer detects format by checking
  * for the presence of `rows` vs `sections`.
+ *
+ * Persisted V2 payloads are row-first. Page-level metadata may be omitted by
+ * the editor/runtime today, so only `rows` should be treated as universally
+ * present across accepted stored shapes.
  */
 export interface SDUIPage {
-  schema_version: '1.0.0';
-  module_id: string;
-  title: string;
+  /** Optional on persisted row-first payloads; storage/runtime layers may add it later. */
+  schema_version?: '1.0.0';
+  module_id?: string;
+  title?: string;
   rows: SDUIRow[];
   generated_at?: string;
   /** Optional metadata for the page */
@@ -325,6 +339,19 @@ export interface SDUIComponentV2 {
   id: string;
   props: Record<string, any>;
   children?: SDUIComponentV2[];
+}
+
+export interface SDUIScreenResponse {
+  screen: Record<string, unknown> | null;
+  /**
+   * Persisted SDUI version. An explicit `0` is a backend tombstone that
+   * asserts the live screen or draft has been cleared.
+   */
+  version?: number;
+}
+
+export interface SDUIDraftResponse extends SDUIScreenResponse {
+  has_draft: boolean;
 }
 
 /** Union type: either a legacy SDUIScreen (v1) or a Row-by-Row SDUIPage (v2) */

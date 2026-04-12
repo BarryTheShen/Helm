@@ -8,12 +8,39 @@
 import { useCallback } from 'react';
 import { Alert, Linking } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { useWebSocket } from '@/contexts/WebSocketContext';
 import { ApiClient } from '@/services/api';
 import type { SDUIAction } from '@/types/sdui';
 import type { ActionDispatcher } from '@/components/sdui/SDUIRenderer';
+
+const TAB_ROUTES: Record<string, Href> = {
+  home: '/(tabs)/home',
+  chat: '/(tabs)/chat',
+  modules: '/(tabs)/modules',
+  calendar: '/(tabs)/calendar',
+  forms: '/(tabs)/forms',
+  alerts: '/(tabs)/alerts',
+  settings: '/(tabs)/settings',
+};
+
+function resolveNavigationTarget(target: string): Href | null {
+  if (target.startsWith('/')) {
+    return target as Href;
+  }
+
+  const tabRoute = TAB_ROUTES[target];
+  if (tabRoute) {
+    return tabRoute;
+  }
+
+  if (target.startsWith('custom-')) {
+    return `/module/${encodeURIComponent(target)}` as Href;
+  }
+
+  return null;
+}
 
 export function useActionDispatcher(): ActionDispatcher {
   const router = useRouter();
@@ -25,19 +52,19 @@ export function useActionDispatcher(): ActionDispatcher {
       switch (action.type) {
         case 'navigate': {
           const target = action.screen;
-          // Map module IDs to tab routes
-          const tabRoutes: Record<string, string> = {
-            home: '/(tabs)/home',
-            chat: '/(tabs)/chat',
-            modules: '/(tabs)/modules',
-            calendar: '/(tabs)/calendar',
-            forms: '/(tabs)/forms',
-            alerts: '/(tabs)/alerts',
-            settings: '/(tabs)/settings',
-          };
-          const route = tabRoutes[target] ?? target;
+          if (!target) {
+            Alert.alert('Navigation Error', 'Missing navigation target');
+            break;
+          }
+
+          const route = resolveNavigationTarget(target);
+          if (!route) {
+            Alert.alert('Navigation Error', `Unknown navigation target "${target}"`);
+            break;
+          }
+
           try {
-            router.push(route as any);
+            router.push(route);
           } catch {
             Alert.alert('Navigation Error', `Could not navigate to "${target}"`);
           }
@@ -102,7 +129,7 @@ export function useActionDispatcher(): ActionDispatcher {
               conversation_id: 'default',
             });
             // Navigate to chat tab so user can see the response
-            router.push('/(tabs)/chat' as any);
+            router.push('/(tabs)/chat' as Href);
           }
           break;
         }

@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, useRouter, Redirect } from 'expo-router';
 import { Text, TouchableOpacity } from 'react-native';
 import { colors } from '@/theme/colors';
-import { WebSocketProvider, useWebSocket } from '@/contexts/WebSocketContext';
+import { useWebSocket } from '@/contexts/WebSocketContext';
 import { useAuthStore } from '@/stores/authStore';
 import { useTabsStore } from '@/stores/tabsStore';
 import { ApiClient } from '@/services/api';
@@ -74,20 +74,38 @@ function SettingsHeaderButton() {
 }
 
 export default function TabsLayout() {
+  const { token, serverUrl } = useAuthStore();
   const hiddenTabs = useTabsStore((s) => s.hiddenTabs);
   const moduleConfigs = useTabsStore((s) => s.moduleConfigs);
+
+  // Defensive auth guard: if token was cleared (e.g. 401 → logout), redirect
+  // to the login screen immediately. This catches cases where the root layout's
+  // redirect effect doesn't fire in time.
+  if (!token) {
+    return <Redirect href={serverUrl ? '/(auth)/login' : '/(auth)/connect'} />;
+  }
 
   // href: null hides the tab from the nav bar while keeping the route accessible.
   const tabHref = (name: string) => (hiddenTabs.includes(name) ? null : undefined);
 
   // Resolve tab label and icon from server-provided config, falling back to defaults.
-  const tabLabel = (id: string, fallback: string) => moduleConfigs[id]?.name ?? fallback;
+  // Strip leading icon from name to prevent double-icon display when the server
+  // (or AI agent rename_tab) stores the emoji as part of the name.
+  const tabLabel = (id: string, fallback: string) => {
+    const cfg = moduleConfigs[id];
+    if (!cfg) return fallback;
+    const { name, icon } = cfg;
+    if (icon && name.startsWith(icon)) {
+      return name.slice(icon.length).trimStart() || fallback;
+    }
+    return name;
+  };
   const tabIcon = (id: string, fallback: string) => moduleConfigs[id]?.icon ?? fallback;
 
   const headerRight = () => <SettingsHeaderButton />;
 
   return (
-    <WebSocketProvider>
+    <>
       <TabsConfigSync />
       <Tabs
         screenOptions={{
@@ -105,48 +123,54 @@ export default function TabsLayout() {
           name="home"
           options={{
             title: tabLabel('home', 'Home'),
+            tabBarLabel: tabLabel('home', 'Home'),
             href: tabHref('home'),
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 22 }}>{tabIcon('home', '🏠')}</Text>,
+            tabBarIcon: ({ color }) => <Text accessible={false} style={{ color, fontSize: 22 }}>{tabIcon('home', '🏠')}</Text>,
           }}
         />
         <Tabs.Screen
           name="chat"
           options={{
             title: tabLabel('chat', 'Chat'),
+            tabBarLabel: tabLabel('chat', 'Chat'),
             href: tabHref('chat'),
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 22 }}>{tabIcon('chat', '💬')}</Text>,
+            tabBarIcon: ({ color }) => <Text accessible={false} style={{ color, fontSize: 22 }}>{tabIcon('chat', '💬')}</Text>,
           }}
         />
         <Tabs.Screen
           name="modules"
           options={{
             title: tabLabel('modules', 'Modules'),
+            tabBarLabel: tabLabel('modules', 'Modules'),
             href: tabHref('modules'),
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 22 }}>{tabIcon('modules', '🧩')}</Text>,
+            tabBarIcon: ({ color }) => <Text accessible={false} style={{ color, fontSize: 22 }}>{tabIcon('modules', '🧩')}</Text>,
           }}
         />
         <Tabs.Screen
           name="calendar"
           options={{
             title: tabLabel('calendar', 'Calendar'),
+            tabBarLabel: tabLabel('calendar', 'Calendar'),
             href: tabHref('calendar'),
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 22 }}>{tabIcon('calendar', '📅')}</Text>,
+            tabBarIcon: ({ color }) => <Text accessible={false} style={{ color, fontSize: 22 }}>{tabIcon('calendar', '📅')}</Text>,
           }}
         />
         <Tabs.Screen
           name="forms"
           options={{
             title: tabLabel('forms', 'Forms'),
+            tabBarLabel: tabLabel('forms', 'Forms'),
             href: tabHref('forms'),
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 22 }}>{tabIcon('forms', '📝')}</Text>,
+            tabBarIcon: ({ color }) => <Text accessible={false} style={{ color, fontSize: 22 }}>{tabIcon('forms', '📝')}</Text>,
           }}
         />
         <Tabs.Screen
           name="alerts"
           options={{
             title: tabLabel('alerts', 'Alerts'),
+            tabBarLabel: tabLabel('alerts', 'Alerts'),
             href: tabHref('alerts'),
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 22 }}>{tabIcon('alerts', '🔔')}</Text>,
+            tabBarIcon: ({ color }) => <Text accessible={false} style={{ color, fontSize: 22 }}>{tabIcon('alerts', '🔔')}</Text>,
           }}
         />
         {/* Settings is always hidden from the tab bar — accessible via the header gear button. */}
@@ -159,7 +183,7 @@ export default function TabsLayout() {
           }}
         />
       </Tabs>
-    </WebSocketProvider>
+    </>
   );
 }
 

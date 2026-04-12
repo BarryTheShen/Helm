@@ -29,25 +29,47 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     const wsUrl = serverUrl.replace(/^http/, 'ws') + '/ws';
     const service = new WebSocketService(wsUrl, token);
 
+    // Two-phase disconnect feedback:
+    //   500ms  → subtle "Reconnecting..." banner
+    //   3 consecutive close events → "Connection lost" with manual retry
+    // ReconnectingWebSocket fires 'close' on every failed attempt, so we
+    // count consecutive disconnects to decide when to escalate.
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let disconnectCount = 0;
+    const MAX_SOFT_RETRIES = 3;
+
+    const clearTimers = () => {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    };
+
     service.onConnect(() => {
+      clearTimers();
+      disconnectCount = 0;
       setConnected(true);
       hideError();
     });
 
-    // Only show "Connection lost" if we're still disconnected after 3 s.
-    // ReconnectingWebSocket typically reconnects in < 1 s — this prevents
-    // the error banner from flashing on every normal reconnect cycle.
-    let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
     service.onDisconnect(() => {
       setConnected(false);
-      disconnectTimer = setTimeout(() => {
-        showError('Connection lost', () => service.connect());
-      }, 3000);
-    });
-    service.onConnect(() => {
-      if (disconnectTimer) {
-        clearTimeout(disconnectTimer);
-        disconnectTimer = null;
+      disconnectCount++;
+
+      if (disconnectCount >= MAX_SOFT_RETRIES) {
+        // Retries exhausted — escalate to hard error with manual retry
+        clearTimers();
+        showError('Connection lost', () => {
+          disconnectCount = 0;
+          hideError();
+          service.connect();
+        });
+      } else if (!reconnectTimer) {
+        // First disconnect — show soft banner after 500ms
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          showError('Reconnecting…');
+        }, 500);
       }
     });
 
@@ -55,7 +77,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     setWs(service);
 
     return () => {
-      if (disconnectTimer) clearTimeout(disconnectTimer);
+      clearTimers();
       service.disconnect();
       setWs(null);
     };

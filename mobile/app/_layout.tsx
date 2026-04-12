@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { Slot, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { WebSocketProvider } from '@/contexts/WebSocketContext';
 import { useAuthStore } from '@/stores/authStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 
@@ -14,10 +15,12 @@ export default function RootLayout() {
     initializeSettings();
   }, []);
 
+  // Derive a stable boolean so the effect doesn't re-fire on every render
+  // (useSegments() returns a new array reference each time).
+  const inAuthGroup = segments[0] === '(auth)';
+
   useEffect(() => {
     if (isLoading) return;
-
-    const inAuthGroup = segments[0] === '(auth)';
 
     if (!token && !inAuthGroup) {
       // If we already have a serverUrl, go directly to login instead of setup
@@ -29,7 +32,11 @@ export default function RootLayout() {
     } else if (token && inAuthGroup) {
       router.replace('/(tabs)/chat');
     }
-  }, [token, segments, isLoading]);
+  }, [token, inAuthGroup, isLoading, serverUrl]);
 
-  return <Slot />;
+  return (
+    <WebSocketProvider>
+      <Stack screenOptions={{ headerShown: false }} />
+    </WebSocketProvider>
+  );
 }
