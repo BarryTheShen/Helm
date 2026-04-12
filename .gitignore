@@ -50,3 +50,6 @@ htmlcov/
 .DS_Store
 
 
+
+# Scratch / test artifacts
+scratch/
