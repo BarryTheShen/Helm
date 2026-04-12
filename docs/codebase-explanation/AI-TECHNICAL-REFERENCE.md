@@ -4,7 +4,7 @@
 > Read this FIRST before making any changes. It tells you exactly where everything is,
 > what connects to what, and what the known pitfalls are.
 >
-> Last updated: 2026-04-06
+> Last updated: 2026-04-12
 
 ---
 
@@ -54,6 +54,7 @@ Helm is a self-hosted AI super app with three layers:
 | Auth dependencies | `dependencies.py` | `get_current_user`, `get_current_user_id`, `require_admin`, `PaginationParams` |
 | DB migrations | `../alembic/versions/` | Run `alembic upgrade head` after model changes |
 | SDUI module endpoints | `routers/modules.py` | `GET/POST/DELETE /api/sdui/{module_id}`, tabs management, screen history, validate, duplicate |
+| SDUI regression tests | `../tests/test_sdui_parity.py` + `../tests/test_templates.py` | Covers row-first validate/apply parity, draft-cleared publish sequencing, proxy tool defs, and streamed `message_id` reuse |
 | User management (admin) | `routers/users.py` | CRUD + list, all admin-only |
 | Session management | `routers/sessions.py` | List (admin/mine), revoke, revoke-others |
 | Audit log | `routers/audit.py` | Admin list + my list |
@@ -71,7 +72,9 @@ Helm is a self-hosted AI super app with three layers:
 |-------------------|---------------|-------|
 | Auth guard / routing | `app/_layout.tsx` | Redirects based on token presence |
 | Auth screens | `app/(auth)/connect.tsx`, `app/(auth)/login.tsx` | Default URL: `http://localhost:8000` |
-| Tab screens | `app/(tabs)/{screen}.tsx` | 7 tabs: home, chat, modules, calendar, forms, alerts, settings |
+| Tab screens | `app/(tabs)/{screen}.tsx` | 7 built-in tabs: home, chat, modules, calendar, forms, alerts, settings |
+| Modules launcher | `app/(tabs)/modules.tsx` | Built-ins jump to tab routes; custom modules open `/module/[moduleId]`; list labels built-in vs custom |
+| Custom module route | `app/module/[moduleId].tsx` | Dedicated runtime route for non-built-in modules; uses `useSDUIScreen(moduleId)` + `DraftPreview` approval flow |
 | Tab bar config | `app/(tabs)/_layout.tsx` | Tab icons/labels; AI-controlled visibility via tabsStore; TabsConfigSync here |
 | Home SDUI screen | `app/(tabs)/home.tsx` | Fully AI-driven via `useSDUIScreen('home')` |
 | Forms SDUI screen | `app/(tabs)/forms.tsx` | Purely SDUI — no fallback native UI |
@@ -82,9 +85,9 @@ Helm is a self-hosted AI super app with three layers:
 | SDUI screen hook | `src/hooks/useSDUIScreen.ts` | Fetch + live-update SDUI screen per module; supports V1+V2 |
 | Action dispatcher hook | `src/hooks/useActionDispatcher.ts` | Handles all SDUI action types (navigate, server_action, send_to_agent, etc.) |
 | Breakpoint hook | `src/hooks/useBreakpoint.ts` | Returns `'compact'` or `'regular'` based on screen width (breakpoint: 768px) |
-| SDUI renderer (V1+V2) | `src/components/sdui/SDUIRenderer.tsx` | V1 `SDUIScreenRenderer`, V2 `SDUIPageRenderer`, auto-dispatch `SDUIUniversalRenderer` |
+| SDUI renderer (V1+V2) | `src/components/sdui/SDUIRenderer.tsx` | V1 `SDUIScreenRenderer`, V2 `SDUIPageRenderer`, auto-dispatch `SDUIUniversalRenderer`; V2 rows honor per-side padding with `padding` as fallback; rows with fixed height apply `overflow: 'hidden'` to prevent calendar-type content bleed |
 | SDUI component registry (V2) | `src/renderer/componentRegistry.ts` | Type string → React component map; `registerComponent()` to extend |
-| SDUI atomic components (V2) | `src/components/atomic/*.tsx` | SDUIText, SDUIMarkdown, SDUIButton, SDUIImage, SDUITextInput, SDUIIcon, SDUIDivider |
+| SDUI atomic components (V2) | `src/components/atomic/*.tsx` | SDUIText, SDUIMarkdown, SDUIButton, SDUIImage, SDUITextInput, SDUIIcon, SDUIDivider (indent + margin aware) |
 | SDUI structural components (V2) | `src/components/structural/SDUIContainer.tsx` | Flexbox container with shadow + color tokens |
 | SDUI composite components (V2) | `src/components/composite/*.tsx` | CalendarModule, ChatModule, NotesModule, InputBar |
 | SDUI V1 legacy components | `src/components/sdui/*.tsx` | AlertComponent, CalendarComponent, DraftPreview, FormComponent, ListComponent |
@@ -122,18 +125,26 @@ Helm is a self-hosted AI super app with three layers:
 | App entry / routing | `web/src/App.tsx` | React Router; login guard; `AdminLayout` wrapper |
 | Login page | `web/src/pages/LoginPage.tsx` | Authenticates against backend `/auth/login` |
 | Dashboard (stats) | `web/src/pages/DashboardPage.tsx` | Admin stats from `/api/admin/stats` |
-| User management | `web/src/pages/UsersPage.tsx` | CRUD via `/api/admin/users` |
+| User management | `web/src/pages/UsersPage.tsx` | CRUD via `/api/users` |
 | Session management | `web/src/pages/SessionsPage.tsx` | List + revoke via `/api/sessions` |
 | Audit log viewer | `web/src/pages/AuditPage.tsx` | Filterable list from `/api/audit` |
 | Workflow management | `web/src/pages/WorkflowsPage.tsx` | Manage workflows |
 | SDUI template management | `web/src/pages/TemplatesPage.tsx` | CRUD + import/export templates |
 | Component registry | `web/src/pages/ComponentsPage.tsx` | View/edit registered SDUI components |
-| Visual SDUI editor | `web/src/pages/EditorPage.tsx` | Puck-based drag-and-drop SDUI screen builder |
-| Puck component config | `web/src/lib/puckConfig.tsx` | 11 Puck component renderers matching SDUI V2 types |
-| SDUI ↔ Puck translation | `web/src/lib/sduiAdapter.ts` | `puckToHelm()` and `helmToPuck()` converters |
-| API client | `web/src/lib/api.ts` | Typed fetch wrapper for all admin endpoints |
+| Visual SDUI editor | `web/src/pages/EditorPage.tsx` | Custom 3-panel editor: structure tree + template library, draft save/push-live flow, presets + custom device sizes, JSON view/import, undo/redo, status bar (shows actual `deviceWidth`×`deviceHeight` from Zustand store), destructive unsaved-change confirmations, live+draft loading that prefers drafts, surfaced module/screen load errors, delete-screen gating on persisted-or-draft state, legacy V1 section-title normalization into heading rows, V1 import that preserves vertical section stacks by emitting one row per legacy component, read-only preservation of lowercase legacy runtime payloads including legacy forms, and module CRUD (create/delete custom modules) |
+| Editor types & presets | `web/src/editor/types.ts` | EditorRow/Cell/Screen types, row visual props, DevicePresets (10 presets), ComponentRegistry, authorable component filtering, and `server_action` param validation before persistence |
+| Local template library | `web/src/editor/templateLibrary.ts` | Built-in starter screen templates + reusable row templates shown in the left panel, aligned to live runtime props |
+| Component prop schemas | `web/src/editor/componentSchemas.ts` | Per-component property schemas for dynamic form generation in PropertyInspector; only supported authorable actions are offered for new edits, while imported unsupported actions fall back to generic editable fields |
+| Editor state (Zustand) | `web/src/editor/useEditorStore.ts` | Rows-first editor contract: rows, selection, history/historyIndex, device dimensions/orientation, screen load/apply/get helpers, row/cell/component mutators |
+| Structure tree (left panel) | `web/src/editor/StructureTree.tsx` | Screen root item + expandable rows/cells with CRUD, row reorder, and JSON copy actions |
+| Editor canvas (center panel) | `web/src/editor/EditorCanvas.tsx` | Interactive canvas with component previews, stable multi-step row drag (50px threshold, 300ms debounce), cell resize handles, direct row-height resize, add-row controls |
+| Property inspector (right) | `web/src/editor/PropertyInspector.tsx` | Contextual editor for row height, cell count/widths, background, per-side padding, scrollable rows, component props/actions |
+| Component picker | `web/src/editor/ComponentPicker.tsx` | Component type selection popover, grouped by category, using authorable registry entries only |
+| SDUI adapter (legacy) | `web/src/lib/sduiAdapter.ts` | Legacy normalization helper retained from the old editor; not used by the current custom editor |
+| Puck config (deprecated) | `web/src/lib/puckConfig.tsx` | Delete-stub only — current editor does not import it |
+| API client | `web/src/lib/api.ts` | Typed fetch wrapper for all admin endpoints; the global 401 handler can be suppressed per request |
 | Utilities | `web/src/lib/utils.ts` | Shared helpers |
-| Auth store | `web/src/stores/authStore.ts` | Zustand store for admin auth state |
+| Auth store | `web/src/stores/authStore.ts` | Zustand store for admin auth state; `/auth/login` suppresses the global unauthorized handler so expected 401s do not clear the session |
 | Nav layout | `web/src/components/AdminLayout.tsx` | Sidebar navigation + top bar |
 | Tailwind styles | `web/src/index.css` | Global Tailwind CSS |
 | Vite config | `web/vite.config.ts` | Dev server + build config |
@@ -172,21 +183,25 @@ Helm is a self-hosted AI super app with three layers:
 
 ```
 Agent calls helm_set_screen(module_id, screen, draft=True)   [default]
-  → tools.py normalize_sdui_screen() → stores as "sdui__{module_id}__draft" in module_states
+  → services/sdui_state.py prepare_sdui_screen_for_storage() validates the shared save/apply contract
+  → stores as "sdui__{module_id}__draft" in module_states
   → broadcasts {type: "sdui_draft_update", module_id, screen, version}
   → Frontend useSDUIScreen() receives → sets draft state → shows DraftPreview component
 
 User clicks "Approve"
   → POST /api/actions/execute {function: "approve_draft", params: {module_id: "home"}}
   → action_registry._approve_draft() → tools.py approve_draft()
-  → copies draft to live "sdui__{module_id}" record, deletes draft record
+  → persist_live_screen() copies draft to live "sdui__{module_id}" record and clears draft row
+  → broadcasts {type: "sdui_draft_update", module_id, screen: null, version: 0}
+  → broadcasts legacy {type: "sdui_draft_rejected", module_id}
   → broadcasts {type: "sdui_screen_update", module_id, screen, version}
-  → Frontend replaces draft preview with live screen
+  → Frontend clears draft state and replaces the preview with the live screen
 
 User clicks "Reject"
   → POST /api/actions/execute {function: "reject_draft", params: {module_id: "home"}}
   → tools.py reject_draft() → deletes draft record
-  → broadcasts {type: "sdui_draft_rejected", module_id}
+  → broadcasts {type: "sdui_draft_update", module_id, screen: null, version: 0}
+  → broadcasts legacy {type: "sdui_draft_rejected", module_id}
   → Frontend clears draft state
 ```
 
@@ -204,23 +219,18 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 
 ## Known Gaps / Outstanding Work
 
-No active bugs known as of 2026-04-06. All previously filed bugs (`connected_user_ids`, calendar `PUT` decorator, `helm_hide_tab` registration, `logout()` not calling server, `fire_trigger()` never called) have been resolved.
+No active bugs known as of 2026-04-12. All previously filed bugs (`connected_user_ids`, calendar `PUT` decorator, `helm_hide_tab` registration, `logout()` not calling server, `fire_trigger()` never called) have been resolved.
 
-The following **cosmetic issues** exist:
-
-| # | Area | Description | Impact |
-|---|------|-------------|--------|
-| 1 | Web Admin | Puck v0.21.2 emits deprecation warnings for `renderHeaderActions` and `DropZones` (recommending slots API) | Cosmetic — console warnings only, all functionality works |
+No active cosmetic issues are currently documented for the custom web editor.
 
 The following **incomplete features** exist (tracked in `docs/codebase-explanation/FEATURES.md` for the full registry, `docs/codebase-explanation/FUTURE_PLANS.md` for implementation plans):
 
 | # | Area | Description |
 |---|------|-------------|
-| 1 | Frontend | `handleModulePress` in modules.tsx is a stub — tab presses do nothing |
-| 2 | Frontend | Calendar tab is read-only — no create/edit/delete UI in the frontend |
-| 3 | Frontend | `conversation_id: 'default'` is hardcoded — no multi-conversation support |
-| 4 | Frontend | Four dead SDUI component files (`AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx`) — unused, should be cleaned up |
-| 5 | Frontend | `settingsStore.navigationMode` and `.theme` are persisted but neither value is applied to the UI |
+| 1 | Frontend | Calendar tab is read-only — no create/edit/delete UI in the frontend |
+| 2 | Frontend | `conversation_id: 'default'` is hardcoded — no multi-conversation support |
+| 3 | Frontend | Four dead SDUI component files (`AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx`) — unused, should be cleaned up |
+| 4 | Frontend | `settingsStore.navigationMode` and `.theme` are persisted but neither value is applied to the UI |
 
 ---
 
@@ -235,7 +245,9 @@ The following **incomplete features** exist (tracked in `docs/codebase-explanati
 | Frontend routing: Expo Router | `app/` file-based | `(auth)/` and `(tabs)/` groups |
 | Web Admin state: Zustand | `web/src/stores/authStore.ts` | Single auth store; pages are self-contained |
 | Web Admin routing: React Router | `web/src/App.tsx` | Login guard; sidebar nav via `AdminLayout` |
-| Puck visual editor | `web/src/pages/EditorPage.tsx` | Drag-and-drop SDUI builder; Row uses `<DropZone>` for horizontal cells; Push Live = save→approve two-step; draft badge + approve/reject; `puckToHelm()` / `helmToPuck()` in `sduiAdapter.ts` |
+| Custom web editor | `web/src/pages/EditorPage.tsx` + `web/src/editor/*` | Three-panel SDUI editor with a rows-first store contract, structure tree + template library, direct canvas resize controls, row visual props, draft save/push-live flow, JSON view/import, unsaved-change confirmations on destructive paths, legacy V1 section-title normalization, V1 import that preserves vertical section stacks, read-only preservation of lowercase legacy runtime payloads including legacy forms, constrained authoring for supported actions/components, and module CRUD (create/delete custom modules) |
+| Module CRUD (dynamic modules) | `backend/app/routers/modules.py` + `web/src/pages/EditorPage.tsx` | Users can create custom modules (name + icon → slug ID) and delete them; custom modules stored as `_custom_modules` key in `module_states`; `GET /api/sdui/modules` returns `is_custom` flag |
+| Local editor templates | `web/src/editor/templateLibrary.ts` | Starter screens and row templates keep the left panel useful when saved templates are empty or supplemental |
 | Pagination pattern | `dependencies.py::PaginationParams` | `skip`, `limit`, `search` — used by workflows, notifications, calendar, audit |
 | Bulk delete pattern | `DELETE /api/{resource}/bulk` | JSON body `{ids: [...]}` — calendar, notifications, workflows |
 | Audit logging | `services/audit.py::log_audit()` | Wired into auth, calendar, workflows, notifications, modules, agent_config, users, sessions |
@@ -246,6 +258,11 @@ The following **incomplete features** exist (tracked in `docs/codebase-explanati
 | SDUI V1 (legacy) | `SDUIScreen` with sections | Still supported; lowercase component types |
 | V2 schema validation | `mcp/tools.py::_validate_sdui_v2()` | Server-side validation of component types against `_VALID_V2_COMPONENT_TYPES` frozenset; raises ValueError with actionable message for external agents |
 | Draft workflow | `sdui__X__draft` in module_states | AI always sets drafts first (default); user approves |
+| Module CRUD | `routers/modules.py` | Custom modules stored as `_custom_modules` in `module_states`; built-in modules cannot be deleted; custom module deletion also cleans up SDUI data |
+| Modules tab launcher | `mobile/app/(tabs)/modules.tsx` + `mobile/app/module/[moduleId].tsx` | Built-ins navigate to their tab route; custom modules open a dedicated SDUI route with the same draft approval UX |
+| Draft-cleared contract | `services/sdui_state.py` + `src/hooks/useSDUIScreen.ts` | Clearing or replacing a draft emits `sdui_draft_update` with `screen: null, version: 0`; legacy `sdui_draft_rejected` still follows for compatibility |
+| Web admin login 401 suppression | `web/src/stores/authStore.ts` + `web/src/lib/api.ts` | Expected `/auth/login` 401s do not fire the global unauthorized handler, so failed logins do not clear admin session state |
+| Agent streaming message IDs | `services/agent_proxy.py` | `chat_start`, streamed `chat_token`s, and `chat_complete` reuse one assistant `message_id` in both built-in and external-agent paths |
 | XML tool-call fallback | `agent_proxy._parse_xml_tool_calls()` | Supports stepfun and other non-function-calling models |
 
 ---

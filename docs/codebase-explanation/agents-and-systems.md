@@ -1,6 +1,6 @@
 # Agents, MCP, Workflows & Additional Systems
 
-> Last updated: 2026-04-06
+> Last updated: 2026-04-12
 
 ## Tier 1: TLDR
 
@@ -83,19 +83,23 @@ For models that don't use OpenAI function-calling (e.g. stepfun): if `finish_rea
 4. Sends `{type:"chat_message_replace", message_id, content: cleaned_content}` to strip XML from frontend display
 
 ### Built-in Tool Definitions (`_get_tool_definitions()`)
-12 tools exposed to the LLM (OpenAI function-calling format):
+16 tools exposed to the LLM (OpenAI function-calling format):
 
 | Tool name | Required params | Description |
 |-----------|----------------|-------------|
 | `read_calendar` | `start_date`, `end_date` | Get events (YYYY-MM-DD) |
 | `create_event` | `title`, `start_time`, `end_time` | Create event; optional: `description`, `color`, `location` |
-| `send_notification` | `title`, `message`, `severity` | Push notification |
-| `update_module_state` | `module_type`, `state` | Write SDUI JSON (legacy) |
+| `send_notification` | `title`, `message`, `severity` | Push notification (severity: info/warning/error/success) |
+| `update_module_state` | `module_type`, `state` | Write SDUI JSON (legacy; module_type: calendar/alerts/form) |
 | `get_chat_history` | — | Optional `limit` (default 20) |
-| `set_screen` | `module_id`, `screen` | Set SDUI screen on any tab; draft=True default |
+| `set_screen` | `module_id`, `screen` | Set SDUI screen on any tab; supports V2 rows (preferred) and legacy sections |
 | `delete_screen` | `module_id` | Clear a tab's SDUI screen |
-| `list_screens` | — | List all AI-generated screens |
-| `hide_tab` | `tab_id` | Hide nav-bar tab |
+| `get_screen` | `module_id` | Get the current live SDUI screen JSON for a module |
+| `list_screens` | — | List all AI-generated screens across all tabs |
+| `get_draft` | `module_id` | Get the pending draft SDUI screen for a module, if one exists |
+| `approve_draft` | `module_id` | Approve and publish a pending draft as the live screen |
+| `reject_draft` | `module_id` | Reject and discard a pending draft; optional `feedback` param |
+| `hide_tab` | `tab_id` | Hide nav-bar tab; valid: home/chat/modules/calendar/forms/alerts/settings |
 | `show_tab` | `tab_id` | Restore hidden tab |
 | `list_tabs` | — | All tabs + visibility |
 | `rename_tab` | `tab_id` | Optional: `name`, `icon` — renames/re-icons a tab |

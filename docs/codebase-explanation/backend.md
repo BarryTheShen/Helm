@@ -1,6 +1,6 @@
 # Backend — Python FastAPI Server
 
-> Last updated: 2026-04-06
+> Last updated: 2026-04-12
 
 ## Tier 1: TLDR
 
@@ -63,6 +63,7 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | Schemas | `app/schemas/` | Pydantic request/response models (15 files) |
 | Routers | `app/routers/` | 15 route files |
 | Services | `app/services/` | auth, agent_proxy, websocket_manager, workflow_engine, action_registry, audit, component_seed |
+| SDUI shared contract helpers | `app/services/sdui_state.py` | Live/draft key helpers, shared validate/apply pipeline, row-aware counters, and broadcast utilities used by REST + MCP |
 | Middleware | `app/middleware/sandbox.py` | Sandbox mode ASGI middleware |
 | MCP | `app/mcp/` | MCP server + shared tool implementations |
 | Utils | `app/utils/security.py` | JWT + bcrypt password helpers |
@@ -111,7 +112,10 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 |-----|---------|
 | `sdui__{module_id}` | Live SDUI screen JSON (e.g. `sdui__home`) |
 | `sdui__{module_id}__draft` | Pending draft awaiting user approval |
+| `config__{module_id}` | Current per-module SDUI config such as `auto_approve_drafts` |
+| `sdui__{module_id}__config` | Legacy SDUI-scoped config key still read for backward compatibility |
 | `_tabs_config` | `{"hidden_tabs": [...]}` — per-user hidden tab list |
+| `_custom_modules` | `[{id, name, icon}, ...]` — per-user custom module definitions |
 | `form_data__{form_id}` | Form submission history |
 | `notes__{user_id}` | Notes data |
 
@@ -135,7 +139,9 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/modules` | ✅ | List all tabs with enabled/disabled status |
+| GET | `/api/modules` | ✅ | List all tabs with enabled/disabled status; includes `is_custom` boolean per module |
+| POST | `/api/sdui/modules` | ✅ | Create custom module `{name, icon}` → generates slug-based ID; stored in `_custom_modules` |
+| DELETE | `/api/sdui/modules/{module_id}` | ✅ | Delete custom module (blocks built-in deletion); cleans up SDUI data |
 | DELETE | `/api/modules/{module_id}` | ✅ | Hide a tab (broadcasts `tabs_updated` WS event) |
 | POST | `/api/modules/{module_id}/show` | ✅ | Restore a hidden tab (broadcasts `tabs_updated`) |
 | PATCH | `/api/modules/{module_id}/config` | ✅ | Rename tab and/or change icon `{name?, icon?}` — broadcasts `tabs_updated` |
@@ -143,10 +149,12 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | POST | `/api/modules/{module_id}/action` | ✅ | Execute mini-app action (random_number, play_rps, create_note, delete_note) |
 | GET | `/api/devices/config` | ✅ | Get device tab config (tab_bar_modules, default_module, nav_mode) |
 | PUT | `/api/devices/config` | ✅ | Update device tab config |
-| GET | `/api/sdui` | ✅ | List all AI-set screens across all modules |
-| GET | `/api/sdui/{module_id}` | ✅ | Get live SDUI screen `{screen, version}` for module |
-| POST | `/api/sdui/{module_id}` | ✅ | Set SDUI screen; `draft=True` by default |
-| DELETE | `/api/sdui/{module_id}` | ✅ | Delete SDUI screen |
+| GET | `/api/sdui` | ✅ | List live AI-set screens across all modules; `sections_count` counts V2 rows or legacy sections |
+| GET | `/api/sdui/{module_id}` | ✅ | Get normalized live SDUI screen `{screen, version}` for module |
+| POST | `/api/sdui/{module_id}` | ✅ | Validate + store the shared row-first save/apply contract (legacy sections still accepted); saves a draft unless `auto_approve_drafts` is enabled |
+| DELETE | `/api/sdui/{module_id}` | ✅ | Delete live, draft, and config state for a module; broadcasts draft-cleared then live-clear events |
+| GET | `/api/sdui/{module_id}/config` | ✅ | Get module SDUI config; reads `config__{module_id}` first, then legacy `sdui__{module_id}__config` |
+| PUT | `/api/sdui/{module_id}/config` | ✅ | Set module SDUI config (`auto_approve_drafts`) |
 | GET | `/api/sdui/{module_id}/draft` | ✅ | Get pending draft `{screen, has_draft}` |
 | POST | `/api/sdui/{module_id}/draft/approve` | ✅ | Approve draft → publish to live screen |
 | POST | `/api/sdui/{module_id}/draft/reject` | ✅ | Reject + delete draft; optional `{feedback?}` body |
@@ -209,15 +217,15 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | `WS /ws` | `?token=` query param | Main app WebSocket |
 | `GET /health` | ❌ | `{"status": "ok", "version": ...}` |
 
-### User Management (`/api/admin/users`) — Admin Only
+### User Management (`/api/users`) — Admin Only
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/admin/users` | ✅ Admin | List all users with pagination |
-| POST | `/api/admin/users` | ✅ Admin | Create a new user `{username, password, role?}` |
-| GET | `/api/admin/users/{id}` | ✅ Admin | Get user by ID |
-| PUT | `/api/admin/users/{id}` | ✅ Admin | Update user `{username?, password?, role?}` |
-| DELETE | `/api/admin/users/{id}` | ✅ Admin | Delete user |
+| GET | `/api/users` | ✅ Admin | List all users with pagination |
+| POST | `/api/users` | ✅ Admin | Create a new user `{username, password, role?}` |
+| GET | `/api/users/{id}` | ✅ Admin | Get user by ID |
+| PUT | `/api/users/{id}` | ✅ Admin | Update user `{username?, password?, role?}` |
+| DELETE | `/api/users/{id}` | ✅ Admin | Delete user |
 
 ### Session Management (`/api/sessions`)
 
@@ -274,7 +282,7 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | GET | `/api/sdui/{module_id}/history/{version}` | ✅ | Get specific history entry |
 | POST | `/api/sdui/{module_id}/history/{version}/restore` | ✅ | Restore a historical screen version |
 | DELETE | `/api/sdui/{module_id}/history` | ✅ | Clear screen history |
-| POST | `/api/sdui/{module_id}/validate` | ✅ | Validate SDUI JSON without saving |
+| POST | `/api/sdui/validate` | ✅ | Validate SDUI JSON against the same row-first normalize/validate contract used by save/apply |
 | POST | `/api/sdui/{module_id}/duplicate` | ✅ | Duplicate a screen to another module |
 
 ---
@@ -297,15 +305,15 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 |--------|---------|------|
 | `connected` | `user_id, device_id` | On connection accepted |
 | `pong` | — | After `ping` |
-| `chat_start` | `message_id` | AI begins responding |
-| `chat_token` | `message_id, token` | Each streamed text delta |
+| `chat_start` | `message_id` | AI begins responding and establishes the assistant `message_id` for the stream |
+| `chat_token` | `message_id, token` | Each streamed text delta; reuses the `chat_start` `message_id` |
 | `chat_message_replace` | `message_id, content` | After XML tool call stripping |
-| `chat_complete` | `message_id, content` | Full response done |
+| `chat_complete` | `message_id, content` | Full response done; reuses the same `message_id` |
 | `chat_error` | `message, code?` | Error; `code:"no_api_key"` if no LLM configured |
 | `notification` | `id?, title, message, severity, actions?, timestamp?` | Push notification |
 | `sdui_screen_update` | `module_id, screen, version` | Live SDUI screen updated |
-| `sdui_draft_update` | `module_id, screen, version` | New draft ready for approval |
-| `sdui_draft_rejected` | `module_id` | Draft was rejected |
+| `sdui_draft_update` | `module_id, screen, version` | New draft ready for approval, or draft cleared when `screen=null` and `version=0` |
+| `sdui_draft_rejected` | `module_id` | Legacy companion event when a draft is rejected or cleared |
 | `tabs_updated` | `modules: [...]` | Tab visibility changed |
 | `module_state_update` | `module, state, version` | Module state changed (legacy) |
 | `tool_result` | `tool, result` | Tool call succeeded |
@@ -419,13 +427,17 @@ ASGI middleware that checks for `X-Helm-Sandbox: true` header. When active:
 | `helm_rename_tab` | `tab_id, name?, icon?` | Rename a tab and/or change its emoji icon |
 | `helm_list_tabs` | — | List all tabs with visibility |
 
-**Total: 22 MCP tools** (registered in `mcp/server.py` via `@mcp.tool()`). The Agent Proxy (`services/agent_proxy.py`) exposes a **12-tool subset** of these to the in-app LLM.
+**Total: 22 MCP tools** (registered in `mcp/server.py` via `@mcp.tool()`). The Agent Proxy (`services/agent_proxy.py`) exposes a **16-tool subset** of these to the in-app LLM.
 
 ### `mcp/tools.py` — Core Tool Implementations
 
 All tool logic is here; shared between the Agent Proxy (internal) and MCP Server (external). Accessed via `execute_tool(name, args, user_id)` dispatcher.
 
-**SDUI Normalization (`normalize_sdui_screen`):** Converts flat AI-generated component dicts to props-based schema before storage. Applied before DB write AND before WS broadcast.
+**Shared SDUI contract (`app/services/sdui_state.py` + `mcp/tools.py`):** `validate_sdui_screen_payload()` and `prepare_sdui_screen_for_storage()` centralize the save/apply contract used by REST validate/save, MCP `set_screen`, template apply/restore/duplicate flows, and draft approval. `normalize_sdui_screen()` still converts flat AI-generated component dicts to the props-based schema the frontend expects, while `_validate_sdui_v2()` enforces the row-first V2 contract when `rows` are present.
+
+**Draft-cleared publish semantics:** `send_draft_cleared()` emits `sdui_draft_update` with `screen: null, version: 0` before the live update and still sends legacy `sdui_draft_rejected` for compatibility.
+
+**Regression coverage:** `tests/test_sdui_parity.py` and `tests/test_templates.py` verify row-first validation/apply parity, agent-proxy/MCP tool-definition parity, live-only `list_screens`, draft-cleared publish sequencing, and assistant `message_id` reuse.
 
 ---
 
