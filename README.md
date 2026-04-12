@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![React Native](https://img.shields.io/badge/React%20Native-Expo-000020?logo=expo)](https://expo.dev/)
+[![React Native](https://img.shields.io/badge/React%20Native-0.83-000020?logo=expo)](https://expo.dev/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 
 An open-source, self-hosted AI super app. A universal agentic AI frontend that dynamically renders rich native UI connected to any service via APIs and AI agents.
@@ -19,7 +19,7 @@ Helm is a mobile-first platform where an AI agent **directly controls your app's
 - Adds, edits, and deletes calendar events
 - Sends you notifications with custom severity and actions
 - Drafts new UI changes for your approval before going live
-- Shows/hides navigation tabs dynamically
+- Shows/hides and renames navigation tabs dynamically
 - Can be extended to control any connected service via MCP tools
 
 The app is a **Server-Driven UI (SDUI) renderer** — the AI sends JSON component payloads and the mobile app renders native components. Zero app updates needed to change any screen.
@@ -30,17 +30,18 @@ The app is a **Server-Driven UI (SDUI) renderer** — the AI sends JSON componen
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  React Native App (iOS / Android / Web)                      │
-│  SDUI V2 renderer · atomic/composite component library       │
-│  Calendar · Chat · Alerts · Forms · Home · Modules           │
+│  React Native App (iOS / Android / Web)          Expo 55    │
+│  SDUI V2 renderer · atomic/structural/composite library     │
+│  Home · Chat · Calendar · Forms · Alerts · Modules          │
 └───────────────────┬─────────────────────────────────────────┘
                     │  WebSocket (real-time events) + REST API
-┌───────────────────▼─────────────────────────────────────────┐
-│  Python FastAPI Backend                           port 8000  │
-│  Auth · Calendar · Chat · Notifications · Workflows          │
-│  Agent Proxy (OpenRouter streaming, tool-call loop)          │
-│  MCP Server (18 tools for any MCP-compatible agent)          │
-└─────────────────┬───────────────────────────────────────────┘
+┌───────────────────▼──────────────────┐  ┌────────────────────┐
+│  Python FastAPI Backend   port 8000  │  │  Web Admin Panel   │
+│  Auth · Calendar · Chat · Workflows  │  │  (Vite + React)    │
+│  Agent Proxy (OpenRouter streaming)  │  │  port 5173         │
+│  MCP Server (22 tools)               │  │  SDUI Editor       │
+│  Workflow Engine (APScheduler)       │  │  User/Session Mgmt │
+└─────────────────┬────────────────────┘  └────────────────────┘
                   │  MCP over HTTP / external agent SSE
 ┌─────────────────▼───────────────────────────────────────────┐
 │  Standalone Helm Agent (PydanticAI + OpenRouter) port 7860   │
@@ -54,15 +55,16 @@ The app is a **Server-Driven UI (SDUI) renderer** — the AI sends JSON componen
 
 | Layer | Technology |
 |-------|-----------|
-| Mobile app | React Native 0.83 / Expo 55, TypeScript strict mode |
-| State management | Zustand, Expo Router (file-based navigation) |
-| Backend | Python FastAPI, SQLAlchemy async, SQLite (aiosqlite) |
+| Mobile app | React Native 0.83.2 / Expo 55.0.8, TypeScript strict mode |
+| Mobile navigation | Expo Router 55 (file-based), Zustand stores |
+| Backend | Python FastAPI 0.115, SQLAlchemy async, SQLite (aiosqlite) |
+| Web admin | React 19 + Vite + Tailwind CSS 4, React Router 7 |
 | AI protocol | MCP (Model Context Protocol) StreamableHTTP |
 | Agent runtime | PydanticAI + OpenRouter |
-| Real-time transport | WebSocket (FastAPI + custom WS manager) |
-| Auth | JWT sessions (Bearer tokens, bcrypt passwords) |
-| Scheduling | APScheduler (cron-based workflow engine) |
-| Tests | pytest-asyncio (55 tests) |
+| Real-time transport | WebSocket (FastAPI + reconnecting-websocket) |
+| Auth | JWT session tokens (bcrypt passwords, Bearer header) |
+| Scheduling | APScheduler (cron + event-trigger workflow engine) |
+| Tests | pytest-asyncio (113 tests across 15 test files) |
 
 ---
 
@@ -74,32 +76,47 @@ The app is a **Server-Driven UI (SDUI) renderer** — the AI sends JSON componen
 | **Home** | AI-driven SDUI canvas — renders any layout the AI sends |
 | **Chat** | Real-time streaming chat with the AI agent |
 | **Calendar** | Full month-grid calendar; AI can add/edit/delete events |
-| **Forms** | Structured input forms (stub — SDUI forms coming) |
+| **Forms** | SDUI-driven forms (no hardcoded UI — purely AI-generated) |
 | **Alerts** | Notification feed with severity levels and tap actions |
-| **Modules** | General-purpose SDUI module slots |
-| **Settings** | Configure server URL, API keys, and profile |
+| **Modules** | Launcher for built-in and AI-created custom modules |
+| **Settings** | Server URL, account info, logout |
 
 ### AI Capabilities
 - **Live screen rendering** — AI sends SDUI JSON → app renders native components instantly
 - **Draft & approval workflow** — AI proposes UI changes; you Approve / Reject / Add Feedback before they go live
 - **Tool-call streaming** — responses stream token by token; tool calls execute mid-stream without blocking
-- **Tab control** — AI hides/shows navigation tabs dynamically during a session
-- **Calendar management** — natural-language event creation, bulk reads, delete-all
+- **Tab control** — hide/show/rename navigation tabs dynamically during a session
+- **Custom modules** — AI can create entirely new named tabs with their own SDUI screens
+- **Calendar management** — natural-language event creation, date-range reads, bulk delete
 - **Notifications** — AI pushes alerts with `info / warning / error / success` severity
-- **Workflow automation** — cron-scheduled or event-triggered automations (e.g. daily digests)
+- **Workflow automation** — cron-scheduled or event-triggered automations (event created/updated, form submitted, message received)
 - **MCP integration** — any MCP-compatible external agent (Claude Desktop, etc.) can drive the whole app
 
 ### SDUI Component Library (V2)
 
-The app ships a pre-built, extensible component registry with three tiers:
+The app ships an extensible component registry with four tiers:
 
 | Tier | Components |
 |------|-----------|
 | **Atomic** | `Text`, `Markdown`, `Button`, `Image`, `TextInput`, `Icon`, `Divider` |
-| **Structural** | `Container` (flexbox, shadows, color tokens) |
+| **Structural** | `Container` (flexbox, shadows, color tokens, nested children) |
 | **Composite** | `CalendarModule`, `ChatModule`, `NotesModule`, `InputBar` |
+| **SDUI-specific** | `Badge`, `Stat`, `List`, `Alert` |
 
-Components are registered by type string and resolved at render time — new components can be added without changing the renderer.
+Components are registered by PascalCase type string and resolved at render time — new components can be added without changing the renderer itself.
+
+### Web Admin Panel
+
+A React + Vite web dashboard for administrators at `http://localhost:5173`:
+
+- **Dashboard** — system stats (users, sessions, events, workflows)
+- **Users** — create, edit, delete, list users
+- **Sessions** — view and revoke active sessions
+- **Audit Log** — filterable audit trail of all security-relevant actions
+- **Workflows** — create and manage automation workflows
+- **Templates** — save and reuse SDUI screen templates
+- **Component Registry** — view/edit registered SDUI component definitions
+- **SDUI Editor** — 3-panel visual editor (structure tree + canvas + property inspector) with device presets, drag-to-reorder, undo/redo, draft/publish flow, and JSON import/export
 
 ---
 
@@ -130,12 +147,12 @@ uvicorn app.main:app --reload   # http://localhost:8000
 
 ### 2. Environment Variables
 
-Create `Helm/.env`:
+Create `Helm/.env` (at the repo root):
 
 ```env
 # Required
 OPENROUTER_API_KEY=sk-or-...       # https://openrouter.ai/keys
-SECRET_KEY=your-secret-key-here    # random string for JWT signing
+SECRET_KEY=your-secret-key-here    # any random string for JWT signing
 
 # Optional — defaults shown
 OPENROUTER_MODEL=stepfun/step-3.5-flash:free
@@ -146,36 +163,54 @@ EXTERNAL_AGENT_URL=                # set to http://localhost:7860 to use api_ser
 AGENT_WEB_PORT=7860
 ```
 
-Register and get your session token:
+Create your first admin account (backend must be running):
 
 ```bash
-# Register
-curl -X POST http://localhost:8000/api/auth/register \
+# First-time setup — creates the admin user (locked after first use)
+curl -X POST http://localhost:8000/auth/setup \
   -H "Content-Type: application/json" \
   -d '{"username": "admin", "password": "yourpassword"}'
 
 # Login — copy session_token from response
-curl -X POST http://localhost:8000/api/auth/login \
+curl -X POST http://localhost:8000/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "yourpassword"}'
+  -d '{"username": "admin", "password": "yourpassword", "device_id": "cli", "device_name": "CLI"}'
 ```
 
-Add `HELM_SESSION_TOKEN=<your token>` to `.env`.
+Add `HELM_SESSION_TOKEN=<your token>` to `.env` if using the standalone agent.
 
-### 3. Frontend
+Alternatively, use the management CLI:
+
+```bash
+cd backend
+source .venv/bin/activate
+python manage.py create_user --username admin --password yourpassword
+```
+
+### 3. Mobile App
 
 ```bash
 cd mobile
 npm install
 npx expo start          # Scan QR with Expo Go on your phone
-npx expo start --web    # Or open in browser
+npx expo start --web    # Or run in browser
 ```
 
-Open the app → Settings → enter server URL (`http://localhost:8000`) → log in.
+At first launch, enter your server URL (`http://localhost:8000`) on the Connect screen, then log in.
 
-### 4. Standalone Agent (Optional)
+### 4. Web Admin Panel (Optional)
 
-The standalone Helm Agent is a developer tool with a browser chat UI:
+```bash
+cd web
+npm install
+npm run dev             # http://localhost:5173
+```
+
+Log in with the same admin credentials you created above.
+
+### 5. Standalone Agent (Optional)
+
+The standalone Helm Agent is a developer / power-user tool with a browser chat UI that has full MCP access and can also read/write mobile source files:
 
 ```bash
 source backend/.venv/bin/activate
@@ -186,8 +221,9 @@ python helm_agent.py --web          # http://localhost:7860
 Example commands:
 - *"Show me my calendar for this week"*
 - *"Add a standup meeting tomorrow at 9am"*
-- *"Send me a warning notification: database backup failed"*
-- *"Set the home tab to a dashboard with a greeting card and my next 3 events"*
+- *"Send me a warning notification: deployment complete"*
+- *"Set the home tab to a dashboard with a greeting and my next 3 events"*
+- *"Hide the forms tab and rename modules to My Journal"*
 
 #### Running as an External Agent Service
 
@@ -208,12 +244,15 @@ cd agent && python api_server.py   # default port 7860
 ```bash
 cd backend
 source .venv/bin/activate
-pytest                              # All 55 tests
-pytest -v tests/test_calendar.py    # Single file
+pytest                              # All 113 tests
+pytest -v tests/test_auth.py        # Auth tests
+pytest -v tests/test_calendar.py    # Calendar tests
 pytest -v tests/test_drafts.py      # Draft/approval workflow tests
+pytest -v tests/test_sdui_parity.py # SDUI format parity tests
+pytest -v tests/test_templates.py   # Template tests
 ```
 
-Test suite covers: auth, calendar, notifications, workflows, drafts, and SDUI actions.
+Test suite covers: auth, calendar, notifications, workflows, drafts, SDUI parity, templates, users, sessions, actions, admin stats, and sandbox mode.
 
 ---
 
@@ -231,45 +270,66 @@ Helm/
 │   └── README.md
 ├── backend/
 │   ├── pyproject.toml
+│   ├── manage.py                   # CLI: create_user, reset_password
 │   ├── alembic/                    # DB migrations
-│   ├── app/
-│   │   ├── main.py                 # FastAPI app, lifespan, middleware
-│   │   ├── config.py               # Settings (pydantic-settings + .env)
-│   │   ├── routers/                # auth, calendar, chat, notifications,
-│   │   │                           # workflows, modules, websocket, actions, users
-│   │   ├── services/               # agent_proxy, ws_manager, workflow_engine, auth
-│   │   ├── models/                 # SQLAlchemy ORM (9 models)
-│   │   ├── schemas/                # Pydantic request/response schemas
-│   │   └── mcp/                    # FastMCP server + 18 tool implementations
-│   └── tests/                      # 55 pytest-asyncio tests
+│   └── app/
+│       ├── main.py                 # FastAPI app, lifespan, middleware
+│       ├── config.py               # Settings (pydantic-settings + .env)
+│       ├── routers/                # 15 routers: auth, modules, chat, calendar,
+│       │                           # notifications, workflows, actions, users,
+│       │                           # sessions, audit, components, templates,
+│       │                           # admin, agent_config, websocket
+│       ├── services/               # agent_proxy, ws_manager, workflow_engine,
+│       │                           # auth, action_registry, audit, component_seed,
+│       │                           # sdui_state, template_seed
+│       ├── models/                 # 14 SQLAlchemy ORM models
+│       ├── schemas/                # Pydantic request/response schemas (15 files)
+│       ├── mcp/                    # FastMCP server + 22 tool implementations
+│       ├── middleware/             # sandbox.py (X-Helm-Sandbox test aid)
+│       └── utils/                  # security.py (JWT, bcrypt)
+│   └── tests/                      # 113 pytest-asyncio tests (15 files)
 ├── mobile/
 │   ├── app/
 │   │   ├── _layout.tsx             # Root layout + auth guard
-│   │   ├── (auth)/                 # Login + server connect screens
-│   │   └── (tabs)/                 # home, chat, calendar, forms, alerts,
-│   │                               # modules, settings
+│   │   ├── (auth)/                 # connect.tsx, login.tsx
+│   │   ├── (tabs)/                 # home, chat, calendar, forms, alerts,
+│   │   │                           # modules, settings
+│   │   └── module/[moduleId].tsx   # Dynamic custom module route
 │   └── src/
 │       ├── components/
-│       │   ├── atomic/             # Text, Button, Icon, Image, Divider…
-│       │   ├── structural/         # Container
+│       │   ├── atomic/             # SDUIText, SDUIButton, SDUIIcon, SDUIImage…
+│       │   ├── structural/         # SDUIContainer
 │       │   ├── composite/          # CalendarModule, ChatModule, InputBar…
-│       │   └── sdui/               # SDUIRenderer, DraftPreview, …
+│       │   └── sdui/               # SDUIRenderer, DraftPreview, legacy V1 components
 │       ├── renderer/               # componentRegistry.ts (V2 type → component map)
-│       ├── hooks/                  # useWebSocket, useSDUIScreen, useActionDispatcher, …
-│       ├── stores/                 # Zustand: authStore, uiStore, webSocketStore
-│       ├── services/               # api.ts (REST client)
-│       ├── theme/                  # tokens.ts (colors, shadows, resolveColor)
-│       └── types/                  # sdui.ts, api.ts TypeScript types
+│       ├── hooks/                  # useSDUIScreen, useActionDispatcher, useBreakpoint
+│       ├── stores/                 # authStore, uiStore, settingsStore, tabsStore
+│       ├── services/               # api.ts (REST client), websocket.ts, auth.ts
+│       ├── contexts/               # WebSocketContext (single shared WS)
+│       ├── theme/                  # colors.ts, tokens.ts (resolveColor, shadows)
+│       └── types/                  # sdui.ts, api.ts, navigation.ts
+├── web/
+│   └── src/
+│       ├── App.tsx                 # React Router, auth guard, AdminLayout
+│       ├── pages/                  # Login, Dashboard, Users, Sessions, Audit,
+│       │                           # Workflows, Templates, Components, Editor
+│       ├── editor/                 # Custom 3-panel SDUI editor
+│       │   ├── useEditorStore.ts   # Zustand store (rows-first contract)
+│       │   ├── EditorCanvas.tsx    # Interactive canvas + resize handles
+│       │   ├── StructureTree.tsx   # Left panel tree with CRUD + drag reorder
+│       │   ├── PropertyInspector.tsx # Right panel contextual editor
+│       │   └── ComponentPicker.tsx
+│       ├── lib/                    # api.ts (typed admin API client), utils.ts
+│       └── stores/                 # authStore (admin auth state)
 └── docs/
     ├── codebase-explanation/       # Living technical docs (read before contributing)
-    │   ├── README.md               # Index of all docs in this folder
-    │   ├── AI-TECHNICAL-REFERENCE.md
-    │   ├── OPERATIONS.md
-    │   ├── backend.md
-    │   ├── frontend.md
-    │   ├── protocol.md
-    │   ├── agents-and-systems.md
-    │   └── FUTURE_PLANS.md
+    │   ├── AI-TECHNICAL-REFERENCE.md  # File map, data flow, patterns
+    │   ├── OPERATIONS.md              # Running services, port reference, env vars
+    │   ├── backend.md                 # All endpoints, DB schema, services
+    │   ├── frontend.md                # Screens, navigation, V2 component system
+    │   ├── protocol.md                # REST API, WebSocket events, MCP, SDUI schemas
+    │   ├── agents-and-systems.md      # Agent Proxy, MCP server, Workflows, Agent
+    │   └── FUTURE_PLANS.md            # Roadmap
     └── Agentic AI Super App — Project Hub/
         └── Blueprint — Production Spec Documents/
 ```
@@ -278,63 +338,90 @@ Helm/
 
 ## How the SDUI Draft Workflow Works
 
-1. AI calls `set_screen(module_id, screen_json)` — stored as a **draft**, not live yet
-2. Backend pushes `sdui_draft_update` WebSocket event to the app
+1. AI calls `helm_set_screen(module_id, screen_json)` — stored as a **draft**, not live yet
+2. Backend broadcasts `sdui_draft_update` WebSocket event to the app
 3. App shows a `DraftPreview` banner with the proposed layout
-4. User taps **Approve** → draft goes live; pushes `sdui_screen_update`
-5. User taps **Reject** (with optional feedback) → draft deleted; pushes `sdui_draft_rejected`
+4. User taps **Approve** → `helm_approve_draft` is called → draft goes live; broadcasts `sdui_screen_update`
+5. User taps **Reject** (with optional feedback) → draft deleted; broadcasts `sdui_draft_rejected`
 6. AI receives the feedback and can revise its proposal
 
 ---
 
 ## MCP Tools Reference
 
-Any MCP-compatible agent can connect to `http://localhost:8000/mcp/` with a valid Bearer token and use these tools:
+Any MCP-compatible agent can connect to `http://localhost:8000/mcp/` with a valid Bearer token:
+
+### Calendar
 
 | Tool | Description |
 |------|-------------|
 | `helm_read_calendar` | Read events in a date range |
+| `helm_read_all_calendar` | Read all events (no date filter) |
 | `helm_create_event` | Create a calendar event |
 | `helm_update_event` | Update an existing event |
-| `helm_delete_event` | Delete an event |
+| `helm_delete_event` | Delete a calendar event |
 | `helm_delete_all_events` | Bulk-delete all events |
-| `helm_read_all_calendar` | Read all events (no date filter) |
-| `helm_send_notification` | Push a notification |
-| `helm_set_screen` | Set SDUI screen on a module (as draft) |
-| `helm_get_screen` | Get current screen for a module |
+
+### Notifications & Chat
+
+| Tool | Description |
+|------|-------------|
+| `helm_send_notification` | Push a notification (info/warning/error/success) |
+| `helm_get_chat_history` | Retrieve recent chat messages |
+| `helm_send_chat_message` | Inject a message into the chat history |
+
+### SDUI Screens
+
+| Tool | Description |
+|------|-------------|
+| `helm_set_screen` | Set SDUI screen on a module (saves as draft) |
+| `helm_get_screen` | Get current live screen for a module |
 | `helm_get_draft` | Get pending draft for a module |
 | `helm_approve_draft` | Approve pending draft → goes live |
 | `helm_reject_draft` | Reject draft with optional feedback |
 | `helm_delete_screen` | Remove a module's SDUI screen |
 | `helm_list_screens` | List all modules with AI-generated screens |
+
+### Navigation Tabs
+
+| Tool | Description |
+|------|-------------|
 | `helm_hide_tab` | Hide a navigation tab |
 | `helm_show_tab` | Show a hidden navigation tab |
-| `helm_list_tabs` | List all tabs with visibility state |
-| `helm_list_actions` | List registered SDUI action handlers |
+| `helm_rename_tab` | Rename a tab and/or change its emoji icon |
+| `helm_list_tabs` | List all tabs with visibility and name state |
+
+### Other
+
+| Tool | Description |
+|------|-------------|
+| `helm_update_module_state` | Update legacy module state (calendar/alerts/forms) |
+| `helm_get_form_data` | Retrieve form submission data |
 
 ---
 
 ## Documentation
+
 All living technical docs are in [`docs/codebase-explanation/`](docs/codebase-explanation/README.md).
+
 | Document | Description |
 |----------|-------------|
-| [AI Technical Reference](docs/codebase-explanation/AI-TECHNICAL-REFERENCE.md) | File map, data flow, known bugs, patterns |
+| [AI Technical Reference](docs/codebase-explanation/AI-TECHNICAL-REFERENCE.md) | File map, data flow, known patterns — **read this first** |
 | [Operations Guide](docs/codebase-explanation/OPERATIONS.md) | Running services, port reference, env vars |
 | [Backend Architecture](docs/codebase-explanation/backend.md) | All endpoints, DB schema, services |
 | [Frontend Architecture](docs/codebase-explanation/frontend.md) | Screens, navigation, V2 component system |
-| [Protocol Reference](docs/codebase-explanation/protocol.md) | REST API, WebSocket events, MCP tools, SDUI schemas |
-| [Agents & Systems](docs/codebase-explanation/agents-and-systems.md) | Agent Proxy, MCP server, Workflows, Standalone Agent |
+| [Protocol Reference](docs/codebase-explanation/protocol.md) | REST API contracts, WebSocket events, MCP tools, SDUI schemas |
+| [Agents & Systems](docs/codebase-explanation/agents-and-systems.md) | Agent Proxy, MCP server, Workflow Engine, Standalone Agent |
 | [Future Plans](docs/codebase-explanation/FUTURE_PLANS.md) | Roadmap beyond current version |
 
 ---
 
 ## Known Limitations
 
-- **Forms** — Currently a static stub. SDUI-driven dynamic forms are planned.
-- **Real-time alerts on web** — WebSocket is not connected in Expo web mode; notifications require a manual refresh.
-- **Mobile push** — APNs/FCM push notifications not yet implemented.
-- **`helm_hide_tab` bug** — Not currently registered in the MCP server due to a code placement issue; fix pending.
-- **Workflow trigger wiring** — `EVENT_CREATED`, `EVENT_UPDATED`, and `MESSAGE_RECEIVED` trigger types exist but are not yet wired to their respective routers.
+- **Calendar UI** — Calendar tab is read-only in the mobile app; add/edit/delete requires the AI or the standalone agent.
+- **Mobile push** — APNs/FCM push notifications not yet implemented; notifications require the app to be open.
+- **settingsStore** — `navigationMode` and `theme` are persisted but have no effect on the UI yet.
+- **conversation_id** — Hardcoded to `'default'`; multi-conversation support is not yet implemented.
 
 ---
 
@@ -345,7 +432,7 @@ See [CLAUDE.md](CLAUDE.md) for full contribution rules. Key points:
 - Never commit directly to `main` — branch + PR always
 - Fix root causes, not symptoms
 - Write a failing test before changing production code
-- Verify with live testing before merging
+- Verify with live testing (Playwright) before merging
 
 ---
 
