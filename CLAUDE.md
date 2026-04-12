@@ -89,8 +89,16 @@ Helm/
 │   │   ├── pages/                # Login, Dashboard, Users, Sessions, Audit, Workflows, Templates, Components, Editor
 │   │   ├── lib/
 │   │   │   ├── api.ts            # Typed fetch wrapper for admin endpoints
-│   │   │   ├── puckConfig.tsx    # Puck visual editor component renderers
-│   │   │   └── sduiAdapter.ts    # puckToHelm() / helmToPuck() translation
+│   │   │   ├── sduiAdapter.ts    # Legacy format normalization (Puck conversion removed)
+│   │   │   └── utils.ts          # Shared helpers
+│   │   ├── editor/               # Custom 3-panel SDUI editor (replaced Puck)
+│   │   │   ├── types.ts          # EditorRow/Cell/Screen types, DevicePresets, ComponentRegistry
+│   │   │   ├── componentSchemas.ts # Per-component prop schemas for property inspector
+│   │   │   ├── useEditorStore.ts # Zustand store — rows, selection, clipboard, undo/redo
+│   │   │   ├── StructureTree.tsx # Left panel — screen structure tree with CRUD
+│   │   │   ├── EditorCanvas.tsx  # Center panel — interactive canvas with previews
+│   │   │   ├── PropertyInspector.tsx # Right panel — contextual property editor
+│   │   │   └── ComponentPicker.tsx # Component type selection popover
 │   │   ├── stores/authStore.ts   # Zustand auth state
 │   │   └── components/           # AdminLayout sidebar + top bar
 │   └── vite.config.ts

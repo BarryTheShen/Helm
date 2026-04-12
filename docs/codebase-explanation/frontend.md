@@ -1,6 +1,6 @@
 # Frontend — React Native (Expo) Mobile App
 
-> Last updated: 2026-04-06
+> Last updated: 2026-04-09
 
 ## Tier 1: TLDR
 
@@ -26,21 +26,23 @@ The frontend is a **React Native (Expo)** mobile app that serves as the universa
 
 ```
 app/
-├── _layout.tsx           → RootLayout: auth guard + root providers
+├── _layout.tsx           → RootLayout: auth guard + root providers + WebSocketProvider
 ├── index.tsx             → Splash/redirect while auth hydrates
 ├── (auth)/
 │   ├── _layout.tsx       → Stack (headerShown: false)
 │   ├── connect.tsx       → Server URL entry + first account setup
 │   └── login.tsx         → Username/password sign-in
-└── (tabs)/
-    ├── _layout.tsx       → Tabs + WebSocketProvider + TabsConfigSync
-    ├── home.tsx          → SDUI-driven home (DraftPreview when draft exists)
-    ├── chat.tsx          → AI chat (WebSocket streaming)
-    ├── modules.tsx       → Module list (enable/disable tabs)
-    ├── calendar.tsx      → Month grid calendar with event dots
-    ├── forms.tsx         → SDUI-driven forms (no fallback native UI)
-    ├── alerts.tsx        → Notifications list
-    └── settings.tsx      → Server info, account, logout
+├── (tabs)/
+│   ├── _layout.tsx       → Tabs + TabsConfigSync
+│   ├── home.tsx          → SDUI-driven home (DraftPreview when draft exists)
+│   ├── chat.tsx          → AI chat (WebSocket streaming)
+│   ├── modules.tsx       → Module list (enable/disable tabs)
+│   ├── calendar.tsx      → Month grid calendar with event dots
+│   ├── forms.tsx         → SDUI-driven forms (no fallback native UI)
+│   ├── alerts.tsx        → Notifications list
+│   └── settings.tsx      → Server info, account, logout
+└── module/
+  └── [moduleId].tsx    → Dedicated custom-module SDUI route (DraftPreview when draft exists)
 ```
 
 **Auth guard** (`_layout.tsx`): Calls `initialize()` + `initializeSettings()` on mount. No token → redirect to `/(auth)/connect`. Has token + in auth group → redirect to `/(tabs)/chat`.
@@ -88,8 +90,14 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 - **API:** `GET /api/notifications` on mount and when `[token, serverUrl]` change. Re-fetches on WS `notification` message.
 
 ### `app/(tabs)/modules.tsx` — Module Manager
-- **Shows:** FlatList of modules with icon, name, description, enabled/disabled badge. SDUI fallback if set.
+- **Shows:** FlatList of built-in and custom modules with icon, name, built-in/custom label, and enabled/disabled badge. Built-ins navigate to their existing tab route; custom modules navigate to `/module/[moduleId]`. SDUI fallback if set.
 - **API:** `GET /api/modules` on mount.
+
+### `app/module/[moduleId].tsx` — Custom Module Route
+- **Shows:** AI-generated SDUI screen for the selected custom module, or `DraftPreview` if draft exists, or empty-state prompt
+- **API:** `GET /api/sdui/{moduleId}` + `GET /api/sdui/{moduleId}/draft` via `useSDUIScreen(moduleId)`
+- **Approve draft:** `POST /api/actions/execute {function: "approve_draft", params: {module_id}}`
+- **Reject draft:** `POST /api/actions/execute {function: "reject_draft", params: {module_id, feedback?}}`
 
 ### `app/(tabs)/forms.tsx` — Forms
 - **Shows:** SDUI-driven form screen via `useSDUIScreen('forms')`, or empty-state loading/error. **No native fallback UI** — purely SDUI.
@@ -173,7 +181,8 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 ```
 - Fetches `GET /api/sdui/{moduleId}` + `GET /api/sdui/{moduleId}/draft` in parallel on mount
 - Re-fetches on `[moduleId, token, serverUrl]` change
-- Subscribes to WS: `sdui_screen_update` (sets live screen), `sdui_draft_update` (sets draft), `sdui_draft_rejected` (clears draft)
+- Shared by built-in tabs and the dedicated custom-module route
+- Subscribes to WS: `sdui_screen_update` (sets live screen and clears draft), `sdui_draft_update` (sets or clears draft based on `screen`), `sdui_draft_rejected` (clears draft)
 - Supports both V1 (`SDUIScreen`) and V2 (`SDUIPage`) payloads via `isSDUIPage()` type guard
 
 ### `useActionDispatcher()` → `(action: SDUIAction) => void`
@@ -181,7 +190,7 @@ Memoized stable callback. Handles all SDUI action types:
 
 | Action type | Behavior |
 |-------------|----------|
-| `navigate` | Maps module IDs to tab routes, calls `router.push()` |
+| `navigate` | Maps built-in module IDs to tab routes and custom module IDs to `/module/[moduleId]`, then calls `router.push()` |
 | `go_back` | `router.back()` if `canGoBack()` |
 | `open_url` | Only allows `http/https/mailto/tel` schemes; calls `Linking.openURL()` |
 | `copy_text` | `Clipboard.setStringAsync()` + Alert confirmation |
@@ -227,9 +236,6 @@ Rendered by `SDUIScreenRenderer` → `SDUIRenderer` (single component) in `src/c
 
 ```json
 {
-  "schema_version": "1.0.0",
-  "module_id": "home",
-  "title": "optional",
   "rows": [
     {
       "id": "r1",
@@ -245,10 +251,16 @@ Rendered by `SDUIScreenRenderer` → `SDUIRenderer` (single component) in `src/c
 }
 ```
 
+Persisted V2 screens are row-first. The mobile type guard only requires `rows`; `schema_version`, `module_id`, and `title` are optional on stored payloads.
+
 Component types (PascalCase — registered in `src/renderer/componentRegistry.ts`):
 `Text`, `Markdown`, `Button`, `Image`, `TextInput`, `Icon`, `Divider`, `Container`, `CalendarModule`, `ChatModule`, `NotesModule`, `InputBar`
 
 Rendered by `SDUIPageRenderer` → `RowRenderer` → `CellRenderer` → `V2ComponentRenderer`.
+
+When `scrollable: true`, rows render as horizontal card rails with fixed-width cells derived from each numeric cell width, so the mobile runtime matches the editor preview instead of flexing cells like paging rows.
+
+Rows with a fixed height apply `overflow: 'hidden'` so that tall child content (e.g. `CalendarModule`) does not bleed into adjacent rows.
 
 ### Auto-dispatch — `SDUIUniversalRenderer`
 Detects format via `isSDUIPage()` type guard and dispatches to `SDUIPageRenderer` (V2) or `SDUIScreenRenderer` (V1).
@@ -289,7 +301,7 @@ Detects format via `isSDUIPage()` type guard and dispatches to `SDUIPageRenderer
 | `SDUIImage` | `src, alt?, width?, height?, aspectRatio?, borderRadius?, onPress?, placeholder?('blur'\|'skeleton'\|'none')` |
 | `SDUITextInput` | `value?, onChangeText?, placeholder?, multiline?, maxLines?, secureTextEntry?, keyboardType?, editable?` |
 | `SDUIIcon` | `name` (Feather name → emoji/unicode map, ~40 icons), `size?, color?, onPress?` |
-| `SDUIDivider` | `direction?('horizontal'\|'vertical'), thickness?, color?, indent?` |
+| `SDUIDivider` | `direction?('horizontal'\|'vertical'), thickness?, color?, indent?, margin?` |
 
 ### V2 Structural (`src/components/structural/`)
 
@@ -306,7 +318,7 @@ Uses `resolveColor()` and `themeShadows` from `src/theme/tokens.ts`.
 | `CalendarModule` | Full MVP | Month grid + 3-day view stub; event dots; day agenda |
 | `ChatModule` | Placeholder | Shows "navigate to Chat tab" |
 | `NotesModule` | Placeholder | Shows "Notes will appear here" |
-| `InputBar` | Full MVP | `[⚙️][TextInput][➤]` strip with optional settings items |
+| `InputBar` | Full MVP | Text input + send strip; send stays disabled unless both `onSend` and `dispatch` are available, and typed text is only cleared after a send action actually dispatches |
 
 ### Component Registry (`src/renderer/componentRegistry.ts`)
 
@@ -357,7 +369,11 @@ resolveColor(tokenOrHex, fallback?)  // resolves token name or passes through he
 
 **V1:** `SDUISection`, `SDUIScreen` (schema_version: 1)
 
-**V2:** `SDUICell { id, width, content }`, `SDUIRow { id, cells, compact?, regular?, scrollable?, gap?, padding?, backgroundColor? }`, `SDUIPage { schema_version: '1.0.0', module_id, title?, rows }`
+**V2:** `SDUICell { id, width, content }`, `SDUIRow { id, cells, compact?, regular?, scrollable?, gap?, padding?, paddingTop?, paddingBottom?, paddingLeft?, paddingRight?, backgroundColor? }`, `SDUIPage { schema_version?: '1.0.0', module_id?: string, title?: string, rows }`
+
+The mobile runtime uses the per-side row padding values when present and falls back to `padding` for uniform spacing.
+
+Persisted rows-first payloads may omit page wrapper metadata; `isSDUIPage(payload)` now treats `rows` as the accepted V2 discriminator.
 
 **`SDUIPayload`** = `SDUIScreen | SDUIPage`
 
@@ -406,7 +422,7 @@ A separate React + TypeScript web application for backend administration. **Not 
 | Tailwind CSS | Styling |
 | Zustand | Auth state management |
 | React Router | Client-side routing |
-| Puck | Visual drag-and-drop SDUI editor |
+| Custom editor components | Visual SDUI editor built from React + Zustand editor primitives |
 
 ### Architecture
 
@@ -426,36 +442,54 @@ web/src/
 │   ├── WorkflowsPage.tsx → Workflow management
 │   ├── TemplatesPage.tsx → SDUI template CRUD + import/export
 │   ├── ComponentsPage.tsx→ Component registry viewer
-│   └── EditorPage.tsx    → Puck visual SDUI editor
+│   └── EditorPage.tsx    → Custom SDUI editor shell + toolbar + status bar; toolbar and status bar use actual `deviceWidth`/`deviceHeight` from Zustand store for display; confirms destructive unsaved-change flows, preserves legacy V1 section titles as heading rows, keeps imported V1 section components vertically stacked by emitting one row per legacy component, and supports module CRUD (create custom modules with name+icon, delete custom modules with ✦ marker)
+├── editor/
+│   ├── types.ts          → Editor types, row visual props, device presets, component registry; preserves lowercase legacy runtime component types as read-only, non-authorable inspection entries instead of normalizing them away, filters non-authorable picker entries, and requires a non-empty `server_action.function` plus valid JSON-object `params` when provided before persistence
+│   ├── templateLibrary.ts→ Local starter screens + reusable row templates aligned to live component props; starter `InputBar` templates no longer seed dead `send_to_agent.message` defaults
+│   ├── componentSchemas.ts → Dynamic property schema definitions for the inspector; unsupported imported actions fall back to generic editable fields, but only supported authorable actions are offered for new edits
+│   ├── useEditorStore.ts → Rows-first Zustand editor contract, history, selection, device preview state
+│   ├── StructureTree.tsx → Left panel tree + JSON copy actions
+│   ├── EditorCanvas.tsx  → Center canvas with cell resize, row-height resize, stable multi-step row drag (50px threshold, 300ms debounce), no dead component-level move control, and read-only preview plus Inspect semantics for preserved lowercase legacy runtime components
+│   ├── PropertyInspector.tsx → Right panel editor for rows/components with explicit auto width controls, uniform + per-side padding, runtime-aligned props, InputBar-specific action narrowing with fallback handling for imported unknown actions, and read-only summaries for preserved legacy runtime payloads including structured action/list/stat/form data
+│   └── ComponentPicker.tsx → Component type chooser for empty cells
 ├── lib/
-│   ├── api.ts            → Typed fetch wrapper for all admin endpoints
-│   ├── puckConfig.tsx    → 11 Puck component renderers matching V2 SDUI types
-│   ├── sduiAdapter.ts    → puckToHelm() and helmToPuck() translation layer
+│   ├── api.ts            → Typed fetch wrapper for all admin endpoints; login can suppress the global 401 handler
+│   ├── puckConfig.tsx    → Deprecated delete stub; current editor does not import it
+│   ├── sduiAdapter.ts    → Legacy normalization helper retained from the old editor
 │   └── utils.ts          → Shared helpers
 └── stores/
-    └── authStore.ts      → Zustand auth store (token, user, serverUrl)
+    └── authStore.ts      → Zustand auth store (token, user, serverUrl); failed `/auth/login` requests do not clear stored auth state
 ```
 
-### Puck Visual SDUI Editor
+### Custom SDUI Editor
 
-The editor page (`/editor`) uses [Puck](https://github.com/measuredco/puck) v0.21.2 to provide a visual drag-and-drop interface for building SDUI screens. **All features verified working via Playwright live testing (2026-04-06).**
+The editor page (`/editor`) is a custom React + Zustand SDUI editor built from `EditorPage.tsx` and the `web/src/editor/` folder. It loads live and draft module screens in parallel, prefers the draft when both exist, surfaces module/screen load failures instead of fabricating fallback module state, normalizes legacy payloads in `normalizeScreenData()`, preserves V1 section titles by turning them into heading rows, imports each legacy section component into its own row so V1 section stacks stay vertical instead of being flattened horizontally, preserves lowercase legacy runtime components including legacy form payloads as type-stable read-only inspectable entries rather than rewriting them or surfacing them as Unknown, and no longer depends on a Puck translation layer.
 
-**Components:**
-- **11 component renderers** in `puckConfig.tsx` matching Helm's V2 types: Text, Markdown, Button, Image, TextInput, Icon, Divider, Container, CalendarModule, ChatModule, NotesModule
-- **Row component** uses `<DropZone>` (from `@puckeditor/core`) with `style={{ display: 'flex', flexDirection: 'row', gap: 8 }}` for horizontal multi-cell layout
+**Module CRUD:** The editor supports creating and deleting custom modules. A (+) button next to the module dropdown opens a create dialog (name, icon). Custom modules appear in the dropdown with a ✦ marker and a trash button for deletion. Created via `POST /api/sdui/modules`, deleted via `DELETE /api/sdui/modules/{module_id}`. The `ModuleInfo` type includes an `is_custom` field to distinguish custom from built-in modules.
 
-**Bidirectional translation** between Puck's internal format and Helm SDUI V2 JSON:
-- `puckToHelm(puckData)` → converts Puck output to `{schema_version, module_id, rows: [{cells: [...]}]}` format
-- `helmToPuck(sduiJson)` → converts Helm SDUI V2 JSON back to Puck format for editing existing screens
-- Translation layer in `web/src/lib/sduiAdapter.ts`
+**Core layout:**
+- The left panel combines `StructureTree` with a collapsible Template Library
+- `StructureTree` includes a screen root item plus row/cell hierarchy, row reorder, duplication/delete, and copy-screen/copy-row JSON actions
+- The Template Library surfaces saved full-screen templates from `/api/templates` and local starter/row templates from `templateLibrary.ts`; local starter templates stay aligned with live runtime props, the form starter remains a supported single-message `Contact Intake` flow using `InputBar` + `send_to_agent`, and starter `InputBar` templates no longer pre-seed dead `send_to_agent.message` values
 
-**EditorPage features:**
-- **Module switching** — dropdown selects module; Puck re-mounts via `key={selectedModule}-${puckVersion}` to reset editor state on switch
-- **Push Live** — two-step save→approve flow (handles `auto_approve_drafts=false` default): saves SDUI draft via `POST /api/sdui/{module}`, then auto-approves via `POST /api/sdui/{module}/approve`
-- **Draft management** — shows "Draft pending (vN)" badge with Approve/Reject buttons when a draft exists
-- **Save as Template** — saves current Puck state as a reusable SDUI template
-- **Load Template** — loads a saved template into the editor
-- **Error surfacing** — API errors displayed properly (no more silent failures)
-- **Config stability** — Puck config wrapped in `useRef` for render stability
+**Editing flow:**
+- Device preview supports presets, rotation, and custom width/height values with an explicit Apply action; the toolbar and status bar read actual `deviceWidth`/`deviceHeight` from the Zustand store (not swapped preset values) so display text stays correct across all device/orientation combinations
+- The canvas provides component previews, add-row buttons, row drag handles, cell width resize handles, and direct row-height drag handles; preserved lowercase legacy runtime components render read-only previews and switch the hover affordance from `Edit` to `Inspect`, multi-step row dragging uses a 50px movement threshold and 300ms debounce to prevent overshoot (rows move exactly 1 position per drag gesture), and adjacent-cell resize changes are previewed live and committed once on mouse-up so undo reverts the full resize in a single step
+- `ComponentPicker` only offers components marked authorable in `types.ts`, so internal-only components stay out of the add-component flow
+- `PropertyInspector` edits row height, cell count, cell widths, background, uniform and per-side padding, horizontal scrollability, and component props/actions; preserved legacy runtime payloads instead get read-only summaries, including structured action/list/stat/form data, cell widths preserve `auto` through explicit Auto controls instead of coercing unset widths to numbers, side-specific padding inputs stay blank when inheriting the uniform row padding value, runtime-aligned schemas no longer expose the removed `ChatModule.showHistory` or `NotesModule.showToolbar` controls, new actions stay limited to the supported authorable set (`navigate`, `server_action`, `open_url`, `go_back`, `send_to_agent`, `dismiss`, `copy_text`), `InputBar` narrows new action authoring further to `None`, `Send to Agent`, and `Server Action`, and imported unsupported actions still fall back to generic editable fields, including imported `InputBar` actions outside that narrowed set
+- Switching modules, applying saved server templates, importing JSON, applying local screen templates, and appending local row templates all prompt before destructive unsaved-change paths
+- Switching modules loads the live screen and draft together; pending drafts win so review/edit resumes from the newest unsaved state
+- If module or screen fetch fails, `EditorPage` shows the error state and disables editing for that selection instead of fabricating empty module data
+- Save stores a draft, while Push Live saves then auto-approves it; draft badges expose Approve/Reject controls when a pending draft exists
+- Delete Screen is only enabled when the selected module has a persisted live screen or a pending draft
+- JSON view and JSON import are built into the editor; import preserves nested components and runtime-style action objects
 
-**Known cosmetic issue:** Puck v0.21.2 emits deprecation warnings for `renderHeaderActions` and `DropZones` (recommending the newer slots API). Non-blocking.
+**State + status:**
+- `useEditorStore.ts` exposes the rows-first contract shared by `EditorPage`, `EditorCanvas`, `PropertyInspector`, and `StructureTree`: `rows`, `selection`, `history/historyIndex` (50-state undo/redo), `deviceWidth/deviceHeight/isLandscape`, and actions for screen load/apply/serialize, device changes, row CRUD/reorder, cell sizing, and component prop updates
+- The store preserves top-level screen metadata in an internal snapshot and re-serializes runtime output through `getScreen()`
+- Persistence is gated by `getPersistableScreen()`, which rejects `server_action` values unless `function` is non-empty and, when `params` are provided, they are blank or parse to a JSON object before drafts, push-live writes, or template saves
+- Local screen templates, local row templates, and JSON import all go through the history-preserving apply path, so one undo returns to the pre-apply or pre-import screen state
+- The status bar shows unsaved changes, last saved time, current preview dimensions, and AI connection status
+- `web/src/lib/puckConfig.tsx` remains only as a deprecated delete stub; the current editor does not import it
+
+No active cosmetic issues are currently documented for the custom editor.

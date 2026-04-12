@@ -1,6 +1,6 @@
 # Protocol — Communication Layer
 
-> Last updated: 2026-04-06
+> Last updated: 2026-04-10
 
 ## Tier 1: TLDR
 
@@ -77,6 +77,8 @@ App                     Backend                    LLM
  | [User sees DraftPreview in app]
  | [User taps Approve]
  |-- POST /api/actions/execute {function:"approve_draft"} -->
+ |<-- {type:"sdui_draft_update", module_id:"home", screen:null, version:0}
+ |<-- {type:"sdui_draft_rejected", module_id:"home"}   // legacy companion clear event
  |<-- {type:"sdui_screen_update", module_id:"home", screen:{...}, version:N}
 ```
 
@@ -93,8 +95,8 @@ App                     Backend                    LLM
 | `chat_error` | `{message?, code?}` | Error; `code: "no_api_key"` if unconfigured |
 | `notification` | `{id?, title, message, severity, actions?, timestamp?}` | Push notification |
 | `sdui_screen_update` | `{module_id, screen, version}` | Live SDUI screen set (or null to clear) |
-| `sdui_draft_update` | `{module_id, screen, version}` | Draft ready for approval |
-| `sdui_draft_rejected` | `{module_id}` | Draft was rejected |
+| `sdui_draft_update` | `{module_id, screen, version}` | Draft ready for approval, or draft cleared when `screen=null` and `version=0` |
+| `sdui_draft_rejected` | `{module_id}` | Legacy companion event when a draft is rejected or cleared |
 | `tabs_updated` | `{modules: [...]}` | Tab visibility changed |
 | `module_state_update` | `{module, state, version}` | Module state changed (legacy) |
 | `tool_result` | `{tool, result}` | Tool call succeeded |
@@ -129,19 +131,27 @@ Mounted at `/mcp` on the FastAPI app. Uses FastMCP (Streamable HTTP). All reques
 | `helm_send_chat_message` | `content: str` | Send message as assistant + push `chat_complete` event |
 | `helm_update_module_state` | `module_type: str`, `state: dict` | Update module state key |
 | `helm_get_form_data` | `form_id: str = ""` | Get form submission data |
-| `helm_set_screen` | `module_id: str`, `screen: dict\|str` | Set SDUI screen; draft=True by default; **V2 only** — server validates component types against registered V2 types and raises error for unknown types |
+| `helm_set_screen` | `module_id: str`, `screen: dict\|str` | Set SDUI screen; draft=True by default; canonical row-first authoring uses PascalCase V2 types, while preserved lowercase legacy runtime component types can round-trip when already present in a payload |
 | `helm_delete_screen` | `module_id: str` | Clear SDUI screen → empty state |
 | `helm_list_screens` | — | List all AI-set SDUI screens |
 | `helm_get_screen` | `module_id: str` | Get current SDUI JSON for a module |
-| `helm_get_draft` | `module_id: str` | Get pending draft screen for a module; returns `{screen, has_draft}` |
-| `helm_approve_draft` | `module_id: str` | Promote draft to live |
+| `helm_get_draft` | `module_id: str` | Get pending draft screen for a module; returns `{screen, version, has_draft}` |
+| `helm_approve_draft` | `module_id: str` | Promote draft to live via the shared live persistence helper |
 | `helm_reject_draft` | `module_id: str`, `feedback?: str` | Discard pending draft with optional feedback |
 | `helm_hide_tab` | `tab_id: str` | Hide a nav-bar tab |
 | `helm_show_tab` | `tab_id: str` | Restore hidden tab |
 | `helm_rename_tab` | `tab_id: str`, `name?: str`, `icon?: str` | Rename a tab and/or change its emoji icon |
 | `helm_list_tabs` | — | List all tabs + visibility status |
 
-**Valid `module_id` values:** `home`, `chat`, `calendar`, `forms`, `alerts`, `modules`, `settings`
+**Valid `module_id` values (built-in):** `home`, `chat`, `calendar`, `forms`, `alerts`, `modules`, `settings` — plus any user-created custom module IDs (slug-based, e.g. `my-module`)
+
+**Module CRUD endpoints:**
+| Tool | Parameters | Purpose |
+|------|-----------|--------|
+| `POST /api/sdui/modules` | `{name: str, icon: str}` | Create a custom module; returns the new module with generated slug ID and `is_custom: true` |
+| `DELETE /api/sdui/modules/{module_id}` | — | Delete a custom module (built-in modules cannot be deleted); cleans up associated SDUI data |
+
+**`GET /api/sdui/modules` response** now includes `is_custom: boolean` for each module entry.
 
 **Valid `tab_id` values:** same as module IDs above
 
@@ -181,9 +191,6 @@ Mounted at `/mcp` on the FastAPI app. Uses FastMCP (Streamable HTTP). All reques
 
 ```json
 {
-  "schema_version": "1.0.0",
-  "module_id": "home",
-  "title": "Home",
   "rows": [
     {
       "id": "row-1",
@@ -210,14 +217,20 @@ Mounted at `/mcp` on the FastAPI app. Uses FastMCP (Streamable HTTP). All reques
 }
 ```
 
+Persisted V2 payloads are row-first. `rows` is the required shape discriminator; `schema_version`, `module_id`, and `title` may be omitted on stored payloads and added later by editor/runtime layers. New authored content should still use PascalCase V2 types, but server validation also permits preserved lowercase legacy runtime component types so existing live screens can round-trip.
+
 **V2 component types (PascalCase):** `Text`, `Markdown`, `Button`, `Image`, `TextInput`, `Icon`, `Divider`, `Container`, `CalendarModule`, `ChatModule`, `NotesModule`, `InputBar`
 
-**V2 cell `width`:** fractional number (0–1) for flex proportion, or `"auto"` for natural width
+**V2 cell `width`:** numeric weight for flex proportion in standard rows, or fixed card-rail width scaling in scrollable rows; `"auto"` behaves like natural/fill width in non-scrollable rows
 
 **V2 row responsive behavior:**
 - `compact` props → applied on screens < 768px wide
 - `regular` props → applied on screens ≥ 768px wide
-- If `scrollable: true` → horizontal carousel
+- If `scrollable: true` → horizontal card rail with fixed-width cells sized from each cell's numeric `width`, matching the editor preview instead of flex paging
+
+**V2 spacing notes:**
+- Rows may use `paddingTop`, `paddingBottom`, `paddingLeft`, and `paddingRight`; runtimes fall back to `padding` when a side-specific value is omitted
+- `Divider` may include both `indent` and `margin`
 
 **V2 action types:** `navigate`, `api_call`, `server_action`, `dismiss`, `copy_text`, `open_url`
 
@@ -233,6 +246,8 @@ Mounted at `/mcp` on the FastAPI app. Uses FastMCP (Streamable HTTP). All reques
 | `send_to_agent` | `message: string` | Send message via WS + navigate to chat |
 | `dismiss` | — | Navigate back |
 | `api_call` | `method, path, body?` | Direct API call (legacy) |
+
+When `TextInput.onSubmit` or `InputBar.onSend` triggers `send_to_agent` or `server_action`, `{{input}}` placeholders inside the message or params template are replaced with the submitted text. If no placeholder is present, the runtime falls back to the raw input for `send_to_agent` and to `params.text = input` for `server_action`.
 
 ### SDUI `server_action` Function Reference
 
@@ -333,8 +348,11 @@ Returns `{"screen": null, "version": 0}` if no screen set.
 **`GET /api/sdui/{module_id}/draft` response:**
 ```json
 {
-  "screen": { ... },
+  "screen": { "rows": [...] },
+  "version": 4,
   "has_draft": true
 }
 ```
-Returns `{"screen": null, "has_draft": false}` if no draft.
+This response is normalized to the same client-facing shape used by live screens; it does not return raw stored JSON.
+
+Returns `{"screen": null, "version": 0, "has_draft": false}` if no draft.

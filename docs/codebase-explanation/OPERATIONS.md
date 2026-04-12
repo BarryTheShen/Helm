@@ -2,7 +2,7 @@
 
 How to run, configure, and edit every part of the stack.
 
-> Last updated: 2026-04-06
+> Last updated: 2026-04-08
 
 ---
 
@@ -210,7 +210,7 @@ eas build --platform ios
 
 ## Web Admin Panel (`web/`)
 
-A React + TypeScript web application for administering the Helm backend. Built with Vite, Tailwind CSS, Zustand, and React Router. Includes a Puck-based visual SDUI editor.
+A React + TypeScript web application for administering the Helm backend. Built with Vite, Tailwind CSS, Zustand, and React Router. Includes a custom visual SDUI editor.
 
 ### One-time setup
 
@@ -289,15 +289,19 @@ npm run build    # outputs to web/dist/
 | Workflows | `/workflows` | Manage automation workflows |
 | Templates | `/templates` | SDUI template library (CRUD + import/export) |
 | Components | `/components` | View/edit registered SDUI component definitions |
-| Editor | `/editor` | Puck-based drag-and-drop visual SDUI screen builder |
+| Editor | `/editor` | Custom 3-panel visual SDUI editor with template library, device preview, and draft publishing |
 
-### Puck Visual Editor
+### Custom SDUI Editor
 
-The editor at `/editor` uses [Puck](https://github.com/measuredco/puck) for drag-and-drop SDUI screen building:
-- **11 component renderers** matching Helm's V2 SDUI types (Text, Button, Image, Container, etc.)
-- **`puckToHelm()`** — converts Puck editor output → Helm SDUI V2 JSON (rows + cells)
-- **`helmToPuck()`** — converts Helm SDUI V2 JSON → Puck editor format (for editing existing screens)
-- Translation layer in `web/src/lib/sduiAdapter.ts`; component config in `web/src/lib/puckConfig.tsx`
+The editor at `/editor` is a custom React + Zustand SDUI editor composed from `web/src/pages/EditorPage.tsx` and `web/src/editor/*`:
+- The left panel combines the structure tree with a collapsible template library
+- Saved templates load from `/api/templates`, while local starter screens and row templates come from `web/src/editor/templateLibrary.ts`
+- Device preview supports presets, rotate, and custom width/height values with an explicit Apply action
+- The canvas supports cell resizing, direct row-height drag handles, add-row controls, and a JSON view/import flow
+- Row properties include background color, per-side padding, and horizontal scrollability
+- The structure tree includes a screen root item plus JSON copy actions for the whole screen and individual rows
+- Save writes a draft to `/api/sdui/{module_id}` and Push Live saves then approves it via `/api/sdui/{module_id}/draft/approve`
+- The status bar shows unsaved state, last saved time, preview dimensions, and AI connectivity
 
 ---
 

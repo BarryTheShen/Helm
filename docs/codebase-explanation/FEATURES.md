@@ -6,7 +6,7 @@
 > Update this file whenever a feature is completed, added, or deprioritised.
 >
 > For detailed implementation plans see `FUTURE_PLANS.md`.
-> Last updated: 2026-04-06 (verified against targeted source read)
+> Last updated: 2026-04-09 (verified against targeted source read)
 
 ---
 
@@ -103,7 +103,8 @@
 | ✅ | XML tool-call fallback (non-function-calling models) | `backend/app/services/agent_proxy.py` | Regex strips `<tool_call>` XML; sends `chat_message_replace` to frontend |
 | ✅ | Per-user agent config (Fernet-decrypted API key, model, URL) | `backend/app/routers/agent_config.py` | Falls back to env vars if unconfigured |
 | ✅ | Reasoning token passthrough | `backend/app/services/agent_proxy.py` | `delta.reasoning` forwarded as `chat_token` |
-| ✅ | 12 built-in tool definitions exposed to LLM | `backend/app/services/agent_proxy.py` | OpenAI function-calling format |
+| ✅ | 16 built-in tool definitions exposed to LLM | `backend/app/services/agent_proxy.py` | OpenAI function-calling format; includes live-screen and draft-management tools (`get_screen`, `list_screens`, `get_draft`, `approve_draft`, `reject_draft`) |
+| ✅ | Stable assistant `message_id` across streamed chat events | `backend/app/services/agent_proxy.py` | Same ID is used for `chat_start`, every `chat_token`, and `chat_complete` in both built-in and external-agent flows |
 | ✅ | Agent config API (`GET/PUT /api/agent/config`) | `backend/app/routers/agent_config.py` | Store model, API key, URL, system prompt |
 | ❌ | `POST /api/agent/test` endpoint | — | Test agent connection; spec'd in Backend Spec §3 |
 | ❌ | Agent memory (vector store - long-term) | — | Planned in FUTURE_PLANS §9 |
@@ -120,7 +121,7 @@
 | ✅ | MCP auth middleware (Bearer token → user) | `backend/app/mcp/server.py` (`_MCPAuthMiddleware`) | Returns 401 for invalid tokens |
 | ✅ | 22 MCP tools registered with `@mcp.tool()` | `backend/app/mcp/server.py` | All prefixed `helm_` |
 | ✅ | Shared tool logic (`execute_tool`) | `backend/app/mcp/tools.py` | Single source of truth used by both MCP server and agent proxy |
-| ✅ | `helm_set_screen` tool (draft=True default) | `backend/app/mcp/tools.py` | Stores SDUI JSON as draft pending user approval |
+| ✅ | `helm_set_screen` tool (draft=True default) | `backend/app/mcp/tools.py` | Stores the shared row-first SDUI contract as a draft pending user approval; legacy sections still accepted |
 | ✅ | `helm_approve_draft` / `helm_reject_draft` tools | `backend/app/mcp/tools.py` | Human-in-the-loop approval flow |
 | ✅ | `helm_hide_tab` / `helm_show_tab` / `helm_list_tabs` | `backend/app/mcp/tools.py` | AI controls tab visibility |
 | ✅ | `helm_rename_tab` tool | `backend/app/mcp/tools.py` | Renames tab and/or changes icon |
@@ -163,14 +164,14 @@
 | ✅ | Hide tab (`DELETE /api/modules/{id}`) | `backend/app/routers/modules.py` | Broadcasts `tabs_updated` WS event |
 | ✅ | Show tab (`POST /api/modules/{id}/show`) | `backend/app/routers/modules.py` | Broadcasts `tabs_updated` |
 | ✅ | Rename/re-icon tab (`PATCH /api/modules/{id}/config`) | `backend/app/routers/modules.py` | Broadcasts `tabs_updated` |
-| ✅ | Set SDUI screen with draft (`POST /api/sdui/{module_id}`) | `backend/app/routers/modules.py` | `draft=True` by default |
+| ✅ | Set SDUI screen with draft (`POST /api/sdui/{module_id}`) | `backend/app/routers/modules.py` | Shared row-first save/apply contract; legacy sections still accepted; drafts unless auto-approved |
 | ✅ | Get live SDUI screen (`GET /api/sdui/{module_id}`) | `backend/app/routers/modules.py` | Returns `{screen, version}` |
 | ✅ | Get draft screen (`GET /api/sdui/{module_id}/draft`) | `backend/app/routers/modules.py` | Returns `{screen, has_draft}` |
 | ✅ | Approve draft → publish live (`POST /api/sdui/{module_id}/draft/approve`) | `backend/app/routers/modules.py` | Copies draft to live |
 | ✅ | Reject / discard draft (`POST /api/sdui/{module_id}/draft/reject`) | `backend/app/routers/modules.py` | Optional feedback body |
 | ✅ | Delete SDUI screen (`DELETE /api/sdui/{module_id}`) | `backend/app/routers/modules.py` | Clears AI-set screen |
-| ✅ | List all SDUI screens (`GET /api/sdui`) | `backend/app/routers/modules.py` | All AI-set screens across modules |
-| ✅ | Validate SDUI payloads (`POST /api/sdui/validate`) | `backend/app/routers/modules.py` | Validates `screen_json` against the component registry before save/apply |
+| ✅ | List all SDUI screens (`GET /api/sdui`) | `backend/app/routers/modules.py` | Lists live screens only; `sections_count` is row-aware for V2 payloads |
+| ✅ | Validate SDUI payloads (`POST /api/sdui/validate`) | `backend/app/routers/modules.py` | Validates the same row-first normalize/validate contract used by save/apply |
 | ✅ | Screen history API (`GET /api/sdui/{module_id}/history`, `GET /api/sdui/{module_id}/history/{version}`, `POST /api/sdui/{module_id}/history/{version}/restore`, `PUT /api/sdui/{module_id}/history/{version}/star`) | `backend/app/routers/modules.py` | Versioned history with restore-to-draft and star/unstar support |
 | ✅ | Duplicate screen to another module (`POST /api/sdui/{module_id}/duplicate`) | `backend/app/routers/modules.py` | Copies a live screen into another module and records history for the target |
 | ✅ | Device tab config (`GET/PUT /api/devices/config`) | `backend/app/routers/modules.py` | Per-device tab bar + nav mode config |
@@ -178,7 +179,7 @@
 | ✅ | Component registry CRUD (`GET/POST/PUT/DELETE /api/components/registry...`) | `backend/app/routers/components.py` | List/get for authenticated users; create, update, and soft-delete for admins |
 | ✅ | Template library CRUD (`GET/POST/GET/{id}/PUT/DELETE /api/templates`) | `backend/app/routers/templates.py` | Public/private templates with category and search filters |
 | ✅ | Apply/import template utilities (`POST /api/templates/{id}/apply`, `POST /api/templates/import`, `GET /api/templates/{id}/rows`) | `backend/app/routers/templates.py` | Apply templates as drafts, import raw JSON, or fetch reusable rows/sections |
-| ✅ | Visual drag-and-drop SDUI editor (web panel at `/editor`) | `web/src/pages/EditorPage.tsx`, `web/src/lib/sduiAdapter.ts` | Puck-based editor loads module screens, saves drafts, and can save templates |
+| ✅ | Visual SDUI editor (web panel at `/editor`) | `web/src/pages/EditorPage.tsx`, `web/src/editor/`, `web/src/editor/templateLibrary.ts` | Custom 3-panel editor loads module screens, saves drafts, supports starter/row templates, custom device sizes, JSON import/view, and push-live flows |
 
 ---
 
@@ -240,7 +241,7 @@
 
 | Status | Feature | Location | Notes |
 |--------|---------|----------|-------|
-| ✅ | Login page + protected admin routing | `web/src/App.tsx`, `web/src/pages/LoginPage.tsx`, `web/src/stores/authStore.ts` | Admin routes are guarded; unauthenticated users are redirected to `/login` |
+| ✅ | Login page + protected admin routing | `web/src/App.tsx`, `web/src/pages/LoginPage.tsx`, `web/src/stores/authStore.ts` | Admin routes are guarded; unauthenticated users are redirected to `/login`; failed `/auth/login` requests do not clear stored admin auth state |
 | ✅ | Dashboard page | `web/src/pages/DashboardPage.tsx` | Surfaces aggregate admin stats from `/api/admin/stats` |
 | ✅ | Users page | `web/src/pages/UsersPage.tsx` | Create, inspect, edit, and delete users via `/api/users` |
 | ✅ | Sessions page | `web/src/pages/SessionsPage.tsx` | View active sessions and revoke them via `/api/sessions` |
@@ -248,7 +249,7 @@
 | ✅ | Workflows page | `web/src/pages/WorkflowsPage.tsx` | Manage workflow records and status |
 | ✅ | Templates page | `web/src/pages/TemplatesPage.tsx` | Browse, create, edit, delete, apply, and import templates |
 | ✅ | Components page | `web/src/pages/ComponentsPage.tsx` | View and manage SDUI component registry entries |
-| ✅ | Editor page | `web/src/pages/EditorPage.tsx`, `web/src/lib/puckConfig.tsx`, `web/src/lib/sduiAdapter.ts` | Puck-based drag-and-drop SDUI builder with draft save and "save as template" flows |
+| ✅ | Editor page | `web/src/pages/EditorPage.tsx`, `web/src/editor/`, `web/src/editor/templateLibrary.ts` | Custom SDUI builder with structure tree + template library, row visual controls, direct row-height resize, draft publishing, live+draft loading that prefers drafts, surfaced load errors, delete gating for persisted-or-draft state, and template save/load/import flows |
 
 ---
 
@@ -278,7 +279,7 @@
 | ✅ | `TabsConfigSync` — syncs tab visibility + labels from REST + WS | `mobile/app/(tabs)/_layout.tsx` | Fetches `GET /api/modules` on mount; live updates on `tabs_updated` WS event |
 | ✅ | Settings via tab (accessible as distinct tab) | `mobile/app/(tabs)/settings.tsx` | |
 | ⚠️ | `settingsStore.navigationMode` applied to UI | `mobile/src/stores/settingsStore.ts` | Value persisted (via AsyncStorage) but not applied — no drawer mode built; settings screen shows the stored value as text only |
-| ⚠️ | `handleModulePress` in modules.tsx | `mobile/app/(tabs)/modules.tsx` | Stub — logs `console.log('Module pressed:', module.id)` but does nothing else |
+| ✅ | Modules tab launcher routes built-in and custom modules | `mobile/app/(tabs)/modules.tsx`, `mobile/app/module/[moduleId].tsx` | Built-ins navigate to their tab route; custom modules open a dedicated SDUI route with `DraftPreview` approval UX |
 | ❌ | Sidebar drawer navigation (Mode B) | — | Frontend Spec §3.2; `nav_mode: 'sidebar'` stored per device but not wired |
 | ❌ | Tab bar reorder UI (long-press to rearrange tabs) | — | Frontend Spec §3.1; device config stores order but no UI |
 | ❌ | Module Center grid (full-screen grid of all module icons) | — | Frontend Spec §3.1; "More" tab → grid not built |
@@ -327,8 +328,8 @@
 | ✅ | Structural V2 components | `mobile/src/components/structural/` | SDUIContainer (flexbox + shadow + color tokens) |
 | ✅ | Composite V2 components | `mobile/src/components/composite/` | CalendarModule, ChatModule, NotesModule, InputBar |
 | ✅ | Extra SDUI utility components | `mobile/src/components/sdui/` | `SDUIBadge.tsx`, `SDUIStat.tsx` (active utility components) |
-| ✅ | `useSDUIScreen` hook — fetch + live-update SDUI per module | `mobile/src/hooks/useSDUIScreen.ts` | Returns `{screen, draft, loading, error, refresh}`; fetches both live screen + draft in parallel on mount |
-| ✅ | `useActionDispatcher` hook — execute all action types | `mobile/src/hooks/useActionDispatcher.ts` | navigate, go_back, open_url, copy_text, dismiss, open_sheet (stub), server_action, send_to_agent, toggle, api_call (legacy) |
+| ✅ | `useSDUIScreen` hook — fetch + live-update SDUI per module | `mobile/src/hooks/useSDUIScreen.ts` | Returns `{screen, draft, loading, error, refresh}`; fetches both live screen + draft in parallel on mount and clears draft state on null `sdui_draft_update` or `sdui_draft_rejected` |
+| ✅ | `useActionDispatcher` hook — execute all action types | `mobile/src/hooks/useActionDispatcher.ts` | `navigate` handles built-in tabs and custom module routes; also supports go_back, open_url, copy_text, dismiss, open_sheet (stub), server_action, send_to_agent, toggle, api_call (legacy) |
 | ✅ | URL scheme validation on `open_url` | `mobile/src/hooks/useActionDispatcher.ts` | Only allows `http`, `https`, `mailto`, `tel` schemes |
 | ✅ | `DraftPreview` component (approve / reject / feedback) | `mobile/src/components/sdui/DraftPreview.tsx` | Shows draft with approve/reject/"Add Feedback" buttons; feedback input toggle; confirmation alert on approve |
 | ✅ | `server_action` → `POST /api/actions/execute` | `mobile/src/hooks/useActionDispatcher.ts` | SDUI buttons can call named backend functions |
