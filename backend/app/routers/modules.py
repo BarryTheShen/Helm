@@ -25,6 +25,25 @@ from app.schemas.modules import (
 )
 from app.schemas.screen_history import ScreenHistoryDetailOut, ScreenHistoryOut
 from app.services.audit import log_audit
+from app.services.sdui_state import (
+    SDUI_MODULE_PREFIX as _SDUI_MODULE_PREFIX,
+    count_sdui_screen_components,
+    count_sdui_screen_layout_items,
+    delete_module_states,
+    draft_screen_key,
+    legacy_module_config_key,
+    live_screen_key,
+    live_screen_module_type_filter,
+    module_state_keys_to_clear,
+    normalize_screen_for_client,
+    persist_live_screen,
+    prepare_sdui_screen_for_storage,
+    send_draft_cleared,
+    send_draft_update,
+    send_live_screen_update,
+    sdui_module_config_key,
+    validate_sdui_screen_payload,
+)
 
 router = APIRouter(prefix="/api", tags=["modules"])
 
@@ -55,7 +74,7 @@ async def _get_hidden_tabs(db: AsyncSession, user_id: str) -> list[str]:
             ModuleState.module_type == _TABS_CONFIG_KEY,
         )
     )
-    state = result.scalar_one_or_none()
+    state = result.scalars().first()
     if state is None:
         return []
     return (state.state_json or {}).get("hidden_tabs", [])
@@ -69,7 +88,7 @@ async def _get_tab_overrides(db: AsyncSession, user_id: str) -> dict[str, dict]:
             ModuleState.module_type == _TABS_CONFIG_KEY,
         )
     )
-    state = result.scalar_one_or_none()
+    state = result.scalars().first()
     if state is None:
         return {}
     return (state.state_json or {}).get("tab_overrides", {})
@@ -83,7 +102,7 @@ async def _get_tabs_config(db: AsyncSession, user_id: str) -> dict:
             ModuleState.module_type == _TABS_CONFIG_KEY,
         )
     )
-    state = result.scalar_one_or_none()
+    state = result.scalars().first()
     if state is None:
         return {"hidden_tabs": [], "tab_overrides": {}}
     cfg = state.state_json or {}
@@ -100,7 +119,7 @@ async def _save_tabs_config(db: AsyncSession, user_id: str, config: dict) -> Non
             ModuleState.module_type == _TABS_CONFIG_KEY,
         )
     )
-    state = result.scalar_one_or_none()
+    state = result.scalars().first()
     if state is None:
         state = ModuleState(
             id=str(uuid4()),
@@ -116,6 +135,58 @@ async def _save_tabs_config(db: AsyncSession, user_id: str, config: dict) -> Non
     await db.commit()
 
 
+_CUSTOM_MODULES_KEY = "_custom_modules"
+
+
+async def _get_custom_modules(db: AsyncSession, user_id: str) -> list[dict]:
+    """Return user's custom module definitions."""
+    result = await db.execute(
+        select(ModuleState).where(
+            ModuleState.user_id == user_id,
+            ModuleState.module_type == _CUSTOM_MODULES_KEY,
+        )
+    )
+    state = result.scalars().first()
+    if state is None:
+        return []
+    return (state.state_json or {}).get("modules", [])
+
+
+async def _save_custom_modules(db: AsyncSession, user_id: str, modules: list[dict]) -> None:
+    """Persist the custom modules list for a user."""
+    result = await db.execute(
+        select(ModuleState).where(
+            ModuleState.user_id == user_id,
+            ModuleState.module_type == _CUSTOM_MODULES_KEY,
+        )
+    )
+    state = result.scalars().first()
+    data = {"modules": modules}
+    if state is None:
+        state = ModuleState(
+            id=str(uuid4()),
+            user_id=user_id,
+            module_type=_CUSTOM_MODULES_KEY,
+            state_json=data,
+            version=1,
+        )
+        db.add(state)
+    else:
+        state.state_json = data
+        state.version += 1
+    await db.commit()
+
+
+def _builtin_ids() -> set[str]:
+    return {m.id for m in _ALL_TABS}
+
+
+async def _get_all_valid_ids(db: AsyncSession, user_id: str) -> set[str]:
+    """Return set of all valid module IDs (built-in + custom)."""
+    custom = await _get_custom_modules(db, user_id)
+    return _builtin_ids() | {m["id"] for m in custom}
+
+
 async def _set_hidden_tabs(db: AsyncSession, user_id: str, hidden_tabs: list[str]) -> None:
     """Persist the updated hidden-tabs list for a user (preserves tab_overrides)."""
     config = await _get_tabs_config(db, user_id)
@@ -123,9 +194,13 @@ async def _set_hidden_tabs(db: AsyncSession, user_id: str, hidden_tabs: list[str
     await _save_tabs_config(db, user_id, config)
 
 
-def _build_module_list(hidden: list[str], overrides: dict[str, dict]) -> list[ModuleInfo]:
+def _build_module_list(
+    hidden: list[str],
+    overrides: dict[str, dict],
+    custom_modules: list[dict] | None = None,
+) -> list[ModuleInfo]:
     """Build the full module list applying per-user overrides on top of defaults."""
-    return [
+    result = [
         ModuleInfo(
             id=m.id,
             name=overrides.get(m.id, {}).get("name", m.name),
@@ -134,6 +209,15 @@ def _build_module_list(hidden: list[str], overrides: dict[str, dict]) -> list[Mo
         )
         for m in _ALL_TABS
     ]
+    for cm in (custom_modules or []):
+        mid = cm["id"]
+        result.append(ModuleInfo(
+            id=mid,
+            name=overrides.get(mid, {}).get("name", cm.get("name", mid)),
+            icon=overrides.get(mid, {}).get("icon", cm.get("icon", "📦")),
+            enabled=mid not in hidden,
+        ))
+    return result
 
 DEFAULT_MODULE_STATES: dict[str, dict[str, Any]] = {
     "chat": {"type": "chat", "props": {"messages": [], "streaming": False}, "version": 0},
@@ -151,7 +235,8 @@ async def list_modules(
 ):
     """Return all tabs with per-user enabled/disabled status and name/icon overrides."""
     config = await _get_tabs_config(db, str(current_user.id))
-    modules = _build_module_list(config["hidden_tabs"], config["tab_overrides"])
+    custom = await _get_custom_modules(db, str(current_user.id))
+    modules = _build_module_list(config["hidden_tabs"], config["tab_overrides"], custom)
     return ModuleListResponse(modules=modules)
 
 
@@ -169,7 +254,7 @@ async def hide_module(
     """
     from app.services.websocket_manager import manager
 
-    valid_ids = {m.id for m in _ALL_TABS}
+    valid_ids = await _get_all_valid_ids(db, str(current_user.id))
     if module_id not in valid_ids:
         raise HTTPException(status_code=404, detail=f"Unknown tab: {module_id}")
 
@@ -179,7 +264,8 @@ async def hide_module(
         await _set_hidden_tabs(db, str(current_user.id), hidden)
 
     overrides = await _get_tab_overrides(db, str(current_user.id))
-    modules_payload = [m.model_dump() for m in _build_module_list(hidden, overrides)]
+    custom = await _get_custom_modules(db, str(current_user.id))
+    modules_payload = [m.model_dump() for m in _build_module_list(hidden, overrides, custom)]
     await manager.send(str(current_user.id), {"type": "tabs_updated", "modules": modules_payload})
     return {"module_id": module_id, "hidden": True}
 
@@ -197,7 +283,7 @@ async def show_module(
     """
     from app.services.websocket_manager import manager
 
-    valid_ids = {m.id for m in _ALL_TABS}
+    valid_ids = await _get_all_valid_ids(db, str(current_user.id))
     if module_id not in valid_ids:
         raise HTTPException(status_code=404, detail=f"Unknown tab: {module_id}")
 
@@ -207,7 +293,8 @@ async def show_module(
         await _set_hidden_tabs(db, str(current_user.id), hidden)
 
     overrides = await _get_tab_overrides(db, str(current_user.id))
-    modules_payload = [m.model_dump() for m in _build_module_list(hidden, overrides)]
+    custom = await _get_custom_modules(db, str(current_user.id))
+    modules_payload = [m.model_dump() for m in _build_module_list(hidden, overrides, custom)]
     await manager.send(str(current_user.id), {"type": "tabs_updated", "modules": modules_payload})
     return {"module_id": module_id, "hidden": False}
 
@@ -227,7 +314,7 @@ async def configure_module(
     """
     from app.services.websocket_manager import manager
 
-    valid_ids = {m.id for m in _ALL_TABS}
+    valid_ids = await _get_all_valid_ids(db, str(current_user.id))
     if module_id not in valid_ids:
         raise HTTPException(status_code=404, detail=f"Unknown tab: {module_id}")
 
@@ -243,7 +330,8 @@ async def configure_module(
     config["tab_overrides"][module_id] = override
     await _save_tabs_config(db, str(current_user.id), config)
 
-    modules_payload = [m.model_dump() for m in _build_module_list(config["hidden_tabs"], config["tab_overrides"])]
+    custom = await _get_custom_modules(db, str(current_user.id))
+    modules_payload = [m.model_dump() for m in _build_module_list(config["hidden_tabs"], config["tab_overrides"], custom)]
     await manager.send(str(current_user.id), {"type": "tabs_updated", "modules": modules_payload})
 
     updated = next(m for m in modules_payload if m["id"] == module_id)
@@ -262,7 +350,7 @@ async def get_module_state(
             ModuleState.module_type == module_id,
         )
     )
-    state = result.scalar_one_or_none()
+    state = result.scalars().first()
     if state is None:
         default = DEFAULT_MODULE_STATES.get(module_id)
         if default is None:
@@ -313,7 +401,7 @@ async def module_action(
             ModuleState.module_type == sdui_key,
         )
     )
-    state = result_q.scalar_one_or_none()
+    state = result_q.scalars().first()
     screen = copy.deepcopy(state.state_json) if state and state.state_json else None
 
     # ── Helper: walk screen and update a component by id ──────────────────────
@@ -360,7 +448,7 @@ async def module_action(
                 ModuleState.module_type == notes_key,
             )
         )
-        ns = r.scalar_one_or_none()
+        ns = r.scalars().first()
         return (ns.state_json or {}).get("notes", []) if ns else []
 
     async def _save_notes(notes: list[dict]) -> None:
@@ -371,7 +459,7 @@ async def module_action(
                 ModuleState.module_type == notes_key,
             )
         )
-        ns = r.scalar_one_or_none()
+        ns = r.scalars().first()
         if ns is None:
             ns = ModuleState(
                 id=str(uuid4()),
@@ -521,7 +609,7 @@ async def update_device_config(
             ModuleState.module_type == "device_config",
         )
     )
-    state = result.scalar_one_or_none()
+    state = result.scalars().first()
     if state is None:
         state = ModuleState(
             id=str(uuid4()),
@@ -542,20 +630,20 @@ async def update_device_config(
 # The AI (via MCP helm_set_screen) writes SDUIScreen JSON here.
 # The frontend polls GET /api/sdui/{module_id} and renders it natively.
 
-_SDUI_MODULE_PREFIX = "sdui__"
-_CONFIG_PREFIX = "config__"
-
-
 async def _get_module_config(db: AsyncSession, user_id: str, module_id: str) -> dict:
     """Return the config dict for a module (auto_approve_drafts, etc.)."""
-    config_key = _CONFIG_PREFIX + module_id
+    config_keys = (
+        legacy_module_config_key(module_id),
+        sdui_module_config_key(module_id),
+    )
     result = await db.execute(
         select(ModuleState).where(
             ModuleState.user_id == user_id,
-            ModuleState.module_type == config_key,
+            ModuleState.module_type.in_(config_keys),
         )
     )
-    state = result.scalar_one_or_none()
+    states = {state.module_type: state for state in result.scalars().all()}
+    state = states.get(config_keys[0]) or states.get(config_keys[1])
     if state is None:
         return {"auto_approve_drafts": False}
     cfg = state.state_json or {}
@@ -600,38 +688,99 @@ class ValidateScreenRequest(BaseModel):
 @router.post("/sdui/validate", status_code=200)
 async def validate_screen(
     body: ValidateScreenRequest,
-    current_user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
+    _current_user_id: str = Depends(get_current_user_id),
 ):
-    """Validate screen_json against the component registry."""
-    from app.models.component_registry import ComponentRegistry
-
-    # Load valid component types
-    result = await db.execute(select(ComponentRegistry.type))
-    valid_types = {r[0] for r in result.all()}
-
-    errors: list[str] = []
-    screen = body.screen_json
-
-    # Walk sections/rows and check component types
-    sections = screen.get("sections", []) + screen.get("rows", [])
-    for i, section in enumerate(sections):
-        components = section.get("components", [])
-        if "component" in section:
-            components = [section["component"]] + components
-        for j, comp in enumerate(components):
-            comp_type = comp.get("type")
-            if comp_type and valid_types and comp_type not in valid_types:
-                errors.append(f"sections[{i}].components[{j}]: unknown type '{comp_type}'")
+    """Validate screen_json against the same normalization contract used by save/apply."""
+    normalized_screen, errors = validate_sdui_screen_payload(body.screen_json)
 
     return {
         "valid": len(errors) == 0,
         "errors": errors,
-        "component_count": sum(
-            len(s.get("components", [])) + (1 if "component" in s else 0)
-            for s in sections
-        ),
+        "component_count": count_sdui_screen_components(normalized_screen or body.screen_json),
     }
+
+
+class CreateModuleRequest(BaseModel):
+    name: str
+    icon: str = "📦"
+
+
+@router.post("/sdui/modules", status_code=201)
+async def create_custom_module(
+    body: CreateModuleRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new custom module with a user-chosen name and icon."""
+    from app.services.websocket_manager import manager
+
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Module name is required.")
+    if len(name) > 50:
+        raise HTTPException(status_code=422, detail="Module name must be 50 characters or fewer.")
+
+    import re
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    if not slug:
+        slug = "module"
+    module_id = f"custom-{slug}-{uuid4().hex[:6]}"
+
+    user_id = str(current_user.id)
+    custom = await _get_custom_modules(db, user_id)
+    custom.append({"id": module_id, "name": name, "icon": body.icon})
+    await _save_custom_modules(db, user_id, custom)
+
+    config = await _get_tabs_config(db, user_id)
+    modules_payload = [m.model_dump() for m in _build_module_list(config["hidden_tabs"], config["tab_overrides"], custom)]
+    await manager.send(user_id, {"type": "tabs_updated", "modules": modules_payload})
+
+    return {"module_id": module_id, "name": name, "icon": body.icon}
+
+
+@router.delete("/sdui/modules/{module_id}", status_code=200)
+async def delete_custom_module(
+    module_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a custom module. Built-in modules cannot be deleted."""
+    from app.services.websocket_manager import manager
+
+    if module_id in _builtin_ids():
+        raise HTTPException(status_code=400, detail="Built-in modules cannot be deleted.")
+
+    user_id = str(current_user.id)
+    custom = await _get_custom_modules(db, user_id)
+    original_len = len(custom)
+    custom = [m for m in custom if m["id"] != module_id]
+    if len(custom) == original_len:
+        raise HTTPException(status_code=404, detail=f"Custom module not found: {module_id}")
+
+    await _save_custom_modules(db, user_id, custom)
+
+    config = await _get_tabs_config(db, user_id)
+    config_changed = False
+    if module_id in config["hidden_tabs"]:
+        config["hidden_tabs"] = [tab_id for tab_id in config["hidden_tabs"] if tab_id != module_id]
+        config_changed = True
+    if module_id in config["tab_overrides"]:
+        config["tab_overrides"].pop(module_id, None)
+        config_changed = True
+    if config_changed:
+        await _save_tabs_config(db, user_id, config)
+
+    deleted_types = await delete_module_states(db, user_id, module_state_keys_to_clear(module_id))
+    if deleted_types:
+        await db.commit()
+
+    await send_draft_cleared(user_id, module_id)
+    await send_live_screen_update(user_id, module_id, None, 0)
+
+    modules_payload = [m.model_dump() for m in _build_module_list(config["hidden_tabs"], config["tab_overrides"], custom)]
+    await manager.send(user_id, {"type": "tabs_updated", "modules": modules_payload})
+
+    return {"module_id": module_id, "deleted": True}
 
 
 @router.get("/sdui/modules")
@@ -640,7 +789,6 @@ async def list_sdui_modules(
     db: AsyncSession = Depends(get_db),
 ):
     """List all modules available for SDUI editing (used by web admin editor)."""
-    # Find which modules already have a saved SDUI screen
     result = await db.execute(
         select(ModuleState.module_type).where(
             ModuleState.user_id == str(current_user.id),
@@ -651,14 +799,28 @@ async def list_sdui_modules(
     )
     existing_keys = {row[0] for row in result.all()}
 
+    custom = await _get_custom_modules(db, str(current_user.id))
+    overrides = await _get_tab_overrides(db, str(current_user.id))
+
     items = []
     for tab in _ALL_TABS:
         sdui_key = _SDUI_MODULE_PREFIX + tab.id
         items.append({
             "module_id": tab.id,
-            "name": tab.name,
-            "icon": tab.icon,
+            "name": overrides.get(tab.id, {}).get("name", tab.name),
+            "icon": overrides.get(tab.id, {}).get("icon", tab.icon),
             "has_screen": sdui_key in existing_keys,
+            "is_custom": False,
+        })
+    for cm in custom:
+        mid = cm["id"]
+        sdui_key = _SDUI_MODULE_PREFIX + mid
+        items.append({
+            "module_id": mid,
+            "name": overrides.get(mid, {}).get("name", cm.get("name", mid)),
+            "icon": overrides.get(mid, {}).get("icon", cm.get("icon", "📦")),
+            "has_screen": sdui_key in existing_keys,
+            "is_custom": True,
         })
     return {"items": items}
 
@@ -673,14 +835,13 @@ async def get_sdui_screen(
     result = await db.execute(
         select(ModuleState).where(
             ModuleState.user_id == str(current_user.id),
-            ModuleState.module_type == _SDUI_MODULE_PREFIX + module_id,
+            ModuleState.module_type == live_screen_key(module_id),
         )
     )
-    state = result.scalar_one_or_none()
+    state = result.scalars().first()
     if state is None:
         return {"screen": None}
-    from app.mcp.tools import normalize_sdui_screen
-    return {"screen": normalize_sdui_screen(state.state_json), "version": state.version}
+    return {"screen": normalize_screen_for_client(state.state_json), "version": state.version}
 
 
 @router.post("/sdui/{module_id}", status_code=200)
@@ -702,7 +863,10 @@ async def set_sdui_screen(
     from app.services.websocket_manager import manager
 
     user_id = str(current_user.id)
-    screen_json = body.screen
+    try:
+        screen_json = prepare_sdui_screen_for_storage(body.screen, module_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     # Check auto-approve config for this module
     config = await _get_module_config(db, user_id, module_id)
@@ -710,14 +874,14 @@ async def set_sdui_screen(
 
     if not auto_approve:
         # Save as draft — requires human approval
-        draft_key = _SDUI_MODULE_PREFIX + module_id + "__draft"
+        draft_key = draft_screen_key(module_id)
         result = await db.execute(
             select(ModuleState).where(
                 ModuleState.user_id == user_id,
                 ModuleState.module_type == draft_key,
             )
         )
-        draft = result.scalar_one_or_none()
+        draft = result.scalars().first()
         if draft is None:
             draft = ModuleState(
                 id=str(uuid4()),
@@ -735,50 +899,28 @@ async def set_sdui_screen(
         await record_screen_history(db, user_id, module_id, screen_json, source="draft")
         await db.commit()
 
-        # Notify frontend a new draft is available
-        await manager.send(user_id, {
-            "type": "sdui_draft_available",
-            "module_id": module_id,
-            "version": draft.version,
-        })
+        await send_draft_update(user_id, module_id, screen_json, draft.version)
 
         return {"module_id": module_id, "version": draft.version, "draft": True, "updated": True}
 
     # Auto-approve: set screen live directly
-    result = await db.execute(
-        select(ModuleState).where(
-            ModuleState.user_id == user_id,
-            ModuleState.module_type == _SDUI_MODULE_PREFIX + module_id,
-        )
+    version, cleared_existing_draft = await persist_live_screen(
+        db,
+        user_id=user_id,
+        module_id=module_id,
+        screen=screen_json,
     )
-    state = result.scalar_one_or_none()
-
-    if state is None:
-        state = ModuleState(
-            id=str(uuid4()),
-            user_id=user_id,
-            module_type=_SDUI_MODULE_PREFIX + module_id,
-            state_json=screen_json,
-            version=1,
-        )
-        db.add(state)
-    else:
-        state.state_json = screen_json
-        state.version += 1
 
     await log_audit(db, user_id, "SCREEN_SET", "screen", module_id, ip=request.client.host if request.client else None)
     await record_screen_history(db, user_id, module_id, screen_json, source="api")
     await db.commit()
 
     # Push to connected frontend over WebSocket so it re-renders immediately
-    await manager.send(user_id, {
-        "type": "sdui_screen_update",
-        "module_id": module_id,
-        "screen": screen_json,
-        "version": state.version,
-    })
+    if cleared_existing_draft:
+        await send_draft_cleared(user_id, module_id)
+    await send_live_screen_update(user_id, module_id, screen_json, version)
 
-    return {"module_id": module_id, "version": state.version, "updated": True}
+    return {"module_id": module_id, "version": version, "updated": True}
 
 
 @router.delete("/sdui/{module_id}", status_code=200)
@@ -794,24 +936,14 @@ async def delete_sdui_screen(
     """
     from app.services.websocket_manager import manager
 
-    result = await db.execute(
-        select(ModuleState).where(
-            ModuleState.user_id == str(current_user.id),
-            ModuleState.module_type == _SDUI_MODULE_PREFIX + module_id,
-        )
-    )
-    state = result.scalar_one_or_none()
-    if state is not None:
-        await log_audit(db, str(current_user.id), "SCREEN_DELETED", "screen", module_id, ip=request.client.host if request.client else None)
-        await db.delete(state)
+    user_id = str(current_user.id)
+    deleted_types = await delete_module_states(db, user_id, module_state_keys_to_clear(module_id))
+    if deleted_types:
+        await log_audit(db, user_id, "SCREEN_DELETED", "screen", module_id, ip=request.client.host if request.client else None)
         await db.commit()
 
-    await manager.send(str(current_user.id), {
-        "type": "sdui_screen_update",
-        "module_id": module_id,
-        "screen": None,
-        "version": 0,
-    })
+    await send_draft_cleared(user_id, module_id)
+    await send_live_screen_update(user_id, module_id, None, 0)
     return {"module_id": module_id, "deleted": True}
 
 
@@ -824,7 +956,7 @@ async def list_sdui_screens(
     result = await db.execute(
         select(ModuleState).where(
             ModuleState.user_id == str(current_user.id),
-            ModuleState.module_type.like(_SDUI_MODULE_PREFIX + "%"),
+            live_screen_module_type_filter(ModuleState.module_type),
         )
     )
     states = result.scalars().all()
@@ -834,7 +966,7 @@ async def list_sdui_screens(
                 "module_id": s.module_type.removeprefix(_SDUI_MODULE_PREFIX),
                 "version": s.version,
                 "title": (s.state_json or {}).get("title", ""),
-                "sections_count": len((s.state_json or {}).get("sections", [])),
+                "sections_count": count_sdui_screen_layout_items(s.state_json),
             }
             for s in states
         ]
@@ -866,14 +998,14 @@ async def set_module_config(
     db: AsyncSession = Depends(get_db),
 ):
     """Store/update config for a module."""
-    config_key = _CONFIG_PREFIX + module_id
+    config_key = legacy_module_config_key(module_id)
     result = await db.execute(
         select(ModuleState).where(
             ModuleState.user_id == current_user_id,
             ModuleState.module_type == config_key,
         )
     )
-    state = result.scalar_one_or_none()
+    state = result.scalars().first()
     config_data = {"auto_approve_drafts": body.auto_approve_drafts}
     if state is None:
         state = ModuleState(
@@ -900,18 +1032,22 @@ async def get_draft(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get the current draft screen for a module, if any."""
-    draft_key = _SDUI_MODULE_PREFIX + module_id + "__draft"
+    """Get the current draft screen using the client-facing draft contract."""
+    draft_key = draft_screen_key(module_id)
     result = await db.execute(
         select(ModuleState).where(
             ModuleState.user_id == str(current_user.id),
             ModuleState.module_type == draft_key,
         )
     )
-    draft = result.scalar_one_or_none()
+    draft = result.scalars().first()
     if draft is None:
-        return {"screen": None, "has_draft": False}
-    return {"screen": draft.state_json, "version": draft.version, "has_draft": True}
+        return {"screen": None, "version": 0, "has_draft": False}
+    return {
+        "screen": normalize_screen_for_client(draft.state_json),
+        "version": draft.version,
+        "has_draft": True,
+    }
 
 
 @router.post("/sdui/{module_id}/draft/approve")
@@ -922,57 +1058,34 @@ async def approve_draft(
     db: AsyncSession = Depends(get_db),
 ):
     """Approve a draft screen — promote it to the live screen."""
-    from app.services.websocket_manager import manager
-
-    draft_key = _SDUI_MODULE_PREFIX + module_id + "__draft"
+    draft_key = draft_screen_key(module_id)
     result = await db.execute(
         select(ModuleState).where(
             ModuleState.user_id == str(current_user.id),
             ModuleState.module_type == draft_key,
         )
     )
-    draft = result.scalar_one_or_none()
+    draft = result.scalars().first()
     if draft is None:
         raise HTTPException(status_code=404, detail=f"No draft found for module '{module_id}'")
 
     screen_json = draft.state_json
 
-    # Delete the draft
-    await db.delete(draft)
-
-    # Upsert the live screen
-    live_key = _SDUI_MODULE_PREFIX + module_id
-    result = await db.execute(
-        select(ModuleState).where(
-            ModuleState.user_id == str(current_user.id),
-            ModuleState.module_type == live_key,
-        )
+    version, cleared_existing_draft = await persist_live_screen(
+        db,
+        user_id=str(current_user.id),
+        module_id=module_id,
+        screen=screen_json,
     )
-    live_state = result.scalar_one_or_none()
-    if live_state is None:
-        live_state = ModuleState(
-            id=str(uuid4()),
-            user_id=str(current_user.id),
-            module_type=live_key,
-            state_json=screen_json,
-            version=1,
-        )
-        db.add(live_state)
-    else:
-        live_state.state_json = screen_json
-        live_state.version += 1
 
     await log_audit(db, str(current_user.id), "SCREEN_APPROVED", "screen", module_id, ip=request.client.host if request.client else None)
     await db.commit()
 
     # Push live screen update
-    await manager.send(str(current_user.id), {
-        "type": "sdui_screen_update",
-        "module_id": module_id,
-        "screen": screen_json,
-        "version": live_state.version,
-    })
-    return {"module_id": module_id, "version": live_state.version, "approved": True}
+    if cleared_existing_draft:
+        await send_draft_cleared(str(current_user.id), module_id)
+    await send_live_screen_update(str(current_user.id), module_id, screen_json, version)
+    return {"module_id": module_id, "version": version, "approved": True}
 
 
 @router.post("/sdui/{module_id}/draft/reject")
@@ -983,16 +1096,14 @@ async def reject_draft(
     db: AsyncSession = Depends(get_db),
 ):
     """Reject a draft screen — discard it."""
-    from app.services.websocket_manager import manager
-
-    draft_key = _SDUI_MODULE_PREFIX + module_id + "__draft"
+    draft_key = draft_screen_key(module_id)
     result = await db.execute(
         select(ModuleState).where(
             ModuleState.user_id == str(current_user.id),
             ModuleState.module_type == draft_key,
         )
     )
-    draft = result.scalar_one_or_none()
+    draft = result.scalars().first()
     if draft is None:
         raise HTTPException(status_code=404, detail=f"No draft found for module '{module_id}'")
 
@@ -1000,10 +1111,7 @@ async def reject_draft(
     await log_audit(db, str(current_user.id), "SCREEN_REJECTED", "screen", module_id, ip=request.client.host if request.client else None)
     await db.commit()
 
-    await manager.send(str(current_user.id), {
-        "type": "sdui_draft_rejected",
-        "module_id": module_id,
-    })
+    await send_draft_cleared(str(current_user.id), module_id)
     return {"module_id": module_id, "rejected": True}
 
 
@@ -1057,7 +1165,7 @@ async def get_screen_history_version(
             ScreenHistory.version == version,
         )
     )
-    entry = result.scalar_one_or_none()
+    entry = result.scalars().first()
     if entry is None:
         raise HTTPException(status_code=404, detail=f"Version {version} not found for module '{module_id}'")
     return ScreenHistoryDetailOut.model_validate(entry)
@@ -1079,19 +1187,19 @@ async def restore_screen_version(
             ScreenHistory.version == version,
         )
     )
-    entry = result.scalar_one_or_none()
+    entry = result.scalars().first()
     if entry is None:
         raise HTTPException(status_code=404, detail=f"Version {version} not found for module '{module_id}'")
 
     screen_json = entry.screen_json
-    draft_key = _SDUI_MODULE_PREFIX + module_id + "__draft"
+    draft_key = draft_screen_key(module_id)
     result = await db.execute(
         select(ModuleState).where(
             ModuleState.user_id == user_id,
             ModuleState.module_type == draft_key,
         )
     )
-    draft = result.scalar_one_or_none()
+    draft = result.scalars().first()
     if draft is None:
         draft = ModuleState(
             id=str(uuid4()),
@@ -1107,13 +1215,7 @@ async def restore_screen_version(
 
     await db.commit()
 
-    from app.services.websocket_manager import manager
-    await manager.send(user_id, {
-        "type": "sdui_draft_ready",
-        "module_id": module_id,
-        "screen": screen_json,
-        "version": draft.version,
-    })
+    await send_draft_update(user_id, module_id, screen_json, draft.version)
     return {"module_id": module_id, "restored_version": version, "draft_version": draft.version}
 
 
@@ -1132,7 +1234,7 @@ async def toggle_star_version(
             ScreenHistory.version == version,
         )
     )
-    entry = result.scalar_one_or_none()
+    entry = result.scalars().first()
     if entry is None:
         raise HTTPException(status_code=404, detail=f"Version {version} not found for module '{module_id}'")
 
@@ -1160,10 +1262,10 @@ async def duplicate_screen(
     result = await db.execute(
         select(ModuleState).where(
             ModuleState.user_id == user_id,
-            ModuleState.module_type == _SDUI_MODULE_PREFIX + module_id,
+            ModuleState.module_type == live_screen_key(module_id),
         )
     )
-    source_state = result.scalar_one_or_none()
+    source_state = result.scalars().first()
     if source_state is None or not source_state.state_json:
         raise HTTPException(status_code=404, detail=f"No screen found for module '{module_id}'")
 
@@ -1171,14 +1273,14 @@ async def duplicate_screen(
     target = body.target_module_id
 
     # Create draft on target
-    draft_key = _SDUI_MODULE_PREFIX + target + "__draft"
+    draft_key = draft_screen_key(target)
     result = await db.execute(
         select(ModuleState).where(
             ModuleState.user_id == user_id,
             ModuleState.module_type == draft_key,
         )
     )
-    draft = result.scalar_one_or_none()
+    draft = result.scalars().first()
     if draft is None:
         draft = ModuleState(
             id=str(uuid4()),
@@ -1195,11 +1297,5 @@ async def duplicate_screen(
     await record_screen_history(db, user_id, target, screen_json, source="api")
     await db.commit()
 
-    from app.services.websocket_manager import manager
-    await manager.send(user_id, {
-        "type": "sdui_draft_ready",
-        "module_id": target,
-        "screen": screen_json,
-        "version": draft.version,
-    })
+    await send_draft_update(user_id, target, screen_json, draft.version)
     return {"source_module_id": module_id, "target_module_id": target, "draft_version": draft.version}

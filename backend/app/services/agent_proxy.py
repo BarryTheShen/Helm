@@ -112,7 +112,11 @@ async def _process_via_external_agent(user_id: str, content: str) -> None:
                     if event_type == "token":
                         token = event.get("text", "")
                         full_response += token
-                        await manager.send(user_id, {"type": "chat_token", "token": token})
+                        await manager.send(user_id, {
+                            "type": "chat_token",
+                            "message_id": assistant_msg_id,
+                            "token": token,
+                        })
                     elif event_type == "done":
                         # Use the final full text from the agent
                         final = event.get("text", "")
@@ -185,13 +189,14 @@ async def _process_chat(
         else:
             history = all_history
 
-    await manager.send(user_id, {"type": "chat_start", "message_id": str(uuid4())})
+    assistant_msg_id = str(uuid4())
+    await manager.send(user_id, {"type": "chat_start", "message_id": assistant_msg_id})
 
     if not api_key:
         await manager.send(user_id, {
             "type": "chat_error",
             "code": "no_api_key",
-            "message": "No API key configured. Please set your AI provider key in Settings.",
+            "message": "No AI provider configured. Please set OPENROUTER_API_KEY or OPENAI_API_KEY in your backend .env file.",
         })
         return
 
@@ -201,7 +206,6 @@ async def _process_chat(
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": content})
 
-    assistant_msg_id = str(uuid4())
     full_response = ""
 
     try:
@@ -546,33 +550,12 @@ def _get_tool_definitions() -> list[dict]:
                 "name": "set_screen",
                 "description": (
                     "Set the Server-Driven UI screen for any app tab. "
-                    "The frontend re-renders instantly via WebSocket — no code changes or rebuild needed. "
-                    "Call this to build any UI: dashboards, forms, calendars, lists, stats, or combinations. "
-                    "You can call it multiple times on the same module_id to update the screen. "
-                    "\n\nAvailable module_ids: home | chat | calendar | forms | alerts | modules | settings"
-                    "\n\nscreen must follow SDUIScreen schema:\n"
-                    "{ schema_version:1, module_id, title, sections:[{id, title?, component}] }\n\n"
-                    "Component types (use 'type' field):\n"
-                    "  heading     { content, level(1-3), align? }\n"
-                    "  text        { content, size(xs/sm/md/lg), bold?, italic?, color?, align? }\n"
-                    "  button      { label, variant(primary/secondary/destructive/ghost), action }\n"
-                    "  stats_row   { stats:[{label,value,change?,change_direction(up/down/neutral)}] }\n"
-                    "  stat        { label, value, change?, change_direction?, icon? }\n"
-                    "  list        { title?, items:[{id,title,subtitle?,badge?,icon?,right_text?,action?}] }\n"
-                    "  card        { title?, subtitle?, elevated? } + children[]\n"
-                    "  container   { direction(row/column), gap?, wrap? } + children[]\n"
-                    "  alert       { severity(info/warning/error/success), title, message, dismissible? }\n"
-                    "  progress    { value(0-100), max?, label?, color? }\n"
-                    "  calendar    { events:[{id,title,start(ISO),end(ISO),color?}] }\n"
-                    "  divider     { spacing? }\n"
-                    "  spacer      { size(xs/sm/md/lg/xl) }\n"
-                    "  badge       { label, color(blue/green/red/yellow/gray) }\n"
-                    "  image       { uri, aspect_ratio?, alt? }\n"
-                    "  form        { title?, fields:[{id,type,label,...}], submit_label?, submit_action }\n\n"
-                    "Action types: {type:navigate,screen} | {type:api_call,method,path,body?} | "
-                    "{type:dismiss} | {type:copy_text,text} | {type:open_url,url}\n\n"
-                    "Each component object must have: { type, id, props: {...} }\n"
-                    "Containers/cards also have: children: [component, ...]"
+                    "The frontend re-renders instantly via WebSocket. "
+                    "Prefer the current row-first contract: screen.rows[] -> row.cells[] -> cell.content. "
+                    "Cell content should use PascalCase V2 component types such as Text, Markdown, Button, Image, TextInput, Icon, Divider, Container, CalendarModule, ChatModule, NotesModule, and InputBar. "
+                    "Stored payloads may omit metadata like schema_version, module_id, and title. "
+                    "Legacy sections payloads are still accepted for backward compatibility, but new tool calls should send row-first screens. "
+                    "Available module_ids: home | chat | calendar | forms | alerts | modules | settings"
                 ),
                 "parameters": {
                     "type": "object",
@@ -583,25 +566,58 @@ def _get_tool_definitions() -> list[dict]:
                         },
                         "screen": {
                             "type": "object",
-                            "description": "The complete SDUIScreen JSON object",
-                            "properties": {
-                                "schema_version": {"type": "integer", "enum": [1]},
-                                "module_id": {"type": "string"},
-                                "title": {"type": "string"},
-                                "sections": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "id": {"type": "string"},
-                                            "title": {"type": "string"},
-                                            "component": {"type": "object"},
+                            "description": "Preferred row-first screen payload. Legacy sections payloads are still accepted for backward compatibility.",
+                            "oneOf": [
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "rows": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {"type": "string"},
+                                                    "cells": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "id": {"type": "string"},
+                                                                "content": {"type": "object"},
+                                                            },
+                                                            "required": ["id", "content"],
+                                                        },
+                                                    },
+                                                },
+                                                "required": ["id", "cells"],
+                                            },
                                         },
-                                        "required": ["id", "component"],
                                     },
+                                    "required": ["rows"],
                                 },
-                            },
-                            "required": ["schema_version", "module_id", "title", "sections"],
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "sections": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {"type": "string"},
+                                                    "title": {"type": "string"},
+                                                    "component": {"type": "object"},
+                                                    "components": {
+                                                        "type": "array",
+                                                        "items": {"type": "object"},
+                                                    },
+                                                },
+                                                "required": ["id"],
+                                            },
+                                        },
+                                    },
+                                    "required": ["sections"],
+                                },
+                            ],
                         },
                     },
                     "required": ["module_id", "screen"],
@@ -629,9 +645,81 @@ def _get_tool_definitions() -> list[dict]:
         {
             "type": "function",
             "function": {
+                "name": "get_screen",
+                "description": "Get the current live SDUI screen JSON for a module.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "module_id": {
+                            "type": "string",
+                            "description": "The tab whose live screen should be returned",
+                        },
+                    },
+                    "required": ["module_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "list_screens",
                 "description": "List all SDUI screens currently set by the AI across all tabs",
                 "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_draft",
+                "description": "Get the pending draft SDUI screen for a module, if one exists.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "module_id": {
+                            "type": "string",
+                            "description": "The tab whose draft screen should be returned",
+                        },
+                    },
+                    "required": ["module_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "approve_draft",
+                "description": "Approve and publish a pending SDUI draft so it becomes the live screen.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "module_id": {
+                            "type": "string",
+                            "description": "The tab whose draft should be approved",
+                        },
+                    },
+                    "required": ["module_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "reject_draft",
+                "description": "Reject and discard a pending SDUI draft, optionally recording user feedback.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "module_id": {
+                            "type": "string",
+                            "description": "The tab whose draft should be rejected",
+                        },
+                        "feedback": {
+                            "type": "string",
+                            "description": "Optional user feedback explaining why the draft was rejected",
+                        },
+                    },
+                    "required": ["module_id"],
+                },
             },
         },
         {

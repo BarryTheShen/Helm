@@ -49,12 +49,11 @@ class ActionRegistry:
 
 async def _refresh_data(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
     """Re-fetch and push SDUI screen data for a module."""
-    from app.services.websocket_manager import manager
-
     module_id = params.get("module_id", "home")
 
     # Re-read the current SDUI screen from DB and push it
     from app.models.module_state import ModuleState
+    from app.services.sdui_state import send_live_screen_update
     from sqlalchemy import select
 
     result = await db.execute(
@@ -63,14 +62,9 @@ async def _refresh_data(user_id: str, params: dict[str, Any], db: AsyncSession) 
             ModuleState.module_type == f"sdui__{module_id}",
         )
     )
-    state = result.scalar_one_or_none()
+    state = result.scalars().first()
     if state:
-        await manager.send(user_id, {
-            "type": "sdui_screen_update",
-            "module_id": module_id,
-            "screen": state.state_json,
-            "version": state.version,
-        })
+        await send_live_screen_update(user_id, module_id, state.state_json, state.version)
     return {"status": "ok", "module_id": module_id, "refreshed": state is not None}
 
 
@@ -89,7 +83,7 @@ async def _submit_form(user_id: str, params: dict[str, Any], db: AsyncSession) -
             ModuleState.module_type == key,
         )
     )
-    state = result.scalar_one_or_none()
+    state = result.scalars().first()
     if state is None:
         state = ModuleState(
             id=str(uuid4()),
@@ -158,7 +152,7 @@ async def _mark_notification_read(user_id: str, params: dict[str, Any], db: Asyn
             Notification.user_id == user_id,
         )
     )
-    notif = result.scalar_one_or_none()
+    notif = result.scalars().first()
     if notif:
         notif.is_read = True
         await db.commit()
@@ -203,7 +197,7 @@ async def _delete_calendar_event(user_id: str, params: dict[str, Any], db: Async
             CalendarEvent.user_id == user_id,
         )
     )
-    event = result.scalar_one_or_none()
+    event = result.scalars().first()
     if event:
         await db.delete(event)
         await db.commit()

@@ -19,11 +19,23 @@ from app.schemas.templates import (
     TemplateUpdate,
 )
 from app.services.audit import log_audit
+from app.services.sdui_state import (
+    draft_screen_key,
+    prepare_sdui_screen_for_storage,
+    send_draft_update,
+)
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
 
 VALID_CATEGORIES = {"dashboard", "planner", "tracker", "form", "custom"}
-_SDUI_MODULE_PREFIX = "sdui__"
+
+
+def _prepare_template_screen_or_422(screen_json: dict, module_id: str) -> dict:
+    """Normalize template SDUI payloads using the shared module save contract."""
+    try:
+        return prepare_sdui_screen_for_storage(screen_json, module_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 async def _record_screen_history(
@@ -106,12 +118,14 @@ async def create_template(
     if body.category not in VALID_CATEGORIES:
         raise HTTPException(status_code=422, detail=f"Invalid category. Must be one of: {', '.join(sorted(VALID_CATEGORIES))}")
 
+    screen_json = _prepare_template_screen_or_422(body.screen_json, "template")
+
     template = SDUITemplate(
         id=str(uuid4()),
         name=body.name,
         description=body.description,
         category=body.category,
-        screen_json=body.screen_json,
+        screen_json=screen_json,
         created_by=current_user_id,
         is_public=body.is_public,
     )
@@ -156,6 +170,9 @@ async def update_template(
         raise HTTPException(status_code=422, detail=f"Invalid category. Must be one of: {', '.join(sorted(VALID_CATEGORIES))}")
 
     update_data = body.model_dump(exclude_unset=True)
+    if "screen_json" in update_data:
+        update_data["screen_json"] = _prepare_template_screen_or_422(update_data["screen_json"], template_id)
+
     for key, value in update_data.items():
         setattr(template, key, value)
 
@@ -202,10 +219,10 @@ async def apply_template(
 
     user_id = str(current_user.id)
     module_id = body.module_id
-    screen_json = template.screen_json
+    screen_json = _prepare_template_screen_or_422(template.screen_json, module_id)
 
     # Create/update a draft (same pattern as the existing draft system)
-    draft_key = _SDUI_MODULE_PREFIX + module_id + "__draft"
+    draft_key = draft_screen_key(module_id)
     result = await db.execute(
         select(ModuleState).where(
             ModuleState.user_id == user_id,
@@ -229,13 +246,7 @@ async def apply_template(
     await _record_screen_history(db, user_id, module_id, screen_json, source="template")
     await db.commit()
 
-    from app.services.websocket_manager import manager
-    await manager.send(user_id, {
-        "type": "sdui_draft_ready",
-        "module_id": module_id,
-        "screen": screen_json,
-        "version": draft.version,
-    })
+    await send_draft_update(user_id, module_id, screen_json, draft.version)
 
     return {"module_id": module_id, "version": draft.version, "template_id": template_id, "applied": True}
 
@@ -247,21 +258,18 @@ async def import_template(
     current_user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Import a template from raw JSON. Validates screen_json has rows or sections."""
+    """Import a template from raw JSON using the shared SDUI save contract."""
     if body.category not in VALID_CATEGORIES:
         raise HTTPException(status_code=422, detail=f"Invalid category. Must be one of: {', '.join(sorted(VALID_CATEGORIES))}")
 
-    if not isinstance(body.screen_json, dict):
-        raise HTTPException(status_code=422, detail="screen_json must be a JSON object")
-    if "rows" not in body.screen_json and "sections" not in body.screen_json:
-        raise HTTPException(status_code=422, detail="screen_json must contain 'rows' or 'sections'")
+    screen_json = _prepare_template_screen_or_422(body.screen_json, "template")
 
     template = SDUITemplate(
         id=str(uuid4()),
         name=body.name,
         description=body.description,
         category=body.category,
-        screen_json=body.screen_json,
+        screen_json=screen_json,
         created_by=current_user_id,
         is_public=body.is_public,
     )

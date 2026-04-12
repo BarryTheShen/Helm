@@ -5,6 +5,26 @@ import pytest
 pytestmark = pytest.mark.anyio
 
 
+def assert_normalized_v2_screen(
+    screen: dict, *, expected_rows: int, expected_content: str | None = None
+) -> None:
+    assert "sections" not in screen
+    assert "rows" in screen
+    assert len(screen["rows"]) == expected_rows
+
+    if expected_content is None:
+        return
+
+    row = screen["rows"][0]
+    assert "cells" in row
+    assert len(row["cells"]) == 1
+
+    cell = row["cells"][0]
+    assert "content" in cell
+    assert cell["content"]["type"]
+    assert cell["content"]["props"]["content"] == expected_content
+
+
 # ── Get Draft — No Draft Exists ────────────────────────────────────────────
 
 async def test_get_draft_empty(auth_client):
@@ -40,11 +60,6 @@ async def test_reject_draft_no_draft(auth_client):
 
 async def test_draft_full_approve_lifecycle(auth_client):
     """Create a draft manually, read it, approve it — verify it becomes live."""
-
-    # 1. Simulate draft creation by writing to the draft key directly via SDUI endpoint
-    # We'll use the module_state mechanism: store a draft screen
-    from app.models.module_state import ModuleState
-    from uuid import uuid4
 
     draft_screen = {
         "title": "Draft Home Screen",
@@ -105,8 +120,13 @@ async def test_draft_full_approve_lifecycle(auth_client):
     # 5. Live screen should have the draft content
     resp = await auth_client.get("/api/sdui/home")
     data = resp.json()
-    assert data["screen"]["title"] == "Draft Home Screen"
-    assert len(data["screen"]["sections"]) == 1
+    screen = data["screen"]
+    assert screen["title"] == "Draft Home Screen"
+    assert_normalized_v2_screen(
+        screen,
+        expected_rows=1,
+        expected_content="Draft content",
+    )
 
 
 # ── Full Draft Lifecycle: Create → Reject ─────────────────────────────────
@@ -171,8 +191,9 @@ async def test_approve_draft_overwrites_live(auth_client):
     # Verify live screen is now the draft content
     resp = await auth_client.get("/api/sdui/forms")
     data = resp.json()
-    assert data["screen"]["title"] == "New Draft Screen"
-    assert len(data["screen"]["sections"]) == 1
+    screen = data["screen"]
+    assert screen["title"] == "New Draft Screen"
+    assert_normalized_v2_screen(screen, expected_rows=1)
 
 
 # ── Multiple modules have independent drafts ──────────────────────────────

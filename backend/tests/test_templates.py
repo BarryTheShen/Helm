@@ -1,9 +1,13 @@
 """Tests for SDUI Templates and Screen History endpoints."""
 
+from sqlalchemy import select
+
 import pytest
 
+from app.models.template import SDUITemplate
 
-SAMPLE_SCREEN = {
+
+LEGACY_SAMPLE_SCREEN = {
     "title": "Test Dashboard",
     "sections": [
         {
@@ -15,10 +19,52 @@ SAMPLE_SCREEN = {
     ],
 }
 
-SAMPLE_SCREEN_WITH_ROWS = {
+NORMALIZED_LEGACY_SAMPLE_SCREEN = {
+    "title": "Test Dashboard",
+    "sections": [
+        {
+            "id": "s1",
+            "components": [
+                {"id": "c1", "type": "Text", "props": {"content": "Hello"}}
+            ],
+        }
+    ],
+}
+
+VALID_ROW_FIRST_SCREEN = {
     "title": "Imported Template",
     "rows": [
-        {"id": "r1", "components": [{"id": "c1", "type": "text"}]},
+        {
+            "id": "row-1",
+            "cells": [
+                {
+                    "id": "cell-1",
+                    "width": 1,
+                    "content": {
+                        "id": "content-1",
+                        "type": "Text",
+                        "props": {"content": "Hello rows"},
+                    },
+                }
+            ],
+        },
+    ],
+}
+
+INVALID_ROW_FIRST_SCREEN = {
+    "title": "Broken Template",
+    "rows": [
+        {
+            "cells": [
+                {
+                    "id": "cell-1",
+                    "content": {
+                        "type": "Text",
+                        "props": {"content": "Missing row id"},
+                    },
+                }
+            ]
+        }
     ],
 }
 
@@ -32,15 +78,27 @@ async def test_create_template(auth_client):
         "name": "My Dashboard",
         "description": "A test template",
         "category": "dashboard",
-        "screen_json": SAMPLE_SCREEN,
+        "screen_json": LEGACY_SAMPLE_SCREEN,
         "is_public": False,
     })
     assert resp.status_code == 201
     data = resp.json()
     assert data["name"] == "My Dashboard"
     assert data["category"] == "dashboard"
-    assert data["screen_json"] == SAMPLE_SCREEN
+    assert data["screen_json"] == NORMALIZED_LEGACY_SAMPLE_SCREEN
     assert data["is_public"] is False
+
+
+@pytest.mark.anyio
+async def test_create_template_rejects_invalid_row_first_payload(auth_client):
+    resp = await auth_client.post("/api/templates", json={
+        "name": "Broken",
+        "category": "dashboard",
+        "screen_json": INVALID_ROW_FIRST_SCREEN,
+    })
+
+    assert resp.status_code == 422
+    assert "missing 'id'" in resp.json()["detail"]
 
 
 @pytest.mark.anyio
@@ -48,7 +106,7 @@ async def test_create_template_invalid_category(auth_client):
     resp = await auth_client.post("/api/templates", json={
         "name": "Bad",
         "category": "invalid_category",
-        "screen_json": SAMPLE_SCREEN,
+        "screen_json": LEGACY_SAMPLE_SCREEN,
     })
     assert resp.status_code == 422
 
@@ -57,10 +115,10 @@ async def test_create_template_invalid_category(auth_client):
 async def test_list_templates(auth_client):
     # Create two templates
     await auth_client.post("/api/templates", json={
-        "name": "T1", "category": "dashboard", "screen_json": SAMPLE_SCREEN,
+        "name": "T1", "category": "dashboard", "screen_json": LEGACY_SAMPLE_SCREEN,
     })
     await auth_client.post("/api/templates", json={
-        "name": "T2", "category": "form", "screen_json": SAMPLE_SCREEN,
+        "name": "T2", "category": "form", "screen_json": LEGACY_SAMPLE_SCREEN,
     })
     resp = await auth_client.get("/api/templates")
     assert resp.status_code == 200
@@ -74,10 +132,10 @@ async def test_list_templates(auth_client):
 @pytest.mark.anyio
 async def test_list_templates_filter_category(auth_client):
     await auth_client.post("/api/templates", json={
-        "name": "Dashboard1", "category": "dashboard", "screen_json": SAMPLE_SCREEN,
+        "name": "Dashboard1", "category": "dashboard", "screen_json": LEGACY_SAMPLE_SCREEN,
     })
     await auth_client.post("/api/templates", json={
-        "name": "Form1", "category": "form", "screen_json": SAMPLE_SCREEN,
+        "name": "Form1", "category": "form", "screen_json": LEGACY_SAMPLE_SCREEN,
     })
     resp = await auth_client.get("/api/templates?category=dashboard")
     assert resp.status_code == 200
@@ -88,10 +146,10 @@ async def test_list_templates_filter_category(auth_client):
 @pytest.mark.anyio
 async def test_list_templates_search(auth_client):
     await auth_client.post("/api/templates", json={
-        "name": "Alpha Board", "category": "dashboard", "screen_json": SAMPLE_SCREEN,
+        "name": "Alpha Board", "category": "dashboard", "screen_json": LEGACY_SAMPLE_SCREEN,
     })
     await auth_client.post("/api/templates", json={
-        "name": "Beta Form", "category": "form", "screen_json": SAMPLE_SCREEN,
+        "name": "Beta Form", "category": "form", "screen_json": LEGACY_SAMPLE_SCREEN,
     })
     resp = await auth_client.get("/api/templates?search=alpha")
     assert resp.status_code == 200
@@ -101,12 +159,12 @@ async def test_list_templates_search(auth_client):
 @pytest.mark.anyio
 async def test_get_template_detail(auth_client):
     create = await auth_client.post("/api/templates", json={
-        "name": "Detail", "category": "tracker", "screen_json": SAMPLE_SCREEN,
+        "name": "Detail", "category": "tracker", "screen_json": LEGACY_SAMPLE_SCREEN,
     })
     tid = create.json()["id"]
     resp = await auth_client.get(f"/api/templates/{tid}")
     assert resp.status_code == 200
-    assert resp.json()["screen_json"] == SAMPLE_SCREEN
+    assert resp.json()["screen_json"] == NORMALIZED_LEGACY_SAMPLE_SCREEN
 
 
 @pytest.mark.anyio
@@ -118,7 +176,7 @@ async def test_get_template_not_found(auth_client):
 @pytest.mark.anyio
 async def test_update_template(auth_client):
     create = await auth_client.post("/api/templates", json={
-        "name": "Old Name", "category": "custom", "screen_json": SAMPLE_SCREEN,
+        "name": "Old Name", "category": "custom", "screen_json": LEGACY_SAMPLE_SCREEN,
     })
     tid = create.json()["id"]
     resp = await auth_client.put(f"/api/templates/{tid}", json={
@@ -132,7 +190,7 @@ async def test_update_template(auth_client):
 @pytest.mark.anyio
 async def test_delete_template(auth_client):
     create = await auth_client.post("/api/templates", json={
-        "name": "ToDelete", "category": "form", "screen_json": SAMPLE_SCREEN,
+        "name": "ToDelete", "category": "form", "screen_json": LEGACY_SAMPLE_SCREEN,
     })
     tid = create.json()["id"]
     resp = await auth_client.delete(f"/api/templates/{tid}")
@@ -147,7 +205,7 @@ async def test_delete_template(auth_client):
 @pytest.mark.anyio
 async def test_apply_template_creates_draft(auth_client):
     create = await auth_client.post("/api/templates", json={
-        "name": "Applicable", "category": "dashboard", "screen_json": SAMPLE_SCREEN,
+        "name": "Applicable", "category": "dashboard", "screen_json": LEGACY_SAMPLE_SCREEN,
     })
     tid = create.json()["id"]
     resp = await auth_client.post(f"/api/templates/{tid}/apply", json={
@@ -163,24 +221,68 @@ async def test_apply_template_creates_draft(auth_client):
 
 
 @pytest.mark.anyio
+async def test_apply_template_rejects_invalid_row_first_payload(auth_client, db_session):
+    create = await auth_client.post("/api/templates", json={
+        "name": "Broken Apply",
+        "category": "dashboard",
+        "screen_json": LEGACY_SAMPLE_SCREEN,
+    })
+    tid = create.json()["id"]
+
+    result = await db_session.execute(select(SDUITemplate).where(SDUITemplate.id == tid))
+    template = result.scalar_one()
+    template.screen_json = INVALID_ROW_FIRST_SCREEN
+    await db_session.commit()
+
+    resp = await auth_client.post(f"/api/templates/{tid}/apply", json={
+        "module_id": "home",
+    })
+
+    assert resp.status_code == 422
+    assert "missing 'id'" in resp.json()["detail"]
+
+    draft = await auth_client.get("/api/sdui/home/draft")
+    assert draft.status_code == 200
+    assert draft.json() == {"screen": None, "has_draft": False, "version": 0}
+
+
+@pytest.mark.anyio
 async def test_import_template(auth_client):
     resp = await auth_client.post("/api/templates/import", json={
         "name": "Imported",
         "category": "custom",
-        "screen_json": SAMPLE_SCREEN_WITH_ROWS,
+        "screen_json": LEGACY_SAMPLE_SCREEN,
     })
     assert resp.status_code == 201
     assert resp.json()["name"] == "Imported"
+    assert resp.json()["screen_json"] == NORMALIZED_LEGACY_SAMPLE_SCREEN
 
 
 @pytest.mark.anyio
-async def test_import_template_missing_rows(auth_client):
+async def test_import_template_rejects_invalid_row_first_payload(auth_client):
+    resp = await auth_client.post("/api/templates/import", json={
+        "name": "Broken Import",
+        "category": "custom",
+        "screen_json": INVALID_ROW_FIRST_SCREEN,
+    })
+
+    assert resp.status_code == 422
+    assert "missing 'id'" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_import_template_missing_rows_normalizes_to_empty_legacy_sections(auth_client):
     resp = await auth_client.post("/api/templates/import", json={
         "name": "Bad Import",
         "category": "custom",
         "screen_json": {"title": "No rows or sections"},
     })
-    assert resp.status_code == 422
+
+    assert resp.status_code == 201
+    assert resp.json()["screen_json"] == {
+        "title": "No rows or sections",
+        "sections": [],
+    }
 
 
 @pytest.mark.anyio
@@ -188,7 +290,7 @@ async def test_get_template_rows(auth_client):
     create = await auth_client.post("/api/templates", json={
         "name": "Rows",
         "category": "dashboard",
-        "screen_json": SAMPLE_SCREEN_WITH_ROWS,
+        "screen_json": VALID_ROW_FIRST_SCREEN,
     })
     tid = create.json()["id"]
     resp = await auth_client.get(f"/api/templates/{tid}/rows")
@@ -203,7 +305,7 @@ async def test_get_template_rows(auth_client):
 async def test_screen_history_recorded_on_set(auth_client):
     """Setting a screen should create a history entry."""
     await auth_client.put("/api/sdui/testmod/config", json={"auto_approve_drafts": True})
-    await auth_client.post("/api/sdui/testmod", json={"screen": SAMPLE_SCREEN})
+    await auth_client.post("/api/sdui/testmod", json={"screen": LEGACY_SAMPLE_SCREEN})
     resp = await auth_client.get("/api/sdui/testmod/history")
     assert resp.status_code == 200
     data = resp.json()
@@ -215,8 +317,8 @@ async def test_screen_history_recorded_on_set(auth_client):
 @pytest.mark.anyio
 async def test_screen_history_versions_increment(auth_client):
     """Each set_screen should increment the version."""
-    await auth_client.post("/api/sdui/vermod", json={"screen": SAMPLE_SCREEN})
-    await auth_client.post("/api/sdui/vermod", json={"screen": SAMPLE_SCREEN})
+    await auth_client.post("/api/sdui/vermod", json={"screen": LEGACY_SAMPLE_SCREEN})
+    await auth_client.post("/api/sdui/vermod", json={"screen": LEGACY_SAMPLE_SCREEN})
     resp = await auth_client.get("/api/sdui/vermod/history")
     assert resp.json()["total"] == 2
     versions = [i["version"] for i in resp.json()["items"]]
@@ -226,10 +328,10 @@ async def test_screen_history_versions_increment(auth_client):
 
 @pytest.mark.anyio
 async def test_get_history_version_detail(auth_client):
-    await auth_client.post("/api/sdui/detmod", json={"screen": SAMPLE_SCREEN})
+    await auth_client.post("/api/sdui/detmod", json={"screen": LEGACY_SAMPLE_SCREEN})
     resp = await auth_client.get("/api/sdui/detmod/history/1")
     assert resp.status_code == 200
-    assert resp.json()["screen_json"] == SAMPLE_SCREEN
+    assert resp.json()["screen_json"] == NORMALIZED_LEGACY_SAMPLE_SCREEN
 
 
 @pytest.mark.anyio
@@ -240,7 +342,7 @@ async def test_get_history_version_not_found(auth_client):
 
 @pytest.mark.anyio
 async def test_restore_history_creates_draft(auth_client):
-    await auth_client.post("/api/sdui/restmod", json={"screen": SAMPLE_SCREEN})
+    await auth_client.post("/api/sdui/restmod", json={"screen": LEGACY_SAMPLE_SCREEN})
     resp = await auth_client.post("/api/sdui/restmod/history/1/restore")
     assert resp.status_code == 200
     assert resp.json()["restored_version"] == 1
@@ -252,7 +354,7 @@ async def test_restore_history_creates_draft(auth_client):
 
 @pytest.mark.anyio
 async def test_toggle_star(auth_client):
-    await auth_client.post("/api/sdui/starmod", json={"screen": SAMPLE_SCREEN})
+    await auth_client.post("/api/sdui/starmod", json={"screen": LEGACY_SAMPLE_SCREEN})
     # Star
     resp = await auth_client.put("/api/sdui/starmod/history/1/star")
     assert resp.status_code == 200
@@ -265,7 +367,7 @@ async def test_toggle_star(auth_client):
 @pytest.mark.anyio
 async def test_duplicate_screen(auth_client):
     await auth_client.put("/api/sdui/srcmod/config", json={"auto_approve_drafts": True})
-    await auth_client.post("/api/sdui/srcmod", json={"screen": SAMPLE_SCREEN})
+    await auth_client.post("/api/sdui/srcmod", json={"screen": LEGACY_SAMPLE_SCREEN})
     resp = await auth_client.post("/api/sdui/srcmod/duplicate", json={
         "target_module_id": "tgtmod",
     })
@@ -286,24 +388,40 @@ async def test_duplicate_screen_no_source(auth_client):
 
 
 @pytest.mark.anyio
-async def test_validate_screen_valid(auth_client):
+async def test_validate_screen_validates_row_first_contract(auth_client):
     resp = await auth_client.post("/api/sdui/validate", json={
-        "screen_json": SAMPLE_SCREEN,
+        "screen_json": VALID_ROW_FIRST_SCREEN,
     })
+
     assert resp.status_code == 200
     data = resp.json()
-    # With no components registered, all types are unknown if valid_types is non-empty
-    # With empty registry, everything is valid
-    assert "valid" in data
+    assert data == {
+        "valid": True,
+        "errors": [],
+        "component_count": 1,
+    }
+
+
+@pytest.mark.anyio
+async def test_validate_screen_reports_row_first_errors(auth_client):
+    resp = await auth_client.post("/api/sdui/validate", json={
+        "screen_json": INVALID_ROW_FIRST_SCREEN,
+    })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["valid"] is False
+    assert any("missing 'id'" in error for error in data["errors"])
+    assert data["component_count"] == 1
 
 
 @pytest.mark.anyio
 async def test_history_filter_by_source(auth_client):
     await auth_client.put("/api/sdui/filtmod/config", json={"auto_approve_drafts": True})
-    await auth_client.post("/api/sdui/filtmod", json={"screen": SAMPLE_SCREEN})
+    await auth_client.post("/api/sdui/filtmod", json={"screen": LEGACY_SAMPLE_SCREEN})
     # Apply a template to create a "template" source entry
     create = await auth_client.post("/api/templates", json={
-        "name": "FilterTest", "category": "dashboard", "screen_json": SAMPLE_SCREEN,
+        "name": "FilterTest", "category": "dashboard", "screen_json": LEGACY_SAMPLE_SCREEN,
     })
     tid = create.json()["id"]
     await auth_client.post(f"/api/templates/{tid}/apply", json={"module_id": "filtmod"})

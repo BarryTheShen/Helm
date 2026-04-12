@@ -74,9 +74,12 @@ async def client(db_engine):
     # Also patch AsyncSessionLocal so that services opening their own sessions
     # (e.g. fire_trigger in workflow_engine) use the test DB.
     import app.database as _db_mod
+    import app.mcp.tools as _mcp_tools_mod
     import app.services.workflow_engine as _wf_mod
     original_session_local = _db_mod.AsyncSessionLocal
+    original_mcp_session_local = _mcp_tools_mod.AsyncSessionLocal
     _db_mod.AsyncSessionLocal = factory
+    _mcp_tools_mod.AsyncSessionLocal = factory
     _wf_mod.AsyncSessionLocal = factory
 
     async with AsyncClient(
@@ -85,6 +88,7 @@ async def client(db_engine):
         yield ac
 
     _db_mod.AsyncSessionLocal = original_session_local
+    _mcp_tools_mod.AsyncSessionLocal = original_mcp_session_local
     _wf_mod.AsyncSessionLocal = original_session_local
     app.dependency_overrides.clear()
 

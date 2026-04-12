@@ -12,6 +12,20 @@ from app.models.calendar_event import CalendarEvent
 from app.models.chat_message import ChatMessage
 from app.models.module_state import ModuleState
 from app.models.notification import Notification
+from app.services.sdui_state import (
+    SDUI_MODULE_PREFIX as _SDUI_PREFIX,
+    count_sdui_screen_layout_items,
+    delete_module_states,
+    draft_screen_key,
+    live_screen_key,
+    live_screen_module_type_filter,
+    module_state_keys_to_clear,
+    persist_live_screen,
+    prepare_sdui_screen_for_storage,
+    send_draft_cleared,
+    send_draft_update,
+    send_live_screen_update,
+)
 
 
 async def execute_tool(name: str, args: dict[str, Any], user_id: str) -> Any:
@@ -123,7 +137,7 @@ async def update_event(
                 CalendarEvent.user_id == user_id,
             )
         )
-        event = result.scalar_one_or_none()
+        event = result.scalars().first()
         if event is None:
             raise ValueError(f"Event {event_id} not found")
         if title is not None:
@@ -150,7 +164,7 @@ async def delete_event(event_id: str, user_id: str) -> dict[str, Any]:
                 CalendarEvent.user_id == user_id,
             )
         )
-        event = result.scalar_one_or_none()
+        event = result.scalars().first()
         if event is None:
             raise ValueError(f"Event {event_id} not found")
         await db.delete(event)
@@ -290,7 +304,7 @@ async def update_module_state(
                 ModuleState.module_type == module_type,
             )
         )
-        module_state = result.scalar_one_or_none()
+        module_state = result.scalars().first()
         if module_state is None:
             module_state = ModuleState(
                 id=str(uuid4()),
@@ -325,14 +339,12 @@ async def get_form_data(form_id: str | None = None, user_id: str = "") -> dict[s
                 ModuleState.module_type == "forms",
             )
         )
-        state = result.scalar_one_or_none()
+        state = result.scalars().first()
         return state.state_json if state else {"forms": []}
 
 
 # ── SDUI tools ─────────────────────────────────────────────────────────────
 # AI-facing tool to set/get a full SDUIScreen for a module.
-
-_SDUI_PREFIX = "sdui__"
 
 # Fields that belong in props for each component type (keyed by type literal)
 _SDUI_PROPS_FIELDS: dict[str, set[str]] = {
@@ -363,7 +375,65 @@ _VALID_V2_COMPONENT_TYPES: frozenset[str] = frozenset({
     "Text", "Markdown", "Button", "Image", "TextInput",
     "Icon", "Divider", "Container",
     "CalendarModule", "ChatModule", "NotesModule", "InputBar",
+    "Badge", "Stat", "List", "Alert",
 })
+
+_LEGACY_V2_TYPE_MAP: dict[str, str] = {
+    "Calendar": "CalendarModule",
+    "Chat": "ChatModule",
+    "Notes": "NotesModule",
+    "calendar": "CalendarModule",
+    "chat": "ChatModule",
+    "notes": "NotesModule",
+    "text": "Text",
+    "markdown": "Markdown",
+    "button": "Button",
+    "image": "Image",
+    "textinput": "TextInput",
+    "text_input": "TextInput",
+    "icon": "Icon",
+    "divider": "Divider",
+    "container": "Container",
+    "inputbar": "InputBar",
+    "input_bar": "InputBar",
+    "badge": "Badge",
+    "stat": "Stat",
+    "list": "List",
+    "alert": "Alert",
+}
+
+
+def _normalize_sdui_type(type_name: Any) -> Any:
+    if not isinstance(type_name, str):
+        return type_name
+    return _LEGACY_V2_TYPE_MAP.get(type_name, type_name)
+
+
+def _validate_sdui_v2_container_children(
+    container: dict[str, Any],
+    errors: list[str],
+) -> None:
+    """Recursively validate nested Container descendants in V2 payloads."""
+    container_id = container.get("id", "unknown")
+    children = container.get("children")
+    if not isinstance(children, list):
+        return
+
+    for child in children:
+        if not isinstance(child, dict):
+            continue
+
+        child_type = child.get("type", "")
+        if child_type and child_type not in _VALID_V2_COMPONENT_TYPES:
+            errors.append(
+                f"Unknown child component type '{child_type}' inside Container "
+                f"'{container_id}'. "
+                f"Valid types: {', '.join(sorted(_VALID_V2_COMPONENT_TYPES))}"
+            )
+            continue
+
+        if child_type == "Container":
+            _validate_sdui_v2_container_children(child, errors)
 
 
 def _validate_sdui_v2(screen: dict[str, Any]) -> list[str]:
@@ -404,17 +474,8 @@ def _validate_sdui_v2(screen: dict[str, Any]) -> list[str]:
                     f"Unknown component type '{comp_type}' in cell '{cell.get('id', cell_idx)}'. "
                     f"Valid types: {', '.join(sorted(_VALID_V2_COMPONENT_TYPES))}"
                 )
-            # Recursively check Container children
-            if comp_type == "Container" and isinstance(content.get("children"), list):
-                for child in content["children"]:
-                    if isinstance(child, dict):
-                        child_type = child.get("type", "")
-                        if child_type and child_type not in _VALID_V2_COMPONENT_TYPES:
-                            errors.append(
-                                f"Unknown child component type '{child_type}' inside Container "
-                                f"'{content.get('id', 'unknown')}'. "
-                                f"Valid types: {', '.join(sorted(_VALID_V2_COMPONENT_TYPES))}"
-                            )
+            if comp_type == "Container":
+                _validate_sdui_v2_container_children(content, errors)
     return errors
 
 
@@ -431,18 +492,23 @@ def _normalize_sdui_component(comp: dict[str, Any]) -> dict[str, Any]:
         return comp
 
     comp_id = comp.get('id') or str(uuid4())
+    comp_type = _normalize_sdui_type(comp.get('type', ''))
 
     # Already has props — ensure id and recurse into children
     if 'props' in comp:
-        result = {**comp, 'id': comp_id}
+        result = {**comp, 'type': comp_type, 'id': comp_id}
         if 'children' in result:
-            result['children'] = [_normalize_sdui_component(c) for c in result['children']]
+            result['children'] = [_normalize_sdui_component(c) for c in result['children'] if isinstance(c, dict) and 'type' in c]
         return result
 
     # Flat format — split fields into props vs structural
-    comp_type: str = comp.get('type', '')
     # Case-insensitive lookup; if type is unknown, ALL non-structural keys become props
-    prop_fields = _SDUI_PROPS_FIELDS.get(comp_type) or _SDUI_PROPS_FIELDS.get(comp_type.lower())
+    prop_fields = (
+        _SDUI_PROPS_FIELDS.get(comp_type)
+        or _SDUI_PROPS_FIELDS.get(str(comp_type).lower())
+        or _SDUI_PROPS_FIELDS.get(comp.get('type', ''))
+        or _SDUI_PROPS_FIELDS.get(str(comp.get('type', '')).lower())
+    )
 
     props: dict[str, Any] = {}
     rest: dict[str, Any] = {}
@@ -458,17 +524,22 @@ def _normalize_sdui_component(comp: dict[str, Any]) -> dict[str, Any]:
     result = {'type': comp_type, 'id': comp_id, 'props': props, **rest}
 
     if 'children' in comp:
-        result['children'] = [_normalize_sdui_component(c) for c in comp['children']]
+        result['children'] = [_normalize_sdui_component(c) for c in comp['children'] if isinstance(c, dict) and 'type' in c]
 
     return result
 
 
-def normalize_sdui_screen(screen: dict[str, Any]) -> dict[str, Any]:
+def normalize_sdui_screen(
+    screen: dict[str, Any],
+    *,
+    convert_legacy_sections: bool = True,
+) -> dict[str, Any]:
     """Normalize every component in an SDUIScreen to use the props-based schema.
 
     Called before storing and before serving SDUI screens so that flat
     AI-generated JSON always matches what the frontend TypeScript types expect.
-    Handles both V1 (section-based) and V2 (row-based) formats.
+    Handles both V1 (section-based) and V2 (row-based) formats. When
+    convert_legacy_sections is True, legacy V1 sections are returned as V2 rows.
     """
     if not isinstance(screen, dict):
         return screen
@@ -497,17 +568,48 @@ def normalize_sdui_screen(screen: dict[str, Any]) -> dict[str, Any]:
 
     # V1: section-based format
     normalized_sections = []
-    for section in screen.get('sections', []):
+    normalized_rows = []
+    for section_index, section in enumerate(screen.get('sections', [])):
         if not isinstance(section, dict):
             normalized_sections.append(section)
             continue
 
         norm_section = dict(section)
-        if 'component' in norm_section:
-            norm_section['component'] = _normalize_sdui_component(norm_section['component'])
+        section_components: list[dict[str, Any]] = []
+        if 'component' in norm_section and isinstance(norm_section['component'], dict):
+            normalized_component = _normalize_sdui_component(norm_section['component'])
+            norm_section['component'] = normalized_component
+            section_components.append(normalized_component)
         if 'components' in norm_section:
-            norm_section['components'] = [_normalize_sdui_component(c) for c in norm_section['components']]
+            normalized_components = [
+                _normalize_sdui_component(component)
+                for component in norm_section['components']
+                if isinstance(component, dict)
+            ]
+            norm_section['components'] = normalized_components
+            section_components.extend(normalized_components)
         normalized_sections.append(norm_section)
+
+        row = {
+            key: value
+            for key, value in norm_section.items()
+            if key not in {'component', 'components'}
+        }
+        row.setdefault('id', f'row-{section_index}')
+        row.setdefault('height', 'auto')
+        row['cells'] = [
+            {
+                'id': f"{row['id']}-cell-{component_index}",
+                'width': 1,
+                'content': component,
+            }
+            for component_index, component in enumerate(section_components)
+        ]
+        normalized_rows.append(row)
+
+    if convert_legacy_sections:
+        screen_meta = {key: value for key, value in screen.items() if key != 'sections'}
+        return {**screen_meta, 'rows': normalized_rows}
 
     return {**screen, 'sections': normalized_sections}
 
@@ -523,24 +625,11 @@ async def set_screen(module_id: str, screen: dict[str, Any], user_id: str, draft
     The screen must follow the SDUIScreen schema:
       { schema_version: 1, module_id, title, sections: [...] }
     """
-    from app.services.websocket_manager import manager
-
-    # Normalise before storage so flat AI-generated components become props-based
-    screen = normalize_sdui_screen(screen)
-
-    # Validate V2 component types against the frontend registry
-    if screen.get("schema_version") == "1.0.0":
-        validation_errors = _validate_sdui_v2(screen)
-        if validation_errors:
-            error_summary = "; ".join(validation_errors[:5])  # cap at 5 errors
-            raise ValueError(
-                f"SDUI V2 validation failed for module '{module_id}': {error_summary}. "
-                "Fix the component types and try again."
-            )
+    screen = prepare_sdui_screen_for_storage(screen, module_id)
 
     if draft:
         # Store as draft, don't overwrite live screen
-        draft_key = _SDUI_PREFIX + module_id + "__draft"
+        draft_key = draft_screen_key(module_id)
         async with AsyncSessionLocal() as db:
             result = await db.execute(
                 select(ModuleState).where(
@@ -548,7 +637,7 @@ async def set_screen(module_id: str, screen: dict[str, Any], user_id: str, draft
                     ModuleState.module_type == draft_key,
                 )
             )
-            state = result.scalar_one_or_none()
+            state = result.scalars().first()
             if state is None:
                 state = ModuleState(
                     id=str(uuid4()),
@@ -564,13 +653,7 @@ async def set_screen(module_id: str, screen: dict[str, Any], user_id: str, draft
             await db.commit()
             version = state.version
 
-        # Notify frontend about the draft
-        await manager.send(user_id, {
-            "type": "sdui_draft_update",
-            "module_id": module_id,
-            "screen": screen,
-            "version": version,
-        })
+        await send_draft_update(user_id, module_id, screen, version)
         return {"module_id": module_id, "version": version, "draft": True, "message": "Screen saved as draft. User must approve to go live."}
     else:
         # Direct publish (for auto-approval or programmatic use)
@@ -579,37 +662,18 @@ async def set_screen(module_id: str, screen: dict[str, Any], user_id: str, draft
 
 async def _publish_screen(module_id: str, screen: dict[str, Any], user_id: str) -> dict[str, Any]:
     """Directly publish a screen (bypasses draft flow)."""
-    from app.services.websocket_manager import manager
-
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(ModuleState).where(
-                ModuleState.user_id == user_id,
-                ModuleState.module_type == _SDUI_PREFIX + module_id,
-            )
+        version, cleared_existing_draft = await persist_live_screen(
+            db,
+            user_id=user_id,
+            module_id=module_id,
+            screen=screen,
         )
-        state = result.scalar_one_or_none()
-        if state is None:
-            state = ModuleState(
-                id=str(uuid4()),
-                user_id=user_id,
-                module_type=_SDUI_PREFIX + module_id,
-                state_json=screen,
-                version=1,
-            )
-            db.add(state)
-        else:
-            state.state_json = screen
-            state.version += 1
         await db.commit()
-        version = state.version
 
-    await manager.send(user_id, {
-        "type": "sdui_screen_update",
-        "module_id": module_id,
-        "screen": screen,
-        "version": version,
-    })
+    if cleared_existing_draft:
+        await send_draft_cleared(user_id, module_id)
+    await send_live_screen_update(user_id, module_id, screen, version)
     return {"module_id": module_id, "version": version, "updated": True}
 
 
@@ -619,10 +683,10 @@ async def get_screen(module_id: str, user_id: str) -> dict[str, Any]:
         result = await db.execute(
             select(ModuleState).where(
                 ModuleState.user_id == user_id,
-                ModuleState.module_type == _SDUI_PREFIX + module_id,
+                ModuleState.module_type == live_screen_key(module_id),
             )
         )
-        state = result.scalar_one_or_none()
+        state = result.scalars().first()
     if state is None:
         return {"screen": None}
     return {"screen": state.state_json, "version": state.version}
@@ -630,26 +694,13 @@ async def get_screen(module_id: str, user_id: str) -> dict[str, Any]:
 
 async def delete_screen(module_id: str, user_id: str) -> dict[str, Any]:
     """Delete the SDUI screen for *module_id*, returning the tab to its empty state."""
-    from app.services.websocket_manager import manager
-
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(ModuleState).where(
-                ModuleState.user_id == user_id,
-                ModuleState.module_type == _SDUI_PREFIX + module_id,
-            )
-        )
-        state = result.scalar_one_or_none()
-        if state is not None:
-            await db.delete(state)
+        deleted_types = await delete_module_states(db, user_id, module_state_keys_to_clear(module_id))
+        if deleted_types:
             await db.commit()
 
-    await manager.send(user_id, {
-        "type": "sdui_screen_update",
-        "module_id": module_id,
-        "screen": None,
-        "version": 0,
-    })
+    await send_draft_cleared(user_id, module_id)
+    await send_live_screen_update(user_id, module_id, None, 0)
     return {"module_id": module_id, "deleted": True}
 
 
@@ -659,7 +710,7 @@ async def list_screens(user_id: str) -> dict[str, Any]:
         result = await db.execute(
             select(ModuleState).where(
                 ModuleState.user_id == user_id,
-                ModuleState.module_type.like(_SDUI_PREFIX + "%"),
+                live_screen_module_type_filter(ModuleState.module_type),
             )
         )
         states = result.scalars().all()
@@ -669,7 +720,7 @@ async def list_screens(user_id: str) -> dict[str, Any]:
                 "module_id": s.module_type.removeprefix(_SDUI_PREFIX),
                 "version": s.version,
                 "title": (s.state_json or {}).get("title", ""),
-                "sections_count": len((s.state_json or {}).get("sections", [])),
+                "sections_count": count_sdui_screen_layout_items(s.state_json),
             }
             for s in states
         ]
@@ -708,7 +759,7 @@ async def _get_tabs_config_for_user(user_id: str) -> dict:
                 ModuleState.module_type == _TABS_CONFIG_KEY,
             )
         )
-        state = result.scalar_one_or_none()
+        state = result.scalars().first()
     if state is None:
         return {"hidden_tabs": [], "tab_overrides": {}}
     cfg = state.state_json or {}
@@ -726,7 +777,7 @@ async def _save_tabs_config_for_user(user_id: str, config: dict) -> None:
                 ModuleState.module_type == _TABS_CONFIG_KEY,
             )
         )
-        state = result.scalar_one_or_none()
+        state = result.scalars().first()
         if state is None:
             state = ModuleState(
                 id=str(uuid4()),
@@ -858,7 +909,7 @@ async def rename_tab(
 
 async def approve_draft(module_id: str, user_id: str) -> dict[str, Any]:
     """Approve a draft screen — promote it to the live screen."""
-    draft_key = _SDUI_PREFIX + module_id + "__draft"
+    draft_key = draft_screen_key(module_id)
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(
@@ -867,7 +918,7 @@ async def approve_draft(module_id: str, user_id: str) -> dict[str, Any]:
                 ModuleState.module_type == draft_key,
             )
         )
-        draft = result.scalar_one_or_none()
+        draft = result.scalars().first()
         if draft is None:
             return {"status": "error", "message": f"No draft found for module '{module_id}'"}
 
@@ -875,19 +926,38 @@ async def approve_draft(module_id: str, user_id: str) -> dict[str, Any]:
 
         # Delete the draft
         await db.delete(draft)
-        await db.commit()
 
-    # Publish the draft as the live screen
-    result = await _publish_screen(module_id, screen, user_id)
-    result["approved"] = True
-    return result
+        result = await db.execute(
+            select(ModuleState).where(
+                ModuleState.user_id == user_id,
+                ModuleState.module_type == live_screen_key(module_id),
+            )
+        )
+        live_state = result.scalars().first()
+        if live_state is None:
+            live_state = ModuleState(
+                id=str(uuid4()),
+                user_id=user_id,
+                module_type=live_screen_key(module_id),
+                state_json=screen,
+                version=1,
+            )
+            db.add(live_state)
+        else:
+            live_state.state_json = screen
+            live_state.version += 1
+
+        await db.commit()
+        version = live_state.version
+
+    await send_draft_cleared(user_id, module_id)
+    await send_live_screen_update(user_id, module_id, screen, version)
+    return {"module_id": module_id, "version": version, "approved": True}
 
 
 async def reject_draft(module_id: str, user_id: str, feedback: str | None = None) -> dict[str, Any]:
     """Reject a draft screen — discard it and optionally provide feedback."""
-    from app.services.websocket_manager import manager
-
-    draft_key = _SDUI_PREFIX + module_id + "__draft"
+    draft_key = draft_screen_key(module_id)
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(
@@ -896,18 +966,14 @@ async def reject_draft(module_id: str, user_id: str, feedback: str | None = None
                 ModuleState.module_type == draft_key,
             )
         )
-        draft = result.scalar_one_or_none()
+        draft = result.scalars().first()
         if draft is None:
             return {"status": "error", "message": f"No draft found for module '{module_id}'"}
 
         await db.delete(draft)
         await db.commit()
 
-    # Notify frontend that draft was rejected
-    await manager.send(user_id, {
-        "type": "sdui_draft_rejected",
-        "module_id": module_id,
-    })
+    await send_draft_cleared(user_id, module_id)
 
     response: dict[str, Any] = {"module_id": module_id, "rejected": True}
     if feedback:
@@ -920,7 +986,7 @@ async def reject_draft(module_id: str, user_id: str, feedback: str | None = None
 
 async def get_draft(module_id: str, user_id: str) -> dict[str, Any]:
     """Get the current draft screen for a module, if any."""
-    draft_key = _SDUI_PREFIX + module_id + "__draft"
+    draft_key = draft_screen_key(module_id)
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(
@@ -929,7 +995,7 @@ async def get_draft(module_id: str, user_id: str) -> dict[str, Any]:
                 ModuleState.module_type == draft_key,
             )
         )
-        draft = result.scalar_one_or_none()
+        draft = result.scalars().first()
 
     if draft is None:
         return {"screen": None, "has_draft": False}
