@@ -57,7 +57,7 @@ Helm is a self-hosted AI super app with three layers:
 | Need to change... | Edit this file | Notes |
 |-------------------|---------------|-------|
 | Auth guard / routing | `app/_layout.tsx` | Redirects based on token presence |
-| Auth screens | `app/(auth)/connect.tsx`, `app/(auth)/login.tsx` | Default URL: `http://localhost:8000` |
+| Auth screens | `app/(auth)/connect.tsx`, `app/(auth)/login.tsx` | Default URL: `http://localhost:9000` |
 | Tab screens | `app/(tabs)/{screen}.tsx` | 7 tabs: home, chat, modules, calendar, forms, alerts, settings |
 | Tab bar config | `app/(tabs)/_layout.tsx` | Tab icons/labels; AI-controlled visibility via tabsStore; TabsConfigSync here |
 | Home SDUI screen | `app/(tabs)/home.tsx` | Fully AI-driven via `useSDUIScreen('home')` |
@@ -197,10 +197,10 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 
 | Service | Default Port | How to change |
 |---------|-------------|---------------|
-| Backend FastAPI | `8000` | `SERVER_PORT` in `.env` |
+| Backend FastAPI | `9000` | `SERVER_PORT` in `.env` |
 | Standalone agent web UI / api_server | `7860` | `AGENT_WEB_PORT` in `.env` or `--port` CLI arg |
-| WebSocket | Same as backend (`8000`) | `ws://host:8000/ws?token=...` |
-| MCP endpoint | Same as backend (`8000`) | `http://host:8000/mcp/` |
+| WebSocket | Same as backend (`9000`) | `ws://host:9000/ws?token=...` |
+| MCP endpoint | Same as backend (`9000`) | `http://host:9000/mcp/` |
 
 ---
 
@@ -214,7 +214,7 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 | `ACCESS_TOKEN_EXPIRE_HOURS` | `720` | 30-day token lifetimes |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `30` | Refresh token lifetime |
 | `SERVER_HOST` | `0.0.0.0` | Bind address |
-| `SERVER_PORT` | `8000` | Port |
+| `SERVER_PORT` | `9000` | Port |
 | `OPENAI_API_KEY` | `` | OpenAI key (fallback) |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI endpoint |
 | `OPENAI_MODEL` | `gpt-4o` | Fallback model |
@@ -225,7 +225,7 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 | `EXTERNAL_AGENT_URL` | `` | If set, all mobile chat forwarded to `{URL}/api/run` |
 | `HELM_SESSION_TOKEN` | `` | Used by standalone agent to auth to MCP |
 | `AGENT_WEB_PORT` | `7860` | Port for `helm_agent.py --web` and `api_server.py` |
-| `HELM_MCP_URL` | `http://localhost:8000/mcp/` | MCP URL used by standalone agent |
+| `HELM_MCP_URL` | `http://localhost:9000/mcp/` | MCP URL used by standalone agent |
 
 ---
 

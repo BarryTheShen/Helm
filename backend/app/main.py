@@ -16,6 +16,14 @@ logger.add(sys.stderr, level="INFO", colorize=True, format="<green>{time:HH:mm:s
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.server_name} v{settings.server_version}")
+
+    # Warn if running with the default insecure secret key
+    if settings.secret_key == "dev-secret-key-change-in-production":
+        logger.warning(
+            "⚠️  Using default SECRET_KEY — set SECRET_KEY in .env for production! "
+            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+
     await start_scheduler()
 
     # Start the MCP StreamableHTTP session manager.
@@ -65,38 +73,41 @@ async def _run_time_alerts() -> None:
 
     await asyncio.sleep(120)  # initial 2-minute delay
     while True:
-        now = datetime.now(timezone.utc)
-        time_str = now.strftime("%H:%M:%S UTC")
-        date_str = now.strftime("%A, %B %d %Y")
-        title = "⏰ Time Check"
-        message = f"Current time: {time_str}\n{date_str}"
-        logger.info(f"Time alert broadcast: {time_str}")
+        try:
+            now = datetime.now(timezone.utc)
+            time_str = now.strftime("%H:%M:%S UTC")
+            date_str = now.strftime("%A, %B %d %Y")
+            title = "⏰ Time Check"
+            message = f"Current time: {time_str}\n{date_str}"
+            logger.info(f"Time alert broadcast: {time_str}")
 
-        connected = list(manager.connected_users())
+            connected = list(manager.connected_user_ids)
 
-        # Persist a notification to the DB for every connected user, then broadcast.
-        async with AsyncSessionLocal() as db:
+            # Persist a notification to the DB for every connected user, then broadcast.
+            async with AsyncSessionLocal() as db:
+                for user_id in connected:
+                    notification = Notification(
+                        id=str(uuid.uuid4()),
+                        user_id=user_id,
+                        title=title,
+                        message=message,
+                        severity="info",
+                    )
+                    db.add(notification)
+                with suppress(Exception):
+                    await db.commit()
+
             for user_id in connected:
-                notification = Notification(
-                    id=str(uuid.uuid4()),
-                    user_id=user_id,
-                    title=title,
-                    message=message,
-                    severity="info",
-                )
-                db.add(notification)
-            with suppress(Exception):
-                await db.commit()
-
-        for user_id in connected:
-            with suppress(Exception):
-                await manager.send(user_id, {
-                    "type": "notification",
-                    "title": title,
-                    "message": message,
-                    "severity": "info",
-                    "timestamp": now.isoformat(),
-                })
+                with suppress(Exception):
+                    await manager.send(user_id, {
+                        "type": "notification",
+                        "title": title,
+                        "message": message,
+                        "severity": "info",
+                        "timestamp": now.isoformat(),
+                    })
+        except Exception as exc:
+            logger.error(f"Time alert error: {exc}")
 
         await asyncio.sleep(120)  # repeat every 2 minutes
 
@@ -108,9 +119,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_allowed_origins = settings.allowed_origins.split(",") if hasattr(settings, "allowed_origins") and settings.allowed_origins else ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -123,14 +135,16 @@ async def health():
 
 
 # Register routers
-from app.routers import auth, modules, chat, calendar, notifications, agent_config, websocket, workflows, actions  # noqa: E402
+from app.routers import auth, modules, chat, calendar, notifications, agent_config, providers, websocket, workflows, actions, conversations  # noqa: E402
 
 app.include_router(auth.router)
 app.include_router(modules.router)
 app.include_router(chat.router)
+app.include_router(conversations.router)
 app.include_router(calendar.router)
 app.include_router(notifications.router)
 app.include_router(agent_config.router)
+app.include_router(providers.router)
 app.include_router(workflows.router)
 app.include_router(actions.router)
 app.include_router(websocket.router)
@@ -143,3 +157,8 @@ try:
     logger.info(f"MCP server mounted at {settings.mcp_path}")
 except Exception as exc:
     logger.warning(f"MCP server not mounted: {exc}")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host=settings.server_host, port=settings.server_port, reload=True)

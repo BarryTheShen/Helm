@@ -20,6 +20,7 @@ class User(Base, TimestampMixin):
     devices: Mapped[list["Device"]] = relationship(back_populates="user", cascade="all, delete-orphan")  # type: ignore[name-defined]  # noqa: F821
     sessions: Mapped[list["Session"]] = relationship(back_populates="user", cascade="all, delete-orphan")  # type: ignore[name-defined]  # noqa: F821
     chat_messages: Mapped[list["ChatMessage"]] = relationship(back_populates="user", cascade="all, delete-orphan")  # type: ignore[name-defined]  # noqa: F821
+    conversations: Mapped[list["Conversation"]] = relationship(back_populates="user", cascade="all, delete-orphan")  # type: ignore[name-defined]  # noqa: F821
     calendar_events: Mapped[list["CalendarEvent"]] = relationship(back_populates="user", cascade="all, delete-orphan")  # type: ignore[name-defined]  # noqa: F821
     notifications: Mapped[list["Notification"]] = relationship(back_populates="user", cascade="all, delete-orphan")  # type: ignore[name-defined]  # noqa: F821
     agent_config: Mapped["AgentConfig | None"] = relationship(back_populates="user", cascade="all, delete-orphan", uselist=False)  # type: ignore[name-defined]  # noqa: F821

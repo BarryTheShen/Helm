@@ -68,6 +68,9 @@ export function useSDUIScreen(moduleId: string): SDUIScreenState {
       if (message.type === 'sdui_screen_update' && message.module_id === moduleId) {
         // screen is null when the AI deletes the screen (helm_delete_screen)
         setScreen((message.screen as SDUIPayload) ?? null);
+        // Clear draft when live screen updates — the draft was either approved
+        // (promoted to live) or superseded by a new screen.
+        setDraft(null);
         setLoading(false);
       }
       if (message.type === 'sdui_draft_update' && message.module_id === moduleId) {

@@ -644,7 +644,7 @@ WORKDIR /app
 COPY pyproject.toml .
 RUN pip install .
 COPY app/ app/
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9000"]
 ```
 
 **docker-compose.yml:**
@@ -655,7 +655,7 @@ services:
   backend:
     build: .
     ports:
-      - "8000:8000"   # FastAPI + WebSocket
+      - "9000:9000"   # FastAPI + WebSocket
       - "3001:3001"   # MCP server (if separate port)
     volumes:
       - ./data:/app/data    # SQLite database file
@@ -669,7 +669,7 @@ services:
 ```
 # Server
 SERVER_HOST=0.0.0.0
-SERVER_PORT=8000
+SERVER_PORT=9000
 SECRET_KEY=your-secret-key-here
 
 # Database

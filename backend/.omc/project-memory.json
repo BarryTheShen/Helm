@@ -1,0 +1,157 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1775997036722,
+  "projectRoot": "/Users/LeoQin/Documents/GitHub/Helm/backend",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Python",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "pyproject.toml"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "fastapi",
+        "version": null,
+        "category": "backend"
+      },
+      {
+        "name": "pytest",
+        "version": null,
+        "category": "testing"
+      }
+    ],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": "pytest",
+    "lintCommand": "ruff check",
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": "snake_case",
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "app",
+      "tests"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "alembic": {
+      "path": "alembic",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1775997036710,
+      "keyFiles": [
+        "env.py",
+        "script.py.mako"
+      ]
+    },
+    "app": {
+      "path": "app",
+      "purpose": "Application code",
+      "fileCount": 6,
+      "lastAccessed": 1775997036710,
+      "keyFiles": [
+        "__init__.py",
+        "config.py",
+        "database.py",
+        "dependencies.py",
+        "main.py"
+      ]
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 9,
+      "lastAccessed": 1775997036711,
+      "keyFiles": [
+        "__init__.py",
+        "conftest.py",
+        "test_actions.py",
+        "test_auth.py",
+        "test_calendar.py"
+      ]
+    },
+    "app/models": {
+      "path": "app/models",
+      "purpose": "Data models",
+      "fileCount": 11,
+      "lastAccessed": 1775997036711,
+      "keyFiles": [
+        "__init__.py",
+        "agent_config.py",
+        "base.py"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "app/config.py",
+      "accessCount": 6,
+      "lastAccessed": 1776001076050,
+      "type": "file"
+    },
+    {
+      "path": "app/services/agent_proxy.py",
+      "accessCount": 3,
+      "lastAccessed": 1775997051817,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 2,
+      "lastAccessed": 1775999555145,
+      "type": "directory"
+    },
+    {
+      "path": "app/services/action_registry.py",
+      "accessCount": 1,
+      "lastAccessed": 1775999523842,
+      "type": "file"
+    },
+    {
+      "path": "app/routers/modules.py",
+      "accessCount": 1,
+      "lastAccessed": 1775999524243,
+      "type": "file"
+    },
+    {
+      "path": "app/mcp/tools.py",
+      "accessCount": 1,
+      "lastAccessed": 1775999543434,
+      "type": "directory"
+    },
+    {
+      "path": "app/routers",
+      "accessCount": 1,
+      "lastAccessed": 1775999550489,
+      "type": "directory"
+    },
+    {
+      "path": "app/routers/actions.py",
+      "accessCount": 1,
+      "lastAccessed": 1775999560383,
+      "type": "directory"
+    }
+  ],
+  "userDirectives": []
+}

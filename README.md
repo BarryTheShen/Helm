@@ -26,6 +26,22 @@ The app is a **Server-Driven UI (SDUI) renderer** — the AI sends JSON componen
 
 ---
 
+## Keel Framework
+
+Keel is the open-source SDUI protocol and toolkit extracted from Helm. It is the layer that lets AI agents generate and control native mobile UI at runtime through a standard JSON protocol. Keel is not a component library — it is a protocol that lets AI communicate through interactive UI, not just text. The AI describes what to show; Keel validates and renders it. The protocol is renderer-agnostic: anyone can build renderers for web, mobile, CLI, or IDE extensions.
+
+Three packages form the complete stack:
+
+| Package | Language | Description |
+|---------|----------|-------------|
+| [`@keel/protocol`](packages/protocol/README.md) | TypeScript | JSON schema types, Zod validation, and action type definitions |
+| [`@keel/renderer`](packages/renderer/README.md) | TypeScript / React Native | Renders protocol JSON as native components; supports presets for UI library adapters |
+| [`keel-server`](packages/server/README.md) | Python | MCP server factory, WebSocket connection manager, SDUI normalization, action registry |
+
+A runnable demo app lives at [`examples/keel-demo/`](examples/keel-demo/README.md) — an Expo app that showcases all built-in components with the React Native Paper preset.
+
+---
+
 ## Architecture
 
 ```
@@ -36,7 +52,7 @@ The app is a **Server-Driven UI (SDUI) renderer** — the AI sends JSON componen
 └───────────────────┬─────────────────────────────────────────┘
                     │  WebSocket (real-time events) + REST API
 ┌───────────────────▼─────────────────────────────────────────┐
-│  Python FastAPI Backend                           port 8000  │
+│  Python FastAPI Backend                           port 9000  │
 │  Auth · Calendar · Chat · Notifications · Workflows          │
 │  Agent Proxy (OpenRouter streaming, tool-call loop)          │
 │  MCP Server (18 tools for any MCP-compatible agent)          │
@@ -125,7 +141,7 @@ pip install -e ".[dev]"
 
 # Run migrations and start
 alembic upgrade head
-uvicorn app.main:app --reload   # http://localhost:8000
+uvicorn app.main:app --reload --port 9000   # http://localhost:9000
 ```
 
 ### 2. Environment Variables
@@ -141,7 +157,7 @@ SECRET_KEY=your-secret-key-here    # random string for JWT signing
 OPENROUTER_MODEL=stepfun/step-3.5-flash:free
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 DATABASE_URL=sqlite+aiosqlite:///./helm.db
-HELM_MCP_URL=http://localhost:8000/mcp/
+HELM_MCP_URL=http://localhost:9000/mcp/
 EXTERNAL_AGENT_URL=                # set to http://localhost:7860 to use api_server.py
 AGENT_WEB_PORT=7860
 ```
@@ -150,12 +166,12 @@ Register and get your session token:
 
 ```bash
 # Register
-curl -X POST http://localhost:8000/api/auth/register \
+curl -X POST http://localhost:9000/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"username": "admin", "password": "yourpassword"}'
 
 # Login — copy session_token from response
-curl -X POST http://localhost:8000/api/auth/login \
+curl -X POST http://localhost:9000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "admin", "password": "yourpassword"}'
 ```
@@ -171,7 +187,7 @@ npx expo start          # Scan QR with Expo Go on your phone
 npx expo start --web    # Or open in browser
 ```
 
-Open the app → Settings → enter server URL (`http://localhost:8000`) → log in.
+Open the app → Settings → enter server URL (`http://localhost:9000`) → log in.
 
 ### 4. Standalone Agent (Optional)
 
@@ -260,6 +276,12 @@ Helm/
 │       ├── services/               # api.ts (REST client)
 │       ├── theme/                  # tokens.ts (colors, shadows, resolveColor)
 │       └── types/                  # sdui.ts, api.ts TypeScript types
+├── packages/                       # Keel framework — standalone publishable packages
+│   ├── protocol/                   # @keel/protocol — TypeScript types + Zod schemas
+│   ├── renderer/                   # @keel/renderer — React Native SDUI renderer
+│   └── server/                     # keel-server — Python FastAPI helpers + MCP factory
+├── examples/
+│   └── keel-demo/                  # Runnable Expo demo app (Paper preset, all components)
 └── docs/
     ├── codebase-explanation/       # Living technical docs (read before contributing)
     │   ├── README.md               # Index of all docs in this folder
@@ -289,7 +311,7 @@ Helm/
 
 ## MCP Tools Reference
 
-Any MCP-compatible agent can connect to `http://localhost:8000/mcp/` with a valid Bearer token and use these tools:
+Any MCP-compatible agent can connect to `http://localhost:9000/mcp/` with a valid Bearer token and use these tools:
 
 | Tool | Description |
 |------|-------------|

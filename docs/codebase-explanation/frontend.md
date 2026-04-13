@@ -56,7 +56,7 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 
 ### `app/(auth)/connect.tsx` — Server Setup
 - **Shows:** Server URL field, username, password, Setup button, "Already have an account?" link
-- **Default values:** URL = `http://localhost:8000`, username = `testuser`, password = `testpass123`
+- **Default values:** URL = `http://localhost:9000`, username = `testuser`, password = `testpass123`
 - **API:** `POST /auth/setup` via `AuthService.setup()`. On 409 → saves server URL, navigates to login
 - **State written:** `authStore.serverUrl` (persisted to SecureStore)
 

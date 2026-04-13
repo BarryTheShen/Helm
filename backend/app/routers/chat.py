@@ -1,7 +1,7 @@
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -17,13 +17,17 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 async def get_chat_history(
     limit: int = 20,
     offset: int = 0,
+    conversation_id: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    query = select(ChatMessage).where(ChatMessage.user_id == str(current_user.id))
+
+    if conversation_id:
+        query = query.where(ChatMessage.conversation_id == conversation_id)
+
     result = await db.execute(
-        select(ChatMessage)
-        .where(ChatMessage.user_id == str(current_user.id))
-        .order_by(ChatMessage.created_at.desc())
+        query.order_by(ChatMessage.created_at.desc())
         .limit(limit + 1)
         .offset(offset)
     )
@@ -46,11 +50,13 @@ async def get_chat_history(
 
 @router.delete("/history")
 async def clear_chat_history(
+    conversation_id: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from sqlalchemy import delete
-    await db.execute(
-        delete(ChatMessage).where(ChatMessage.user_id == str(current_user.id))
-    )
+    query = delete(ChatMessage).where(ChatMessage.user_id == str(current_user.id))
+    if conversation_id:
+        query = query.where(ChatMessage.conversation_id == conversation_id)
+    await db.execute(query)
+    await db.commit()
     return {"message": "Chat history cleared"}

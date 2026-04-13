@@ -31,6 +31,7 @@ from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.agent_config import AgentConfig
 from app.models.chat_message import ChatMessage
+from app.models.conversation import Conversation
 from app.services.websocket_manager import manager
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -49,20 +50,35 @@ async def handle_chat_message(
 ) -> None:
     """Entry point called from WebSocket handler (runs as background task)."""
     try:
-        # Save the user message first regardless of routing
+        # Auto-create conversation if needed, auto-title from first message
         async with AsyncSessionLocal() as db:
+            if conversation_id:
+                # Verify conversation exists
+                result = await db.execute(
+                    select(Conversation).where(
+                        Conversation.id == conversation_id,
+                        Conversation.user_id == user_id,
+                    )
+                )
+                conv = result.scalar_one_or_none()
+                if conv and conv.title == "New Chat":
+                    # Auto-title from first user message (truncate to 50 chars)
+                    conv.title = content[:50].strip() + ("..." if len(content) > 50 else "")
+                    await db.commit()
+
             user_msg = ChatMessage(
                 id=str(uuid4()),
                 user_id=user_id,
                 role="user",
                 content=content,
+                conversation_id=conversation_id,
             )
             db.add(user_msg)
             await db.commit()
 
         # Route: external agent when configured, else built-in OpenRouter proxy
         if settings.external_agent_url:
-            await _process_via_external_agent(user_id, content)
+            await _process_via_external_agent(user_id, content, conversation_id)
         else:
             await _process_chat(user_id, content, conversation_id)
     except Exception as exc:
@@ -73,7 +89,7 @@ async def handle_chat_message(
         })
 
 
-async def _process_via_external_agent(user_id: str, content: str) -> None:
+async def _process_via_external_agent(user_id: str, content: str, conversation_id: str | None = None) -> None:
     """Forward the chat message to the external agent API (api_server.py) and stream back.
 
     This is used when EXTERNAL_AGENT_URL is configured. The external agent has full
@@ -128,6 +144,7 @@ async def _process_via_external_agent(user_id: str, content: str) -> None:
             user_id=user_id,
             role="assistant",
             content=full_response,
+            conversation_id=conversation_id,
         )
         db.add(assistant_msg)
         await db.commit()
@@ -157,18 +174,17 @@ async def _process_chat(
         )
         agent_config = result.scalar_one_or_none()
 
-        api_key = _resolve_api_key(agent_config)
-        model = (agent_config.model if agent_config else None) or settings.openrouter_model or settings.openai_model
-        base_url = (agent_config.base_url if agent_config else None) or settings.openrouter_base_url or settings.openai_base_url
+        api_key, base_url, model = _resolve_provider_settings(agent_config)
         system_prompt = (agent_config.system_prompt if agent_config else None) or DEFAULT_SYSTEM_PROMPT
         temperature = agent_config.temperature if agent_config else 0.7
         max_tokens = agent_config.max_tokens if agent_config else 4096
 
         # Load history excluding the current user message (last message already saved)
+        history_query = select(ChatMessage).where(ChatMessage.user_id == user_id)
+        if conversation_id:
+            history_query = history_query.where(ChatMessage.conversation_id == conversation_id)
         history_result = await db.execute(
-            select(ChatMessage)
-            .where(ChatMessage.user_id == user_id)
-            .order_by(ChatMessage.created_at.desc())
+            history_query.order_by(ChatMessage.created_at.desc())
             .limit(21)  # extra 1 to skip the just-saved user msg
         )
         all_history = list(reversed(history_result.scalars().all()))
@@ -256,6 +272,7 @@ async def _process_chat(
             user_id=user_id,
             role="assistant",
             content=full_response,
+            conversation_id=conversation_id,
         )
         db.add(assistant_msg)
         await db.commit()
@@ -434,22 +451,92 @@ async def _execute_tool_safe(user_id: str, name: str, arguments_str: str) -> dic
         return {"error": str(exc)}
 
 
-def _resolve_api_key(agent_config: AgentConfig | None) -> str | None:
-    """Resolve the API key: per-user DB config → OpenRouter env → OpenAI env."""
-    raw = agent_config.api_key_encrypted if agent_config else None
-    if raw:
+def _resolve_provider_settings(agent_config: AgentConfig | None) -> tuple[str | None, str, str]:
+    """Resolve (api_key, base_url, model) from per-user config or env defaults.
+
+    Priority: per-user DB config → env vars for the chosen provider → fallback chain.
+    Returns (api_key, base_url, model).
+    """
+    from app.providers import get_provider
+
+    # Check if the user has a personal API key set
+    user_key = None
+    if agent_config and agent_config.api_key_encrypted:
         try:
             from app.routers.agent_config import _decrypt_api_key
-            decrypted = _decrypt_api_key(raw)
+            decrypted = _decrypt_api_key(agent_config.api_key_encrypted)
             if decrypted and decrypted not in ("test_key", "placeholder", ""):
-                return decrypted
+                user_key = decrypted
         except Exception:
             pass
-    if settings.openrouter_api_key:
-        return settings.openrouter_api_key
-    if settings.openai_api_key:
-        return settings.openai_api_key
-    return None
+
+    if user_key:
+        # User has their own key — respect their provider/model/url choices
+        provider_id = (agent_config.provider if agent_config else None) or settings.default_provider
+        user_base_url = agent_config.base_url if agent_config else None
+        user_model = agent_config.model if agent_config else None
+        logger.info(f"Provider: '{provider_id}' (user key set)")
+    else:
+        # No user key — use env-level defaults entirely
+        provider_id = settings.default_provider
+        user_base_url = None
+        user_model = None
+        logger.info(f"Provider: using env default '{provider_id}' (no user key)")
+
+    # Provider-specific env var lookup
+    env_keys: dict[str, tuple[str, str, str]] = {
+        # provider_id → (api_key_attr, base_url_attr, model_attr)
+        "openai": ("openai_api_key", "openai_base_url", "openai_model"),
+        "openrouter": ("openrouter_api_key", "openrouter_base_url", "openrouter_model"),
+        "siliconflow": ("siliconflow_api_key", "siliconflow_base_url", "siliconflow_model"),
+        "ollama": ("", "ollama_base_url", "ollama_model"),
+        "deepseek": ("deepseek_api_key", "deepseek_base_url", "deepseek_model"),
+        "groq": ("groq_api_key", "groq_base_url", "groq_model"),
+        "together": ("together_api_key", "together_base_url", "together_model"),
+    }
+
+    preset = get_provider(provider_id)
+
+    if provider_id in env_keys:
+        key_attr, url_attr, model_attr = env_keys[provider_id]
+        env_key = getattr(settings, key_attr, "") if key_attr else ""
+        env_url = getattr(settings, url_attr, "")
+        env_model = getattr(settings, model_attr, "")
+    elif preset:
+        env_key = ""
+        env_url = preset.base_url
+        env_model = preset.default_model
+    else:
+        env_key = ""
+        env_url = ""
+        env_model = ""
+
+    api_key = user_key or env_key or None
+    base_url = user_base_url or env_url
+    model = user_model or env_model
+
+    # Ollama doesn't need an API key — use a dummy so the proxy doesn't reject it
+    if provider_id == "ollama" and not api_key:
+        api_key = "ollama"
+
+    # Fallback: if the chosen provider has no key, try openrouter → openai
+    if not api_key and provider_id not in ("ollama", "custom"):
+        if settings.openrouter_api_key:
+            api_key = settings.openrouter_api_key
+            base_url = base_url or settings.openrouter_base_url
+            model = model or settings.openrouter_model
+        elif settings.openai_api_key:
+            api_key = settings.openai_api_key
+            base_url = base_url or settings.openai_base_url
+            model = model or settings.openai_model
+
+    logger.info(
+        f"Resolved: provider={provider_id}, model={model}, "
+        f"base_url={base_url[:40] if base_url else 'None'}..., "
+        f"key={'***' + api_key[-4:] if api_key and len(api_key) > 4 else 'NONE'}"
+    )
+
+    return api_key, base_url, model
 
 
 def _get_tool_definitions() -> list[dict]:

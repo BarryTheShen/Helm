@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"ls .venv/bin/python 2>/dev/null || echo \\\"NO_VENV\\\" && which python3 && python3 -m pytest --version 2>&1\",\"description\":\"Find available Python with pytest\"}",
+  "error": "Exit code 1\nNO_VENV\n/opt/homebrew/bin/python3\n/opt/homebrew/opt/python@3.13/bin/python3.13: No module named pytest\n[rerun: b10]",
+  "timestamp": "2026-04-12T07:46:08.913Z",
+  "retry_count": 2
+}

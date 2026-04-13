@@ -17,7 +17,7 @@ cd backend
 python -m venv .venv           # first time only
 source .venv/bin/activate
 pip install -e ".[dev]"        # first time only
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 9000
 
 # Terminal 2 — Frontend
 cd mobile
@@ -28,9 +28,9 @@ npx expo start
 Then open the Expo Go app on your phone and scan the QR code **or** press `i` for iOS Simulator.
 
 At first launch the app shows a **Connect** screen. Enter your backend URL:
-- Same device / simulator: `http://localhost:8000`
-- Real device on same WiFi: `http://YOUR_MACHINE_IP:8000`
-- Android Emulator: `http://10.0.2.2:8000`
+- Same device / simulator: `http://localhost:9000`
+- Real device on same WiFi: `http://YOUR_MACHINE_IP:9000`
+- Android Emulator: `http://10.0.2.2:9000`
 
 ---
 
@@ -38,10 +38,10 @@ At first launch the app shows a **Connect** screen. Enter your backend URL:
 
 | Service | Default Port | How to change |
 |---------|-------------|---------------|
-| Backend FastAPI | `8000` | `SERVER_PORT` env var or uvicorn `--port` arg |
+| Backend FastAPI | `9000` | `SERVER_PORT` env var or uvicorn `--port` arg |
 | Standalone agent web UI / api_server | `7860` | `AGENT_WEB_PORT` env var or `--port` CLI arg |
-| WebSocket | Same as backend (`8000`) | `ws://<host>:8000/ws?token=...` |
-| MCP endpoint | Same as backend (`8000`) | `http://<host>:8000/mcp/` |
+| WebSocket | Same as backend (`9000`) | `ws://<host>:9000/ws?token=...` |
+| MCP endpoint | Same as backend (`9000`) | `http://<host>:9000/mcp/` |
 
 ---
 
@@ -69,15 +69,15 @@ source .venv/bin/activate
 uvicorn app.main:app --reload
 ```
 
-Server starts at `http://localhost:8000`
+Server starts at `http://localhost:9000`
 
 | URL | What it is |
 |-----|-----------|
-| `http://localhost:8000` | REST API root |
-| `http://localhost:8000/docs` | Auto-generated Swagger UI — test every endpoint here |
-| `http://localhost:8000/redoc` | ReDoc API reference |
-| `http://localhost:8000/mcp` | MCP server endpoint (Streamable HTTP) |
-| `ws://localhost:8000/ws` | WebSocket for AI chat; pass `?token=` as query param |
+| `http://localhost:9000` | REST API root |
+| `http://localhost:9000/docs` | Auto-generated Swagger UI — test every endpoint here |
+| `http://localhost:9000/redoc` | ReDoc API reference |
+| `http://localhost:9000/mcp` | MCP server endpoint (Streamable HTTP) |
+| `ws://localhost:9000/ws` | WebSocket for AI chat; pass `?token=` as query param |
 
 ### Database migrations
 
@@ -206,7 +206,7 @@ A fully independent external agent that controls Helm via MCP and can also edit 
 No extra installs needed — `pydantic-ai` ships with the backend venv. You need a valid session token:
 
 ```bash
-curl -s -X POST http://localhost:8000/auth/login \
+curl -s -X POST http://localhost:9000/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"your_user","password":"your_pass","device_id":"agent","device_name":"Agent"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['session_token'])"
@@ -275,7 +275,7 @@ Requires `api_server.py` to already be running on port 7860.
 Tokens expire (default: 720h = 30 days). To reissue:
 
 ```bash
-curl -s -X POST http://localhost:8000/auth/login \
+curl -s -X POST http://localhost:9000/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"your_user","password":"your_pass","device_id":"agent","device_name":"Agent"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['session_token'])"
@@ -296,7 +296,7 @@ ENCRYPTION_KEY=       # Fernet key — required to encrypt agent API keys in the
 ACCESS_TOKEN_EXPIRE_HOURS=720
 REFRESH_TOKEN_EXPIRE_DAYS=30
 SERVER_HOST=0.0.0.0
-SERVER_PORT=8000
+SERVER_PORT=9000
 
 # ─── LLM providers ───────────────────────────────────────
 # Primary: OpenRouter (recommended)
@@ -318,7 +318,7 @@ MCP_PATH=/mcp
 
 # ─── Standalone agent ────────────────────────────────────
 HELM_SESSION_TOKEN=   # JWT token for agent → MCP auth
-HELM_MCP_URL=http://localhost:8000/mcp/
+HELM_MCP_URL=http://localhost:9000/mcp/
 AGENT_WEB_PORT=7860   # port for helm_agent.py --web and api_server.py
 ```
 
@@ -339,14 +339,14 @@ print(Fernet.generate_key().decode())
 
 ## MCP Configuration
 
-The MCP server is mounted at `http://localhost:8000/mcp`.
+The MCP server is mounted at `http://localhost:9000/mcp`.
 
 **To connect Claude Desktop to Helm's MCP server**, add to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
     "helm": {
-      "url": "http://localhost:8000/mcp",
+      "url": "http://localhost:9000/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_SESSION_TOKEN"
       }
@@ -376,7 +376,7 @@ npx playwright test tests/e2e.spec.ts
 npx playwright show-report
 ```
 
-Requires both backend (port 8000) and frontend dev server (port 8082) to be running, or let Playwright auto-start them via `playwright.config.ts`.
+Requires both backend (port 9000) and frontend dev server (port 8082) to be running, or let Playwright auto-start them via `playwright.config.ts`.
 
 ### Ad-hoc Playwright / Puppeteer scripts (manual, not CI)
 
@@ -423,5 +423,5 @@ python inject-home.py
 | Agent can't connect to MCP | `HELM_SESSION_TOKEN` missing or expired | Regenerate token, update `.env` |
 | `helm_hide_tab` MCP tool does nothing | Known bug in `mcp/server.py` | Use action registry: `POST /api/actions/execute {function: "hide_tab", params: {tab_id: "..."}}` |
 | `PUT /api/calendar/events/{id}` → 404 | Known bug: decorator missing on `update_event` | No fix yet — use delete + create |
-| Android emulator can't reach backend | Wrong localhost | Use `http://10.0.2.2:8000` not `http://localhost:8000` |
+| Android emulator can't reach backend | Wrong localhost | Use `http://10.0.2.2:9000` not `http://localhost:9000` |
 | Expo Go can't reach backend | Device on different network | Use `npx expo start --tunnel` |

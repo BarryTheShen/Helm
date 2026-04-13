@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@keel/protocol": ["../../packages/protocol/src"],
+      "@keel/renderer/presets/paper": ["../../packages/renderer/src/presets/paper"],
+      "@keel/renderer": ["../../packages/renderer/src"]
+    }
+  },
+  "include": ["src", "index.ts"],
+  "exclude": ["node_modules"]
+}

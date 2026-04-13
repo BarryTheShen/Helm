@@ -374,6 +374,9 @@ async def helm_approve_draft(module_id: str) -> dict:
     """
     return await approve_draft(module_id, get_current_user_id())
 
+
+@mcp.tool()
+async def helm_hide_tab(tab_id: str) -> dict:
     """Hide a tab from the bottom navigation bar.
 
     The tab disappears from the nav bar instantly via WebSocket.

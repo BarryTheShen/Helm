@@ -21,4 +21,17 @@ dist/
 
 # Build outputs
 build/
+dist/
+
+# Keel packages
+packages/*/node_modules/
+packages/*/dist/
+
+# Test artifacts
+test-results/
+
+# IDE
+.idea/
+*.swp
+*.swo
 

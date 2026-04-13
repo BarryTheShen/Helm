@@ -44,7 +44,7 @@ App                          Backend
 
 ### Channel 2: WebSocket (Real-Time)
 
-**Connection:** `ws://server:8000/ws?token=SESSION_TOKEN&device_id=OPTIONAL`
+**Connection:** `ws://server:9000/ws?token=SESSION_TOKEN&device_id=OPTIONAL`
 
 **Chat flow:**
 ```

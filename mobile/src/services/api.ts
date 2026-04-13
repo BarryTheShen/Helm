@@ -7,6 +7,7 @@ import type {
   Workflow,
   Module,
   ChatMessage,
+  Conversation,
 } from '@/types/api';
 
 export class ApiError extends Error {
@@ -178,15 +179,35 @@ export class ApiClient {
     return this.request<void>(`/api/sdui/${moduleId}`, { method: 'DELETE' });
   }
 
+  // Conversations
+  async getConversations(): Promise<Conversation[]> {
+    const res = await this.request<{conversations: Conversation[]}>('/api/conversations');
+    return res.conversations;
+  }
+
+  async createConversation(title?: string): Promise<Conversation> {
+    return this.request<Conversation>('/api/conversations', {
+      method: 'POST',
+      body: JSON.stringify(title ? { title } : {}),
+    });
+  }
+
+  async renameConversation(id: string, title: string): Promise<Conversation> {
+    return this.request<Conversation>(`/api/conversations/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
+    });
+  }
+
+  async deleteConversation(id: string): Promise<void> {
+    return this.request<void>(`/api/conversations/${id}`, { method: 'DELETE' });
+  }
+
   // Chat history
   async getChatHistory(conversationId?: string): Promise<ChatMessage[]> {
     const query = conversationId ? `?conversation_id=${conversationId}` : '';
     const res = await this.request<{messages: ChatMessage[], has_more: boolean}>(`/api/chat/history${query}`);
     return res.messages;
-  }
-
-  async deleteConversation(conversationId: string): Promise<void> {
-    return this.request<void>(`/api/chat/history`, { method: 'DELETE' });
   }
 
   // Server actions (SDUI function registry)

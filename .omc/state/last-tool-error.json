@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd /Users/LeoQin/Documents/GitHub/Helm/packages/renderer && npx tsc --noEmit 2>&1\",\"timeout\":60000,\"description\":\"Type-check renderer package\"}",
+  "error": "Exit code 2\nsrc/presets/paper.tsx(19,8): error TS2307: Cannot find module 'react-native-paper' or its corresponding type declarations.\n[rerun: b2]",
+  "timestamp": "2026-04-12T15:51:43.377Z",
+  "retry_count": 1
+}

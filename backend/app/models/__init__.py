@@ -2,6 +2,7 @@ from app.models.agent_config import AgentConfig
 from app.models.base import Base
 from app.models.calendar_event import CalendarEvent
 from app.models.chat_message import ChatMessage
+from app.models.conversation import Conversation
 from app.models.device import Device
 from app.models.module_state import ModuleState
 from app.models.notification import Notification
@@ -14,6 +15,7 @@ __all__ = [
     "User",
     "Device",
     "Session",
+    "Conversation",
     "ChatMessage",
     "CalendarEvent",
     "Notification",

@@ -1,4 +1,5 @@
-import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, Alert, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -9,6 +10,8 @@ import { useSDUIScreen } from '@/hooks/useSDUIScreen';
 import { SDUIUniversalRenderer } from '@/components/sdui/SDUIRenderer';
 import { useActionDispatcher } from '@/hooks/useActionDispatcher';
 import { AuthService } from '@/services/auth';
+import { ApiClient } from '@/services/api';
+import type { Module } from '@/types/api';
 
 export default function SettingsScreen() {
   const handleAction = useActionDispatcher();
@@ -16,6 +19,39 @@ export default function SettingsScreen() {
   const { user, token, serverUrl, logout } = useAuthStore();
   const { navigationMode, theme, setNavigationMode, setTheme } = useSettingsStore();
   const { screen: sduiScreen } = useSDUIScreen('settings');
+  const [modules, setModules] = useState<Module[]>([]);
+
+  useEffect(() => {
+    if (token && serverUrl) loadModules();
+  }, [token, serverUrl]);
+
+  const loadModules = async () => {
+    if (!token || !serverUrl) return;
+    try {
+      const api = new ApiClient(serverUrl, token, logout);
+      const data = await api.getModules();
+      setModules(data.modules);
+    } catch {
+      // Silently fail
+    }
+  };
+
+  const toggleModule = async (moduleId: string, currentEnabled: boolean) => {
+    if (!token || !serverUrl) return;
+    try {
+      const api = new ApiClient(serverUrl, token, logout);
+      if (currentEnabled) {
+        await api.hideTab(moduleId);
+      } else {
+        await api.showTab(moduleId);
+      }
+      setModules((prev) =>
+        prev.map((m) => (m.id === moduleId ? { ...m, enabled: !currentEnabled } : m))
+      );
+    } catch {
+      // Revert on failure
+    }
+  };
 
   const handleLogout = async () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -24,7 +60,6 @@ export default function SettingsScreen() {
         text: 'Logout',
         style: 'destructive',
         onPress: async () => {
-          // Invalidate session on the server first
           if (serverUrl && token) {
             try {
               const authService = new AuthService(serverUrl);
@@ -40,7 +75,6 @@ export default function SettingsScreen() {
     ]);
   };
 
-  // If the AI has set an SDUI screen for the settings tab, render that instead
   if (sduiScreen) {
     return <SDUIUniversalRenderer payload={sduiScreen} onAction={handleAction} />;
   }
@@ -65,6 +99,34 @@ export default function SettingsScreen() {
           <Card>
             <Text style={styles.label}>Model</Text>
             <Text style={styles.value}>Configure in backend</Text>
+          </Card>
+        </View>
+
+        {/* Tabs / Modules Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Tabs</Text>
+          <Card>
+            {modules.map((mod) => (
+              <View key={mod.id} style={styles.moduleRow}>
+                <View style={styles.moduleInfo}>
+                  <Text style={styles.moduleIcon}>{mod.icon}</Text>
+                  <View>
+                    <Text style={styles.moduleName}>{mod.name}</Text>
+                    {mod.description ? (
+                      <Text style={styles.moduleDesc}>{mod.description}</Text>
+                    ) : null}
+                  </View>
+                </View>
+                <Switch
+                  value={mod.enabled !== false}
+                  onValueChange={() => toggleModule(mod.id, mod.enabled !== false)}
+                  trackColor={{ true: colors.primary, false: colors.divider }}
+                />
+              </View>
+            ))}
+            {modules.length === 0 && (
+              <Text style={styles.emptyModules}>Loading tabs...</Text>
+            )}
           </Card>
         </View>
 
@@ -156,6 +218,39 @@ const styles = StyleSheet.create({
   value: {
     ...typography.body,
     color: colors.text,
+  },
+  // Module rows in Settings
+  moduleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.divider,
+  },
+  moduleInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  moduleIcon: {
+    fontSize: 24,
+  },
+  moduleName: {
+    ...typography.body,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  moduleDesc: {
+    ...typography.caption1,
+    color: colors.textSecondary,
+  },
+  emptyModules: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: spacing.md,
   },
   logoutButton: {
     marginTop: spacing.md,

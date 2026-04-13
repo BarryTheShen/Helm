@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd /Users/LeoQin/Documents/GitHub/Helm && npx jest --config packages/renderer/jest.config.js 2>&1 && npx jest --config examples/keel-demo/jest.config.js 2>&1\",\"timeout\":30000}",
+  "error": "Exit code 1\nPASS packages/renderer/src/__tests__/presets.test.ts\nPASS packages/renderer/src/__tests__/registry.test.ts\n\nTest Suites: 2 passed, 2 total\nTests:       20 passed, 20 total\nSnapshots:   0 total\nTime:        0.677 s, estimated 1 s\nRan all test suites.\nFAIL examples/keel-demo/src/__tests__/demo.test.ts\n  ● Test suite failed to run\n\n    TypeError: Cannot read properties of undefined (reading 'select')\n\n       9 | import React, { useState } from 'react';\n      10 | import { View } from 'r...",
+  "timestamp": "2026-04-12T16:12:15.396Z",
+  "retry_count": 1
+}

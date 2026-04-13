@@ -52,14 +52,14 @@ HELM_SESSION_TOKEN=your-session-token-here
 OPENROUTER_API_KEY=sk-or-...
 
 # Optional: override defaults
-HELM_MCP_URL=http://localhost:8000/mcp/          # default
+HELM_MCP_URL=http://localhost:9000/mcp/          # default
 OPENROUTER_MODEL=stepfun/step-3.5-flash:free     # default; reasoning/thinking models supported
 ```
 
 **How to get a session token:**
 
 ```bash
-curl -X POST http://localhost:8000/auth/login \
+curl -X POST http://localhost:9000/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "admin", "password": "your-password"}'
 # → copy "session_token" from the response and add to .env
