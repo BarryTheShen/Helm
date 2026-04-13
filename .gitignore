@@ -35,3 +35,10 @@ test-results/
 *.swp
 *.swo
 
+# OMC state (oh-my-claudecode)
+.omc/
+
+# Private project documents (Notion exports)
+docs/Agentic AI Super App — Project Hub/
+docs/Agentic AI Super App — Project Hub*.md
+

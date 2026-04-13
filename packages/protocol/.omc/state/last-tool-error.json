@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"cd /Users/LeoQin/Documents/GitHub/Helm/packages/renderer && npm run build 2>&1\",\"timeout\":60000,\"description\":\"Build the renderer package\"}",
-  "error": "Exit code 2\n\n> @keel/renderer@0.1.0 build\n> tsc\n\n../protocol/src/index.ts(24,8): error TS6059: File '/Users/LeoQin/Documents/GitHub/Helm/packages/protocol/src/types/sdui.ts' is not under 'rootDir' '/Users/LeoQin/Documents/GitHub/Helm/packages/renderer/src'. 'rootDir' is expected to contain all source files.\n  The file is in the program because:\n    Imported via './types/sdui' from file '/Users/LeoQin/Documents/GitHub/Helm/packages/protocol/src/index.ts'\n    Imported via './types/sdui' from file ...",
-  "timestamp": "2026-04-12T07:54:19.809Z",
-  "retry_count": 1
-}

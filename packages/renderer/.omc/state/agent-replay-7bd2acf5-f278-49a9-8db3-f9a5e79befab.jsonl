@@ -1,6 +1,0 @@
-{"t":0,"agent":"afe2468","agent_type":"architect","event":"agent_start","parent_mode":"none"}
-{"t":0,"agent":"adb6852","agent_type":"security-reviewer","event":"agent_start","parent_mode":"none"}
-{"t":0,"agent":"ac16ad8","agent_type":"code-reviewer","event":"agent_start","parent_mode":"none"}
-{"t":0,"agent":"afe2468","agent_type":"architect","event":"agent_stop","success":true,"duration_ms":32904}
-{"t":0,"agent":"adb6852","agent_type":"security-reviewer","event":"agent_stop","success":true,"duration_ms":35466}
-{"t":0,"agent":"ac16ad8","agent_type":"code-reviewer","event":"agent_stop","success":true,"duration_ms":43482}
