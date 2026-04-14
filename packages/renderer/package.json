@@ -4,12 +4,20 @@
   "description": "SDUI V2 renderer, component registry, and theme system for Keel AI-UI framework",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "jest"
   },
   "dependencies": {
-    "@keel/protocol": "0.1.0"
+    "@keel/protocol": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=18.0.0",

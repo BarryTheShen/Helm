@@ -11,8 +11,8 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "@keel/protocol": "*",
-    "@keel/renderer": "*",
+    "@keel/protocol": "workspace:*",
+    "@keel/renderer": "workspace:*",
     "babel-preset-expo": "^55.0.12",
     "expo": "~55.0.8",
     "expo-status-bar": "~55.0.4",

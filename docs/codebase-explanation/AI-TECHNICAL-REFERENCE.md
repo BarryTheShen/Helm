@@ -18,12 +18,17 @@ Helm is a self-hosted AI super app with three layers:
 | Frontend | React Native (Expo) | `mobile/` | `mobile/index.ts` → `mobile/app/_layout.tsx` |
 | Protocol | WebSocket + REST + MCP | Embedded in backend | `backend/app/routers/websocket.py` |
 | Standalone Agent | PydanticAI | `agent/` | `agent/helm_agent.py` |
+| Keel Protocol | TypeScript | `packages/protocol/` | `packages/protocol/src/index.ts` |
+| Keel Renderer | TypeScript / React Native | `packages/renderer/` | `packages/renderer/src/index.ts` |
+| Keel Server | Python | `packages/server/` | `packages/server/keel_server/__init__.py` |
+| Keel Demo App | TypeScript / Expo | `examples/keel-demo/` | `examples/keel-demo/src/App.tsx` |
 
 **To run backend:** `cd backend && uvicorn app.main:app --reload`
 **To run frontend:** `cd mobile && npx expo start`
 **To run tests:** `cd backend && pytest`
 **To run standalone agent:** `source backend/.venv/bin/activate && cd agent && python helm_agent.py`
 **To run agent web UI:** `source backend/.venv/bin/activate && cd agent && python helm_agent.py --web`
+**To run Keel tests:** `cd packages/protocol && npx jest` / `cd packages/renderer && npx jest` / `cd examples/keel-demo && npx jest`
 
 ---
 
@@ -89,6 +94,25 @@ Helm is a self-hosted AI super app with three layers:
 | Validation schemas | `src/utils/validation.ts` | `wsMessageSchema` (uses `.passthrough()` — critical!) |
 | Secure storage | `src/utils/storage.ts` | Platform-aware (SecureStore/localStorage) |
 | Example dashboard template | `src/templates/dashboard-home.json` | Example V2 SDUIPage payload; not auto-loaded at runtime |
+
+### Keel Framework (`packages/` and `examples/keel-demo/`)
+
+Keel is the standalone SDUI protocol and toolkit. The Helm app (`mobile/`, `backend/`) is one example application built on the same concepts but maintains its own parallel implementations — it does not import from the Keel packages.
+
+| Need to change... | Edit this file | Notes |
+|-------------------|---------------|-------|
+| SDUI type definitions | `packages/protocol/src/types/sdui.ts` | SDUIPage, SDUIAction, SDUIComponentType, etc. |
+| Zod validation schemas | `packages/protocol/src/schemas/validation.ts` | Validates SDUI payloads at runtime |
+| Protocol barrel exports | `packages/protocol/src/index.ts` | Re-exports all types and schemas |
+| Component registry | `packages/renderer/src/registry/componentRegistry.ts` | registerComponent(), resolveComponent() |
+| Preset system | `packages/renderer/src/registry/presets.ts` | registerPreset() for UI library adapters |
+| Built-in components | `packages/renderer/src/components/*.ts` | Text, Button, Container, etc. |
+| Paper preset | `packages/renderer/src/presets/paper.tsx` | React Native Paper adapter components |
+| Renderer barrel exports | `packages/renderer/src/index.ts` | Re-exports registry, components, presets |
+| Python MCP factory | `packages/server/keel_server/__init__.py` | create_mcp_server(), ConnectionManager |
+| Demo app | `examples/keel-demo/src/App.tsx` | Runnable Expo app with Paper preset |
+| Demo screen data | `examples/keel-demo/src/screens.ts` | Home and calendar screen JSON |
+| Demo custom component | `examples/keel-demo/src/WeatherWidget.ts` | Example third-party component |
 
 ### Standalone Agent (`agent/`)
 

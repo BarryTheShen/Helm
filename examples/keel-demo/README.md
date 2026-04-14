@@ -6,11 +6,29 @@ Runnable Expo app demonstrating all Keel built-in components with the React Nati
 
 ## What Is This
 
-`keel-demo` is a self-contained Expo application that exercises every built-in Keel component. It uses the Paper preset to render all atomic components with Material Design 3 styling from `react-native-paper`. It also includes a custom `WeatherWidget` component that shows how to extend the registry with third-party or app-specific components. The demo requires no backend — all screen data is defined as static TypeScript objects.
+`keel-demo` demonstrates the full Keel AI-to-UI loop: a backend server generates SDUI screens dynamically, the frontend renders them with Material Design 3 styling via the Paper preset, and user interactions (button taps, form submissions, messages) flow back to the server which responds with new screens. It also includes a static mode showcasing every built-in component.
 
 ---
 
 ## Running the Demo
+
+### Live Mode (full AI-to-UI loop)
+
+```bash
+# Terminal 1 — Start the demo server
+cd examples/keel-demo/server
+pip install -r requirements.txt
+uvicorn main:app --port 8765
+
+# Terminal 2 — Start the app
+cd examples/keel-demo
+npm install
+npx expo start
+```
+
+The app connects to the server via WebSocket. A green dot in the status bar means "Live — AI Connected". Try typing messages in the InputBar: "hello", "form", "dashboard", "buttons". Each generates a new screen dynamically.
+
+### Static Mode (no server required)
 
 ```bash
 cd examples/keel-demo
@@ -18,20 +36,34 @@ npm install
 npx expo start
 ```
 
-Scan the QR code with Expo Go on a physical device, or press `i` for iOS simulator / `a` for Android emulator.
+If no server is running, the app falls back to static demo screens. You can also toggle between Live/Static mode with the switch in the status bar.
 
 ---
 
 ## What You Will See
 
-The app has two tabs selectable via a segmented control at the top:
+### Live Mode
+
+The server responds to user messages with dynamically generated SDUI screens:
+
+| Message | Response |
+|---------|----------|
+| "hello" | Welcome screen with suggestions |
+| "form" | Interactive contact form with validation |
+| "dashboard" | Dashboard with stats and action buttons |
+| "buttons" | Interactive buttons that trigger new screens |
+| anything else | Echoed back in a styled card |
+
+Buttons, forms, and the InputBar all send actions to the server, which responds with new screens — demonstrating the complete Keel protocol loop.
+
+### Static Mode
+
+Two tabs selectable via a segmented control:
 
 | Tab | Contents |
 |-----|----------|
-| **Home** | Text variants, buttons (primary/secondary/ghost/destructive), icons, dividers, a container card, the custom WeatherWidget |
+| **Home** | Text variants, buttons, icons, dividers, a container card, the custom WeatherWidget |
 | **Calendar** | CalendarModule with sample events |
-
-All tappable components show an `Alert` describing the action that would fire in a real app. No network requests are made.
 
 ---
 
@@ -40,10 +72,13 @@ All tappable components show an `Alert` describing the action that would fire in
 ```
 examples/keel-demo/
 ├── src/
-│   ├── App.tsx              # Root component: PaperProvider, tab bar, SDUIPageRenderer
-│   ├── screens.ts           # Static SDUIPage objects for Home and Calendar tabs
-│   ├── actionDispatcher.ts  # handleAction() — maps all SDUIAction types to Alert()
+│   ├── App.tsx              # Root: WebSocket connection, live/static mode, SDUIPageRenderer
+│   ├── screens.ts           # Static SDUIPage objects for fallback mode
+│   ├── actionDispatcher.ts  # Standalone action handler (used in tests)
 │   └── WeatherWidget.ts     # Custom component registered via registerComponent()
+├── server/
+│   ├── main.py              # FastAPI server using keel-server (WebSocket + SDUI tools)
+│   └── requirements.txt     # Python dependencies
 ├── package.json
 ├── app.json
 ├── babel.config.js
@@ -52,15 +87,15 @@ examples/keel-demo/
 
 ### App.tsx
 
-Sets up `PaperProvider` and `SafeAreaProvider`, applies the Paper preset, and renders `SDUIPageRenderer` with the active screen. The tab switch is a plain state variable — no navigation library needed.
+Connects to the demo server via WebSocket. In live mode, user actions (button taps, form submissions, InputBar messages) are sent to the server as JSON, and the server responds with new SDUI screens. Falls back to static screens if no server is running.
+
+### server/main.py
+
+A minimal FastAPI server that uses `keel-server`'s `ConnectionManager`, `normalize_sdui_screen()`, and `InMemoryScreenStore`. It includes a rule-based "AI" responder that generates SDUI screens from user messages. Replace `respond_to_message()` with an LLM call for real AI-driven UI.
 
 ### screens.ts
 
-Exports `homeScreen` and `calendarScreen` as typed `SDUIPage` objects. Edit these to experiment with different layouts and component props without touching the app shell.
-
-### actionDispatcher.ts
-
-A switch statement over all 10 `SDUIAction` types. In a real app you would replace `Alert.alert()` calls with actual navigation, API calls, or agent messages.
+Exports `homeScreen` and `calendarScreen` as typed `SDUIPage` objects. Used as fallback in static mode.
 
 ### WeatherWidget.ts
 

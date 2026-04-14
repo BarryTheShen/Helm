@@ -359,6 +359,46 @@ The MCP server is mounted at `http://localhost:9000/mcp`.
 
 ---
 
+## Keel Packages
+
+The Keel framework packages live in `packages/` and `examples/`. They are independent of the Helm app and have their own test suites.
+
+### Running Keel tests
+
+```bash
+# Protocol types and validation schemas (49 tests)
+cd packages/protocol && npx jest
+
+# Renderer and preset system (20 tests)
+cd packages/renderer && npx jest
+
+# Demo app tests (21 tests)
+cd examples/keel-demo && npx jest
+```
+
+### Running the Keel demo app
+
+```bash
+cd examples/keel-demo
+npm install                    # first time only
+npx expo start                 # Expo dev server with QR code
+npx expo start --web           # Browser mode
+```
+
+The demo app uses the React Native Paper preset and showcases all built-in Keel components (Text, Button, Container, CalendarModule, etc.) plus a custom WeatherWidget.
+
+### Keel package structure
+
+| Package | Location | Language | What it provides |
+|---------|----------|----------|-----------------|
+| `@keel/protocol` | `packages/protocol/` | TypeScript | SDUI JSON types, Zod schemas, action definitions |
+| `@keel/renderer` | `packages/renderer/` | TypeScript | Component registry, preset system, built-in components |
+| `keel-server` | `packages/server/` | Python | `create_mcp_server()`, `ConnectionManager`, `normalize_sdui_screen()` |
+
+**Note:** Keel is the standalone framework. The Helm backend (`backend/app/mcp/`) and mobile app (`mobile/src/renderer/`) are an example application with their own parallel implementations — they do not import from the Keel packages.
+
+---
+
 ## Root-Level Dev & Test Scripts
 
 These scripts live at the repo root and are **not** part of the production app. They are development utilities and debugging tools.

@@ -276,6 +276,12 @@ APScheduler (`AsyncIOScheduler(timezone="UTC")`)-based automation engine.
 
 ## MCP Server & Tools
 
+> **Keel relationship:** The Keel framework includes a standalone Python package (`keel-server`
+> in `packages/server/`) that provides a reusable MCP server factory, connection manager, and
+> SDUI normalization utilities. The Helm backend's MCP code below is a parallel implementation
+> — it does not import from `keel-server`. Both implement similar functionality (MCP server
+> setup, `normalize_sdui_screen()`, action registry) but are maintained independently.
+
 ### `mcp/server.py`
 - **Framework:** `FastMCP("Helm", streamable_http_path="/")`
 - **Auth middleware:** `_MCPAuthMiddleware` validates Bearer token, sets `_current_user_id` context var

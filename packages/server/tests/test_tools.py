@@ -1,6 +1,12 @@
-"""Tests for keel_server.tools — SDUI normalization."""
+"""Tests for keel_server.tools — SDUI normalization, component updates, and form validation."""
 
-from keel_server.tools import normalize_sdui_screen, _normalize_sdui_component
+import pytest
+from keel_server.tools import (
+    normalize_sdui_screen,
+    _normalize_sdui_component,
+    update_component_in_screen,
+    validate_form_submission,
+)
 
 
 # ── _normalize_sdui_component ───────────────────────────────────────────────
@@ -115,3 +121,172 @@ class TestNormalizeScreen:
         screen = {"rows": [{"id": "r1", "cells": ["not a dict"]}]}
         result = normalize_sdui_screen(screen)
         assert result["rows"][0]["cells"][0] == "not a dict"
+
+
+# ── update_component_in_screen ────────────────────────────────────────────
+
+class TestUpdateComponent:
+    def _make_screen(self):
+        return {
+            "schema_version": "1.0.0",
+            "module_id": "home",
+            "rows": [
+                {
+                    "id": "r1",
+                    "cells": [
+                        {
+                            "id": "c1",
+                            "content": {
+                                "type": "Text",
+                                "id": "greeting",
+                                "props": {"content": "Hello", "variant": "heading"},
+                            },
+                        },
+                        {
+                            "id": "c2",
+                            "content": {
+                                "type": "Button",
+                                "id": "btn-1",
+                                "props": {"label": "Click me", "variant": "primary"},
+                            },
+                        },
+                    ],
+                },
+            ],
+        }
+
+    def test_updates_existing_props(self):
+        screen = self._make_screen()
+        result = update_component_in_screen(screen, "greeting", {"content": "Good morning"})
+        cell = result["rows"][0]["cells"][0]["content"]
+        assert cell["props"]["content"] == "Good morning"
+        assert cell["props"]["variant"] == "heading"  # preserved
+
+    def test_does_not_mutate_original(self):
+        screen = self._make_screen()
+        update_component_in_screen(screen, "greeting", {"content": "Changed"})
+        assert screen["rows"][0]["cells"][0]["content"]["props"]["content"] == "Hello"
+
+    def test_adds_new_props(self):
+        screen = self._make_screen()
+        result = update_component_in_screen(screen, "btn-1", {"disabled": True})
+        btn = result["rows"][0]["cells"][1]["content"]
+        assert btn["props"]["disabled"] is True
+        assert btn["props"]["label"] == "Click me"
+
+    def test_raises_for_unknown_id(self):
+        screen = self._make_screen()
+        with pytest.raises(ValueError, match="Component not found"):
+            update_component_in_screen(screen, "nonexistent", {"content": "X"})
+
+    def test_works_with_nested_children(self):
+        screen = {
+            "rows": [
+                {
+                    "id": "r1",
+                    "cells": [
+                        {
+                            "id": "c1",
+                            "content": {
+                                "type": "Container",
+                                "id": "container-1",
+                                "props": {"direction": "row"},
+                                "children": [
+                                    {"type": "Text", "id": "nested-text", "props": {"content": "Inner"}},
+                                ],
+                            },
+                        },
+                    ],
+                },
+            ],
+        }
+        result = update_component_in_screen(screen, "nested-text", {"content": "Updated inner"})
+        nested = result["rows"][0]["cells"][0]["content"]["children"][0]
+        assert nested["props"]["content"] == "Updated inner"
+
+    def test_component_without_props_key(self):
+        screen = {
+            "rows": [
+                {
+                    "id": "r1",
+                    "cells": [
+                        {"id": "c1", "content": {"type": "Text", "id": "bare"}},
+                    ],
+                },
+            ],
+        }
+        result = update_component_in_screen(screen, "bare", {"content": "Added"})
+        assert result["rows"][0]["cells"][0]["content"]["props"]["content"] == "Added"
+
+
+# ── validate_form_submission ──────────────────────────────────────────────
+
+class TestValidateFormSubmission:
+    def test_valid_submission(self):
+        fields = [
+            {"id": "name", "type": "text", "label": "Name", "required": True},
+            {"id": "email", "type": "email", "label": "Email", "required": True},
+        ]
+        data = {"name": "Alice", "email": "alice@example.com"}
+        assert validate_form_submission(fields, data) == []
+
+    def test_missing_required_field(self):
+        fields = [
+            {"id": "name", "type": "text", "label": "Name", "required": True},
+        ]
+        data = {"name": ""}
+        errors = validate_form_submission(fields, data)
+        assert len(errors) == 1
+        assert "Name is required" in errors[0]
+
+    def test_missing_required_field_absent_key(self):
+        fields = [
+            {"id": "name", "type": "text", "label": "Name", "required": True},
+        ]
+        data = {}
+        errors = validate_form_submission(fields, data)
+        assert len(errors) == 1
+
+    def test_optional_field_can_be_empty(self):
+        fields = [
+            {"id": "notes", "type": "textarea", "label": "Notes", "required": False},
+        ]
+        data = {"notes": ""}
+        assert validate_form_submission(fields, data) == []
+
+    def test_invalid_select_option(self):
+        fields = [
+            {
+                "id": "color",
+                "type": "select",
+                "label": "Color",
+                "options": [{"label": "Red", "value": "red"}, {"label": "Blue", "value": "blue"}],
+            },
+        ]
+        data = {"color": "green"}
+        errors = validate_form_submission(fields, data)
+        assert len(errors) == 1
+        assert "invalid option" in errors[0]
+
+    def test_valid_select_option(self):
+        fields = [
+            {
+                "id": "color",
+                "type": "select",
+                "label": "Color",
+                "options": [{"label": "Red", "value": "red"}],
+            },
+        ]
+        data = {"color": "red"}
+        assert validate_form_submission(fields, data) == []
+
+    def test_checkbox_false_counts_as_missing_for_required(self):
+        fields = [
+            {"id": "agree", "type": "checkbox", "label": "I agree", "required": True},
+        ]
+        data = {"agree": False}
+        errors = validate_form_submission(fields, data)
+        assert len(errors) == 1
+
+    def test_empty_fields_list(self):
+        assert validate_form_submission([], {"anything": "value"}) == []

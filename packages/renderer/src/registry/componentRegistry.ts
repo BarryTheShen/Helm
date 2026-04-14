@@ -23,6 +23,8 @@ import { CalendarModule } from '../components/composite/CalendarModule';
 import { ChatModule } from '../components/composite/ChatModule';
 import { NotesModule } from '../components/composite/NotesModule';
 import { InputBar } from '../components/composite/InputBar';
+import { SDUIForm } from '../components/composite/SDUIForm';
+import { ScreenOptions } from '../components/composite/ScreenOptions';
 
 // Registry: type string → React component
 // Components receive { ...props, dispatch, children? }
@@ -40,6 +42,8 @@ const registry: Record<string, ComponentType<any>> = {
   ChatModule: ChatModule,
   NotesModule: NotesModule,
   InputBar: InputBar,
+  Form: SDUIForm,
+  ScreenOptions: ScreenOptions,
 };
 
 /** Look up a component by its SDUI type string. Returns null if not found. */

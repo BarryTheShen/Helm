@@ -99,8 +99,8 @@ describe('registerPreset', () => {
 
   // ── Built-in count preserved ───────────────────────────────────────────
 
-  it('still has at least 12 types after applying a preset', () => {
+  it('still has at least 14 types after applying a preset', () => {
     registerPreset({ Button: () => null, Text: () => null });
-    expect(getRegisteredTypes().length).toBeGreaterThanOrEqual(12);
+    expect(getRegisteredTypes().length).toBeGreaterThanOrEqual(14);
   });
 });

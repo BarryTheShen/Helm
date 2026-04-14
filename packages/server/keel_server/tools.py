@@ -1,32 +1,41 @@
-"""SDUI normalization utilities.
+"""SDUI normalization and manipulation utilities.
 
 Pure functions for converting flat AI-generated SDUI JSON into the props-based
-schema that the frontend TypeScript types expect. No database access.
+schema that the frontend TypeScript types expect. Also provides helpers for
+partial component updates and form submission validation. No database access.
 """
 
 from typing import Any
 from uuid import uuid4
 
 
-# Fields that belong in props for each component type (keyed by type literal)
+# Fields that belong in props for each component type.
+# Keys use PascalCase to match the canonical SDUIComponentType from @keel/protocol.
+# The normalizer also does a case-insensitive fallback (line ~60), so AI output
+# like {"type": "text", ...} still resolves correctly.
 _SDUI_PROPS_FIELDS: dict[str, set[str]] = {
-    'text':        {'content', 'size', 'color', 'bold', 'italic', 'align', 'variant', 'underline', 'strikethrough', 'numberOfLines', 'selectable'},
-    'heading':     {'content', 'level', 'align'},
-    'button':      {'label', 'variant', 'action', 'disabled', 'icon'},
-    'icon_button': {'icon', 'label', 'action', 'size'},
-    'divider':     {'spacing'},
-    'spacer':      {'size'},
-    'card':        {'title', 'subtitle', 'elevated', 'action'},
-    'container':   {'direction', 'gap', 'wrap', 'align', 'justify', 'padding', 'flex', 'backgroundColor', 'borderRadius', 'shadow'},
-    'list':        {'title', 'items'},
-    'form':        {'title', 'fields', 'submit_label', 'submit_action'},
-    'alert':       {'severity', 'title', 'message', 'dismissible'},
-    'badge':       {'label', 'color'},
-    'stat':        {'label', 'value', 'change', 'change_direction', 'icon'},
-    'stats_row':   {'stats'},
-    'calendar':    {'events', 'view'},
-    'image':       {'uri', 'aspect_ratio', 'alt', 'action'},
-    'progress':    {'value', 'max', 'label', 'color'},
+    # Atomic (Tier 2)
+    'Text':           {'content', 'size', 'color', 'bold', 'italic', 'align', 'variant', 'underline', 'strikethrough', 'numberOfLines', 'selectable'},
+    'Markdown':       {'content', 'style'},
+    'Button':         {'label', 'variant', 'action', 'disabled', 'icon'},
+    'Image':          {'uri', 'aspect_ratio', 'alt', 'action'},
+    'TextInput':      {'placeholder', 'value', 'secure', 'keyboardType', 'multiline', 'label', 'onChangeAction'},
+    'Icon':           {'name', 'size', 'color'},
+    'Divider':        {'spacing'},
+    # Structural (Tier 1)
+    'Container':      {'direction', 'gap', 'wrap', 'align', 'justify', 'padding', 'flex', 'backgroundColor', 'borderRadius', 'shadow'},
+    # Composite (Tier 3)
+    'CalendarModule': {'events', 'view', 'defaultView'},
+    'ChatModule':     {'threadId', 'messages'},
+    'NotesModule':    {'notes'},
+    'InputBar':       {'placeholder', 'action', 'value'},
+    'Form':           {'title', 'fields', 'submit_label', 'submit_action'},
+    'ScreenOptions':  {'options', 'title'},
+}
+
+# Lowercase lookup index so AI output like {"type": "text"} still resolves
+_SDUI_PROPS_FIELDS_LOWER: dict[str, set[str]] = {
+    k.lower(): v for k, v in _SDUI_PROPS_FIELDS.items()
 }
 
 _SDUI_STRUCTURAL_KEYS = {'type', 'id', 'children', 'props'}
@@ -55,8 +64,8 @@ def _normalize_sdui_component(comp: dict[str, Any]) -> dict[str, Any]:
 
     # Flat format — split fields into props vs structural
     comp_type: str = comp.get('type', '')
-    # Case-insensitive lookup; if type is unknown, ALL non-structural keys become props
-    prop_fields = _SDUI_PROPS_FIELDS.get(comp_type) or _SDUI_PROPS_FIELDS.get(comp_type.lower())
+    # Exact match first, then case-insensitive fallback for AI-generated lowercase types
+    prop_fields = _SDUI_PROPS_FIELDS.get(comp_type) or _SDUI_PROPS_FIELDS_LOWER.get(comp_type.lower())
 
     props: dict[str, Any] = {}
     rest: dict[str, Any] = {}
@@ -109,3 +118,110 @@ def normalize_sdui_screen(screen: dict[str, Any]) -> dict[str, Any]:
             norm_row['cells'] = norm_cells
         normalized_rows.append(norm_row)
     return {**screen, 'rows': normalized_rows}
+
+
+# ── Partial component update ──────────────────────────────────────────────
+
+
+def _find_component_by_id(
+    screen: dict[str, Any], component_id: str
+) -> dict[str, Any] | None:
+    """Walk a V2 screen and return the component dict matching the given id.
+
+    Returns None if no component with that id is found. The returned dict is a
+    reference into the original screen structure, so mutations to it will modify
+    the screen in place.
+    """
+    for row in screen.get('rows', []):
+        if not isinstance(row, dict):
+            continue
+        for cell in row.get('cells', []):
+            if not isinstance(cell, dict):
+                continue
+            content = cell.get('content')
+            if isinstance(content, dict):
+                found = _search_component_tree(content, component_id)
+                if found is not None:
+                    return found
+    return None
+
+
+def _search_component_tree(
+    comp: dict[str, Any], component_id: str
+) -> dict[str, Any] | None:
+    """Recursively search a component tree for a component with the given id."""
+    if comp.get('id') == component_id:
+        return comp
+    for child in comp.get('children', []):
+        if isinstance(child, dict):
+            found = _search_component_tree(child, component_id)
+            if found is not None:
+                return found
+    return None
+
+
+def update_component_in_screen(
+    screen: dict[str, Any],
+    component_id: str,
+    props: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply a partial props update to a specific component within a V2 screen.
+
+    Finds the component by id and merges the given props into its existing props
+    dict. Returns a new screen dict (shallow copy at the top level). The original
+    screen is not modified.
+
+    Raises ValueError if no component with the given id is found.
+    """
+    import copy
+    updated = copy.deepcopy(screen)
+    target = _find_component_by_id(updated, component_id)
+    if target is None:
+        raise ValueError(f"Component not found: {component_id}")
+    if 'props' not in target:
+        target['props'] = {}
+    target['props'].update(props)
+    return updated
+
+
+# ── Form submission validation ────────────────────────────────────────────
+
+
+def validate_form_submission(
+    fields: list[dict[str, Any]],
+    data: dict[str, Any],
+) -> list[str]:
+    """Validate form submission data against field definitions.
+
+    Checks that all required fields have non-empty values and that select fields
+    contain valid option values. Returns a list of error messages (empty if valid).
+
+    Args:
+        fields: List of field definition dicts, each with at least 'id', 'type',
+            'label', and optionally 'required' and 'options'.
+        data: The submitted form data dict mapping field id to value.
+
+    Returns:
+        A list of human-readable error strings. An empty list means the
+        submission is valid.
+    """
+    errors: list[str] = []
+    for field in fields:
+        field_id = field.get('id', '')
+        label = field.get('label', field_id)
+        required = field.get('required', False)
+        value = data.get(field_id)
+
+        if required:
+            if value is None or value == '' or value is False:
+                errors.append(f"{label} is required")
+                continue
+
+        if value is not None and value != '':
+            # Validate select fields against allowed options
+            if field.get('type') == 'select' and field.get('options'):
+                valid_values = {opt['value'] for opt in field['options']}
+                if value not in valid_values:
+                    errors.append(f"{label}: invalid option '{value}'")
+
+    return errors

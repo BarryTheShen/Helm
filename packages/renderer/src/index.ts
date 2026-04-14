@@ -40,6 +40,8 @@ export { CalendarModule } from './components/composite/CalendarModule';
 export { ChatModule } from './components/composite/ChatModule';
 export { NotesModule } from './components/composite/NotesModule';
 export { InputBar } from './components/composite/InputBar';
+export { SDUIForm } from './components/composite/SDUIForm';
+export { ScreenOptions } from './components/composite/ScreenOptions';
 
 // ── Theme ─────────────────────────────────────────────────────────────────
 export { themeColors, themeShadows, resolveColor } from './theme/tokens';

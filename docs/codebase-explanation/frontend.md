@@ -207,6 +207,17 @@ Returns `'compact'` (width < 768px) or `'regular'` (width ≥ 768px). Listens to
 
 ## SDUI Component System
 
+> **Keel framework relationship:** The V2 SDUI format used by the Helm app follows the
+> Keel protocol specification. The canonical type definitions live in `packages/protocol/`
+> (`@keel/protocol`), and a standalone renderer exists at `packages/renderer/` (`@keel/renderer`).
+>
+> The Helm app is an example built on Keel's concepts. It has its own inline copies of the
+> SDUI types (`mobile/src/types/sdui.ts`) and component registry
+> (`mobile/src/renderer/componentRegistry.ts`). It does not import from `@keel/protocol`
+> or `@keel/renderer`.
+>
+> When adding new V2 component types, update both the Helm app types and the Keel protocol types.
+
 ### V1 — `SDUIScreen` (legacy, still supported)
 
 ```json

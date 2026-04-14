@@ -148,6 +148,17 @@ Mounted at `/mcp` on the FastAPI app. Uses FastMCP (Streamable HTTP). All reques
 
 ## Tier 3: SDUI Schema Reference
 
+> **Keel protocol:** The V2 SDUI schema described in this section is defined by the
+> Keel framework. The canonical TypeScript type definitions and Zod validation schemas
+> live in `packages/protocol/` (`@keel/protocol`). If you need to look up the exact
+> type for a component, action, or page structure, check `packages/protocol/src/types/sdui.ts`
+> and `packages/protocol/src/schemas/validation.ts`. The standalone renderer is at
+> `packages/renderer/` (`@keel/renderer`).
+>
+> The Helm mobile app (`mobile/src/types/sdui.ts`) has its own copy of these types.
+> The two are kept in sync manually. When adding new component types or actions,
+> update both locations.
+
 ### V1 Schema (legacy, still supported)
 
 ```json

@@ -22,17 +22,17 @@ Requirements: Python >= 3.11, `fastapi >= 0.115`, `mcp >= 1.6`, `loguru >= 0.7`.
 
 ## Quick Start
 
-Create an MCP server with Bearer token auth and mount it into a FastAPI app:
+Create an MCP server with pre-built SDUI tools and mount it into a FastAPI app:
 
 ```python
 from fastapi import FastAPI
-from keel_server import create_mcp_server, get_current_user_id
+from keel_server import create_mcp_server
+from keel_server.sdui_tools import register_sdui_tools, InMemoryScreenStore
 
 app = FastAPI()
 
 async def validate_token(token: str) -> str | None:
     """Return user_id if valid, None if invalid."""
-    # Replace with your real token lookup
     return await db.get_user_id_for_token(token)
 
 mcp, auth_middleware = await create_mcp_server(
@@ -40,16 +40,25 @@ mcp, auth_middleware = await create_mcp_server(
     validate_token=validate_token,
 )
 
-@mcp.tool()
-async def greet() -> str:
-    user_id = get_current_user_id()
-    return f"Hello, {user_id}"
+# Register pre-built SDUI tools — AI agents can now render screens immediately
+register_sdui_tools(mcp, InMemoryScreenStore())
 
 # Mount the authenticated ASGI app
 app.mount("/mcp", auth_middleware)
 ```
 
-Any MCP-compatible client connecting to `/mcp` must supply a `Bearer` token. Invalid or missing tokens receive a `401` response.
+Any MCP-compatible AI client connecting to `/mcp` can now call `render_screen`, `update_component`, `get_screen`, `list_screens`, and `validate_form`. Invalid or missing Bearer tokens receive a `401` response.
+
+You can also register your own custom tools alongside the pre-built ones:
+
+```python
+from keel_server import get_current_user_id
+
+@mcp.tool()
+async def greet() -> str:
+    user_id = get_current_user_id()
+    return f"Hello, {user_id}"
+```
 
 ---
 
@@ -178,6 +187,46 @@ normalized = normalize_sdui_screen(raw_screen)
 ```
 
 The function handles V2 row-based format (`rows[] -> cells[] -> content`). Components that already have a `props` key are returned unchanged. Unknown component types are handled liberally: all non-structural keys are moved into `props`.
+
+---
+
+## Pre-Built MCP Tools (register_sdui_tools)
+
+`register_sdui_tools()` registers 5 ready-to-use MCP tools onto your server. Any AI agent that connects via MCP can immediately render screens, update components, and validate forms — no custom tool code required.
+
+```python
+from keel_server import create_mcp_server
+from keel_server.sdui_tools import register_sdui_tools, InMemoryScreenStore
+
+mcp, auth_middleware = await create_mcp_server("MyApp", validate_token=my_validator)
+register_sdui_tools(mcp, InMemoryScreenStore())
+
+# That's it — AI agents can now call render_screen, update_component, etc.
+app.mount("/mcp", auth_middleware)
+```
+
+### Registered Tools
+
+| Tool | What it does |
+|------|-------------|
+| `render_screen(module_id, title, rows)` | AI generates a full SDUI screen. Normalizes and stores it. |
+| `get_screen(module_id)` | Retrieve the current screen for a module. |
+| `update_component(module_id, component_id, props)` | Patch a single component's props by ID without rebuilding the full screen. |
+| `list_screens()` | List all module IDs with stored screens for the current user. |
+| `validate_form(fields, data)` | Validate form submission data against field definitions. Returns `{valid, errors}`. |
+
+### ScreenStore
+
+Tools persist screens via a `ScreenStore` — a simple async interface you implement against your storage layer:
+
+```python
+class ScreenStore(Protocol):
+    async def save_screen(self, user_id: str, module_id: str, screen: dict) -> None: ...
+    async def get_screen(self, user_id: str, module_id: str) -> dict | None: ...
+    async def list_screens(self, user_id: str) -> list[str]: ...
+```
+
+`InMemoryScreenStore` is included for demos and testing. For production, implement `ScreenStore` against your database (SQLAlchemy, Redis, etc.).
 
 ---
 

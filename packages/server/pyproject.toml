@@ -17,9 +17,17 @@ dev = [
     "pytest-asyncio>=0.25",
 ]
 
+[project.urls]
+Homepage = "https://github.com/BarryTheShen/Helm"
+Repository = "https://github.com/BarryTheShen/Helm"
+Documentation = "https://github.com/BarryTheShen/Helm/tree/main/packages/server"
+
 [build-system]
 requires = ["setuptools>=75", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["keel_server*"]
+
+[tool.setuptools.package-data]
+keel_server = ["py.typed"]

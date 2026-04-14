@@ -28,17 +28,6 @@ export type {
 
 export { isSDUIPage } from './types/sdui';
 
-// API types
-export type {
-  User,
-  LoginRequest,
-  LoginResponse,
-  ChatMessage,
-  CalendarEvent,
-  Notification,
-  Module,
-} from './types/api';
-
 // Validation schemas
 export {
   sduiComponentSchema,

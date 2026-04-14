@@ -62,6 +62,8 @@ describe('componentRegistry', () => {
     expect(types).toContain('ChatModule');
     expect(types).toContain('NotesModule');
     expect(types).toContain('InputBar');
+    expect(types).toContain('Form');
+    expect(types).toContain('ScreenOptions');
   });
 
   it('includes custom-registered types', () => {
@@ -69,8 +71,18 @@ describe('componentRegistry', () => {
     expect(getRegisteredTypes()).toContain('MyCustomType');
   });
 
-  it('has at least 12 built-in types', () => {
-    // 7 atomic + 1 structural + 4 composite = 12
-    expect(getRegisteredTypes().length).toBeGreaterThanOrEqual(12);
+  it('has at least 14 built-in types', () => {
+    // 7 atomic + 1 structural + 6 composite = 14
+    expect(getRegisteredTypes().length).toBeGreaterThanOrEqual(14);
+  });
+
+  // ── Form and ScreenOptions ────────────────────────────────────────────
+
+  it('resolves built-in Form component', () => {
+    expect(resolveComponent('Form')).not.toBeNull();
+  });
+
+  it('resolves built-in ScreenOptions component', () => {
+    expect(resolveComponent('ScreenOptions')).not.toBeNull();
   });
 });

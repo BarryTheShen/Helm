@@ -1,23 +1,34 @@
-# Agentic AI Super App
+# Keel + Helm
 
-An independent, open-source React Native (Expo) mobile app — a universal agentic AI frontend that dynamically renders rich native UI components connected to any service via APIs. WeChat/Alipay super app model but AI-native.
+This repository contains two things:
 
-## Tech Stack
+1. **Keel** -- an open-source protocol and toolkit that lets AI agents render native mobile UI at runtime. The AI describes screens as JSON; Keel validates and renders them as real components. Keel lives in `packages/` and `examples/`.
 
-- **Frontend:** React Native (Expo), iOS-first, Android comes free
-- **Backend:** Python FastAPI server, self-hosted
-- **Protocol:** AG-UI over WebSocket (agent↔frontend communication)
-- **AI Agent:** PydanticAI / raw LLM API calls
-- **Dev Environment:** Linux (primary), Mac only for final App Store build
-- **IDE:** Cursor
+2. **Helm** -- a full-stack example application built on Keel. It is a mobile AI super app with a Python backend, React Native frontend, calendar, chat, notifications, and an AI agent that controls the whole UI. Helm lives in `backend/`, `mobile/`, and `agent/`.
 
-## Architecture (Three Layers)
+Keel is the reusable framework. Helm is one app that uses it.
 
-1. **Backend** — Python FastAPI. API gateway, AI agent runtime, plugin/connector system for services (Google Calendar OAuth, weather, email, etc.)
-2. **Protocol** — AG-UI protocol. Open-source, framework-agnostic message format. WebSocket transport. Backend sends AG-UI events → app parses and renders.
-3. **React Native App** — SDUI renderer. Pre-built component library (calendar, chat, news feed, charts, forms, maps, notifications, lists). JSON payloads → native components.
+## Keel Framework
 
-**Build order:** Backend → Protocol → Frontend.
+Three packages form the complete stack:
+
+| Package | Language | Location | What it does |
+|---------|----------|----------|-------------|
+| `@keel/protocol` | TypeScript | `packages/protocol/` | JSON types for pages, components, and actions. Zod validation. |
+| `@keel/renderer` | TypeScript | `packages/renderer/` | Component registry, page renderer, UI library preset system. |
+| `keel-server` | Python | `packages/server/` | MCP server factory, WebSocket manager, SDUI normalization, form validation. |
+
+A runnable demo lives at `examples/keel-demo/` -- an Expo app that renders Keel screens using the React Native Paper preset.
+
+For the full Keel protocol reference (types, actions, component list, preset system), see the [README.md](README.md).
+
+## Helm Example App
+
+Helm demonstrates what a complete AI-powered app looks like when built on Keel. It adds authentication, a real database, calendar management, chat streaming, notifications, workflow automation, and 18 MCP tools (prefixed `helm_`) on top of the Keel protocol.
+
+The Helm mobile app (`mobile/`) has its own inline copies of the SDUI types and renderer. It does not import from `@keel/protocol` or `@keel/renderer`. Similarly, the Helm backend (`backend/`) has its own MCP server and does not import from `keel-server`. The Keel packages are standalone -- intended for anyone to use independently of Helm.
+
+**Naming convention:** "Keel" refers to the protocol and the packages in `packages/`. "Helm" refers to the example app code in `backend/`, `mobile/`, and `agent/`.
 
 ## Codebase Map
 
@@ -49,61 +60,66 @@ Detailed production specifications live in `docs/Agentic AI Super App — Projec
 
 ```
 Helm/
-├── CLAUDE.md
-├── agent/
-│   ├── helm_agent.py           # Standalone PydanticAI agent (MCP + frontend editor)
-│   └── README.md               # How to run + architecture
+│
+│── Keel framework (standalone, publishable) ──────────────────
+├── packages/
+│   ├── protocol/               # @keel/protocol — types + Zod schemas
+│   ├── renderer/               # @keel/renderer — React Native renderer + presets
+│   └── server/                 # keel-server — Python MCP + WebSocket utilities
+├── examples/
+│   └── keel-demo/              # Runnable demo app (Paper preset)
+│
+│── Helm example app ──────────────────────────────────────────
 ├── backend/
-│   ├── pyproject.toml          # Dependencies + pytest config
-│   ├── alembic.ini
-│   ├── alembic/
-│   │   └── versions/           # DB migrations
 │   ├── app/
 │   │   ├── main.py             # FastAPI app, lifespan, middleware
 │   │   ├── config.py           # Settings (pydantic-settings)
-│   │   ├── database.py         # SQLAlchemy async engine + session
-│   │   ├── dependencies.py     # get_current_user, get_db
-│   │   ├── models/             # SQLAlchemy ORM models
+│   │   ├── routers/            # REST + WebSocket endpoints
+│   │   ├── services/           # Agent proxy, workflow engine, auth
+│   │   ├── models/             # SQLAlchemy ORM models (9 tables)
 │   │   ├── schemas/            # Pydantic request/response schemas
-│   │   ├── routers/            # FastAPI routers (auth, calendar, chat, etc.)
-│   │   ├── services/           # Business logic (auth, agent_proxy, ws_manager, workflow_engine)
-│   │   ├── mcp/                # MCP server (FastMCP) + tool implementations
-│   │   └── utils/              # security.py (JWT, bcrypt)
-│   └── tests/
-│       ├── conftest.py         # Shared fixtures (in-memory DB, auth_client)
-│       ├── test_auth.py
-│       ├── test_calendar.py
-│       ├── test_notifications.py
-│       └── test_workflows.py
+│   │   ├── mcp/                # MCP server + 18 tool implementations
+│   │   └── utils/              # JWT, bcrypt helpers
+│   └── tests/                  # 55 pytest-asyncio tests
+├── mobile/
+│   ├── app/                    # Expo Router screens (7 tabs)
+│   └── src/
+│       ├── components/         # SDUI components (atomic, structural, composite)
+│       ├── renderer/           # Component registry
+│       ├── hooks/              # useSDUIScreen, useActionDispatcher
+│       └── types/              # TypeScript SDUI + API types
+├── agent/
+│   ├── helm_agent.py           # Standalone PydanticAI agent
+│   └── api_server.py           # External agent HTTP service
+│
+│── Shared ─────────────────────────────────────────────────────
+├── CLAUDE.md                   # This file
+├── README.md                   # Project overview (Keel-first)
 └── docs/
-    ├── codebase-explanation/   # ← AI agents: read this folder first every session
-    │   ├── AI-TECHNICAL-REFERENCE.md
-    │   ├── OPERATIONS.md
-    │   ├── backend.md
-    │   ├── frontend.md
-    │   ├── protocol.md
-    │   └── agents-and-systems.md
+    ├── codebase-explanation/   # Detailed technical docs (read first every session)
     └── Agentic AI Super App — Project Hub/
         └── Blueprint — Production Spec Documents/
-            ├── Backend Spec — Python FastAPI Server.md
-            ├── Frontend Spec — iOS App (React Native Expo).md
-            └── Protocol Spec — Communication Layer.md
 ```
 
 ## Commands
 
-### Frontend
-npx expo start              # Dev server with hot reload (QR code for Expo Go on real device)
-npx expo start --ios        # iOS simulator (requires Mac + Xcode)
-npx expo start --android    # Android emulator (requires Android Studio)
-npx expo start --web        # Browser (limited native API support)
-npx expo start --tunnel     # Tunnel mode (works across networks, uses ngrok)
+### Keel (the framework)
+cd packages/protocol && npx jest        # Protocol type + validation tests (49 tests)
+cd packages/renderer && npx jest        # Renderer + preset tests (22 tests)
+cd packages/server && python -m pytest  # Server tools tests (48 tests)
+cd examples/keel-demo && npx jest       # Demo app tests (21 tests)
+cd examples/keel-demo && npx expo start # Run the Keel demo app
 
-### Backend
+### Helm backend (example app)
 cd backend && uvicorn app.main:app --reload   # FastAPI dev server
-cd backend && pytest                           # Run backend tests
+cd backend && pytest                           # Run backend tests (55 tests)
 
-### Standalone Agent
+### Helm frontend (example app)
+cd mobile && npx expo start              # Dev server (QR code for Expo Go)
+cd mobile && npx expo start --ios        # iOS simulator (Mac + Xcode)
+cd mobile && npx expo start --web        # Browser
+
+### Helm standalone agent (example app)
 source backend/.venv/bin/activate
 cd agent && python helm_agent.py --web            # Web UI at http://localhost:7860
 cd agent && python helm_agent.py                  # Interactive REPL
