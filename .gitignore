@@ -49,8 +49,8 @@ htmlcov/
 # MacOS
 .DS_Store
 
-# Claude / Copilot local settings
-.claude/
+# Claude Code local settings (agents/skills are tracked — only settings.local.json is personal)
+.claude/settings.local.json
 
 # Root-level screenshot artifacts (from Playwright live testing)
 /*.png
