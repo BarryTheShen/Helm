@@ -27,30 +27,36 @@ All session context lives in `.helm-sessions/current/` (git-ignored, runtime onl
 | `feature-map.md` | requirements | planner, reviewer | Dependency map |
 | `current-plan.md` | planner | planner, orchestrator | Active plan with checkboxes |
 
-**Step 0 for all agents:** Check session folder before reading source files.
+**Step 0 for all agents:** Search Mem0 for prior context, then check session folder, then read source files.
 
 ## Core Rules
 
-### 1. Read ≤5 Files at a Time
+### 1. Memory First, Files Second
+Search Mem0 before reading source files. Prior sessions may already have the context you need. Save useful findings to Mem0 after completing work.
+
+### 2. Read ≤5 Files at a Time
 No agent should have >5 source files loaded simultaneously. Read in batches.
 
-### 2. Search Before Read
+### 3. Search Before Read
 Use `Grep` and `Glob` to find exact locations before `Read`. Never read entire files hoping to find something.
 
-### 3. Summaries, Not Files
+### 4. Summaries, Not Files
 When the orchestrator invokes a sub-agent, pass OUTPUT from the previous agent — not raw files. Due-diligence exists to compress context.
 
-### 4. Session Cache First
-Before analyzing source files, check if `.helm-sessions/current/global-context.md` already has the context you need.
+### 5. Session Cache Second
+If Mem0 doesn't have what you need, check `.helm-sessions/current/global-context.md` before reading source files directly.
 
-### 5. PARTIAL RESULT Protocol
+### 6. Context7 for Library Docs
+When you need current API syntax for external libraries, use Context7 instead of guessing from training data.
+
+### 7. PARTIAL RESULT Protocol
 If a sub-agent runs out of context:
 1. Finish the current unit of work
 2. Document completed items and remaining items
 3. Return a structured PARTIAL RESULT with a Continuation Prompt
 4. The orchestrator MUST re-invoke to cover remaining items
 
-### 6. Context Budget Awareness
+### 8. Context Budget Awareness
 Large tasks overflow context. Split by:
 - Layer (backend vs frontend)
 - File batch (≤4 files per invocation)

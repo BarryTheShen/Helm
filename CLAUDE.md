@@ -223,6 +223,77 @@ This loop is mandatory. Never skip steps. Never declare a bug fixed without veri
 - No hardcoded secrets, API keys, or URLs — use environment variables
 - When in doubt, check the Blueprint specs in the project docs before making architectural decisions
 
+## Git Commit Standards
+
+After completing a feature, bug fix, or meaningful change, **commit immediately**. Don't batch unrelated work.
+
+### When to Commit
+- After a feature is implemented and verified
+- After a bug is fixed and tests pass
+- After a refactor that leaves the codebase in a clean state
+- After documentation updates
+- **Never** with failing tests, broken builds, or half-done work
+
+### Commit Message Format
+```
+<type>: <short imperative description>
+
+<optional body — explain WHY, not WHAT>
+```
+
+**Types:** `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `style`
+
+**Examples:**
+```
+feat: Add calendar event CRUD endpoints
+fix: Resolve WebSocket stale-closure in chat handler
+refactor: Extract action registry from router to service
+docs: Update AI-TECHNICAL-REFERENCE with new MCP tools
+test: Add reproduction test for draft publish race condition
+chore: Upgrade Expo SDK to 55
+```
+
+### Rules
+- Run tests before committing — `cd backend && pytest -x -q`
+- One logical change per commit
+- Reference the issue/task if applicable
+- The orchestrator commits after each completed workflow step, not just at the end
+
+## Memory System (Mem0)
+
+Mem0 provides persistent memory across sessions via plugin. Use it to avoid redundant codebase exploration.
+
+### When to Save Memories
+- After discovering a non-obvious pattern or gotcha
+- After fixing a bug (save the root cause + fix)
+- After learning how a module works (save the compressed understanding)
+- After making an architectural decision (save the reasoning)
+
+### When to Search Memories
+- **Before exploring the codebase** — check if you already know how the relevant code works
+- Before starting any task — search for prior context on the same area
+- When encountering an error — search for past fixes to similar issues
+
+### Memory Discipline
+- Keep memories concise and factual — not raw file dumps
+- Tag memories with the area: `[backend]`, `[frontend]`, `[mcp]`, `[editor]`, etc.
+- Update memories when code changes invalidate them
+- Don't duplicate what's already in `docs/codebase-explanation/`
+
+## Library Documentation (Context7)
+
+Context7 provides up-to-date library documentation. Use it instead of guessing API syntax.
+
+### When to Use
+- When writing code that uses an external library (React Native, Expo, FastAPI, SQLAlchemy, Pydantic, etc.)
+- When unsure about current API syntax — Context7 has the latest docs
+- When the training data might be outdated for a library version
+
+### How to Use
+- Add `use context7` to prompts when you need library docs
+- Use library IDs for precision: `use context7 with /vercel/next.js`
+- Available for 87,000+ libraries
+
 ## Development Workflow — Sub-Agent Orchestration
 
 You are the orchestrator. For complex, multi-step tasks (features, bug fixes, audits), delegate to specialist sub-agents rather than doing everything yourself. For simple questions or small edits, handle directly.
@@ -338,13 +409,15 @@ Max 5 iterations. After 5, escalate to user.
 
 ### Context Management
 
-1. **Summaries, not files.** Pass sub-agent output, not raw file contents.
-2. **Context budget.** Each sub-agent reads ≤5 files. Break large tasks into sub-tasks.
-3. **Docs first.** Always start with `requirements` reading `docs/codebase-explanation/`.
-4. **Cross-layer protocol.** Invoke `protocol-dev` FIRST for backend+frontend tasks, pass contract to both implementers, `reviewer` validates both sides match.
-5. **MCP sync.** When MCP tools change, invoke BOTH `backend-dev` and `agent-dev`. Three files must stay in sync: `tools.py`, `agent_proxy.py` → `_get_tool_definitions()`, `server.py`.
-6. **PARTIAL RESULTs.** When a sub-agent returns PARTIAL RESULT with Completed/Remaining lists, re-invoke with the Continuation Prompt. Never skip remaining items.
-7. **Question relay.** When a sub-agent returns questions, present them to the user, then re-invoke the sub-agent with answers. Never answer sub-agent questions yourself.
+1. **Memory first, files second.** Search Mem0 for prior context before reading source files. Save useful findings to Mem0 after tasks.
+2. **Summaries, not files.** Pass sub-agent output, not raw file contents.
+3. **Context budget.** Each sub-agent reads ≤5 files. Break large tasks into sub-tasks.
+4. **Docs first.** Always start with `requirements` reading `docs/codebase-explanation/`.
+5. **Cross-layer protocol.** Invoke `protocol-dev` FIRST for backend+frontend tasks, pass contract to both implementers, `reviewer` validates both sides match.
+6. **MCP sync.** When MCP tools change, invoke BOTH `backend-dev` and `agent-dev`. Three files must stay in sync: `tools.py`, `agent_proxy.py` → `_get_tool_definitions()`, `server.py`.
+7. **PARTIAL RESULTs.** When a sub-agent returns PARTIAL RESULT with Completed/Remaining lists, re-invoke with the Continuation Prompt. Never skip remaining items.
+8. **Question relay.** When a sub-agent returns questions, present them to the user, then re-invoke the sub-agent with answers. Never answer sub-agent questions yourself.
+9. **Context7 for library docs.** When sub-agents need current library API syntax, they should use Context7 instead of guessing.
 
 ---
 

@@ -11,6 +11,8 @@ You define and validate the contracts between Helm's backend and frontend. You w
 
 **You CANNOT spawn sub-agents. Do all work yourself with your tools.**
 
+**Before defining contracts:** Search Mem0 for existing API contracts, known mismatches, and protocol decisions in the affected area.
+
 For cross-layer changes, you run FIRST. You define the contract, then implementers work against it.
 
 ---

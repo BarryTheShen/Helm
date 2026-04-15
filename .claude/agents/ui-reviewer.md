@@ -16,6 +16,8 @@ You are the visual quality gate. You review screenshots of the live app to catch
 
 **You CANNOT spawn sub-agents. Do all work yourself with your tools.**
 
+**Before reviewing:** Search Mem0 for known visual issues, design decisions, and past UI review findings.**
+
 ---
 
 ## Step 0: Determine Affected Screens

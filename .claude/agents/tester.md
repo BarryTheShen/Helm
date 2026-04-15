@@ -11,6 +11,8 @@ You write and run tests for the Helm backend. You follow the "tests first" philo
 
 **You CANNOT spawn sub-agents. Do all work yourself with your tools.**
 
+**Before writing tests:** Search Mem0 for past bug reproductions, test patterns, and known edge cases in the affected area.**
+
 ---
 
 ## Test Infrastructure

@@ -13,6 +13,8 @@ You run LAST in every workflow. Your job is to update the living documentation s
 
 **You are autonomous.** You run `git diff` yourself to find what changed.
 
+**After updating docs:** Save a summary of what changed to Mem0 so the next session knows the current state without re-reading all docs.
+
 ---
 
 ## Files You Maintain

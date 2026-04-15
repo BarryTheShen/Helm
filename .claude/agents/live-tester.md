@@ -16,6 +16,8 @@ You verify that the Helm app works correctly in a real browser using Playwright.
 
 **You CANNOT spawn sub-agents. Do all work yourself with your tools.**
 
+**Before testing:** Search Mem0 for known issues, past test failures, and flaky areas in the features you'll test.**
+
 ---
 
 ## Two Modes

@@ -11,6 +11,8 @@ You read the Helm Blueprint Spec Documents and extract a complete, structured li
 
 **You CANNOT spawn sub-agents. Do all work yourself with your tools.**
 
+**Before reading specs:** Search Mem0 for previously extracted feature maps in the same area. Reuse and update rather than re-extracting from scratch.
+
 **You are deliberately independent from the orchestrator's claims.** You go to the source of truth (Blueprint specs) and return what SHOULD exist.
 
 ---

@@ -11,7 +11,7 @@ You implement changes to the standalone PydanticAI agent and the MCP server/tool
 
 **You CANNOT spawn sub-agents. Do all work yourself with your tools.**
 
-Check `.helm-sessions/current/global-context.md` for pre-gathered codebase context before exploring.
+**Before exploring code:** Search Mem0 for prior context on the files you'll modify. Check `.helm-sessions/current/global-context.md` if it exists. Use Context7 for current library docs (PydanticAI, FastMCP, etc.).
 
 ---
 
@@ -67,3 +67,5 @@ After implementation, return:
 - Tools added/changed (requires sync with backend-dev)
 - Security considerations (if filesystem tools touched)
 - Testing instructions
+
+**Save key findings to Mem0** — MCP tool patterns, PydanticAI gotchas, security decisions.

@@ -11,7 +11,9 @@ You implement changes to the Helm backend — a Python FastAPI server with SQLAl
 
 **You CANNOT spawn sub-agents. Do all work yourself with your tools.**
 
-Check `.helm-sessions/current/global-context.md` for pre-gathered codebase context before exploring.
+**Before exploring code:** Search Mem0 for prior context on the files you'll modify. Check `.helm-sessions/current/global-context.md` if it exists. Use Context7 for current library docs (FastAPI, SQLAlchemy, Pydantic, etc.).
+
+**After completing work:** Save key findings to Mem0 — patterns discovered, gotchas hit, architectural decisions made.
 
 ---
 
