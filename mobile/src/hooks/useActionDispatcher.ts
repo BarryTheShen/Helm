@@ -5,13 +5,16 @@
  * Dispatches client-side actions (navigate, open_url, copy_text, dismiss, toggle)
  * directly via React Native APIs, and routes server_action to the backend.
  */
-import { useCallback } from 'react';
-import { Alert, Linking } from 'react-native';
+import { useCallback, useRef } from 'react';
+import { Alert, Linking, Share } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter, type Href } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
+import { useComponentStateStore } from '@/stores/componentStateStore';
 import { useWebSocket } from '@/contexts/WebSocketContext';
 import { ApiClient } from '@/services/api';
+import { executeCompositeAction } from '@/utils/actionEngine';
+import { clearDataSourceCache } from '@/hooks/useDataSource';
 import type { SDUIAction } from '@/types/sdui';
 import type { ActionDispatcher } from '@/components/sdui/SDUIRenderer';
 
@@ -46,8 +49,12 @@ export function useActionDispatcher(): ActionDispatcher {
   const router = useRouter();
   const { token, serverUrl, logout } = useAuthStore();
   const ws = useWebSocket();
+  const componentStateStore = useComponentStateStore();
 
-  return useCallback(
+  // Keep a ref to the latest dispatch for use in async composite actions
+  const dispatchRef = useRef<ActionDispatcher>();
+
+  const dispatch = useCallback(
     (action: SDUIAction) => {
       switch (action.type) {
         case 'navigate': {
@@ -122,13 +129,13 @@ export function useActionDispatcher(): ActionDispatcher {
         }
 
         case 'send_to_agent': {
+          console.warn('[useActionDispatcher] send_to_agent is deprecated. Use server_action or api_call instead.');
           if (ws) {
             ws.send({
               type: 'chat_message',
               content: action.message,
               conversation_id: 'default',
             });
-            // Navigate to chat tab so user can see the response
             router.push('/(tabs)/chat' as Href);
           }
           break;
@@ -136,7 +143,150 @@ export function useActionDispatcher(): ActionDispatcher {
 
         case 'toggle': {
           // Toggle is handled locally by the component that owns the state
-          // This is a no-op at the dispatcher level — components should handle it
+          break;
+        }
+
+        case 'submit_form': {
+          if (!token || !serverUrl) {
+            Alert.alert('Error', 'Not connected to server');
+            return;
+          }
+          // Collect form data from component state store
+          const allStates = componentStateStore.states;
+          const formData: Record<string, any> = {};
+          if (action.formId && allStates[action.formId]) {
+            Object.assign(formData, allStates[action.formId]);
+          } else {
+            // Collect all component states as form data
+            for (const [compId, state] of Object.entries(allStates)) {
+              if (state.value !== undefined) {
+                formData[compId] = state.value;
+              }
+            }
+          }
+          const submitBody = { ...formData, ...(action.params ?? {}) };
+          fetch(`${serverUrl}/api/actions/execute`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(submitBody),
+          }).catch((err: Error) => {
+            Alert.alert('Submit Failed', err.message);
+          });
+          break;
+        }
+
+        case 'set_component_state': {
+          componentStateStore.setComponentState(action.componentId, action.key, action.value);
+          break;
+        }
+
+        case 'set_variable': {
+          if (!token || !serverUrl) return;
+          fetch(`${serverUrl}/api/variables`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              name: action.name,
+              value: action.value,
+              scope: action.scope,
+            }),
+          }).catch((err: Error) => {
+            console.warn('[useActionDispatcher] set_variable failed:', err.message);
+          });
+          break;
+        }
+
+        case 'show_notification': {
+          const titleMap: Record<string, string> = {
+            success: 'Success',
+            error: 'Error',
+            info: 'Info',
+            warning: 'Warning',
+          };
+          const title = titleMap[action.notificationType ?? 'info'] ?? 'Info';
+          Alert.alert(title, action.message);
+          break;
+        }
+
+        case 'show_alert': {
+          const buttons = action.buttons?.map((btn) => ({
+            text: btn.text,
+            onPress: btn.action ? () => dispatchRef.current?.(btn.action!) : undefined,
+          }));
+          Alert.alert(action.title, action.message, buttons ?? [{ text: 'OK' }]);
+          break;
+        }
+
+        case 'haptic': {
+          // expo-haptics is optional — try dynamic import, no-op if unavailable
+          try {
+            const Haptics = require('expo-haptics');
+            const styleMap: Record<string, any> = {
+              light: Haptics.ImpactFeedbackStyle?.Light,
+              medium: Haptics.ImpactFeedbackStyle?.Medium,
+              heavy: Haptics.ImpactFeedbackStyle?.Heavy,
+            };
+            if (action.style === 'success' || action.style === 'error') {
+              const notificationType = action.style === 'success'
+                ? Haptics.NotificationFeedbackType?.Success
+                : Haptics.NotificationFeedbackType?.Error;
+              if (notificationType !== undefined) {
+                Haptics.notificationAsync(notificationType);
+              }
+            } else if (styleMap[action.style] !== undefined) {
+              Haptics.impactAsync(styleMap[action.style]);
+            }
+          } catch {
+            // expo-haptics not available — no-op
+          }
+          break;
+        }
+
+        case 'share': {
+          Share.share({
+            message: action.content,
+            title: action.title,
+          }).catch(() => {
+            // User cancelled or share failed — no-op
+          });
+          break;
+        }
+
+        case 'chain':
+        case 'conditional':
+        case 'delay': {
+          const executeSimple = async (a: SDUIAction) => {
+            dispatchRef.current?.(a);
+          };
+          const resolveCondition = (expr: string): boolean => {
+            // Simple truthiness check: look up expression in component states
+            const parts = expr.trim().split('.');
+            if (parts.length >= 2 && parts[0] === 'component') {
+              const compId = parts[1];
+              const key = parts.slice(2).join('.');
+              return Boolean(componentStateStore.getComponentState(compId, key || 'value'));
+            }
+            // Bare value check
+            return Boolean(componentStateStore.getComponentState(parts[0], parts[1] ?? 'value'));
+          };
+          executeCompositeAction(action, executeSimple, resolveCondition).catch((err: Error) => {
+            console.warn('[useActionDispatcher] Composite action failed:', err.message);
+          });
+          break;
+        }
+
+        case 'refresh_data': {
+          if (action.dataSourceId) {
+            clearDataSourceCache(action.dataSourceId);
+          } else {
+            clearDataSourceCache();
+          }
           break;
         }
 
@@ -162,6 +312,10 @@ export function useActionDispatcher(): ActionDispatcher {
         }
       }
     },
-    [router, token, serverUrl, logout, ws],
+    [router, token, serverUrl, logout, ws, componentStateStore],
   );
+
+  dispatchRef.current = dispatch;
+
+  return dispatch;
 }

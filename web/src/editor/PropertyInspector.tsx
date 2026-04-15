@@ -1,9 +1,15 @@
+import { useState, useEffect } from 'react';
 import { useEditorStore } from './useEditorStore';
 import { COMPONENT_SCHEMAS, ACTION_TYPES } from './componentSchemas';
 import type { ActionSchema, FieldSchema } from './componentSchemas';
 import { getActionPropName, getComponentDefinition } from './types';
-import type { EditorComponent, EditorRowPaddingKey } from './types';
+import type { ActionRule, EditorComponent, EditorRowPaddingKey } from './types';
 import { Settings, Rows3, Box, Minus, Plus } from 'lucide-react';
+import { RuleBuilder } from './RuleBuilder';
+import { api } from '../lib/api';
+import type { DataSource } from '../lib/api';
+
+const INTERACTIVE_COMPONENTS = new Set(['Button', 'TextInput', 'InputBar']);
 
 const ROW_PADDING_FIELDS: Array<{ key: EditorRowPaddingKey; label: string }> = [
   { key: 'paddingTop', label: 'Top' },
@@ -544,6 +550,23 @@ function ReadOnlyComponentSummary({ component }: { component: EditorComponent })
   );
 }
 
+// ── Variable Groups ────────────────────────────────────────────────────────
+
+const VARIABLE_GROUPS = [
+  { label: 'User', vars: ['{{user.name}}', '{{user.username}}', '{{user.email}}'] },
+  { label: 'Self', vars: ['{{self.value}}'] },
+  { label: 'Custom', vars: ['{{custom.appName}}'] },
+  { label: 'Environment', vars: ['{{env.serverUrl}}'] },
+];
+
+const DATA_BINDING_COMPONENT_TYPES = new Set(['CalendarModule', 'ChatModule', 'NotesModule']);
+
+const DATA_BINDING_SOURCE_TYPE: Record<string, string> = {
+  CalendarModule: 'calendar',
+  ChatModule: 'chat',
+  NotesModule: 'notes',
+};
+
 // ── Field Renderers ──────────────────────────────────────────────────────────
 
 function FieldRenderer({ field, value, onChange }: {
@@ -551,16 +574,52 @@ function FieldRenderer({ field, value, onChange }: {
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
+  const [showVarMenu, setShowVarMenu] = useState(false);
   switch (field.type) {
     case 'text':
       return (
-        <input
-          type="text"
-          value={coerceStringValue(value, field.defaultValue ?? '')}
-          onChange={e => onChange(e.target.value)}
-          placeholder={field.placeholder}
-          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-        />
+        <div className="relative">
+          <div className="flex gap-1 items-center">
+            <input
+              type="text"
+              value={coerceStringValue(value, field.defaultValue ?? '')}
+              onChange={e => onChange(e.target.value)}
+              placeholder={field.placeholder}
+              className="flex-1 px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            />
+            <button
+              type="button"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => setShowVarMenu(v => !v)}
+              className="text-[9px] px-1 py-0.5 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded text-gray-500 whitespace-nowrap"
+            >
+              {'{x}'}
+            </button>
+          </div>
+          {showVarMenu && (
+            <div className="absolute right-0 top-full mt-0.5 z-50 bg-white border border-gray-200 rounded-md shadow-lg py-1 min-w-[160px]">
+              {VARIABLE_GROUPS.map(group => (
+                <div key={group.label}>
+                  <div className="px-2 py-0.5 text-[9px] font-semibold text-gray-400 uppercase tracking-wide">{group.label}</div>
+                  {group.vars.map(varStr => (
+                    <button
+                      key={varStr}
+                      type="button"
+                      onMouseDown={e => {
+                        e.preventDefault();
+                        onChange(coerceStringValue(value, field.defaultValue ?? '') + varStr);
+                        setShowVarMenu(false);
+                      }}
+                      className="w-full text-left px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50 font-mono"
+                    >
+                      {varStr}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       );
     case 'number':
       {
@@ -600,15 +659,51 @@ function FieldRenderer({ field, value, onChange }: {
     case 'textarea':
       {
         const textareaValue = value ?? field.defaultValue ?? '';
+        const textareaStr = typeof textareaValue === 'string' ? textareaValue : JSON.stringify(textareaValue, null, 2);
 
       return (
-        <textarea
-          value={typeof textareaValue === 'string' ? textareaValue : JSON.stringify(textareaValue, null, 2)}
-          onChange={e => onChange(e.target.value)}
-          placeholder={field.placeholder}
-          rows={3}
-          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono resize-y"
-        />
+        <div className="relative">
+          <div className="flex gap-1 items-start">
+            <textarea
+              value={textareaStr}
+              onChange={e => onChange(e.target.value)}
+              placeholder={field.placeholder}
+              rows={3}
+              className="flex-1 px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono resize-y"
+            />
+            <button
+              type="button"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => setShowVarMenu(v => !v)}
+              className="text-[9px] px-1 py-0.5 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded text-gray-500 whitespace-nowrap mt-1"
+            >
+              {'{x}'}
+            </button>
+          </div>
+          {showVarMenu && (
+            <div className="absolute right-0 top-full mt-0.5 z-50 bg-white border border-gray-200 rounded-md shadow-lg py-1 min-w-[160px]">
+              {VARIABLE_GROUPS.map(group => (
+                <div key={group.label}>
+                  <div className="px-2 py-0.5 text-[9px] font-semibold text-gray-400 uppercase tracking-wide">{group.label}</div>
+                  {group.vars.map(varStr => (
+                    <button
+                      key={varStr}
+                      type="button"
+                      onMouseDown={e => {
+                        e.preventDefault();
+                        onChange(textareaStr + varStr);
+                        setShowVarMenu(false);
+                      }}
+                      className="w-full text-left px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50 font-mono"
+                    >
+                      {varStr}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       );
       }
     case 'color':
@@ -848,7 +943,19 @@ function ComponentPropertiesPanel({ rowId, cellIndex }: { rowId: string; cellInd
   const updateComponentProps = useEditorStore(s => s.updateComponentProps);
   const removeComponent = useEditorStore(s => s.removeComponent);
 
+  // Derive type before early returns so hooks can depend on it
   const row = rows.find(r => r.id === rowId);
+  const componentType = row?.cells[cellIndex]?.content?.type ?? '';
+
+  const [dataSources, setDataSources] = useState<DataSource[]>([]);
+
+  useEffect(() => {
+    if (!DATA_BINDING_COMPONENT_TYPES.has(componentType)) return;
+    api.getDataSources({ limit: 50 })
+      .then(body => setDataSources(body.items))
+      .catch(() => {});
+  }, [componentType]);
+
   if (!row) return null;
   const cell = row.cells[cellIndex];
   if (!cell?.content) return <EmptyCellPanel />;
@@ -928,6 +1035,30 @@ function ComponentPropertiesPanel({ rowId, cellIndex }: { rowId: string; cellInd
               />
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Data Binding (for composite modules) */}
+      {!isReadOnly && DATA_BINDING_COMPONENT_TYPES.has(type) && (
+        <div className="border-t border-gray-100 pt-3">
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+            🔗 Data Binding
+          </div>
+          <div>
+            <label className="block text-[10px] font-medium text-gray-400 mb-0.5">Data Source</label>
+            <select
+              value={(props.dataBinding as { sourceId?: string } | undefined)?.sourceId ?? ''}
+              onChange={e => handleChange('dataBinding', e.target.value ? { sourceId: e.target.value } : undefined)}
+              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none bg-white"
+            >
+              <option value="">None</option>
+              {dataSources
+                .filter(ds => !DATA_BINDING_SOURCE_TYPE[type] || ds.type === DATA_BINDING_SOURCE_TYPE[type])
+                .map(ds => (
+                  <option key={ds.id} value={ds.id}>{ds.name}</option>
+                ))}
+            </select>
+          </div>
         </div>
       )}
 
@@ -1011,6 +1142,78 @@ function EmptyCellPanel() {
 
 // ── Main PropertyInspector Component ─────────────────────────────────────────
 
+function RulesPanel({ rowId, cellIndex }: { rowId: string; cellIndex: number }) {
+  const rows = useEditorStore(s => s.rows);
+  const updateCellRules = useEditorStore(s => s.updateCellRules);
+
+  const row = rows.find(r => r.id === rowId);
+  const cell = row?.cells[cellIndex];
+  const rules: ActionRule[] = Array.isArray(cell?.rules) ? cell.rules as ActionRule[] : [];
+
+  return (
+    <div className="p-3">
+      <RuleBuilder
+        rules={rules}
+        onChange={(nextRules) => updateCellRules(rowId, cellIndex, nextRules)}
+      />
+    </div>
+  );
+}
+
+type InspectorTab = 'properties' | 'rules';
+
+function ComponentInspectorTabbed({ rowId, cellIndex }: { rowId: string; cellIndex: number }) {
+  const [activeTab, setActiveTab] = useState<InspectorTab>('properties');
+  const rows = useEditorStore(s => s.rows);
+
+  const row = rows.find(r => r.id === rowId);
+  const cell = row?.cells[cellIndex];
+  const componentType = cell?.content?.type;
+  const isInteractive = typeof componentType === 'string' && INTERACTIVE_COMPONENTS.has(componentType);
+
+  if (!isInteractive) {
+    return <ComponentPropertiesPanel rowId={rowId} cellIndex={cellIndex} />;
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Tab bar */}
+      <div className="flex border-b border-gray-200 shrink-0">
+        <button
+          onClick={() => setActiveTab('properties')}
+          className={`flex-1 px-3 py-1.5 text-xs font-medium transition-colors ${
+            activeTab === 'properties'
+              ? 'text-blue-700 border-b-2 border-blue-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Properties
+        </button>
+        <button
+          onClick={() => setActiveTab('rules')}
+          className={`flex-1 px-3 py-1.5 text-xs font-medium transition-colors ${
+            activeTab === 'rules'
+              ? 'text-blue-700 border-b-2 border-blue-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Rules
+        </button>
+      </div>
+
+      {/* Tab content */}
+      <div className="flex-1 overflow-y-auto">
+        {activeTab === 'properties' && (
+          <ComponentPropertiesPanel rowId={rowId} cellIndex={cellIndex} />
+        )}
+        {activeTab === 'rules' && (
+          <RulesPanel rowId={rowId} cellIndex={cellIndex} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function PropertyInspector() {
   const selection = useEditorStore(s => s.selection);
 
@@ -1019,10 +1222,10 @@ export function PropertyInspector() {
       {!selection && <NoSelectionPanel />}
       {selection?.type === 'row' && <RowPropertiesPanel rowId={selection.rowId} />}
       {selection?.type === 'cell' && selection.cellIndex !== undefined && (
-        <ComponentPropertiesPanel rowId={selection.rowId} cellIndex={selection.cellIndex} />
+        <ComponentInspectorTabbed rowId={selection.rowId} cellIndex={selection.cellIndex} />
       )}
       {selection?.type === 'component' && selection.cellIndex !== undefined && (
-        <ComponentPropertiesPanel rowId={selection.rowId} cellIndex={selection.cellIndex} />
+        <ComponentInspectorTabbed rowId={selection.rowId} cellIndex={selection.cellIndex} />
       )}
     </div>
   );

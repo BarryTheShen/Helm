@@ -49,10 +49,19 @@ htmlcov/
 # MacOS
 .DS_Store
 
+# Claude / Copilot local settings
+.claude/
 
+# Root-level screenshot artifacts (from Playwright live testing)
+/*.png
 
 # Scratch / test artifacts
 scratch/
 
 # pytest debug artifacts
 backend/.pytest_*.txt
+
+# Helm AI session context files (runtime, not for source control)
+# The folder itself is tracked via .gitkeep; only the contents are ignored
+.helm-sessions/current/
+.helm-sessions/archive/

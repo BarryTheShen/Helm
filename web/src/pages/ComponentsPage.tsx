@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { Loader2, Search } from 'lucide-react';
 
 interface Component {
   id: string;
@@ -20,22 +21,46 @@ const tierMeta: Record<string, { label: string; color: string; border: string }>
 
 export function ComponentsPage() {
   const [components, setComponents] = useState<Component[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
-    api.get<Component[]>('/api/components/registry').then(setComponents);
+    setLoading(true);
+    api.get<Component[]>('/api/components/registry')
+      .then(setComponents)
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
   }, []);
 
-  const tiers = [...new Set(components.map(c => c.tier))];
+  const filtered = search
+    ? components.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.description.toLowerCase().includes(search.toLowerCase()) || c.type.toLowerCase().includes(search.toLowerCase()))
+    : components;
+  const tiers = [...new Set(filtered.map(c => c.tier))];
 
   return (
     <div>
-      <h2 className="text-xl font-semibold mb-6">Component Registry</h2>
-      {components.length === 0 && (
-        <p className="text-gray-500 text-center py-8">No components found in the registry.</p>
-      )}
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-semibold">Component Registry ({components.length})</h2>
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input placeholder="Search components..." value={search} onChange={e => setSearch(e.target.value)}
+            className="pl-8 pr-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64" />
+        </div>
+      </div>
+      {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-lg mb-4">{error}</div>}
+      {loading ? (
+        <div className="flex items-center justify-center py-12 text-gray-400">
+          <Loader2 size={20} className="animate-spin mr-2" />
+          Loading components...
+        </div>
+      ) : filtered.length === 0 ? (
+        <p className="text-gray-500 text-center py-8">{search ? 'No components match your search.' : 'No components found in the registry.'}</p>
+      ) : (
+        <>
       {tiers.map(tier => {
         const meta = tierMeta[tier] || { label: `${tier} Components`, color: 'text-gray-700', border: 'border-gray-200' };
-        const comps = components.filter(c => c.tier === tier);
+        const comps = filtered.filter(c => c.tier === tier);
         return (
           <div key={tier} className="mb-8">
             <div className={`flex items-center gap-3 mb-4 pb-2 border-b-2 ${meta.border}`}>
@@ -59,6 +84,8 @@ export function ComponentsPage() {
           </div>
         );
       })}
+        </>
+      )}
     </div>
   );
 }

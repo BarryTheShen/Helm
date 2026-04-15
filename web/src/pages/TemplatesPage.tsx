@@ -44,6 +44,7 @@ export function TemplatesPage() {
 
   // Preview modal
   const [previewTemplate, setPreviewTemplate] = useState<TemplateDetail | null>(null);
+  const [showJson, setShowJson] = useState(false);
 
   // Apply modal
   const [applyingTemplate, setApplyingTemplate] = useState<string | null>(null);
@@ -127,27 +128,26 @@ export function TemplatesPage() {
       <div className="space-y-2">
         {screenJson.rows.map((row: any, ri: number) => (
           <div key={ri} className="flex gap-2 p-2 border rounded bg-gray-50">
-            {(row.cells || []).map((cell: any, ci: number) => (
-              <div key={ci} className="flex-1 text-xs">
-                {cell.component ? (
-                  <div className="bg-white rounded p-2 border">
-                    <span className="font-mono text-blue-600">{cell.component.type}</span>
-                    {cell.component.props?.content && (
-                      <span className="text-gray-500 ml-1">
-                        "{String(cell.component.props.content).slice(0, 30)}"
-                      </span>
-                    )}
-                    {cell.component.props?.label && (
-                      <span className="text-gray-500 ml-1">
-                        "{String(cell.component.props.label).slice(0, 30)}"
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <div className="bg-gray-100 rounded p-2 text-gray-400">empty</div>
-                )}
-              </div>
-            ))}
+            {(row.cells || []).map((cell: any, ci: number) => {
+              const comp = cell.content ?? cell.component;
+              return (
+                <div key={ci} className="flex-1 text-xs">
+                  {comp ? (
+                    <div className="bg-white rounded p-2 border">
+                      <span className="font-mono text-blue-600">{comp.type}</span>
+                      {comp.props?.content && (
+                        <span className="text-gray-500 ml-1">"{String(comp.props.content).slice(0, 30)}"</span>
+                      )}
+                      {comp.props?.label && (
+                        <span className="text-gray-500 ml-1">"{String(comp.props.label).slice(0, 30)}"</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-gray-100 rounded p-2 text-gray-400">empty</div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ))}
       </div>
@@ -258,17 +258,25 @@ export function TemplatesPage() {
           <div className="bg-white rounded-lg p-6 w-[600px] max-h-[80vh] overflow-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">{previewTemplate.name}</h3>
-              <button onClick={() => setPreviewTemplate(null)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowJson(v => !v)} className={`px-2 py-1 text-xs font-mono rounded border transition-colors ${showJson ? 'bg-gray-800 text-white border-gray-800' : 'text-gray-500 border-gray-300 hover:bg-gray-100'}`}>{'{}'}</button>
+                <button onClick={() => { setPreviewTemplate(null); setShowJson(false); }} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+              </div>
             </div>
             <p className="text-sm text-gray-500 mb-4">{previewTemplate.description || 'No description'}</p>
-            <div className="border rounded-lg p-4 bg-gray-50 mb-4" style={{ maxWidth: 390, margin: '0 auto' }}>
-              <div className="text-xs text-gray-400 mb-2 text-center">Mobile Preview (390px)</div>
-              {renderScreenPreview(previewTemplate.screen_json)}
-            </div>
+            {showJson ? (
+              <pre className="mt-2 text-xs font-mono bg-gray-50 p-3 rounded overflow-auto max-h-64 mb-4">{JSON.stringify(previewTemplate.screen_json, null, 2)}</pre>
+            ) : (
+              <div className="border rounded-lg p-4 bg-gray-50 mb-4" style={{ maxWidth: 390, margin: '0 auto' }}>
+                <div className="text-xs text-gray-400 mb-2 text-center">Mobile Preview (390px)</div>
+                {renderScreenPreview(previewTemplate.screen_json)}
+              </div>
+            )}
             <div className="flex gap-2 justify-end">
               <button
                 onClick={() => {
                   setPreviewTemplate(null);
+                  setShowJson(false);
                   setApplyingTemplate(previewTemplate.id);
                 }}
                 className="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-md"
@@ -276,7 +284,7 @@ export function TemplatesPage() {
                 Apply to Module
               </button>
               <button
-                onClick={() => setPreviewTemplate(null)}
+                onClick={() => { setPreviewTemplate(null); setShowJson(false); }}
                 className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
               >
                 Close

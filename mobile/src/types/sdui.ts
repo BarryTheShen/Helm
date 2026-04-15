@@ -27,12 +27,24 @@ export type SDUIAction =
   | { type: 'go_back' }
   | { type: 'api_call'; method: 'GET' | 'POST' | 'PUT' | 'DELETE'; path: string; body?: Record<string, unknown> }
   | { type: 'server_action'; function: string; params?: Record<string, any> }
+  /** @deprecated Use server_action or api_call instead. */
   | { type: 'send_to_agent'; message?: string }
   | { type: 'dismiss' }
   | { type: 'open_sheet'; content: SDUIComponent }
   | { type: 'copy_text'; text: string }
   | { type: 'open_url'; url: string }
-  | { type: 'toggle'; target: string };
+  | { type: 'toggle'; target: string }
+  | { type: 'submit_form'; formId?: string; params?: Record<string, any> }
+  | { type: 'set_component_state'; componentId: string; key: string; value: any }
+  | { type: 'set_variable'; name: string; value: any; scope?: string }
+  | { type: 'show_notification'; message: string; notificationType?: 'success' | 'error' | 'info' | 'warning' }
+  | { type: 'show_alert'; title: string; message: string; buttons?: Array<{ text: string; action?: SDUIAction }> }
+  | { type: 'haptic'; style: 'light' | 'medium' | 'heavy' | 'success' | 'error' }
+  | { type: 'share'; content: string; title?: string }
+  | { type: 'chain'; actions: SDUIAction[] }
+  | { type: 'conditional'; condition: string; then: SDUIAction; else?: SDUIAction }
+  | { type: 'delay'; ms: number; action: SDUIAction }
+  | { type: 'refresh_data'; dataSourceId?: string };
 
 // ── Component type union ───────────────────────────────────────────────────
 
@@ -333,12 +345,20 @@ export type SDUIComponentTypeV2 =
   | 'NotesModule'
   | 'InputBar';
 
+/** Data binding configuration for connecting a component to a data source */
+export interface SDUIDataBinding {
+  dataSourceId: string;
+  fieldMapping: Record<string, string>;
+  query?: Record<string, any>;
+}
+
 /** V2 component: type + props bag. Rendered via componentRegistry. */
 export interface SDUIComponentV2 {
   type: SDUIComponentTypeV2;
   id: string;
   props: Record<string, any>;
   children?: SDUIComponentV2[];
+  dataBinding?: SDUIDataBinding;
 }
 
 export interface SDUIScreenResponse {

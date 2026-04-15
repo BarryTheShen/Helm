@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { LayoutDashboard, Users, Key, ScrollText, Workflow, FileText, Puzzle, Paintbrush, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, Key, ScrollText, Workflow, FileText, Puzzle, Paintbrush, Braces, Zap, LogOut } from 'lucide-react';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -11,6 +11,8 @@ const navItems = [
   { to: '/templates', label: 'Templates', icon: FileText },
   { to: '/components', label: 'Components', icon: Puzzle },
   { to: '/editor', label: 'Visual Editor', icon: Paintbrush },
+  { to: '/variables', label: 'Variables', icon: Braces },
+  { to: '/actions-triggers', label: 'Actions & Triggers', icon: Zap },
 ];
 
 export function AdminLayout() {

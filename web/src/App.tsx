@@ -11,6 +11,8 @@ import { WorkflowsPage } from './pages/WorkflowsPage';
 import { TemplatesPage } from './pages/TemplatesPage';
 import { ComponentsPage } from './pages/ComponentsPage';
 import { EditorPage } from './pages/EditorPage';
+import { VariablesPage } from './pages/VariablesPage';
+import { ActionsTriggersPage } from './pages/ActionsTriggersPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore(s => s.token);
@@ -37,6 +39,8 @@ export default function App() {
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/components" element={<ComponentsPage />} />
           <Route path="/editor" element={<EditorPage />} />
+          <Route path="/variables" element={<VariablesPage />} />
+          <Route path="/actions-triggers" element={<ActionsTriggersPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

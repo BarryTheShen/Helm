@@ -235,3 +235,62 @@ async def test_execute_with_empty_params(auth_client):
     assert data["status"] == "ok"
     # Default module_id should be "home"
     assert data["result"]["module_id"] == "home"
+
+
+# ── Execute — set_variable ─────────────────────────────────────────────────
+
+async def test_execute_set_variable_create(auth_client):
+    """set_variable creates a new variable if it doesn't exist."""
+    resp = await auth_client.post(
+        "/api/actions/execute",
+        json={
+            "function": "set_variable",
+            "params": {"name": "theme", "value": "dark"},
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["result"]["name"] == "theme"
+    assert data["result"]["value"] == "dark"
+
+
+async def test_execute_set_variable_update(auth_client):
+    """set_variable updates an existing variable."""
+    # Create
+    await auth_client.post(
+        "/api/actions/execute",
+        json={"function": "set_variable", "params": {"name": "counter", "value": "1"}},
+    )
+    # Update
+    resp = await auth_client.post(
+        "/api/actions/execute",
+        json={"function": "set_variable", "params": {"name": "counter", "value": "2"}},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["result"]["value"] == "2"
+
+    # Verify via variables API
+    list_resp = await auth_client.get("/api/variables")
+    variables = list_resp.json()["items"]
+    counter = [v for v in variables if v["name"] == "counter"]
+    assert len(counter) == 1
+    assert counter[0]["value"] == "2"
+
+
+async def test_execute_set_variable_missing_name(auth_client):
+    """set_variable without name returns error."""
+    resp = await auth_client.post(
+        "/api/actions/execute",
+        json={"function": "set_variable", "params": {"value": "x"}},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["result"]["status"] == "error"
+    assert "name required" in data["result"]["detail"]
+
+
+async def test_set_variable_in_functions_list(auth_client):
+    """set_variable should appear in the functions list."""
+    resp = await auth_client.get("/api/actions/functions")
+    assert "set_variable" in resp.json()["functions"]

@@ -1207,12 +1207,16 @@ export function EditorCanvas() {
 
                 {/* Row */}
                 <div
-                  className={`relative z-0 group rounded-lg transition-all mb-1 ${
-                    draggedRowIndex === rowIdx ? 'opacity-60 ring-1 ring-blue-200' : ''
+                  className={`relative z-0 group rounded-lg transition-all mb-1 border border-dashed ${
+                    draggedRowIndex === rowIdx
+                      ? 'opacity-60 ring-1 ring-blue-200 border-blue-200'
+                      : ''
                   } ${
                     isRowSelected(row.id)
-                      ? 'ring-2 ring-blue-500'
-                      : 'hover:ring-1 hover:ring-gray-300'
+                      ? 'ring-2 ring-blue-500 border-blue-300'
+                      : `border-gray-200 hover:border-gray-400 hover:ring-1 hover:ring-gray-300 ${
+                          rowIdx % 2 === 0 ? 'bg-white/60' : 'bg-gray-50/40'
+                        }`
                   }`}
                   style={getRowContainerStyle(
                     row,

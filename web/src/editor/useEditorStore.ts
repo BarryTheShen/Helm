@@ -5,6 +5,7 @@ import {
   DEVICE_PRESETS,
   cloneEditorComponent,
   createEditorId,
+  getActionPropName,
   normalizeComponentForEditor,
   serializeComponentForRuntime,
 } from './types';
@@ -16,6 +17,7 @@ import type {
   EditorRowHeight,
   EditorScreen,
   Selection as EditorSelection,
+  ActionRule,
 } from './types';
 
 const HISTORY_LIMIT = 50;
@@ -58,6 +60,7 @@ type EditorStoreState = {
   setCellCount: (rowId: string, count: number) => void;
   updateCellWidth: (rowId: string, cellIndex: number, width: EditorCell['width']) => void;
   updateComponentProps: (rowId: string, cellIndex: number, props: Record<string, unknown>) => void;
+  updateCellRules: (rowId: string, cellIndex: number, rules: ActionRule[]) => void;
   screenSnapshot: EditorScreen;
   clipboard: ClipboardItem | null;
 };
@@ -188,10 +191,33 @@ function normalizeRow(value: unknown): EditorRow {
 
 function serializeCellForRuntime(cell: EditorCell): EditorCell {
   const clonedCell = cloneValue(cell);
+  const serializedContent = cell.content ? serializeComponentForRuntime(cell.content) : null;
+
+  // Inject rules as the component's action prop for mobile runtime.
+  // Rules in the editor's RuleBuilder are the visual representation of the
+  // component's onPress/onSubmit action. Serialize them into the standard
+  // action prop format so the mobile renderer can execute them.
+  if (serializedContent && Array.isArray(clonedCell.rules) && clonedCell.rules.length > 0) {
+    const rules = clonedCell.rules as ActionRule[];
+    const actionPropName = getActionPropName(serializedContent.type);
+    if (actionPropName) {
+      // Use the last rule that has at least one action step
+      const activeRule = [...rules].reverse().find(r => r.actions && r.actions.length > 0);
+      if (activeRule) {
+        const action: Record<string, unknown> = activeRule.actions.length === 1
+          ? { type: activeRule.actions[0].type, ...activeRule.actions[0].params }
+          : {
+              type: 'chain',
+              actions: activeRule.actions.map(step => ({ type: step.type, ...step.params })),
+            };
+        serializedContent.props = { ...serializedContent.props, [actionPropName]: action };
+      }
+    }
+  }
 
   return {
     ...clonedCell,
-    content: cell.content ? serializeComponentForRuntime(cell.content) : null,
+    content: serializedContent,
   };
 }
 
@@ -724,6 +750,28 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
         return {
           ...row,
           cells: row.cells.map((entry, index) => index === cellIndex ? { ...entry, content: nextComponent } : entry),
+        };
+      });
+
+      return commitRows(state, nextRows);
+    });
+  },
+
+  updateCellRules: (rowId, cellIndex, rules) => {
+    set((state) => {
+      const cell = findCell(state.rows, rowId, cellIndex);
+      if (!cell) {
+        return state;
+      }
+
+      const nextRows = state.rows.map((row) => {
+        if (row.id !== rowId) {
+          return row;
+        }
+
+        return {
+          ...row,
+          cells: row.cells.map((entry, index) => index === cellIndex ? { ...entry, rules } : entry),
         };
       });
 

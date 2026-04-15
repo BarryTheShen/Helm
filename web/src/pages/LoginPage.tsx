@@ -34,6 +34,7 @@ export function LoginPage() {
           <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
           <input type="text" value={username} onChange={e => setUsername(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" autoFocus />
+          <p className="text-xs text-gray-400 mt-1">Username is case-sensitive</p>
         </div>
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>

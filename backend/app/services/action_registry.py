@@ -48,7 +48,33 @@ class ActionRegistry:
 # ── Built-in Action Handlers ───────────────────────────────────────────────
 
 async def _refresh_data(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
-    """Re-fetch and push SDUI screen data for a module."""
+    """Re-fetch and push SDUI screen data for a module, or query a data source."""
+    # If a dataSourceId is provided, query that specific data source
+    data_source_id = params.get("dataSourceId")
+    if data_source_id:
+        from app.models.data_source import DataSource
+        from app.services.data_connectors import query_data_source
+        from sqlalchemy import select
+
+        result = await db.execute(
+            select(DataSource).where(
+                DataSource.id == data_source_id,
+                DataSource.user_id == user_id,
+            )
+        )
+        source = result.scalars().first()
+        if source is None:
+            return {"status": "error", "detail": "Data source not found"}
+        data = await query_data_source(
+            source_type=source.type,
+            user_id=user_id,
+            db=db,
+            filters=params.get("filters"),
+            limit=params.get("limit", 50),
+            offset=params.get("offset", 0),
+        )
+        return {"status": "ok", "source_id": data_source_id, "data": data, "count": len(data)}
+
     module_id = params.get("module_id", "home")
 
     # Re-read the current SDUI screen from DB and push it
@@ -223,6 +249,123 @@ async def _reject_draft(user_id: str, params: dict[str, Any], db: AsyncSession) 
     return await reject_draft(module_id=module_id, user_id=user_id, feedback=feedback)
 
 
+async def _set_variable(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    """Upsert a custom variable — create if it doesn't exist, update if it does."""
+    from app.models.custom_variable import CustomVariable
+    from sqlalchemy import select
+    from uuid import uuid4
+
+    name = params.get("name")
+    if not name:
+        return {"status": "error", "detail": "name required"}
+    value = str(params.get("value", ""))
+    var_type = params.get("type", "text")
+
+    result = await db.execute(
+        select(CustomVariable).where(
+            CustomVariable.user_id == user_id,
+            CustomVariable.name == name,
+        )
+    )
+    variable = result.scalars().first()
+    if variable is None:
+        variable = CustomVariable(
+            id=str(uuid4()),
+            user_id=user_id,
+            name=name,
+            value=value,
+            type=var_type,
+        )
+        db.add(variable)
+    else:
+        variable.value = value
+        if var_type:
+            variable.type = var_type
+
+    await db.commit()
+    return {"status": "ok", "name": name, "value": value, "created": variable.id is not None}
+
+
+# ── Client-Only Action Stubs ──────────────────────────────────────────────
+# These actions are handled entirely on the client side.  The backend handler
+# simply acknowledges receipt so the action registry has a complete catalog.
+
+async def _client_only(action_name: str) -> ActionHandler:
+    """Factory is not used — each stub is defined inline for clarity."""
+    ...
+
+
+async def _navigate(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    return {"status": "client_only", "action": "navigate"}
+
+
+async def _go_back(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    return {"status": "client_only", "action": "go_back"}
+
+
+async def _open_url(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    return {"status": "client_only", "action": "open_url"}
+
+
+async def _open_sheet(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    return {"status": "client_only", "action": "open_sheet"}
+
+
+async def _dismiss(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    return {"status": "client_only", "action": "dismiss"}
+
+
+async def _set_component_state(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    return {"status": "client_only", "action": "set_component_state"}
+
+
+async def _toggle(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    return {"status": "client_only", "action": "toggle"}
+
+
+async def _show_notification(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    return {"status": "client_only", "action": "show_notification"}
+
+
+async def _show_alert(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    return {"status": "client_only", "action": "show_alert"}
+
+
+async def _haptic(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    return {"status": "client_only", "action": "haptic"}
+
+
+async def _share(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    return {"status": "client_only", "action": "share"}
+
+
+async def _copy_text(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    return {"status": "client_only", "action": "copy_text"}
+
+
+async def _delay(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    return {"status": "client_only", "action": "delay"}
+
+
+async def _chain(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    return {"status": "client_only", "action": "chain"}
+
+
+async def _conditional(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    return {"status": "client_only", "action": "conditional"}
+
+
+async def _server_action(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    """Generic server action — dispatches to a named function if provided."""
+    function_name = params.get("function")
+    if not function_name:
+        return {"status": "error", "detail": "No function name provided in server_action"}
+    # Re-dispatch through the registry (excluding self to avoid infinite recursion)
+    if function_name == "server_action":
+        return {"status": "error", "detail": "Recursive server_action not allowed"}
+    return await registry.execute(function_name, user_id, params, db)
+
+
 # ── Singleton Registry ─────────────────────────────────────────────────────
 
 registry = ActionRegistry()
@@ -236,3 +379,32 @@ registry.register("create_calendar_event", _create_calendar_event)
 registry.register("delete_calendar_event", _delete_calendar_event)
 registry.register("approve_draft", _approve_draft)
 registry.register("reject_draft", _reject_draft)
+registry.register("set_variable", _set_variable)
+
+# Session 8 additions — navigation
+registry.register("navigate", _navigate)
+registry.register("go_back", _go_back)
+registry.register("open_url", _open_url)
+registry.register("open_sheet", _open_sheet)
+registry.register("dismiss", _dismiss)
+
+# Session 8 additions — data
+registry.register("server_action", _server_action)
+
+# Session 8 additions — state
+registry.register("set_component_state", _set_component_state)
+registry.register("toggle", _toggle)
+
+# Session 8 additions — feedback
+registry.register("show_notification", _show_notification)
+registry.register("show_alert", _show_alert)
+registry.register("haptic", _haptic)
+registry.register("share", _share)
+
+# Session 8 additions — utility
+registry.register("copy_text", _copy_text)
+registry.register("delay", _delay)
+
+# Session 8 additions — flow control
+registry.register("chain", _chain)
+registry.register("conditional", _conditional)

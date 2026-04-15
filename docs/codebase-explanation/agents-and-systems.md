@@ -1,6 +1,6 @@
 # Agents, MCP, Workflows & Additional Systems
 
-> Last updated: 2026-04-12
+> Last updated: 2026-04-14
 
 ## Tier 1: TLDR
 
@@ -188,11 +188,40 @@ All functions are `async`. Main `execute_tool(name, args, user_id)` dispatcher.
 | `EVENT_UPDATED` | — | `fire_trigger()` called from calendar router (PUT update event) |
 | `FORM_SUBMITTED` | — | `fire_trigger()` called from action registry (`submit_form` handler) |
 | `MESSAGE_RECEIVED` | — | `fire_trigger()` called from agent_proxy (`handle_chat_message`) |
+| `DATA_CHANGED` | — | Exists in enum; not yet wired to a firing site |
+| `SERVER_EVENT` | — | Exists in enum; not yet wired to a firing site |
 
-**⚠️ Outstanding:** All event-based trigger types are now wired. `fire_trigger()` is called from calendar router (EVENT_CREATED, EVENT_UPDATED), action registry (FORM_SUBMITTED), and agent_proxy (MESSAGE_RECEIVED).
+⚠️ `DATA_CHANGED` and `SERVER_EVENT` exist in the enum but the Workflows page dropdown only shows 5 types (these two are missing from the UI dropdown).
 
 ### Workflow Action
 `action_config.tool` + `action_config.params` → `execute_tool(tool, merged_args, user_id)` in `mcp/tools.py`.
+
+---
+
+## Trigger Engine (Session 8)
+
+### Location
+`backend/app/services/trigger_engine.py` + `backend/app/models/trigger.py` + `backend/app/routers/triggers.py`
+
+### Distinction from Workflow Engine
+The **Workflow Engine** (above) uses APScheduler and the `workflows` table with `TriggerType` enum. The **Trigger Engine** is a newer, more flexible system using `trigger_definitions` table with freeform JSON config and action chains.
+
+### Model — `TriggerDefinition`
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | UUID PK | |
+| `user_id` | FK → users | Owner |
+| `name` | string | Human-readable trigger name |
+| `trigger_type` | string | `schedule` \| `data_change` \| `server_event` |
+| `config_json` | JSON text | Type-specific config (e.g. cron expression, data source/field/condition, event name) |
+| `action_chain_json` | JSON text | Array of action steps: `[{"type": "<action>", "params": {...}}, ...]` |
+| `enabled` | boolean | Whether this trigger is active |
+
+### `fire_trigger(trigger, db)`
+Parses `action_chain_json` and runs each action through `action_registry.execute()`. Returns a list of results, one per step. Errors in individual steps don't halt the chain — each step result is captured independently.
+
+### `register_scheduled_triggers(scheduler)`
+V1 placeholder for hooking schedule-type triggers into APScheduler.
 
 ---
 

@@ -143,3 +143,33 @@ async def test_update_workflow_not_found(auth_client):
 async def test_delete_workflow_not_found(auth_client):
     resp = await auth_client.delete(f"{WORKFLOWS}/nonexistent-id")
     assert resp.status_code == 404
+
+
+# ── New Trigger Types ──────────────────────────────────────────────────────
+
+async def test_create_workflow_data_changed_trigger(auth_client):
+    resp = await auth_client.post(
+        WORKFLOWS,
+        json={
+            "name": "On data change",
+            "trigger_type": "data_changed",
+            "trigger_config": {"source_type": "calendar"},
+            "action_config": {"action_type": "refresh_data"},
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["trigger_type"] == "data_changed"
+
+
+async def test_create_workflow_server_event_trigger(auth_client):
+    resp = await auth_client.post(
+        WORKFLOWS,
+        json={
+            "name": "On server event",
+            "trigger_type": "server_event",
+            "trigger_config": {"event_name": "user_login"},
+            "action_config": {"action_type": "send_notification", "title": "Welcome back!"},
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["trigger_type"] == "server_event"

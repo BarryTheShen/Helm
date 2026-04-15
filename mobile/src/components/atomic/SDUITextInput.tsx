@@ -2,9 +2,10 @@
  * SDUITextInput — Tier 2 atomic component.
  * Text entry field, outlined variant for MVP.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TextInput, StyleSheet } from 'react-native';
 import { themeColors } from '@/theme/tokens';
+import { useComponentStateStore } from '@/stores/componentStateStore';
 import type { SDUIAction } from '@/types/sdui';
 
 const INPUT_TEMPLATE_TOKEN = '{{input}}';
@@ -75,6 +76,7 @@ function resolveActionWithInput(action: SDUIAction, input: string): SDUIAction {
 }
 
 interface SDUITextInputProps {
+  id?: string;
   value?: string;
   onChangeText?: (text: string) => void;
   placeholder?: string;
@@ -90,6 +92,7 @@ interface SDUITextInputProps {
 }
 
 export function SDUITextInput({
+  id,
   value,
   onChangeText,
   placeholder,
@@ -104,10 +107,20 @@ export function SDUITextInput({
   dispatch,
 }: SDUITextInputProps) {
   const [localValue, setLocalValue] = useState(value ?? '');
+  const { registerComponent, unregisterComponent, setComponentState } = useComponentStateStore();
+
+  useEffect(() => {
+    if (!id) return;
+    registerComponent(id, { value: '' });
+    return () => unregisterComponent(id);
+  }, [id]);
 
   const handleChangeText = (text: string) => {
     setLocalValue(text);
     onChangeText?.(text);
+    if (id) {
+      setComponentState(id, 'value', text);
+    }
   };
 
   const handleSubmitEditing = () => {
@@ -115,6 +128,9 @@ export function SDUITextInput({
 
     dispatch(resolveActionWithInput(onSubmit, localValue.trim()));
     setLocalValue('');
+    if (id) {
+      setComponentState(id, 'value', '');
+    }
   };
 
   return (

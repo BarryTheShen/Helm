@@ -2,7 +2,7 @@
 
 How to run, configure, and edit every part of the stack.
 
-> Last updated: 2026-04-08
+> Last updated: 2026-04-14
 
 ---
 
@@ -108,26 +108,32 @@ The database file lives at `backend/helm.db`. Delete it and re-run `alembic upgr
 ```bash
 cd backend
 source .venv/bin/activate
-pytest                         # all 113 tests
+pytest                         # all tests
 pytest -v                      # verbose
 pytest tests/test_auth.py      # single file
 pytest --cov=app               # with coverage
 ```
 
-Test files:
-| File | Tests | Covers |
-|------|-------|--------|
-| `tests/test_auth.py` | 12 | Registration, login, lockdown, JWT |
-| `tests/test_calendar.py` | 8 | Calendar CRUD, bulk delete |
-| `tests/test_notifications.py` | 6 | Notifications + mark-read action |
-| `tests/test_workflows.py` | 10 | Workflow CRUD, cron scheduling |
-| `tests/test_actions.py` | 15 | Action registry, endpoint auth, each handler |
-| `tests/test_drafts.py` | 8 | Draft lifecycle (set/approve/reject/overwrite) |
-| `tests/test_users.py` | — | User management CRUD (admin-only) |
-| `tests/test_sessions.py` | — | Session listing, revocation |
-| `tests/test_templates.py` | — | SDUI template CRUD, apply, import |
-| `tests/test_sandbox.py` | — | Sandbox mode commit interception |
-| `tests/test_admin.py` | — | Admin stats endpoints |
+Test files (18 total):
+| File | Covers |
+|------|--------|
+| `tests/test_auth.py` | Registration, login, lockdown, JWT |
+| `tests/test_calendar.py` | Calendar CRUD, bulk delete |
+| `tests/test_notifications.py` | Notifications + mark-read action |
+| `tests/test_workflows.py` | Workflow CRUD, cron scheduling |
+| `tests/test_actions.py` | Action registry, endpoint auth, each handler |
+| `tests/test_drafts.py` | Draft lifecycle (set/approve/reject/overwrite) |
+| `tests/test_users.py` | User management CRUD (admin-only) |
+| `tests/test_sessions.py` | Session listing, revocation |
+| `tests/test_templates.py` | SDUI template CRUD, apply, import |
+| `tests/test_sandbox.py` | Sandbox mode commit interception |
+| `tests/test_admin.py` | Admin stats endpoints |
+| `tests/test_triggers.py` | Trigger definition CRUD + test endpoint |
+| `tests/test_variable_resolver.py` | Variable expression resolution |
+| `tests/test_variables.py` | Custom variables CRUD |
+| `tests/test_data_sources.py` | Data source management |
+| `tests/test_modules.py` | Module and SDUI screen management |
+| `tests/test_sdui_parity.py` | Row-first validate/apply parity, proxy tool defs, streamed message_id reuse |
 
 ### User management (CLI)
 
@@ -282,13 +288,15 @@ npm run build    # outputs to web/dist/
 | Page | URL | Description |
 |------|-----|-------------|
 | Login | `/login` | Authenticates against backend `/auth/login` |
-| Dashboard | `/` | Admin stats overview (users, sessions, events, workflows) |
+| Dashboard | `/` | Admin stats: users, sessions, WS connections, events, workflows, notifications, screens, templates, audit entries |
 | Users | `/users` | CRUD user management (admin-only) |
 | Sessions | `/sessions` | View and revoke active sessions |
-| Audit | `/audit` | Filterable audit log viewer |
-| Workflows | `/workflows` | Manage automation workflows |
+| Audit | `/audit` | Filterable by action_type, user_id, resource_type, date range |
+| Workflows | `/workflows` | CRUD. Dropdown shows 5 of 7 trigger types (DATA_CHANGED and SERVER_EVENT missing) |
 | Templates | `/templates` | SDUI template library (CRUD + import/export) |
 | Components | `/components` | View/edit registered SDUI component definitions |
+| Variables | `/variables` | Two tabs: Variables CRUD + Data Sources management |
+| Actions & Triggers | `/actions-triggers` | Two tabs: hardcoded actions catalog (19 actions, 6 categories) + TriggerDefinition CRUD with test button |
 | Editor | `/editor` | Custom 3-panel visual SDUI editor with template library, device preview, and draft publishing |
 
 ### Custom SDUI Editor

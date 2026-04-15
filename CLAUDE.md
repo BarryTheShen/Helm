@@ -63,10 +63,10 @@ Helm/
 │   │   ├── config.py           # Settings (pydantic-settings)
 │   │   ├── database.py         # SQLAlchemy async engine + session
 │   │   ├── dependencies.py     # get_current_user, get_db, require_admin, PaginationParams
-│   │   ├── models/             # SQLAlchemy ORM models (14 models)
-│   │   ├── schemas/            # Pydantic request/response schemas (15 files)
-│   │   ├── routers/            # FastAPI routers (15 route files)
-│   │   ├── services/           # Business logic (auth, agent_proxy, ws_manager, workflow_engine, audit, component_seed)
+│   │   ├── models/             # SQLAlchemy ORM models (18 models)
+│   │   ├── schemas/            # Pydantic request/response schemas (16 files)
+│   │   ├── routers/            # FastAPI routers (18 route files)
+│   │   ├── services/           # Business logic (auth, agent_proxy, ws_manager, workflow_engine, audit, component_seed, variable_resolver, trigger_engine)
 │   │   ├── mcp/                # MCP server (FastMCP) + tool implementations
 │   │   ├── middleware/         # ASGI middleware (sandbox.py)
 │   │   └── utils/              # security.py (JWT, bcrypt)
@@ -82,22 +82,25 @@ Helm/
 │       ├── test_sessions.py
 │       ├── test_templates.py
 │       ├── test_sandbox.py
-│       └── test_admin.py
+│       ├── test_admin.py
+│       ├── test_triggers.py
+│       └── test_variable_resolver.py
 ├── web/                          # Web Admin Panel (Vite + React + TypeScript + Tailwind)
 │   ├── src/
 │   │   ├── App.tsx               # React Router, auth guard, AdminLayout
-│   │   ├── pages/                # Login, Dashboard, Users, Sessions, Audit, Workflows, Templates, Components, Editor
+│   │   ├── pages/                # Login, Dashboard, Users, Sessions, Audit, Workflows, Templates, Components, Editor, Variables, ActionsTriggersPage
 │   │   ├── lib/
 │   │   │   ├── api.ts            # Typed fetch wrapper for admin endpoints
 │   │   │   ├── sduiAdapter.ts    # Legacy format normalization (Puck conversion removed)
 │   │   │   └── utils.ts          # Shared helpers
 │   │   ├── editor/               # Custom 3-panel SDUI editor (replaced Puck)
-│   │   │   ├── types.ts          # EditorRow/Cell/Screen types, DevicePresets, ComponentRegistry
+│   │   │   ├── types.ts          # EditorRow/Cell/Screen types, DevicePresets, ComponentRegistry, ActionRule/ActionStep
 │   │   │   ├── componentSchemas.ts # Per-component prop schemas for property inspector
-│   │   │   ├── useEditorStore.ts # Zustand store — rows, selection, clipboard, undo/redo
+│   │   │   ├── useEditorStore.ts # Zustand store — rows, selection, clipboard, undo/redo, updateCellRules
 │   │   │   ├── StructureTree.tsx # Left panel — screen structure tree with CRUD
 │   │   │   ├── EditorCanvas.tsx  # Center panel — interactive canvas with previews
-│   │   │   ├── PropertyInspector.tsx # Right panel — contextual property editor
+│   │   │   ├── PropertyInspector.tsx # Right panel — tabbed (Properties/Rules) contextual editor
+│   │   │   ├── RuleBuilder.tsx   # Notion-style visual rule builder for action chains
 │   │   │   └── ComponentPicker.tsx # Component type selection popover
 │   │   ├── stores/authStore.ts   # Zustand auth state
 │   │   └── components/           # AdminLayout sidebar + top bar
@@ -128,7 +131,7 @@ npx expo start --tunnel     # Tunnel mode (works across networks, uses ngrok)
 
 ### Backend
 cd backend && uvicorn app.main:app --reload   # FastAPI dev server
-cd backend && pytest                           # Run backend tests (113 tests)
+cd backend && pytest                           # Run backend tests (200 tests)
 
 ### Web Admin Panel
 cd web && npm run dev                          # Vite dev server at http://localhost:5173 (auto-increments if busy)
@@ -222,10 +225,18 @@ This loop is mandatory. Never skip steps. Never declare a bug fixed without veri
 
 ## Known Patterns & Gotchas
 
-<!-- Add patterns and gotchas as you discover them during development -->
-(empty — update as the project grows)
+- **Agent nesting depth**: Max 3 levels (helm-dev → sub-agent → sub-sub-agent). Deeper nesting causes workflow cancellation. plan-critic and feature-validator are the only level-2 agents.
+- **Session context**: `.helm-sessions/current/` holds runtime context (global-context.md, current-plan.md, etc.). These are git-ignored. due-diligence writes to them; all agents read from them before exploring source.
+- **Feature completeness**: reviewer always invokes feature-validator to check Blueprint specs. Never approve a feature that only has UI but no backing data/actions/dependencies.
+- **Plan persistence**: Planner writes to `.helm-sessions/current/current-plan.md`. If the session is interrupted, the plan survives for resumption.
+- **Completion loop**: NOTHING is done until feature-critic approves. Loop is: tester → reviewer → live-tester → ui-reviewer → feature-critic. Rejection from feature-critic resets to tester. Max 5 cycles before escalation to user.
+- **Context budget / PARTIAL RESULT**: All sub-agents report PARTIAL RESULT when context runs low, listing completed items and remaining items. helm-dev re-invokes with the Continuation Prompt rather than skipping. Large tasks are proactively split before overflow.
+- **Agent autonomy**: Sub-agents (live-tester, ui-reviewer, feature-critic, etc.) read session files (global-context.md, current-plan.md, feature-map.md) to self-direct. helm-dev passes HIGH-LEVEL task + session file pointers — not detailed per-screen instructions.
 
 ## Common Mistakes to Avoid
 
 <!-- Claude: when you make a mistake and get corrected, add it here so you don't repeat it -->
-(empty — update as patterns emerge)
+- **Infinite sub-agent recursion**: A sub-agent seeing a task and delegating it to another sub-agent who delegates further. All non-orchestrator agents must have `agents: []` except planner (→ plan-critic) and reviewer (→ feature-validator).
+- **Parallel sub-agent invocations**: Causes context cancellation. Always invoke ONE agent, wait, then invoke the next.
+- **Over-specifying sub-agent work**: Don't tell live-tester which screens to click or ui-reviewer which exact URLs to visit. They read session files and self-direct. Over-specification wastes orchestrator context and prevents agent autonomy.
+- **Skipping PARTIAL RESULT continuation**: When a sub-agent returns PARTIAL RESULT, the orchestrator MUST re-invoke with the Continuation Prompt. Never skip the Remaining items and declare the task done.

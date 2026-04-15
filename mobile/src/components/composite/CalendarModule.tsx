@@ -2,10 +2,13 @@
  * CalendarModule — Tier 3 composite module.
  * MVP: Month grid view with event dots and day agenda on tap.
  * Wraps a simple built-in calendar (no external library for MVP).
+ * Supports pull-to-refresh when connected to a data source.
  */
-import React, { useState, useMemo } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import React, { useState, useMemo, useCallback } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { themeColors } from '@/theme/tokens';
+import { useDataSource, clearDataSourceCache } from '@/hooks/useDataSource';
+import type { SDUIDataBinding } from '@/types/sdui';
 
 interface CalendarModuleProps {
   defaultView?: 'month' | 'threeDay';
@@ -16,16 +19,48 @@ interface CalendarModuleProps {
     end: string;
     allDay?: boolean;
     sourceColor?: string;
-    properties?: Record<string, any>;
+    properties?: Record<string, unknown>;
   }>;
+  dataBinding?: SDUIDataBinding;
+  onDataRefresh?: () => void;
 }
 
 const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
-export function CalendarModule({ defaultView = 'month', events = [] }: CalendarModuleProps) {
+export function CalendarModule({ defaultView = 'month', events: eventsProp = [], dataBinding, onDataRefresh }: CalendarModuleProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [view, setView] = useState(defaultView);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Data source integration: use bound data as events if available
+  const { data: dataSourceData, refresh: dsRefresh } = useDataSource(dataBinding);
+
+  const events = useMemo(() => {
+    if (dataSourceData && dataSourceData.length > 0) {
+      return dataSourceData.map((row) => ({
+        id: String(row.id ?? ''),
+        title: String(row.title ?? ''),
+        start: String(row.start ?? row.start_time ?? ''),
+        end: String(row.end ?? row.end_time ?? ''),
+        allDay: Boolean(row.allDay ?? row.is_all_day ?? false),
+        sourceColor: row.sourceColor as string | undefined ?? row.color as string | undefined,
+        properties: row.properties as Record<string, unknown> | undefined,
+      }));
+    }
+    return eventsProp;
+  }, [dataSourceData, eventsProp]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    if (dataBinding) {
+      clearDataSourceCache(dataBinding.dataSourceId);
+    }
+    const refresh = onDataRefresh ?? dsRefresh;
+    refresh();
+    // Brief delay so the spinner is visible
+    setTimeout(() => setRefreshing(false), 600);
+  }, [dataBinding, onDataRefresh, dsRefresh]);
 
   const today = new Date();
   const year = currentMonth.getFullYear();
@@ -71,7 +106,12 @@ export function CalendarModule({ defaultView = 'month', events = [] }: CalendarM
     selectedDate && d.getDate() === selectedDate.getDate() && d.getMonth() === selectedDate.getMonth() && d.getFullYear() === selectedDate.getFullYear();
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={themeColors.primary} />
+      }
+    >
       {/* View Switcher */}
       <View style={styles.viewSwitcher}>
         <TouchableOpacity
@@ -173,7 +213,7 @@ export function CalendarModule({ defaultView = 'month', events = [] }: CalendarM
           <Text style={styles.threeDaySubtext}>Coming in next update</Text>
         </View>
       )}
-    </View>
+    </ScrollView>
   );
 }
 

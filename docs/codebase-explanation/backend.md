@@ -1,6 +1,6 @@
 # Backend — Python FastAPI Server
 
-> Last updated: 2026-04-12
+> Last updated: 2026-04-14
 
 ## Tier 1: TLDR
 
@@ -59,10 +59,10 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | Config | `app/config.py` | pydantic-settings loading from `.env` (resolves from repo root) |
 | Database | `app/database.py` | Async SQLAlchemy engine + session factory |
 | Auth dependencies | `app/dependencies.py` | `get_current_user`, `get_current_user_id`, `get_token_from_request`, `require_admin`, `PaginationParams` |
-| Models | `app/models/` | 14 SQLAlchemy ORM models |
-| Schemas | `app/schemas/` | Pydantic request/response models (15 files) |
-| Routers | `app/routers/` | 15 route files |
-| Services | `app/services/` | auth, agent_proxy, websocket_manager, workflow_engine, action_registry, audit, component_seed |
+| Models | `app/models/` | 18 SQLAlchemy ORM models |
+| Schemas | `app/schemas/` | Pydantic request/response models (16 files) |
+| Routers | `app/routers/` | 18 route files |
+| Services | `app/services/` | auth, agent_proxy, websocket_manager, workflow_engine, action_registry, audit, component_seed, variable_resolver, trigger_engine |
 | SDUI shared contract helpers | `app/services/sdui_state.py` | Live/draft key helpers, shared validate/apply pipeline, row-aware counters, and broadcast utilities used by REST + MCP |
 | Middleware | `app/middleware/sandbox.py` | Sandbox mode ASGI middleware |
 | MCP | `app/mcp/` | MCP server + shared tool implementations |
@@ -72,26 +72,26 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 
 ### `main.py` — App Setup
 
-**Middleware:**
-- `CORSMiddleware`: `allow_origins=["*"]`, `allow_credentials=True`, `allow_methods=["*"]`, `allow_headers=["*"]`
-- `SandboxMiddleware`: Checks `X-Helm-Sandbox` header; intercepts DB commits in sandbox mode
+**Middleware (in order of execution):**
+1. `SandboxMiddleware` — `X-Helm-Sandbox: true` header → intercepts DB commits, records to `sandbox_actions`
+2. `CORSMiddleware` — allows all origins (`*`), credentials=True
 
 **Lifespan events:**
-- Startup: `start_scheduler()`, starts MCP session manager, creates `_run_time_alerts()` background task, seeds component registry
+- Startup: `start_scheduler()`, manually starts MCP session manager (FastAPI does not invoke sub-app lifespans for mounted apps), seeds component registry (`seed_components()`), seeds templates (`seed_templates()`) — both are no-ops if already populated, optionally starts `_run_time_alerts()` background task
 - Shutdown: cancels alert task, stops MCP session manager, `stop_scheduler()`
 
-**Background task `_run_time_alerts()`**: Every 2 minutes, saves a Notification to DB for every connected user and broadcasts a notification via WebSocket. Controlled by `DEMO_TIME_ALERTS=true` env var.
+**Background task `_run_time_alerts()`**: Every 2 minutes, saves a Notification to DB for every connected user and broadcasts a notification via WebSocket. Controlled by `DEMO_TIME_ALERTS` env var — **defaults to true**. Disable in production.
 
-**Routers registered:** auth, modules, chat, calendar, notifications, agent_config, workflows, actions, websocket, users, sessions, audit, components, templates, admin
+**Routers registered:** auth, modules, chat, calendar, notifications, agent_config, workflows, actions, websocket, users, sessions, audit, components, templates, admin, variables, data_sources, triggers
 
 **MCP mounted:** `app.mount(settings.mcp_path, _MCPAuthMiddleware(mcp.streamable_http_app()))` → at `/mcp`
 
 ---
 
-## Database Tables (14 total)
+## Database Tables (18 total)
 
 | Table | Key Fields |
-|-------|-----------|
+|-------|------------|
 | `users` | id (UUID PK), username (unique), password_hash, role (admin/user) |
 | `devices` | id, user_id (FK), device_name, device_id (unique), config_json, last_seen |
 | `sessions` | id, user_id (FK), device_id (FK), token (unique), expires_at, is_active |
@@ -101,25 +101,24 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | `workflows` | id, user_id (FK), name, trigger_type (enum), trigger_config, action_config, is_active, run_count, last_run_at |
 | `agent_configs` | id, user_id (FK, unique), provider, model, api_key_encrypted, base_url, system_prompt, temperature, max_tokens, is_active |
 | `module_states` | id, user_id (FK), module_type (string key), state_json, version |
-| `audit_logs` | id, user_id (FK), action (string), resource_type, resource_id, details (JSON), ip_address, created_at |
-| `component_registry` | id, type (unique), category (atomic/structural/composite/hardcoded), display_name, description, props_schema (JSON), is_active |
-| `sdui_templates` | id, name, description, module_id, screen_json, tags (JSON), is_public, user_id (FK), created_at, updated_at |
-| `sdui_screen_history` | id, module_id, user_id (FK), screen_json, version, source (user/ai/template), created_at |
-| `sandbox_actions` | id, user_id, method, path, request_body, timestamp |
+| `audit_logs` | id, user_id, action_type (50, indexed), resource_type (50, indexed), resource_id, details_json, ip_address |
+| `component_registry` | id, type (100, unique, indexed), tier (50), name, icon, description, props_schema (JSON), default_props (JSON), is_active |
+| `sdui_templates` | id, name, description, category (indexed), screen_json (JSON), created_by (FK), is_public |
+| `sdui_screen_history` | id, module_id (100, indexed), user_id (FK), screen_json, version, source (50), is_starred |
+| `sandbox_actions` | id, session_id (100, indexed), user_id (FK), method, path (500), request_body (JSON), response_body (JSON), response_code |
+| `custom_variables` | id, user_id (FK), name, value, type (text/number/boolean), description |
+| `data_sources` | id, user_id (FK), name, type, config_json |
+| `trigger_definitions` | id, user_id (FK), name, trigger_type (schedule/data_change/server_event), config_json, action_chain_json, enabled, created_at, updated_at |
 
 **`module_states` key naming conventions:**
 | Key | Content |
 |-----|---------|
 | `sdui__{module_id}` | Live SDUI screen JSON (e.g. `sdui__home`) |
 | `sdui__{module_id}__draft` | Pending draft awaiting user approval |
-| `config__{module_id}` | Current per-module SDUI config such as `auto_approve_drafts` |
-| `sdui__{module_id}__config` | Legacy SDUI-scoped config key still read for backward compatibility |
-| `_tabs_config` | `{"hidden_tabs": [...]}` — per-user hidden tab list |
-| `_custom_modules` | `[{id, name, icon}, ...]` — per-user custom module definitions |
-| `form_data__{form_id}` | Form submission history |
-| `notes__{user_id}` | Notes data |
-
-**Default `devices.config_json`:** `{"tab_bar_modules": ["chat", "calendar", "alerts"], "default_module": "chat", "nav_mode": "tabs"}`
+| `_tabs_config` | Per-user tab visibility + overrides |
+| `_custom_modules` | Per-user custom module definitions |
+| `form_data__{form_id}` | Form submission storage |
+| `forms` | General forms state (used by `get_form_data` MCP tool) |
 
 ---
 
@@ -139,25 +138,26 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/modules` | ✅ | List all tabs with enabled/disabled status; includes `is_custom` boolean per module |
-| POST | `/api/sdui/modules` | ✅ | Create custom module `{name, icon}` → generates slug-based ID; stored in `_custom_modules` |
-| DELETE | `/api/sdui/modules/{module_id}` | ✅ | Delete custom module (blocks built-in deletion); cleans up SDUI data |
+| GET | `/api/modules` | ✅ | List all tabs with enabled/disabled status, hidden/enabled state and overrides |
 | DELETE | `/api/modules/{module_id}` | ✅ | Hide a tab (broadcasts `tabs_updated` WS event) |
 | POST | `/api/modules/{module_id}/show` | ✅ | Restore a hidden tab (broadcasts `tabs_updated`) |
 | PATCH | `/api/modules/{module_id}/config` | ✅ | Rename tab and/or change icon `{name?, icon?}` — broadcasts `tabs_updated` |
-| GET | `/api/modules/{module_id}/state` | ✅ | Get module state; returns defaults if not set |
-| POST | `/api/modules/{module_id}/action` | ✅ | Execute mini-app action (random_number, play_rps, create_note, delete_note) |
-| GET | `/api/devices/config` | ✅ | Get device tab config (tab_bar_modules, default_module, nav_mode) |
-| PUT | `/api/devices/config` | ✅ | Update device tab config |
-| GET | `/api/sdui` | ✅ | List live AI-set screens across all modules; `sections_count` counts V2 rows or legacy sections |
-| GET | `/api/sdui/{module_id}` | ✅ | Get normalized live SDUI screen `{screen, version}` for module |
-| POST | `/api/sdui/{module_id}` | ✅ | Validate + store the shared row-first save/apply contract (legacy sections still accepted); saves a draft unless `auto_approve_drafts` is enabled |
-| DELETE | `/api/sdui/{module_id}` | ✅ | Delete live, draft, and config state for a module; broadcasts draft-cleared then live-clear events |
-| GET | `/api/sdui/{module_id}/config` | ✅ | Get module SDUI config; reads `config__{module_id}` first, then legacy `sdui__{module_id}__config` |
-| PUT | `/api/sdui/{module_id}/config` | ✅ | Set module SDUI config (`auto_approve_drafts`) |
+| GET | `/api/modules/custom` | ✅ | List only custom modules |
+| POST | `/api/modules/custom` | ✅ | Create custom module `{name, icon}` → generates slug-based ID |
+| DELETE | `/api/modules/custom/{module_id}` | ✅ | Delete custom module + its SDUI data |
+| GET | `/api/sdui/{module_id}` | ✅ | Get live SDUI screen `{screen, version}` |
 | GET | `/api/sdui/{module_id}/draft` | ✅ | Get pending draft `{screen, has_draft}` |
-| POST | `/api/sdui/{module_id}/draft/approve` | ✅ | Approve draft → publish to live screen |
-| POST | `/api/sdui/{module_id}/draft/reject` | ✅ | Reject + delete draft; optional `{feedback?}` body |
+| POST | `/api/sdui/{module_id}` | ✅ | Set SDUI screen (REST equivalent of MCP set_screen) |
+| DELETE | `/api/sdui/{module_id}` | ✅ | Delete SDUI screen (live + draft) |
+| GET | `/api/sdui/modules` | ✅ | List all modules with `is_custom` flag |
+| GET | `/api/sdui/{module_id}/tabs` | ✅ | Get tab config |
+| PUT | `/api/sdui/{module_id}/tabs` | ✅ | PUT tab config |
+| GET | `/api/sdui/{module_id}/history` | ✅ | Paginated screen history |
+| GET | `/api/sdui/{module_id}/history/{entry_id}` | ✅ | Single history entry detail |
+| POST | `/api/sdui/{module_id}/validate` | ✅ | Validate SDUI payload |
+| POST | `/api/sdui/{module_id}/duplicate` | ✅ | Duplicate screen to another module |
+| GET | `/api/device/config` | ✅ | Get device config |
+| PUT | `/api/device/config` | ✅ | Update device config |
 
 ### Chat (`/api/chat`)
 
@@ -170,12 +170,12 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/calendar/events` | ✅ | List events; optional `start_date`, `end_date`, pagination (`skip`, `limit`, `search`) |
-| POST | `/api/calendar/events` | ✅ | Create event; auto-refreshes SDUI calendar screen; fires `EVENT_CREATED` trigger |
-| POST | `/api/calendar/add-meeting` | ✅ | User-friendly meeting creation `{title, date, start_time, end_time, description?, color?}` |
-| DELETE | `/api/calendar/events/{event_id}` | ✅ | Delete event; auto-refreshes SDUI calendar screen |
+| GET | `/api/calendar/events` | ✅ | List events; optional `start_date`, `end_date`, pagination |
+| POST | `/api/calendar/events` | ✅ | Create event; fires `EVENT_CREATED` workflow trigger; auto-refreshes SDUI calendar screen |
+| GET | `/api/calendar/events/{event_id}` | ✅ | Get single event |
+| PUT | `/api/calendar/events/{event_id}` | ✅ | Update event; fires `EVENT_UPDATED`; updates SDUI |
+| DELETE | `/api/calendar/events/{event_id}` | ✅ | Delete event |
 | DELETE | `/api/calendar/events/bulk` | ✅ | Bulk delete events `{ids: [...]}` |
-| PUT | `/api/calendar/events/{event_id}` | ✅ | Update event fields; fires `EVENT_UPDATED` trigger |
 
 ### Notifications (`/api/notifications`)
 
@@ -184,7 +184,7 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | GET | `/api/notifications` | ✅ | List notifications; params: `unread_only=False`, pagination (`skip`, `limit`, `search`) |
 | POST | `/api/notifications/{id}/read` | ✅ | Mark one notification as read |
 | POST | `/api/notifications/read-all` | ✅ | Mark all notifications as read |
-| DELETE | `/api/notifications/bulk` | ✅ | Bulk delete notifications `{ids: [...]}` |
+| DELETE | `/api/notifications/bulk-delete` | ✅ | Bulk delete notifications `{ids: [...]}` |
 
 ### Agent Config (`/api/agent`)
 
@@ -210,6 +210,16 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | POST | `/api/actions/execute` | ✅ | Execute a named registered action |
 | GET | `/api/actions/functions` | ✅ | List all registered action names |
 
+### Triggers (`/api/triggers`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/triggers` | ✅ | List user's trigger definitions; paginated |
+| POST | `/api/triggers` | ✅ | Create trigger `{name, trigger_type, config_json, action_chain_json, enabled}` |
+| PUT | `/api/triggers/{id}` | ✅ | Update trigger (partial) |
+| DELETE | `/api/triggers/{id}` | ✅ 204 | Delete trigger |
+| POST | `/api/triggers/{id}/test` | ✅ | Manually fire a trigger for testing — runs action chain via `fire_trigger()` |
+
 ### WebSocket & Health
 
 | Path | Auth | Description |
@@ -231,27 +241,27 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/sessions` | ✅ Admin | List all sessions (admin view) |
-| GET | `/api/sessions/mine` | ✅ | List current user's sessions |
-| DELETE | `/api/sessions/{id}` | ✅ | Revoke a session |
-| DELETE | `/api/sessions/revoke-others` | ✅ | Revoke all sessions except current |
+| GET | `/api/sessions` | ✅ Admin | All active sessions |
+| GET | `/api/sessions/me` | ✅ | My active sessions |
+| DELETE | `/api/sessions/me/others` | ✅ | Revoke all sessions except current |
+| DELETE | `/api/sessions/{id}` | ✅ Admin | Revoke specific session |
 
 ### Audit Log (`/api/audit`)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/api/audit` | ✅ Admin | List all audit logs with pagination; filterable by action, resource_type |
-| GET | `/api/audit/mine` | ✅ | List current user's audit logs |
+| GET | `/api/audit/me` | ✅ | List current user's audit logs |
 
 ### Component Registry (`/api/components`)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/components` | ✅ | List all registered SDUI components |
-| POST | `/api/components` | ✅ Admin | Register a new component `{type, category, display_name, ...}` |
-| GET | `/api/components/{id}` | ✅ | Get component by ID |
-| PUT | `/api/components/{id}` | ✅ Admin | Update component |
-| DELETE | `/api/components/{id}` | ✅ Admin | Delete component |
+| GET | `/api/components/registry` | ✅ | All active components |
+| GET | `/api/components/registry/{type}` | ✅ | Single component by type |
+| POST | `/api/components/registry` | ✅ Admin | Create component |
+| PUT | `/api/components/registry/{type}` | ✅ Admin | Update component |
+| DELETE | `/api/components/registry/{type}` | ✅ Admin | Soft-delete component |
 
 ### SDUI Templates (`/api/templates`)
 
@@ -270,19 +280,17 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/admin/stats` | ✅ Admin | System stats (user count, sessions, events, etc.) |
-| GET | `/api/admin/workflows/stats` | ✅ Admin | Workflow execution statistics |
-| GET | `/api/admin/websocket/stats` | ✅ Admin | Active WebSocket connection info |
+| GET | `/api/admin/stats` | ✅ Admin | Aggregate counts (users, sessions, WS connections, events, workflows, notifications, screens, templates, audit entries) |
+| GET | `/api/admin/stats/workflows` | ✅ Admin | Per-workflow analytics |
+| GET | `/api/admin/stats/websocket` | ✅ Admin | Live WS connection details |
 
 ### Modules — Screen History & Utilities (added to `/api/sdui`)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/sdui/{module_id}/history` | ✅ | List screen history for module |
-| GET | `/api/sdui/{module_id}/history/{version}` | ✅ | Get specific history entry |
-| POST | `/api/sdui/{module_id}/history/{version}/restore` | ✅ | Restore a historical screen version |
-| DELETE | `/api/sdui/{module_id}/history` | ✅ | Clear screen history |
-| POST | `/api/sdui/validate` | ✅ | Validate SDUI JSON against the same row-first normalize/validate contract used by save/apply |
+| GET | `/api/sdui/{module_id}/history` | ✅ | Paginated screen history for module |
+| GET | `/api/sdui/{module_id}/history/{entry_id}` | ✅ | Single history entry detail |
+| POST | `/api/sdui/{module_id}/validate` | ✅ | Validate SDUI payload |
 | POST | `/api/sdui/{module_id}/duplicate` | ✅ | Duplicate a screen to another module |
 
 ---
@@ -351,12 +359,44 @@ Registered built-in actions (singleton `registry`):
 | `delete_calendar_event` | Deletes `CalendarEvent` by `event_id` |
 | `approve_draft` | Calls `tools.approve_draft()` |
 | `reject_draft` | Calls `tools.reject_draft()` with optional `feedback` |
+| `set_variable` | Upserts a CustomVariable by user + name |
+
+**Client-only action stubs (13):** `navigate`, `go_back`, `open_url`, `open_sheet`, `dismiss`, `server_action`, `set_component_state`, `toggle`, `show_notification`, `show_alert`, `haptic`, `share`, `copy_text`, `delay`, `chain`, `conditional` — these return `{"status": "client_only"}` so the action registry has a complete catalog for the web admin action catalog UI.
+
+**Total registered actions: 22** (9 server-side handlers + 13 client-only stubs)
+
+### `services/variable_resolver.py`
+
+Resolves `{{expression}}` mustache syntax in SDUI payloads server-side.
+
+**Supported scopes:**
+| Scope | Pattern | Source |
+|-------|---------|--------|
+| `user` | `{{user.name}}`, `{{user.id}}`, `{{user.email}}` | Current user object |
+| `component` | `{{component.<id>.value}}` | Component state dict |
+| `self` | `{{self.value}}` | Shorthand for current component |
+| `custom` | `{{custom.<name>}}` | CustomVariable by user + name |
+| `env` | `{{env.<key>}}` | `os.environ` |
+| `data` | `{{data.<source_name>.<field>}}` | Data source cache dict |
+
+Async entry point: `resolve_expression(expr, context)` replaces all `{{...}}` in a string. Unresolved expressions are left as-is.
+
+### `services/trigger_engine.py`
+
+Executes action chains defined in TriggerDefinition records.
+
+| Function | Purpose |
+|----------|--------|
+| `fire_trigger(trigger, db)` | Parses `action_chain_json` and runs each action through `action_registry.execute()` |
+| `register_scheduled_triggers(scheduler)` | V1 placeholder for APScheduler cron-based triggers |
 
 ### `services/workflow_engine.py`
 
 APScheduler (`AsyncIOScheduler(timezone="UTC")`)-based automation engine.
 
-**TriggerType enum:** `EVENT_CREATED`, `EVENT_UPDATED`, `FORM_SUBMITTED`, `SCHEDULE` (cron string in `trigger_config.cron`), `MESSAGE_RECEIVED`
+**TriggerType enum:** `EVENT_CREATED`, `EVENT_UPDATED`, `FORM_SUBMITTED`, `SCHEDULE` (cron string in `trigger_config.cron`), `MESSAGE_RECEIVED`, `DATA_CHANGED`, `SERVER_EVENT`
+
+⚠️ `DATA_CHANGED` and `SERVER_EVENT` exist in the enum but the Workflows page dropdown only shows 5 types (these two are missing from the UI).
 
 | Function | Purpose |
 |----------|---------|
@@ -375,8 +415,9 @@ APScheduler (`AsyncIOScheduler(timezone="UTC")`)-based automation engine.
 ### `services/component_seed.py`
 
 Seeds the `component_registry` table on startup with 11 default components:
-- **7 Atomic:** Text, Markdown, Button, Image, TextInput, Icon, Divider
-- **4 Hardcoded/Composite:** Container, CalendarModule, ChatModule, NotesModule
+- `text`, `markdown`, `button`, `image`, `container`, `calendar`, `alert`, `list`, `form`, `divider`, `spacer`
+
+Plus 4 hardcoded composites: `calendar_module`, `chat_module`, `notes_module`, `input_bar`
 
 Only inserts if the component type doesn't already exist.
 

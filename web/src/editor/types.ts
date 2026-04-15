@@ -1,5 +1,17 @@
 // Editor state types for the Helm SDUI visual editor
 
+export interface ActionStep {
+  id: string;
+  type: string;
+  params: Record<string, unknown>;
+}
+
+export interface ActionRule {
+  id: string;
+  trigger: 'onPress' | 'onSubmit';
+  actions: ActionStep[];
+}
+
 export interface EditorComponent {
   id: string;
   type: string;
@@ -11,6 +23,7 @@ export interface EditorCell {
   id: string;
   width: number | 'auto';
   content: EditorComponent | null;
+  rules?: ActionRule[];
   [key: string]: unknown;
 }
 

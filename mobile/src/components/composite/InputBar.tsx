@@ -2,9 +2,10 @@
  * InputBar — Tier 3 composite module.
  * Universal input strip: [TextInput] [Send]
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, TextInput, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { themeColors } from '@/theme/tokens';
+import { useComponentStateStore } from '@/stores/componentStateStore';
 import type { SDUIAction } from '@/types/sdui';
 
 const INPUT_TEMPLATE_TOKEN = '{{input}}';
@@ -75,6 +76,7 @@ function resolveActionWithInput(action: SDUIAction, input: string): SDUIAction {
 }
 
 interface InputBarProps {
+  id?: string;
   placeholder?: string;
   maxLines?: number;
   onSend?: SDUIAction;
@@ -87,6 +89,7 @@ const INPUT_VERTICAL_PADDING = 8;
 const INPUT_MIN_HEIGHT = INPUT_LINE_HEIGHT + INPUT_VERTICAL_PADDING * 2;
 
 export function InputBar({
+  id,
   placeholder = 'Message...',
   maxLines = 6,
   onSend,
@@ -95,6 +98,20 @@ export function InputBar({
 }: InputBarProps) {
   const [text, setText] = useState('');
   const [contentHeight, setContentHeight] = useState(INPUT_MIN_HEIGHT);
+  const { registerComponent, unregisterComponent, setComponentState } = useComponentStateStore();
+
+  useEffect(() => {
+    if (!id) return;
+    registerComponent(id, { value: '' });
+    return () => unregisterComponent(id);
+  }, [id]);
+
+  const handleTextChange = (newText: string) => {
+    setText(newText);
+    if (id) {
+      setComponentState(id, 'value', newText);
+    }
+  };
 
   const normalizedMaxLines = Number.isFinite(maxLines) ? Math.max(1, Math.trunc(maxLines)) : 6;
   const maxInputHeight = INPUT_LINE_HEIGHT * normalizedMaxLines + INPUT_VERTICAL_PADDING * 2;
@@ -111,6 +128,9 @@ export function InputBar({
 
     setText('');
     setContentHeight(INPUT_MIN_HEIGHT);
+    if (id) {
+      setComponentState(id, 'value', '');
+    }
   };
 
   return (
@@ -122,7 +142,7 @@ export function InputBar({
           { height: inputHeight, maxHeight: maxInputHeight },
         ]}
         value={text}
-        onChangeText={setText}
+        onChangeText={handleTextChange}
         onContentSizeChange={(event) => {
           setContentHeight(Math.max(INPUT_MIN_HEIGHT, event.nativeEvent.contentSize.height));
         }}

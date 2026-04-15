@@ -1,6 +1,6 @@
 # Protocol — Communication Layer
 
-> Last updated: 2026-04-10
+> Last updated: 2026-04-14
 
 ## Tier 1: TLDR
 
@@ -263,6 +263,38 @@ These are the registered functions callable via `server_action`:
 | `delete_calendar_event` | `{event_id}` | Deletes calendar event |
 | `approve_draft` | `{module_id}` | Promotes SDUI draft to live |
 | `reject_draft` | `{module_id, feedback?}` | Discards SDUI draft |
+| `set_variable` | `{name, value, type?}` | Upserts a CustomVariable by user + name |
+
+**Client-only action stubs (16):** `navigate`, `go_back`, `open_url`, `open_sheet`, `dismiss`, `server_action`, `set_component_state`, `toggle`, `show_notification`, `show_alert`, `haptic`, `share`, `copy_text`, `delay`, `chain`, `conditional` — acknowledged by backend but executed on client.
+
+### Trigger Definitions (`/api/triggers`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/triggers` | ✅ | List user’s trigger definitions; paginated |
+| POST | `/api/triggers` | ✅ | Create trigger `{name, trigger_type, config_json, action_chain_json, enabled}` |
+| PUT | `/api/triggers/{id}` | ✅ | Update trigger (partial) |
+| DELETE | `/api/triggers/{id}` | ✅ 204 | Delete trigger |
+| POST | `/api/triggers/{id}/test` | ✅ | Manually fire — runs action chain via `fire_trigger()` |
+
+**Trigger types:** `schedule`, `data_change`, `server_event`
+
+**`action_chain_json` format:** JSON array of action steps: `[{"type": "<action_name>", "params": {...}}, ...]`
+
+### Variable Expression Format
+
+Template strings use `{{expression}}` mustache syntax. Resolved both server-side (`variable_resolver.py`) and client-side (`variableResolver.ts`).
+
+| Scope | Pattern | Source |
+|-------|---------|--------|
+| `user` | `{{user.name}}`, `{{user.id}}` | Current user |
+| `component` | `{{component.<id>.value}}` | Component state |
+| `self` | `{{self.value}}` | Current component shorthand |
+| `custom` | `{{custom.<name>}}` | CustomVariable record |
+| `env` | `{{env.<key>}}` | Environment variables |
+| `data` | `{{data.<source>.<field>}}` | Data source cache |
+
+Unresolved expressions are left as-is `{{original}}`. `{{input}}` is a backward-compat alias for `{{self.value}}`.
 
 ---
 

@@ -6,7 +6,7 @@
  *
  * The renderer auto-detects the format via isSDUIPage().
  */
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -33,11 +33,14 @@ import { colors, spacing, typography } from '@/theme/colors';
 import { resolveComponent } from '@/renderer/componentRegistry';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import { resolveIconName } from '@/components/atomic/SDUIIcon';
+import { useVariableContext } from '@/hooks/useVariableContext';
+import { resolveProps, type VariableContext } from '@/utils/variableResolver';
+import { useDataSource } from '@/hooks/useDataSource';
 
 // ── Flat-props extraction ─────────────────────────────────────────────────
 // AI-generated JSON often omits the "props" wrapper required by the V2 schema.
 // This extracts all non-structural keys as props so components still render.
-const STRUCTURAL_KEYS = new Set(['type', 'id', 'children', 'props']);
+const STRUCTURAL_KEYS = new Set(['type', 'id', 'children', 'props', 'dataBinding']);
 
 function extractFlatProps(comp: SDUIComponentV2): Record<string, any> {
   const result: Record<string, any> = {};
@@ -313,6 +316,18 @@ function V2ComponentRenderer({
   component: SDUIComponentV2;
   dispatch: ActionDispatcher;
 }) {
+  // Assemble variable context from stores + custom variables
+  const baseContext = useVariableContext(component?.id);
+
+  // Data binding: fetch data if the component specifies a dataBinding
+  const { data: dataSourceData, refresh: dataRefresh } = useDataSource(component?.dataBinding);
+
+  // Merge data-source data into the base context
+  const variableContext = useMemo<VariableContext>(() => ({
+    ...baseContext,
+    data: dataSourceData ? { items: dataSourceData } : baseContext.data,
+  }), [baseContext, dataSourceData]);
+
   if (!component || !component.type) {
     // Unwrap cell-format children: { id, width, content: { type, ... } }
     if ((component as any)?.content?.type) {
@@ -330,9 +345,12 @@ function V2ComponentRenderer({
   // Extract props: merge explicit props with any flat top-level keys.
   // Agents often place some props at the top level and some inside "props".
   const flatProps = extractFlatProps(component);
-  const props = Object.keys(flatProps).length > 0
+  const rawProps = Object.keys(flatProps).length > 0
     ? { ...flatProps, ...(component.props ?? {}) }
     : (component.props ?? {});
+
+  // Resolve {{expressions}} in string props
+  const props = resolveProps(rawProps, variableContext);
 
   // Try V2 registry first
   const Comp = resolveComponent(component.type);
@@ -347,6 +365,13 @@ function V2ComponentRenderer({
     );
     // Strip children from props to avoid passing array as React prop
     const { children: _dropped, ...cleanProps } = (props ?? {}) as any;
+
+    // Pass data binding info to composite modules for pull-to-refresh support
+    if (component.dataBinding) {
+      cleanProps.dataBinding = component.dataBinding;
+      cleanProps.onDataRefresh = dataRefresh;
+    }
+
     const childElements = validKids?.map((child: SDUIComponentV2, idx: number) => (
       <V2ComponentRenderer
         key={child.id ?? `${component.id}-child-${idx}`}

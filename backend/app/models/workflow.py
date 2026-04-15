@@ -14,6 +14,8 @@ class TriggerType(str, enum.Enum):
     FORM_SUBMITTED = "form_submitted"
     SCHEDULE = "schedule"
     MESSAGE_RECEIVED = "message_received"
+    DATA_CHANGED = "data_changed"
+    SERVER_EVENT = "server_event"
 
 
 class Workflow(Base, TimestampMixin):

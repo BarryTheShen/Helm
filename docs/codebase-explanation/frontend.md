@@ -1,6 +1,6 @@
 # Frontend — React Native (Expo) Mobile App
 
-> Last updated: 2026-04-09
+> Last updated: 2026-04-14
 
 ## Tier 1: TLDR
 
@@ -116,6 +116,7 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 | `useUIStore` | `src/stores/uiStore.ts` | `isConnected`, `errorBanner: {message, retry?}` | No |
 | `useSettingsStore` | `src/stores/settingsStore.ts` | `navigationMode`, `theme` | AsyncStorage: `navigation_mode`, `theme` |
 | `useTabsStore` | `src/stores/tabsStore.ts` | `hiddenTabs: string[]`, `moduleConfigs: Record<string, {name, icon}>` | No (reloaded from server) |
+| `componentStateStore` | `src/stores/componentStateStore.ts` | `states: Record<componentId, Record<key, any>>` | No (in-session only) |
 
 **Critical notes:**
 - `authStore.logout()` calls `POST /auth/logout` to invalidate the server session, then clears client-side token
@@ -202,6 +203,18 @@ Memoized stable callback. Handles all SDUI action types:
 ### `useBreakpoint()` → `'compact' | 'regular'`
 Returns `'compact'` (width < 768px) or `'regular'` (width ≥ 768px). Listens to `Dimensions` change events. Used by V2 row renderer for responsive layout.
 
+### `useVariableContext(selfId?)` → `VariableContext`
+Assembles the full variable context for SDUI expression resolution. Combines:
+- **User info** from auth store (`username`, `id`, `email`)
+- **Component state** from `componentStateStore`
+- **Custom variables** fetched from `GET /api/variables?limit=200` on first mount (module-level cache shared across instances)
+- **Self state** from `componentStates[selfId]` if `selfId` provided
+
+Returns `{ user, component, self, data, env, custom }` — consumed by `variableResolver.resolveExpression()`.
+
+### `useDataSource(name?)` → data
+Fetches from `GET /api/data-sources`, caches results. Used by V2 components for data binding via `dataBinding` field on `SDUIComponentV2`.
+
 ---
 
 ## Contexts
@@ -254,7 +267,7 @@ Rendered by `SDUIScreenRenderer` → `SDUIRenderer` (single component) in `src/c
 Persisted V2 screens are row-first. The mobile type guard only requires `rows`; `schema_version`, `module_id`, and `title` are optional on stored payloads.
 
 Component types (PascalCase — registered in `src/renderer/componentRegistry.ts`):
-`Text`, `Markdown`, `Button`, `Image`, `TextInput`, `Icon`, `Divider`, `Container`, `CalendarModule`, `ChatModule`, `NotesModule`, `InputBar`
+`Text`, `Markdown`, `Button`, `Image`, `TextInput`, `Icon`, `Divider`, `Container`, `CalendarModule`, `ChatModule`, `NotesModule`, `InputBar`, `Badge`, `Stat`, `List`, `Alert`
 
 Rendered by `SDUIPageRenderer` → `RowRenderer` → `CellRenderer` → `V2ComponentRenderer`.
 
@@ -315,9 +328,9 @@ Uses `resolveColor()` and `themeShadows` from `src/theme/tokens.ts`.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `CalendarModule` | Full MVP | Month grid + 3-day view stub; event dots; day agenda |
-| `ChatModule` | Placeholder | Shows "navigate to Chat tab" |
-| `NotesModule` | Placeholder | Shows "Notes will appear here" |
+| `CalendarModule` | Full MVP | Month grid + 3-day view stub; event dots; day agenda; pull-to-refresh via RefreshControl |
+| `ChatModule` | Placeholder | Shows "navigate to Chat tab"; pull-to-refresh via RefreshControl |
+| `NotesModule` | Placeholder | Shows "Notes will appear here"; pull-to-refresh via RefreshControl |
 | `InputBar` | Full MVP | Text input + send strip; send stays disabled unless both `onSend` and `dispatch` are available, and typed text is only cleared after a send action actually dispatches |
 
 ### Component Registry (`src/renderer/componentRegistry.ts`)

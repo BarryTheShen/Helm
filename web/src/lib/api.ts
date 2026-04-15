@@ -8,6 +8,107 @@ interface ApiOptions {
   suppressUnauthorizedHandler?: boolean;
 }
 
+// --- Pagination ---
+export interface PaginationParams {
+  limit?: number;
+  offset?: number;
+}
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+// --- Variables ---
+export interface Variable {
+  id: string;
+  name: string;
+  value: string;
+  type: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+export interface VariableCreate {
+  name: string;
+  value: string;
+  type: 'text' | 'number' | 'boolean';
+  description?: string;
+}
+export interface VariableUpdate {
+  name?: string;
+  value?: string;
+  type?: 'text' | 'number' | 'boolean';
+  description?: string;
+}
+
+// --- Data Sources ---
+export interface DataSource {
+  id: string;
+  name: string;
+  type: string;
+  connector: string;
+  config_json: string;
+  schema_json: string | null;
+  created_at: string;
+  updated_at: string;
+}
+export interface DataSourceCreate {
+  name: string;
+  type: string;
+  connector: string;
+  config_json?: string;
+}
+export interface DataSourceSchema {
+  source_id: string;
+  type: string;
+  schema: Record<string, unknown> | null;
+}
+export interface DataSourceQuery {
+  filters?: Record<string, unknown>;
+  limit?: number;
+  offset?: number;
+}
+export interface DataSourceResult {
+  source_id: string;
+  type: string;
+  data: unknown[];
+  count: number;
+}
+
+// --- Triggers ---
+export interface Trigger {
+  id: string;
+  name: string;
+  trigger_type: string;
+  config_json: string;
+  action_chain_json: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+export interface TriggerCreate {
+  name: string;
+  trigger_type: 'schedule' | 'data_change' | 'server_event';
+  config_json?: string;
+  action_chain_json?: string;
+  enabled?: boolean;
+}
+export interface TriggerUpdate {
+  name?: string;
+  trigger_type?: 'schedule' | 'data_change' | 'server_event';
+  config_json?: string;
+  action_chain_json?: string;
+  enabled?: boolean;
+}
+export interface TriggerTestResult {
+  status: string;
+  trigger_id: string;
+  result: unknown;
+}
+
 class ApiClient {
   private token: string | null = null;
   private unauthorizedHandler: (() => void) | null = null;
@@ -66,6 +167,66 @@ class ApiClient {
 
   del<T>(path: string, options?: Omit<ApiOptions, 'method' | 'body'>) {
     return this.request<T>(path, { ...options, method: 'DELETE' });
+  }
+
+  private buildQuery(params?: PaginationParams): string {
+    if (!params) return '';
+    const qs = new URLSearchParams();
+    if (params.limit != null) qs.set('limit', String(params.limit));
+    if (params.offset != null) qs.set('offset', String(params.offset));
+    const s = qs.toString();
+    return s ? `?${s}` : '';
+  }
+
+  // --- Variables ---
+  getVariables(params?: PaginationParams) {
+    return this.get<PaginatedResponse<Variable>>(`/api/variables${this.buildQuery(params)}`);
+  }
+  createVariable(data: VariableCreate) {
+    return this.post<Variable>('/api/variables', data);
+  }
+  updateVariable(id: number | string, data: VariableUpdate) {
+    return this.put<Variable>(`/api/variables/${id}`, data);
+  }
+  deleteVariable(id: number | string) {
+    return this.del<void>(`/api/variables/${id}`);
+  }
+
+  // --- Data Sources ---
+  getDataSources(params?: PaginationParams) {
+    return this.get<PaginatedResponse<DataSource>>(`/api/data-sources${this.buildQuery(params)}`);
+  }
+  createDataSource(data: DataSourceCreate) {
+    return this.post<DataSource>('/api/data-sources', data);
+  }
+  deleteDataSource(id: number | string) {
+    return this.del<void>(`/api/data-sources/${id}`);
+  }
+  updateDataSource(id: number | string, data: Partial<DataSourceCreate>) {
+    return this.put<DataSource>(`/api/data-sources/${id}`, data);
+  }
+  getDataSourceSchema(id: number | string) {
+    return this.get<DataSourceSchema>(`/api/data-sources/${id}/schema`);
+  }
+  queryDataSource(id: number | string, params: DataSourceQuery) {
+    return this.post<DataSourceResult>(`/api/data-sources/${id}/query`, params);
+  }
+
+  // --- Triggers ---
+  getTriggers(params?: PaginationParams) {
+    return this.get<PaginatedResponse<Trigger>>(`/api/triggers${this.buildQuery(params)}`);
+  }
+  createTrigger(data: TriggerCreate) {
+    return this.post<Trigger>('/api/triggers', data);
+  }
+  updateTrigger(id: number | string, data: TriggerUpdate) {
+    return this.put<Trigger>(`/api/triggers/${id}`, data);
+  }
+  deleteTrigger(id: number | string) {
+    return this.del<void>(`/api/triggers/${id}`);
+  }
+  testTrigger(id: number | string) {
+    return this.post<TriggerTestResult>(`/api/triggers/${id}/test`);
   }
 }
 

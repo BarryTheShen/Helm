@@ -15,7 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.models.base import Base  # noqa: E402
 from app.models import (  # noqa: E402, F401
     User, Device, Session, ChatMessage, CalendarEvent,
-    Notification, AgentConfig, ModuleState, SandboxAction, Workflow
+    Notification, AgentConfig, ModuleState, SandboxAction, Workflow,
+    CustomVariable, DataSource,
 )
 from app.config import settings  # noqa: E402
 

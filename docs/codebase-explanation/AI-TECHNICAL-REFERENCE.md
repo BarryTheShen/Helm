@@ -4,7 +4,7 @@
 > Read this FIRST before making any changes. It tells you exactly where everything is,
 > what connects to what, and what the known pitfalls are.
 >
-> Last updated: 2026-04-12
+> Last updated: 2026-04-14
 
 ---
 
@@ -35,20 +35,25 @@ Helm is a self-hosted AI super app with three layers:
 
 | Need to change... | Edit this file | Notes |
 |-------------------|---------------|-------|
-| API endpoints | `routers/{domain}.py` | 15 router files |
-| Database models | `models/{model}.py` | 14 model files, all import in `models/__init__.py` |
-| Request/response types | `schemas/{domain}.py` | 15 schema files; workflow schemas inline in `routers/workflows.py` |
+| API endpoints | `routers/{domain}.py` | 18 router files |
+| Database models | `models/{model}.py` | 18 model files, all import in `models/__init__.py` |
+| Request/response types | `schemas/{domain}.py` | 16 schema files (includes trigger.py); workflow schemas inline in `routers/workflows.py` |
 | Auth logic | `services/auth.py` + `utils/security.py` | Session-based with JWT tokens |
 | Admin-only guard | `dependencies.py::require_admin` | Raises 403 if `user.role != "admin"` |
 | AI chat streaming | `services/agent_proxy.py` | Core feature — LLM streaming + tool calls + XML fallback |
 | External agent routing | `services/agent_proxy.py` | When `settings.external_agent_url` is set, all chat is forwarded to `api_server.py` |
 | WebSocket handling | `routers/websocket.py` + `services/websocket_manager.py` | token in query param; device_id tracked; `module_action` dispatches to action registry |
-| Action handlers | `services/action_registry.py` | 8 named function handlers; add here to register new functions |
+| Action handlers | `services/action_registry.py` | 25 named function handlers (9 server-side + 16 client-only stubs); add here to register new functions |
 | Actions router | `routers/actions.py` | Actions whitelist (POST /api/actions/execute, GET /api/actions/functions); prevents SSRF |
 | User management CLI | `manage.py` (backend root) | CLI user management (since /auth/setup is locked after first user) |
 | MCP tools (for AI agents) | `mcp/tools.py` | Shared between agent proxy and MCP server |
 | MCP server config | `mcp/server.py` | FastMCP wrapper, mounted at `/mcp` |
 | Workflow automation | `services/workflow_engine.py` | APScheduler-based |
+| Variable resolver | `services/variable_resolver.py` | Resolves `{{expression}}` syntax; scopes: user.*, component.*.value, self.value, custom.*, env.*, data.*.* |
+| Trigger engine | `services/trigger_engine.py` | `fire_trigger()` executes action chains from TriggerDefinition records |
+| Trigger model | `models/trigger.py` | TriggerDefinition ORM model (schedule/data_change/server_event) |
+| Trigger schemas | `schemas/trigger.py` | TriggerCreate, TriggerUpdate, TriggerOut |
+| Trigger CRUD router | `routers/triggers.py` | CRUD + test endpoint for trigger definitions |
 | App config | `config.py` | pydantic-settings, reads `.env` from repo root |
 | Database engine | `database.py` | SQLAlchemy async, SQLite default |
 | Auth dependencies | `dependencies.py` | `get_current_user`, `get_current_user_id`, `require_admin`, `PaginationParams` |
@@ -97,6 +102,8 @@ Helm is a self-hosted AI super app with three layers:
 | UI state | `src/stores/uiStore.ts` | Connection status, error banner |
 | Settings state | `src/stores/settingsStore.ts` | Nav mode, theme (both stubs — not applied to UI) |
 | Tab visibility state | `src/stores/tabsStore.ts` | hiddenTabs[], set by AI via WS or REST |
+| Variable context hook | `src/hooks/useVariableContext.ts` | Assembles VariableContext from auth store, component state, and custom vars (fetched from backend) |
+| Variable resolver | `src/utils/variableResolver.ts` | Resolves `{{expression}}` mustache templates with NOT_FOUND sentinel; `resolveAllExpressions()` for deep objects |
 | Design tokens | `src/theme/colors.ts` | Colors, spacing, typography |
 | Theme tokens (V2) | `src/theme/tokens.ts` | `themeColors`, `themeShadows`, `resolveColor()` |
 | API types | `src/types/api.ts` | TypeScript interfaces for all backend responses |
@@ -131,14 +138,17 @@ Helm is a self-hosted AI super app with three layers:
 | Workflow management | `web/src/pages/WorkflowsPage.tsx` | Manage workflows |
 | SDUI template management | `web/src/pages/TemplatesPage.tsx` | CRUD + import/export templates |
 | Component registry | `web/src/pages/ComponentsPage.tsx` | View/edit registered SDUI components |
+| Variables & Data Sources | `web/src/pages/VariablesPage.tsx` | Two-tab page: Variables CRUD + Data Sources management |
+| Actions & Triggers | `web/src/pages/ActionsTriggersPage.tsx` | Two-tab page: Action catalog (hardcoded) + Trigger CRUD with test |
+| Rule builder | `web/src/editor/RuleBuilder.tsx` | Notion-style visual rule builder for action chains on interactive components |
 | Visual SDUI editor | `web/src/pages/EditorPage.tsx` | Custom 3-panel editor: structure tree + template library, draft save/push-live flow, presets + custom device sizes, JSON view/import, undo/redo, status bar (shows actual `deviceWidth`×`deviceHeight` from Zustand store), destructive unsaved-change confirmations, live+draft loading that prefers drafts, surfaced module/screen load errors, delete-screen gating on persisted-or-draft state, legacy V1 section-title normalization into heading rows, V1 import that preserves vertical section stacks by emitting one row per legacy component, read-only preservation of lowercase legacy runtime payloads including legacy forms, and module CRUD (create/delete custom modules) |
-| Editor types & presets | `web/src/editor/types.ts` | EditorRow/Cell/Screen types, row visual props, DevicePresets (10 presets), ComponentRegistry, authorable component filtering, and `server_action` param validation before persistence |
+| Editor types & presets | `web/src/editor/types.ts` | EditorRow/Cell/Screen types, row visual props, DevicePresets (10 presets), ComponentRegistry, authorable component filtering, `server_action` param validation before persistence, ActionRule/ActionStep types, `rules` field on EditorCell |
 | Local template library | `web/src/editor/templateLibrary.ts` | Built-in starter screen templates + reusable row templates shown in the left panel, aligned to live runtime props |
 | Component prop schemas | `web/src/editor/componentSchemas.ts` | Per-component property schemas for dynamic form generation in PropertyInspector; only supported authorable actions are offered for new edits, while imported unsupported actions fall back to generic editable fields |
-| Editor state (Zustand) | `web/src/editor/useEditorStore.ts` | Rows-first editor contract: rows, selection, history/historyIndex, device dimensions/orientation, screen load/apply/get helpers, row/cell/component mutators |
+| Editor state (Zustand) | `web/src/editor/useEditorStore.ts` | Rows-first editor contract: rows, selection, history/historyIndex, device dimensions/orientation, screen load/apply/get helpers, row/cell/component mutators, `updateCellRules()` method |
 | Structure tree (left panel) | `web/src/editor/StructureTree.tsx` | Screen root item + expandable rows/cells with CRUD, row reorder, and JSON copy actions |
-| Editor canvas (center panel) | `web/src/editor/EditorCanvas.tsx` | Interactive canvas with component previews, stable multi-step row drag (50px threshold, 300ms debounce), cell resize handles, direct row-height resize, add-row controls |
-| Property inspector (right) | `web/src/editor/PropertyInspector.tsx` | Contextual editor for row height, cell count/widths, background, per-side padding, scrollable rows, component props/actions |
+| Editor canvas (center panel) | `web/src/editor/EditorCanvas.tsx` | Interactive canvas with component previews, stable multi-step row drag (50px threshold, 300ms debounce), cell resize handles, direct row-height resize, add-row controls, row boundary visibility (dashed borders, alternating backgrounds) |
+| Property inspector (right) | `web/src/editor/PropertyInspector.tsx` | Tabbed UI (Properties/Rules) for interactive components; contextual editor for row height, cell count/widths, background, per-side padding, scrollable rows, component props/actions |
 | Component picker | `web/src/editor/ComponentPicker.tsx` | Component type selection popover, grouped by category, using authorable registry entries only |
 | SDUI adapter (legacy) | `web/src/lib/sduiAdapter.ts` | Legacy normalization helper retained from the old editor; not used by the current custom editor |
 | Puck config (deprecated) | `web/src/lib/puckConfig.tsx` | Delete-stub only — current editor does not import it |
@@ -219,18 +229,19 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 
 ## Known Gaps / Outstanding Work
 
-No active bugs known as of 2026-04-12. All previously filed bugs (`connected_user_ids`, calendar `PUT` decorator, `helm_hide_tab` registration, `logout()` not calling server, `fire_trigger()` never called) have been resolved.
-
-No active cosmetic issues are currently documented for the custom web editor.
-
-The following **incomplete features** exist (tracked in `docs/codebase-explanation/FEATURES.md` for the full registry, `docs/codebase-explanation/FUTURE_PLANS.md` for implementation plans):
+The following **incomplete features and known issues** exist:
 
 | # | Area | Description |
 |---|------|-------------|
 | 1 | Frontend | Calendar tab is read-only — no create/edit/delete UI in the frontend |
 | 2 | Frontend | `conversation_id: 'default'` is hardcoded — no multi-conversation support |
-| 3 | Frontend | Four dead SDUI component files (`AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx`) — unused, should be cleaned up |
-| 4 | Frontend | `settingsStore.navigationMode` and `.theme` are persisted but neither value is applied to the UI |
+| 3 | Frontend | `settingsStore.navigationMode` and `.theme` are persisted but neither value is applied to the UI |
+| 4 | Frontend | Four legacy V1 SDUI component files (`AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx`) — exist but only used for V1 rendering |
+| 5 | Backend | `trigger_engine.register_scheduled_triggers()` is a placeholder — TriggerDefinition schedule triggers must be manually tested via the test endpoint |
+| 6 | Backend | `TriggerType.DATA_CHANGED` and `SERVER_EVENT` exist in the enum but the Workflows page dropdown only shows 5 types (missing those two) |
+| 7 | Backend | `demo_time_alerts=True` by default — broadcasts time notifications every 2 minutes in production unless explicitly disabled |
+| 8 | Web | `web/src/lib/sduiAdapter.ts` — dead code (legacy Puck stub, retained but unused) |
+| 9 | Agent | `send_prompt.py` requires a manually set session token; no automated auth flow |
 
 ---
 
@@ -264,6 +275,10 @@ The following **incomplete features** exist (tracked in `docs/codebase-explanati
 | Web admin login 401 suppression | `web/src/stores/authStore.ts` + `web/src/lib/api.ts` | Expected `/auth/login` 401s do not fire the global unauthorized handler, so failed logins do not clear admin session state |
 | Agent streaming message IDs | `services/agent_proxy.py` | `chat_start`, streamed `chat_token`s, and `chat_complete` reuse one assistant `message_id` in both built-in and external-agent paths |
 | XML tool-call fallback | `agent_proxy._parse_xml_tool_calls()` | Supports stepfun and other non-function-calling models |
+| Variable expression resolver | `backend/app/services/variable_resolver.py` + `mobile/src/utils/variableResolver.ts` | `{{scope.path}}` syntax resolved server-side and client-side; scopes: user, component, self, custom, env, data |
+| Trigger definitions | `backend/app/models/trigger.py` + `routers/triggers.py` | Server-event / schedule / data-change triggers with action chain JSON; `fire_trigger()` in trigger_engine.py walks the chain through action_registry |
+| Action catalog (22 total) | `backend/app/services/action_registry.py` | 9 server-side handlers + 13 client-only stubs; expandable via `registry.register()` |
+| Rule builder | `web/src/editor/RuleBuilder.tsx` | Notion-style visual builder for per-cell action rules (trigger → action steps); stored as `rules` on EditorCell |
 
 ---
 
