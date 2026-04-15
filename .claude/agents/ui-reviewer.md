@@ -1,14 +1,13 @@
 ---
 name: ui-reviewer
 description: Visual quality reviewer for React Native (Expo) and React web UIs. Takes screenshots of every affected screen, identifies visual defects, and compares against intended design. Returns prioritized visual fixes or approves.
+model: sonnet
 tools: Read, Grep, Glob, WebFetch
 mcpServers:
-  playwright:
-    type: stdio
-    command: npx
-    args:
-      - "-y"
-      - "@playwright/mcp@latest"
+  - playwright:
+      type: stdio
+      command: npx
+      args: ["-y", "@playwright/mcp@latest"]
 ---
 
 # UI Reviewer — Helm Visual Quality

@@ -1,6 +1,7 @@
 ---
 name: session-init
 description: Initializes or archives Helm AI sessions. Creates .helm-sessions/current/ folder structure, writes session metadata, archives old sessions.
+model: haiku
 tools: Edit, Write, Bash
 ---
 

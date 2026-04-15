@@ -1,6 +1,7 @@
 ---
 name: agent-dev
 description: PydanticAI and MCP specialist for Helm. Works in agent/ and backend/app/mcp/. Knows PydanticAI agent construction, MCP StreamableHTTP, filesystem tool security, api_server.py SSE streaming, and the external agent routing path.
+model: sonnet
 tools: Edit, Write, Read, Grep, Glob, LSP
 ---
 

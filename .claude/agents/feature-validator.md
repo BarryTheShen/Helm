@@ -1,6 +1,7 @@
 ---
 name: feature-validator
-description: Reads the Helm Blueprint Spec Documents to return a complete list of features, sub-features, and their required dependencies for any given feature area. Used by helm-dev to feed the reviewer for completeness checks.
+description: Reads the Helm Blueprint Spec Documents to return a complete list of features, sub-features, and their required dependencies for any given feature area. Used by the orchestrator to feed the reviewer for completeness checks.
+model: haiku
 tools: Read, Grep, Glob, WebFetch
 ---
 

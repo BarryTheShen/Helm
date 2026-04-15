@@ -1,6 +1,7 @@
 ---
 name: tester
 description: pytest-asyncio specialist for Helm backend. Writes failing tests FIRST to reproduce bugs, then verifies fixes. Knows conftest.py fixtures, in-memory SQLite setup, and the test patterns used across the test suite.
+model: sonnet
 tools: Edit, Write, Read, Grep, Glob, Bash
 ---
 

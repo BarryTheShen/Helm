@@ -1,6 +1,7 @@
 ---
 name: protocol-dev
 description: API contract specialist for Helm. Works at the boundary between backend and frontend. Validates REST endpoints, WebSocket message types, MCP tool signatures, and SDUI schemas match across layers.
+model: sonnet
 tools: Read, Grep, Glob, WebFetch, LSP
 ---
 

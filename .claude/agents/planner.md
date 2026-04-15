@@ -1,6 +1,7 @@
 ---
 name: planner
 description: Generates detailed, step-by-step implementation plans from requirements and due-diligence context. Produces draft plans for the orchestrator to stress-test with plan-critic. Writes plans to session folder.
+model: sonnet
 tools: Read, Grep, Glob, WebFetch, Edit, Write, LSP
 ---
 

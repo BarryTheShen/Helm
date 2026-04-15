@@ -223,20 +223,146 @@ This loop is mandatory. Never skip steps. Never declare a bug fixed without veri
 - No hardcoded secrets, API keys, or URLs — use environment variables
 - When in doubt, check the Blueprint specs in the project docs before making architectural decisions
 
+## Development Workflow — Sub-Agent Orchestration
+
+You are the orchestrator. For complex, multi-step tasks (features, bug fixes, audits), delegate to specialist sub-agents rather than doing everything yourself. For simple questions or small edits, handle directly.
+
+### Agent Hierarchy (Flat)
+
+Sub-agents CANNOT spawn other sub-agents in Claude Code. All 16 agents are depth-1 — invoked directly by you.
+
+| Agent | Model | Expertise | Works In |
+|-------|-------|-----------|----------|
+| `session-init` | haiku | Session folder creation/archiving | `.helm-sessions/` |
+| `requirements` | sonnet | Maps tasks to affected files via docs | `docs/` only |
+| `due-diligence` | sonnet | Reads source, outputs compressed context | Affected files |
+| `planner` | sonnet | Generates implementation plans | Context packages |
+| `plan-critic` | sonnet | Challenges plan assumptions via codebase | Affected files (read-only) |
+| `protocol-dev` | sonnet | Defines API/WS/MCP contracts | `backend/` + `mobile/` protocol |
+| `backend-dev` | sonnet | Python FastAPI implementation | `backend/` only |
+| `frontend-dev` | sonnet | React Native / TypeScript + Web admin | `mobile/` + `web/` |
+| `agent-dev` | sonnet | PydanticAI + MCP implementation | `agent/` + `backend/app/mcp/` |
+| `tester` | sonnet | pytest-asyncio test writing and execution | `backend/tests/` |
+| `live-tester` | sonnet | Playwright functional verification | Running app |
+| `ui-reviewer` | sonnet | Visual quality review | Running app |
+| `reviewer` | sonnet | Code quality gate + feature completeness | Changed files |
+| `feature-validator` | haiku | Blueprint spec feature extraction | `docs/` Blueprint specs |
+| `feature-critic` | sonnet | Product completeness GATEKEEPER | Running app + specs |
+| `docs-updater` | sonnet | Living documentation maintenance | `docs/` + `CLAUDE.md` |
+
+### Session Management
+
+Sessions use persistent context in `.helm-sessions/current/`.
+
+**New session** (no `.helm-sessions/current/session.md`):
+1. Invoke `session-init` to create the session folder
+2. Invoke `due-diligence`: "Read docs/codebase-explanation/AI-TECHNICAL-REFERENCE.md and write compressed context to .helm-sessions/current/global-context.md"
+3. Accept the user's task
+
+**Resuming session** (session.md exists):
+1. Read `.helm-sessions/current/session.md` for in-progress state
+2. Check `current-plan.md` — if it exists, a plan is in progress
+3. Ask if user wants to resume or start fresh
+
+### Orchestration Principles
+
+- **Delegate, don't do.** For complex tasks, every code reading, investigation, and implementation goes through sub-agents. Your context window is finite — protect it by delegating.
+- **Series, not parallel.** Invoke sub-agents ONE AT A TIME. Wait for output before invoking the next.
+- **Autonomy over micro-management.** Give agents tasks ("fix the publish endpoint"), not file-level instructions. They explore the codebase themselves.
+- **When invoking a sub-agent, always include:**
+  - "You CANNOT spawn sub-agents. Do the work yourself."
+  - "Check `.helm-sessions/current/global-context.md` for codebase context."
+  - The task description + relevant context from previous agents (summaries, not raw files)
+
+### The Workflow
+
+```
+User Task → Requirements → Due Diligence
+  → [Cross-layer? Protocol-Dev first]
+  → Planner → Plan-Critic loop (max 3 rounds)
+  → [Bug? Tester writes repro first]
+  → Implementer(s) → Tester (verify)
+  → Feature-Validator → Reviewer
+  → Live-Tester → UI-Reviewer (if UI change)
+  → Feature-Critic (GATEKEEPER)
+  → Docs-Updater (ALWAYS last)
+```
+
+**Adapt per task type:**
+
+| Task Type | Workflow |
+|-----------|----------|
+| Backend bug fix | requirements → due-diligence → planner → plan-critic → tester (repro) → backend-dev → tester (verify) → feature-validator → reviewer → live-tester → docs-updater |
+| Frontend bug fix | requirements → due-diligence → planner → plan-critic → frontend-dev → feature-validator → reviewer → live-tester → ui-reviewer → docs-updater |
+| New API endpoint | requirements → due-diligence → protocol-dev → planner → plan-critic → backend-dev → frontend-dev (ApiClient) → tester → feature-validator → reviewer → live-tester → docs-updater |
+| New MCP tool | requirements → due-diligence → protocol-dev → planner → plan-critic → backend-dev + agent-dev → tester → feature-validator → reviewer → docs-updater |
+| New SDUI component | requirements → due-diligence → protocol-dev (schema) → planner → plan-critic → frontend-dev → feature-validator → reviewer → live-tester → ui-reviewer → docs-updater |
+| Agent change | requirements → due-diligence → planner → agent-dev → reviewer → docs-updater |
+| Docs-only change | docs-updater |
+| Full system audit | due-diligence (feature list) → live-tester (audit all) → fix loop → docs-updater |
+
+### Planning Phase (Critic Loop)
+
+1. Invoke `planner` with task + requirements + due-diligence output → writes to `.helm-sessions/current/current-plan.md`
+2. Invoke `plan-critic`: "Challenge this plan against the actual codebase."
+3. If objections → invoke `planner` again with critic feedback
+4. Repeat until approved or max 3 rounds
+
+### Reviewer Phase (Feature Validation)
+
+1. Invoke `feature-validator`: "Return the complete feature list from Blueprint specs for this area."
+2. Invoke `reviewer` with BOTH the implementation summary AND the feature list
+
+### Full-System Audit
+
+1. **Discover:** Invoke `due-diligence` — "List all implemented features and expected behaviors."
+2. **Test:** Invoke `live-tester` in audit mode — "Test EVERY feature end-to-end."
+3. **Fix loop:** For each issue → invoke appropriate implementer → `live-tester` regression test → repeat until zero issues
+4. **Final verification:** One last `live-tester` pass to confirm clean state
+
+### The Completion Loop
+
+After implementation passes `reviewer`:
+
+```
+tester (full suite) → PASS
+  → feature-validator → reviewer → APPROVE
+  → live-tester → PASS
+  → ui-reviewer (UI changes only) → APPROVE
+  → feature-critic (GATEKEEPER)
+      ├── APPROVE → docs-updater → DONE
+      └── REJECT  → back to implementers → repeat
+```
+
+Max 5 iterations. After 5, escalate to user.
+
+### Context Management
+
+1. **Summaries, not files.** Pass sub-agent output, not raw file contents.
+2. **Context budget.** Each sub-agent reads ≤5 files. Break large tasks into sub-tasks.
+3. **Docs first.** Always start with `requirements` reading `docs/codebase-explanation/`.
+4. **Cross-layer protocol.** Invoke `protocol-dev` FIRST for backend+frontend tasks, pass contract to both implementers, `reviewer` validates both sides match.
+5. **MCP sync.** When MCP tools change, invoke BOTH `backend-dev` and `agent-dev`. Three files must stay in sync: `tools.py`, `agent_proxy.py` → `_get_tool_definitions()`, `server.py`.
+6. **PARTIAL RESULTs.** When a sub-agent returns PARTIAL RESULT with Completed/Remaining lists, re-invoke with the Continuation Prompt. Never skip remaining items.
+7. **Question relay.** When a sub-agent returns questions, present them to the user, then re-invoke the sub-agent with answers. Never answer sub-agent questions yourself.
+
+---
+
 ## Known Patterns & Gotchas
 
-- **Agent nesting depth**: Max 3 levels (helm-dev → sub-agent → sub-sub-agent). Deeper nesting causes workflow cancellation. plan-critic and feature-validator are the only level-2 agents.
+- **Flat agent hierarchy**: All 16 sub-agents are depth-1. Sub-agents cannot spawn other sub-agents. You (the main conversation) coordinate all loops — plan-critic loop, feature-validator→reviewer handoff, completion loop.
 - **Session context**: `.helm-sessions/current/` holds runtime context (global-context.md, current-plan.md, etc.). These are git-ignored. due-diligence writes to them; all agents read from them before exploring source.
-- **Feature completeness**: reviewer always invokes feature-validator to check Blueprint specs. Never approve a feature that only has UI but no backing data/actions/dependencies.
+- **Feature completeness**: Before `reviewer`, always invoke `feature-validator` first to get the complete feature list from Blueprint specs. Never approve a feature that only has UI but no backing data/actions/dependencies.
 - **Plan persistence**: Planner writes to `.helm-sessions/current/current-plan.md`. If the session is interrupted, the plan survives for resumption.
-- **Completion loop**: NOTHING is done until feature-critic approves. Loop is: tester → reviewer → live-tester → ui-reviewer → feature-critic. Rejection from feature-critic resets to tester. Max 5 cycles before escalation to user.
-- **Context budget / PARTIAL RESULT**: All sub-agents report PARTIAL RESULT when context runs low, listing completed items and remaining items. helm-dev re-invokes with the Continuation Prompt rather than skipping. Large tasks are proactively split before overflow.
-- **Agent autonomy**: Sub-agents (live-tester, ui-reviewer, feature-critic, etc.) read session files (global-context.md, current-plan.md, feature-map.md) to self-direct. helm-dev passes HIGH-LEVEL task + session file pointers — not detailed per-screen instructions.
+- **Completion loop**: Nothing is done until feature-critic approves. Rejection resets to implementers. Max 5 cycles before escalation to user.
+- **Context budget / PARTIAL RESULT**: All sub-agents report PARTIAL RESULT when context runs low, listing completed items and remaining items. Re-invoke with the Continuation Prompt — never skip remaining items.
+- **Agent autonomy**: Sub-agents read session files to self-direct. Pass HIGH-LEVEL task + session file pointers — not detailed per-file instructions.
 
 ## Common Mistakes to Avoid
 
 <!-- Claude: when you make a mistake and get corrected, add it here so you don't repeat it -->
-- **Infinite sub-agent recursion**: A sub-agent seeing a task and delegating it to another sub-agent who delegates further. All non-orchestrator agents must have `agents: []` except planner (→ plan-critic) and reviewer (→ feature-validator).
-- **Parallel sub-agent invocations**: Causes context cancellation. Always invoke ONE agent, wait, then invoke the next.
-- **Over-specifying sub-agent work**: Don't tell live-tester which screens to click or ui-reviewer which exact URLs to visit. They read session files and self-direct. Over-specification wastes orchestrator context and prevents agent autonomy.
-- **Skipping PARTIAL RESULT continuation**: When a sub-agent returns PARTIAL RESULT, the orchestrator MUST re-invoke with the Continuation Prompt. Never skip the Remaining items and declare the task done.
+- **Sub-agent spawning sub-agents**: Sub-agents do NOT have the Agent tool. Only the main conversation (you) can invoke agents. If a task requires coordination, you handle it.
+- **Parallel sub-agent invocations**: Invoke ONE agent, wait, then invoke the next.
+- **Over-specifying sub-agent work**: Don't tell live-tester which screens to click or ui-reviewer which URLs to visit. They read session files and self-direct.
+- **Skipping PARTIAL RESULT continuation**: When a sub-agent returns PARTIAL RESULT, re-invoke with the Continuation Prompt. Never skip remaining items and declare the task done.
+- **Answering sub-agent questions yourself**: When a sub-agent returns questions, relay them to the user. Never fabricate answers.

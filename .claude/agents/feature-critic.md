@@ -1,14 +1,13 @@
 ---
 name: feature-critic
 description: Product completeness critic for Helm. Final gatekeeper. Asks "is this feature genuinely complete from a user's perspective?" Uses Playwright to experience features as a real user. Sends everything back to square one if anything is missing.
+model: sonnet
 tools: Read, Grep, Glob, WebFetch
 mcpServers:
-  playwright:
-    type: stdio
-    command: npx
-    args:
-      - "-y"
-      - "@playwright/mcp@latest"
+  - playwright:
+      type: stdio
+      command: npx
+      args: ["-y", "@playwright/mcp@latest"]
 ---
 
 # Feature Critic — Product Completeness Judge
