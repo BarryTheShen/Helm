@@ -246,7 +246,7 @@ Sub-agents CANNOT spawn other sub-agents in Claude Code. All 16 agents are depth
 | `live-tester` | sonnet | Playwright functional verification | Running app |
 | `ui-reviewer` | sonnet | Visual quality review | Running app |
 | `reviewer` | sonnet | Code quality gate + feature completeness | Changed files |
-| `feature-validator` | haiku | Blueprint spec feature extraction | `docs/` Blueprint specs |
+| `feature-validator` | sonnet | Blueprint spec feature extraction | `docs/` Blueprint specs |
 | `feature-critic` | sonnet | Product completeness GATEKEEPER | Running app + specs |
 | `docs-updater` | sonnet | Living documentation maintenance | `docs/` + `CLAUDE.md` |
 
