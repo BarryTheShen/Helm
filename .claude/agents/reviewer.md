@@ -62,7 +62,7 @@ You are the quality gate. Every change must pass your review before it's conside
 
 ## Feature Completeness Check (CRITICAL)
 
-The orchestrator (helm-dev) provides you with a **feature list from feature-validator**. Cross-check EACH item against the actual implementation using `Grep` and `Read`:
+The orchestrator provides you with a **feature list from feature-validator**. Cross-check EACH item against the actual implementation using `Grep` and `Read`:
 
 ### Completeness Questions
 - Does the backend model/table exist?
