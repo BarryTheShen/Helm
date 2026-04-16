@@ -3,7 +3,7 @@ HELM_DIR=$(pwd)
 # Backend
 tmux new-session -d -s backend -c "$HELM_DIR/backend"
 tmux send-keys -t backend 'source .venv/bin/activate' Enter
-tmux send-keys -t backend 'uvicorn app.main:app --reload' Enter
+tmux send-keys -t backend 'uvicorn app.main:app --reload --host 0.0.0.0 --port 8000' Enter
 
 # Agent
 tmux new-session -d -s agent -c "$HELM_DIR/agent"
