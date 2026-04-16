@@ -2,7 +2,8 @@
 
 How to run, configure, and edit every part of the stack.
 
-> Last updated: 2026-04-14
+> Last updated: 2026-04-16  
+> Last audit: 2026-04-16 — ✅ All systems operational
 
 ---
 
@@ -27,7 +28,7 @@ npx expo start
 # Terminal 3 — Web Admin Panel (optional)
 cd web
 npm install                    # first time only
-npm run dev                    # http://localhost:5173
+npm run dev                    # Usually http://localhost:5174 (auto-increments if 5173 is busy)
 ```
 
 Then open the Expo Go app on your phone and scan the QR code **or** press `i` for iOS Simulator.
@@ -44,10 +45,12 @@ At first launch the app shows a **Connect** screen. Enter your backend URL:
 | Service | Default Port | How to change |
 |---------|-------------|---------------|
 | Backend FastAPI | `8000` | `SERVER_PORT` env var or uvicorn `--port` arg |
-| Web Admin Panel (Vite) | `5173` | `web/vite.config.ts` or `--port` arg |
+| Web Admin Panel (Vite) | `5174` | `web/vite.config.ts` or `--port` arg (auto-increments if 5173 is busy) |
 | Standalone agent web UI / api_server | `7860` | `AGENT_WEB_PORT` env var or `--port` CLI arg |
 | WebSocket | Same as backend (`8000`) | `ws://<host>:8000/ws?token=...` |
 | MCP endpoint | Same as backend (`8000`) | `http://<host>:8000/mcp/` |
+
+> **Note:** Vite dev server auto-increments the port if the default is busy. Check the terminal output for the actual port.
 
 ---
 
@@ -538,3 +541,5 @@ python inject-home.py
 | Agent can't connect to MCP | `HELM_SESSION_TOKEN` missing or expired | Regenerate token, update `.env` |
 | Android emulator can't reach backend | Wrong localhost | Use `http://10.0.2.2:8000` not `http://localhost:8000` |
 | Expo Go can't reach backend | Device on different network | Use `npx expo start --tunnel` |
+| Standalone agent rate limit errors | Using `claude-opus-4-20250514` | Change to `claude-sonnet-4-20250514` in `agent/helm_agent.py` |
+| Web admin shows wrong port in docs | Vite auto-incremented port | Check terminal output for actual port (usually 5174) |

@@ -54,6 +54,30 @@ _local_ui = Path(__file__).parent / "chat_ui.html"
 from helm_agent import _build_agent, _check_env, OPENROUTER_MODEL  # noqa
 
 
+def _extract_error_message(error: Exception) -> str:
+    """Extract a meaningful error message from an exception, handling ExceptionGroups.
+
+    When exceptions occur in TaskGroups (anyio), they're wrapped in BaseExceptionGroup.
+    This function unwraps them to show the actual error.
+    """
+    # Check if it's a BaseExceptionGroup (Python 3.11+)
+    if hasattr(error, 'exceptions') and hasattr(error, '__class__') and 'Group' in error.__class__.__name__:
+        # Extract the first actual exception from the group
+        exceptions = getattr(error, 'exceptions', [])
+        if exceptions:
+            # Recursively extract in case of nested groups
+            first_exc = exceptions[0]
+            return _extract_error_message(first_exc)
+
+    # For regular exceptions, return the string representation
+    error_str = str(error)
+    if error_str:
+        return error_str
+
+    # If str(error) is empty, use the exception type name
+    return f"{type(error).__name__}"
+
+
 def _create_app():
     """Build a Starlette app with CORS, custom endpoints, and the pydantic-ai API.
 
@@ -70,6 +94,32 @@ def _create_app():
     from starlette.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
     from starlette.routing import Mount, Route
     from pydantic_ai.ui._web.api import create_api_app
+    from pydantic_ai.ui.vercel_ai import VercelAIAdapter
+    from pydantic_ai.ui.vercel_ai._event_stream import VercelAIEventStream
+    from pydantic_ai.ui.vercel_ai.response_types import BaseChunk, ErrorChunk
+    from typing import AsyncIterator
+
+    # Custom event stream that extracts real errors from ExceptionGroups
+    class ImprovedVercelAIEventStream(VercelAIEventStream):
+        async def on_error(self, error: Exception) -> AsyncIterator[BaseChunk]:
+            self._finish_reason = 'error'
+            error_text = _extract_error_message(error)
+            yield ErrorChunk(error_text=error_text)
+
+    # Monkey-patch the VercelAIAdapter to use our improved event stream
+    original_build_event_stream = VercelAIAdapter.build_event_stream
+
+    def patched_build_event_stream(self):
+        # Get the original stream
+        stream = original_build_event_stream(self)
+        # Replace it with our improved version
+        return ImprovedVercelAIEventStream(
+            sdk_version=stream.sdk_version,
+            server_message_id=stream.server_message_id,
+            run_input=stream.run_input,
+        )
+
+    VercelAIAdapter.build_event_stream = patched_build_event_stream
 
     agent = _build_agent()
 
@@ -117,8 +167,8 @@ def _create_app():
                     yield f"data: {json.dumps({'type': 'done', 'text': ''.join(full_text)})}\n\n"
             except Exception as exc:
                 import traceback
-                error_detail = str(exc) or f"{type(exc).__name__}: {traceback.format_exc()[-500:]}"
-                print(f"[AGENT ERROR] {type(exc).__name__}: {exc}")
+                error_detail = _extract_error_message(exc)
+                print(f"[AGENT ERROR] {type(exc).__name__}: {error_detail}")
                 traceback.print_exc()
                 yield f"data: {json.dumps({'type': 'error', 'text': error_detail})}\n\n"
 

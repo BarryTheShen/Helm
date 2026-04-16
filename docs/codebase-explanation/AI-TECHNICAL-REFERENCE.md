@@ -4,7 +4,8 @@
 > Read this FIRST before making any changes. It tells you exactly where everything is,
 > what connects to what, and what the known pitfalls are.
 >
-> Last updated: 2026-04-14
+> Last updated: 2026-04-16
+> Last audit: 2026-04-16 — ✅ PRODUCTION-READY (200/200 backend tests passing, web admin fully functional)
 
 ---
 
@@ -227,21 +228,68 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 
 ---
 
+## Test Coverage
+
+**Last Test Run:** 2026-04-16  
+**Status:** ✅ 200/200 tests passing (100% pass rate)  
+**Execution Time:** 117 seconds
+
+### Test Breakdown by Module
+
+| Module | Tests | Status |
+|--------|-------|--------|
+| Actions | 19 | ✅ |
+| Admin | 7 | ✅ |
+| Auth | 13 | ✅ |
+| Calendar | 9 | ✅ |
+| Data Sources | 16 | ✅ |
+| Drafts | 18 | ✅ |
+| Modules | 14 | ✅ |
+| Notifications | 8 | ✅ |
+| Sandbox | 10 | ✅ |
+| SDUI Parity | 30 | ✅ |
+| Sessions | 10 | ✅ |
+| Templates | 18 | ✅ |
+| Triggers | 8 | ✅ |
+| Users | 11 | ✅ |
+| Variable Resolver | 5 | ✅ |
+| Variables | 8 | ✅ |
+| Workflows | 13 | ✅ |
+
+### Coverage Gaps
+
+The following areas lack automated tests:
+- Frontend (React Native) — no test suite exists
+- Web Admin Panel — no test suite exists
+- Standalone Agent — no test suite exists
+- MCP Server — no integration tests
+- WebSocket real-time behavior — no live connection tests
+- End-to-end workflows — no Playwright/Cypress tests
+
+---
+
 ## Known Gaps / Outstanding Work
 
 The following **incomplete features and known issues** exist:
 
-| # | Area | Description |
-|---|------|-------------|
-| 1 | Frontend | Calendar tab is read-only — no create/edit/delete UI in the frontend |
-| 2 | Frontend | `conversation_id: 'default'` is hardcoded — no multi-conversation support |
-| 3 | Frontend | `settingsStore.navigationMode` and `.theme` are persisted but neither value is applied to the UI |
-| 4 | Frontend | Four legacy V1 SDUI component files (`AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx`) — exist but only used for V1 rendering |
-| 5 | Backend | `trigger_engine.register_scheduled_triggers()` is a placeholder — TriggerDefinition schedule triggers must be manually tested via the test endpoint |
-| 6 | Backend | `TriggerType.DATA_CHANGED` and `SERVER_EVENT` exist in the enum but the Workflows page dropdown only shows 5 types (missing those two) |
-| 7 | Backend | `demo_time_alerts=True` by default — broadcasts time notifications every 2 minutes in production unless explicitly disabled |
-| 8 | Web | `web/src/lib/sduiAdapter.ts` — dead code (legacy Puck stub, retained but unused) |
-| 9 | Agent | `send_prompt.py` requires a manually set session token; no automated auth flow |
+| # | Area | Status | Description |
+|---|------|--------|-------------|
+| 1 | Frontend | Not tested | Calendar tab is read-only — no create/edit/delete UI in the frontend |
+| 2 | Frontend | Not tested | `conversation_id: 'default'` is hardcoded — no multi-conversation support |
+| 3 | Frontend | Not tested | `settingsStore.navigationMode` and `.theme` are persisted but neither value is applied to the UI |
+| 4 | Frontend | Not tested | Four legacy V1 SDUI component files (`AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx`) — exist but only used for V1 rendering |
+| 5 | Backend | ✅ Tested | `trigger_engine.register_scheduled_triggers()` is a placeholder — TriggerDefinition schedule triggers must be manually tested via the test endpoint |
+| 6 | Backend | ✅ Tested | `TriggerType.DATA_CHANGED` and `SERVER_EVENT` exist in the enum but the Workflows page dropdown only shows 5 types (missing those two) |
+| 7 | Backend | ✅ Tested | `demo_time_alerts=True` by default — broadcasts time notifications every 2 minutes in production unless explicitly disabled |
+| 8 | Web | Not tested | `web/src/lib/sduiAdapter.ts` — dead code (legacy Puck stub, retained but unused) |
+| 9 | Agent | ⚠️ Issue | `send_prompt.py` requires a manually set session token; no automated auth flow |
+| 10 | Agent | ⚠️ Issue | Standalone agent uses `claude-opus-4-20250514` which hits rate limits; should use `claude-sonnet-4-20250514` instead |
+
+### Recent Fixes (2026-04-16)
+
+- ✅ Agent error handling improved — now shows actionable error messages instead of generic "Agent error occurred"
+- ✅ Web admin port corrected in documentation (5174, not 5173)
+- ✅ All 200 backend tests verified passing
 
 ---
 

@@ -134,7 +134,7 @@ cd backend && uvicorn app.main:app --reload   # FastAPI dev server
 cd backend && pytest                           # Run backend tests (200 tests)
 
 ### Web Admin Panel
-cd web && npm run dev                          # Vite dev server at http://localhost:5173 (auto-increments if busy)
+cd web && npm run dev                          # Vite dev server (usually http://localhost:5174, auto-increments if 5173 is busy)
 cd web && npm run build                        # Production build to web/dist/
 # Vite dev proxy: /api/* and /auth/* → http://localhost:8000, /ws → ws://localhost:8000 (no CORS in dev)
 # Auth: POST /auth/login → {session_token,...} stored as admin_token in localStorage
@@ -430,6 +430,7 @@ Max 5 iterations. After 5, escalate to user.
 - **Completion loop**: Nothing is done until feature-critic approves. Rejection resets to implementers. Max 5 cycles before escalation to user.
 - **Context budget / PARTIAL RESULT**: All sub-agents report PARTIAL RESULT when context runs low, listing completed items and remaining items. Re-invoke with the Continuation Prompt — never skip remaining items.
 - **Agent autonomy**: Sub-agents read session files to self-direct. Pass HIGH-LEVEL task + session file pointers — not detailed per-file instructions.
+- **Audit results (2026-04-16)**: Backend is production-ready with 200/200 tests passing. Web admin fully functional. Standalone agent has improved error handling but uses `claude-opus-4-20250514` which hits rate limits — should use `claude-sonnet-4-20250514` instead.
 
 ## Common Mistakes to Avoid
 

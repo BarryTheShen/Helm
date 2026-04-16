@@ -1,0 +1,10 @@
+- generic [ref=e4]:
+  - heading "⛵ Helm Admin" [level=1] [ref=e5]
+  - generic [ref=e6]:
+    - generic [ref=e7]: Username
+    - textbox [active] [ref=e8]
+    - paragraph [ref=e9]: Username is case-sensitive
+  - generic [ref=e10]:
+    - generic [ref=e11]: Password
+    - textbox [ref=e12]
+  - button "Login" [ref=e13]
