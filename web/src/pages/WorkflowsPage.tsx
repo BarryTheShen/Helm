@@ -1,17 +1,14 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import ReactFlow, {
-  Node,
-  Edge,
   Controls,
   Background,
   useNodesState,
   useEdgesState,
   addEdge,
-  NodeTypes,
   MarkerType,
   Panel,
 } from 'reactflow';
-import type { Connection } from 'reactflow';
+import type { Node, Edge, Connection, NodeTypes } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { api, Workflow, WorkflowCreate, WorkflowUpdate } from '../lib/api';
 import { Plus, Save, Play, Upload, Trash2, X, Settings, ChevronDown, ChevronRight } from 'lucide-react';

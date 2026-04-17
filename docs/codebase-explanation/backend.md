@@ -1,6 +1,6 @@
 # Backend — Python FastAPI Server
 
-> Last updated: 2026-04-14
+> Last updated: 2026-04-17
 
 ## Tier 1: TLDR
 
@@ -59,9 +59,9 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | Config | `app/config.py` | pydantic-settings loading from `.env` (resolves from repo root) |
 | Database | `app/database.py` | Async SQLAlchemy engine + session factory |
 | Auth dependencies | `app/dependencies.py` | `get_current_user`, `get_current_user_id`, `get_token_from_request`, `require_admin`, `PaginationParams` |
-| Models | `app/models/` | 18 SQLAlchemy ORM models |
+| Models | `app/models/` | 19 SQLAlchemy ORM models |
 | Schemas | `app/schemas/` | Pydantic request/response models (16 files) |
-| Routers | `app/routers/` | 18 route files |
+| Routers | `app/routers/` | 19 route files |
 | Services | `app/services/` | auth, agent_proxy, websocket_manager, workflow_engine, action_registry, audit, component_seed, variable_resolver, trigger_engine |
 | SDUI shared contract helpers | `app/services/sdui_state.py` | Live/draft key helpers, shared validate/apply pipeline, row-aware counters, and broadcast utilities used by REST + MCP |
 | Middleware | `app/middleware/sandbox.py` | Sandbox mode ASGI middleware |
@@ -98,7 +98,8 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | `chat_messages` | id, user_id (FK), role (user/assistant/system/tool), content, metadata_json |
 | `calendar_events` | id, user_id (FK), title, start_time, end_time, description, color, location, is_all_day |
 | `notifications` | id, user_id (FK), title, message, severity (info/warning/error/success), actions (JSON), is_read |
-| `workflows` | id, user_id (FK), name, trigger_type (enum), trigger_config, action_config, is_active, run_count, last_run_at |
+| `workflows` | id, user_id (FK), name, description, graph (JSON), trigger_type (onSchedule/onDataChange/onServerEvent/manual), trigger_config (JSON), enabled |
+| `connections` | id, user_id (FK), name, provider, credentials_encrypted (Fernet) |
 | `agent_configs` | id, user_id (FK, unique), provider, model, api_key_encrypted, base_url, system_prompt, temperature, max_tokens, is_active |
 | `module_states` | id, user_id (FK), module_type (string key), state_json, version |
 | `audit_logs` | id, user_id, action_type (50, indexed), resource_type (50, indexed), resource_id, details_json, ip_address |
@@ -198,10 +199,21 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/api/workflows` | ✅ | List user workflows; pagination (`skip`, `limit`, `search`) |
-| POST | `/api/workflows` | ✅ | Create workflow; auto-registers with APScheduler if SCHEDULE type |
+| POST | `/api/workflows` | ✅ | Create workflow; auto-registers with APScheduler if onSchedule type |
 | PUT | `/api/workflows/{id}` | ✅ | Update; manages scheduler registration |
 | DELETE | `/api/workflows/{id}` | ✅ 204 | Delete; unregisters from scheduler |
 | DELETE | `/api/workflows/bulk` | ✅ | Bulk delete workflows `{ids: [...]}` |
+| POST | `/api/workflows/import/n8n` | ✅ | Import n8n workflow JSON → React Flow graph |
+
+### Connections (`/api/connections`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/connections` | ✅ | List user connections; pagination |
+| POST | `/api/connections` | ✅ | Create connection `{name, provider, credentials}` — credentials Fernet-encrypted |
+| GET | `/api/connections/{id}` | ✅ | Get connection (credentials excluded) |
+| PUT | `/api/connections/{id}` | ✅ | Update connection |
+| DELETE | `/api/connections/{id}` | ✅ 204 | Delete connection |
 
 ### Actions (`/api/actions`)
 
@@ -352,7 +364,7 @@ Registered built-in actions (singleton `registry`):
 | Name | What it does |
 |------|-------------|
 | `refresh_data` | Re-reads SDUI screen from DB for `params.module_id`, pushes `sdui_screen_update` |
-| `submit_form` | Stores form submission in `ModuleState` keyed by `form_data__{form_id}`; sends notification; fires `FORM_SUBMITTED` trigger |
+| `submit_form` | Stores form submission in `ModuleState` keyed by `form_data__{form_id}`; sends notification; fires `form_submitted` trigger |
 | `send_to_agent` | Fires `handle_chat_message()` as background task |
 | `mark_notification_read` | Sets `is_read=True` on notification |
 | `create_calendar_event` | Creates `CalendarEvent` ORM row |
@@ -360,10 +372,13 @@ Registered built-in actions (singleton `registry`):
 | `approve_draft` | Calls `tools.approve_draft()` |
 | `reject_draft` | Calls `tools.reject_draft()` with optional `feedback` |
 | `set_variable` | Upserts a CustomVariable by user + name |
+| `fetch_rss` | Fetches and parses RSS feed via `feedparser`, returns normalized article list |
+| `fetch_weather` | Fetches weather from OpenWeatherMap API using Connection credentials |
+| `run_workflow` | Executes a workflow by ID via `workflow_engine._execute_workflow()` |
 
-**Client-only action stubs (13):** `navigate`, `go_back`, `open_url`, `open_sheet`, `dismiss`, `server_action`, `set_component_state`, `toggle`, `show_notification`, `show_alert`, `haptic`, `share`, `copy_text`, `delay`, `chain`, `conditional` — these return `{"status": "client_only"}` so the action registry has a complete catalog for the web admin action catalog UI.
+**Client-only action stubs (13):** `navigate`, `go_back`, `open_url`, `server_action`, `set_component_state`, `toggle`, `show_notification`, `show_alert`, `haptic`, `share`, `copy_text`, `delay`, `chain`, `conditional` — these return `{"status": "client_only"}` so the action registry has a complete catalog for the web admin action catalog UI.
 
-**Total registered actions: 22** (9 server-side handlers + 13 client-only stubs)
+**Total registered actions: 25** (12 server-side handlers + 13 client-only stubs)
 
 ### `services/variable_resolver.py`
 
@@ -378,6 +393,7 @@ Resolves `{{expression}}` mustache syntax in SDUI payloads server-side.
 | `custom` | `{{custom.<name>}}` | CustomVariable by user + name |
 | `env` | `{{env.<key>}}` | `os.environ` |
 | `data` | `{{data.<source_name>.<field>}}` | Data source cache dict |
+| `connection` | `{{connection.<name>.<credential_key>}}` | Connection credentials (Fernet-decrypted) |
 
 Async entry point: `resolve_expression(expr, context)` replaces all `{{...}}` in a string. Unresolved expressions are left as-is.
 
@@ -392,19 +408,33 @@ Executes action chains defined in TriggerDefinition records.
 
 ### `services/workflow_engine.py`
 
-APScheduler (`AsyncIOScheduler(timezone="UTC")`)-based automation engine.
+React Flow graph execution engine with APScheduler (`AsyncIOScheduler(timezone="UTC")`).
 
-**TriggerType enum:** `EVENT_CREATED`, `EVENT_UPDATED`, `FORM_SUBMITTED`, `SCHEDULE` (cron string in `trigger_config.cron`), `MESSAGE_RECEIVED`, `DATA_CHANGED`, `SERVER_EVENT`
+**Workflow structure:**
+- `graph` field stores React Flow JSON: `{nodes: [...], edges: [...]}`
+- `trigger_type`: `onSchedule`, `onDataChange`, `onServerEvent`, `manual`
+- `trigger_config`: JSON config (e.g., `{cron: "0 9 * * *"}` for onSchedule)
 
-⚠️ `DATA_CHANGED` and `SERVER_EVENT` exist in the enum but the Workflows page dropdown only shows 5 types (these two are missing from the UI).
+**Node types:**
+- `action` — executes MCP tool via `execute_tool()`
+- `condition` — evaluates expression, branches on true/false edges
+- `switch` — multi-way branching based on expression
+- `loop` — iterates over array, executes subgraph for each item
+
+**Execution:**
+- Topological sort via in-degree queue
+- Context passing between nodes (`context.results[node_id]`)
+- Branching via edge `sourceHandle` matching condition results
+- Max iterations limit to prevent infinite loops
 
 | Function | Purpose |
 |----------|---------|
 | `start_scheduler()` / `stop_scheduler()` | Lifecycle management |
-| `_load_scheduled_workflows()` | On startup: re-registers all active SCHEDULE workflows |
-| `_schedule_workflow(workflow)` | Registers/replaces APScheduler cron job (`misfire_grace_time=300`) |
-| `fire_trigger(trigger_type, user_id, event_data)` | Called by routers when events occur; finds matching workflows |
-| `register_workflow(workflow)` / `unregister_workflow(workflow_id)` | Called by workflow router after DB insert/delete |
+| `_load_scheduled_workflows()` | On startup: re-registers all active onSchedule workflows |
+| `_schedule_workflow_by_config(workflow_id, config)` | Registers APScheduler cron job |
+| `fire_trigger(trigger_type, user_id, event_data)` | Called by routers when events occur; finds matching workflows and executes |
+| `_execute_workflow(workflow_id, event_data)` | Executes workflow graph in topological order |
+| `_execute_graph(nodes, edges, user_id, context)` | Core graph execution with branching/looping support |
 
 ### `services/audit.py`
 
@@ -414,12 +444,17 @@ APScheduler (`AsyncIOScheduler(timezone="UTC")`)-based automation engine.
 
 ### `services/component_seed.py`
 
-Seeds the `component_registry` table on startup with 11 default components:
-- `text`, `markdown`, `button`, `image`, `container`, `calendar`, `alert`, `list`, `form`, `divider`, `spacer`
+Seeds the `component_registry` table on startup with default components. Only inserts if the component type doesn't already exist.
 
-Plus 4 hardcoded composites: `calendar_module`, `chat_module`, `notes_module`, `input_bar`
+**Atomic components (11):** `text`, `markdown`, `rich_text_renderer`, `button`, `image`, `textinput`, `container`, `divider`, `spacer`, `alert`, `list`
 
-Only inserts if the component type doesn't already exist.
+**Composite components (6):** `calendar`, `form`, `todo`, `article_card`, `calendar_module`, `chat_module`, `notes_module`, `input_bar`
+
+**New in Session 9:**
+- `rich_text_renderer` — renders markdown/rich text with theme support
+- `todo` — interactive todo list with add/toggle/delete actions
+- `article_card` — article preview card with image, title, description, source, publishedAt
+- `calendar` — updated with `variant` prop (month/week/day/agenda)
 
 ### `services/websocket_manager.py` (updated)
 
@@ -514,3 +549,41 @@ All tool logic is here; shared between the Agent Proxy (internal) and MCP Server
 | `apscheduler` | ≥3.11 | Cron/event scheduler |
 | `loguru` | ≥0.7 | Logging |
 | `python-dotenv` | ≥1.0 | `.env` loading |
+| `cryptography` | ≥44.0 | Fernet encryption for credentials |
+| `feedparser` | ≥6.0.0 | RSS feed parsing |
+
+---
+
+## Session 9 Changes (2026-04-17)
+
+### New Models
+- **Connection** — OAuth/API key storage with Fernet encryption (`id`, `user_id`, `name`, `provider`, `credentials_encrypted`)
+- **Workflow** — Updated to React Flow graph structure (`graph` JSON field replaces `action_config`; removed `run_count`, `last_run_at`)
+
+### New Routers
+- **connections.py** — CRUD for connections with encrypted credentials
+- **workflows.py** — Added n8n import endpoint (`POST /api/workflows/import/n8n`)
+
+### New Actions
+- **fetch_rss** — Fetches and parses RSS feeds via `feedparser`
+- **fetch_weather** — Fetches weather from OpenWeatherMap API using Connection credentials
+- **run_workflow** — Executes workflow by ID
+
+### New Components
+- **todo** — Interactive todo list with add/toggle/delete
+- **rich_text_renderer** — Markdown/rich text renderer with theme support
+- **article_card** — Article preview card with image, title, description, source
+- **calendar** — Updated with `variant` prop (month/week/day/agenda)
+
+### Variable Resolver
+- Added `connection.*` namespace for accessing encrypted connection credentials
+
+### Workflow Engine
+- Executes React Flow graphs in topological order
+- Supports branching (condition, switch nodes)
+- Supports loops (loop node with iteration context)
+- Node types: action, condition, switch, loop
+
+### Template Seed
+- 5 new production templates (Calendar, Chat, News, Weather, Tasks)
+- Templates now use new components and actions
