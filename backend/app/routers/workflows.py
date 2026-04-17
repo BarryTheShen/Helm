@@ -133,6 +133,32 @@ async def create_workflow(
     )
 
 
+@router.get("/{workflow_id}", response_model=WorkflowResponse)
+async def get_workflow(
+    workflow_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Workflow).where(Workflow.id == workflow_id, Workflow.user_id == user_id)
+    )
+    wf = result.scalar_one_or_none()
+    if wf is None:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
+    return WorkflowResponse(
+        id=str(wf.id),
+        name=wf.name,
+        description=wf.description,
+        graph=wf.graph or {},
+        trigger_type=wf.trigger_type,
+        trigger_config=wf.trigger_config or {},
+        enabled=wf.enabled,
+        created_at=wf.created_at.isoformat(),
+        updated_at=wf.updated_at.isoformat(),
+    )
+
+
 @router.put("/{workflow_id}", response_model=WorkflowResponse)
 async def update_workflow(
     workflow_id: str,
@@ -207,6 +233,36 @@ async def delete_workflow(
     await log_audit(db, user_id, "WORKFLOW_DELETED", "workflow", workflow_id, ip=request.client.host if request.client else None)
     await db.delete(wf)
     await db.commit()
+
+
+class WorkflowExecuteResponse(BaseModel):
+    status: str
+    message: str
+
+
+@router.post("/{workflow_id}/execute", response_model=WorkflowExecuteResponse)
+async def execute_workflow(
+    workflow_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually execute a workflow."""
+    from app.services.workflow_engine import _execute_workflow
+
+    result = await db.execute(
+        select(Workflow).where(Workflow.id == workflow_id, Workflow.user_id == user_id)
+    )
+    wf = result.scalar_one_or_none()
+    if wf is None:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
+    # Execute workflow asynchronously
+    await _execute_workflow(workflow_id, event_data={"trigger": "manual"})
+
+    return WorkflowExecuteResponse(
+        status="success",
+        message=f"Workflow '{wf.name}' executed successfully"
+    )
 
 
 @router.post("/bulk-delete")

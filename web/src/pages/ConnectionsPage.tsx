@@ -70,7 +70,12 @@ export function ConnectionsPage() {
       return;
     }
     try {
-      await api.post<Connection>('/api/connections', newConn);
+      // Transform to backend schema: credentials is a dict
+      await api.post<Connection>('/api/connections', {
+        name: newConn.name,
+        provider: newConn.provider,
+        credentials: { api_key: newConn.api_key }
+      });
       setShowCreate(false);
       setNewConn({ name: '', provider: 'openweathermap', api_key: '' });
       setError('');
@@ -99,7 +104,12 @@ export function ConnectionsPage() {
   const saveEdit = async () => {
     if (!editingConn) return;
     try {
-      await api.put<Connection>(`/api/connections/${editingConn.id}`, editForm);
+      // Transform to backend schema: credentials is a dict
+      const payload: { name?: string; credentials?: { api_key: string } } = {};
+      if (editForm.name !== undefined) payload.name = editForm.name;
+      if (editForm.api_key !== undefined) payload.credentials = { api_key: editForm.api_key };
+
+      await api.put<Connection>(`/api/connections/${editingConn.id}`, payload);
       setEditingConn(null);
       setEditForm({});
       setError('');
