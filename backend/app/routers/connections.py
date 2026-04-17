@@ -20,11 +20,10 @@ router = APIRouter(prefix="/api/connections", tags=["connections"])
 
 
 def _get_fernet() -> Fernet:
-    """Derive a Fernet key from the app's secret key."""
-    key_material = settings.secret_key.encode()
-    digest = hashlib.sha256(key_material).digest()
-    fernet_key = base64.urlsafe_b64encode(digest)
-    return Fernet(fernet_key)
+    """Get Fernet cipher using the encryption key from settings."""
+    if not settings.encryption_key:
+        raise ValueError("ENCRYPTION_KEY must be set in environment variables")
+    return Fernet(settings.encryption_key.encode())
 
 
 def _encrypt_credentials(credentials: dict) -> str:
@@ -59,7 +58,7 @@ async def list_connections(
     connections = result.scalars().all()
 
     return PaginatedResponse(
-        items=[ConnectionOut.model_validate(c) for c in connections],
+        items=[ConnectionOut.model_validate(c, from_attributes=True) for c in connections],
         total=total,
         limit=pagination.limit,
         offset=pagination.offset,

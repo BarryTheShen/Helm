@@ -17,11 +17,10 @@ from app.services.audit import log_audit
 
 
 def _get_fernet() -> Fernet:
-    """Derive a Fernet key from the app's secret key."""
-    key_material = settings.secret_key.encode()
-    digest = hashlib.sha256(key_material).digest()
-    fernet_key = base64.urlsafe_b64encode(digest)
-    return Fernet(fernet_key)
+    """Get Fernet cipher using the encryption key from settings."""
+    if not settings.encryption_key:
+        raise ValueError("ENCRYPTION_KEY must be set in environment variables")
+    return Fernet(settings.encryption_key.encode())
 
 
 def _encrypt_api_key(api_key: str) -> str:

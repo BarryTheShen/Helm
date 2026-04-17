@@ -6,7 +6,7 @@ interface Connection {
   id: string;
   name: string;
   provider: string;
-  api_key: string;
+  api_key?: string;
   created_at: string;
   updated_at: string;
 }
@@ -131,8 +131,8 @@ export function ConnectionsPage() {
     });
   };
 
-  const maskKey = (key: string) => {
-    if (key.length <= 8) return '••••••••';
+  const maskKey = (key: string | undefined) => {
+    if (!key || key.length <= 8) return '••••••••';
     return key.slice(0, 4) + '••••••••' + key.slice(-4);
   };
 

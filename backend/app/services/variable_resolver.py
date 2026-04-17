@@ -27,17 +27,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 _EXPRESSION_RE = re.compile(r"\{\{(.+?)\}\}")
 
 
-def _get_fernet(secret_key: str) -> Fernet:
-    """Derive a Fernet key from the app's secret key."""
-    key_material = secret_key.encode()
-    digest = hashlib.sha256(key_material).digest()
-    fernet_key = base64.urlsafe_b64encode(digest)
-    return Fernet(fernet_key)
+def _get_fernet(encryption_key: str) -> Fernet:
+    """Get Fernet cipher using the encryption key."""
+    if not encryption_key:
+        raise ValueError("ENCRYPTION_KEY must be set in environment variables")
+    return Fernet(encryption_key.encode())
 
 
-def _decrypt_credentials(encrypted: str, secret_key: str) -> dict:
+def _decrypt_credentials(encrypted: str, encryption_key: str) -> dict:
     """Decrypt encrypted credentials string, return dict."""
-    json_str = _get_fernet(secret_key).decrypt(encrypted.encode()).decode()
+    json_str = _get_fernet(encryption_key).decrypt(encrypted.encode()).decode()
     return json.loads(json_str)
 
 
@@ -114,12 +113,12 @@ async def _resolve_single(expr: str, context: dict[str, Any]) -> str:
             if value is not None:
                 return str(value)
 
-        # Query database if cache miss and db/user_id/secret_key available
+        # Query database if cache miss and db/user_id/encryption_key available
         db = context.get("db")
         user_id = context.get("user_id")
-        secret_key = context.get("secret_key")
+        encryption_key = context.get("encryption_key")
 
-        if db is not None and user_id is not None and secret_key is not None:
+        if db is not None and user_id is not None and encryption_key is not None:
             from app.models.connection import Connection
 
             result = await db.execute(
@@ -132,7 +131,7 @@ async def _resolve_single(expr: str, context: dict[str, Any]) -> str:
 
             if connection is not None:
                 try:
-                    credentials = _decrypt_credentials(connection.credentials_encrypted, secret_key)
+                    credentials = _decrypt_credentials(connection.credentials_encrypted, encryption_key)
                     # Cache for future lookups in this context
                     if connection_name not in connections_cache:
                         connections_cache[connection_name] = credentials
