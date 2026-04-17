@@ -1,6 +1,6 @@
-# Frontend — React Native (Expo) Mobile App
+# Frontend — React Native (Expo) Mobile App + Web Admin
 
-> Last updated: 2026-04-14
+> Last updated: 2026-04-17
 
 ## Tier 1: TLDR
 
@@ -63,7 +63,8 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 - **State written:** `authStore.serverUrl` (persisted to SecureStore)
 
 ### `app/(auth)/login.tsx` — Sign In
-- **Shows:** Username + password fields, "Connected to: {serverUrl}" + "Change Server" link
+- **Shows:** Username + password fields only (no signup), "Connected to: {serverUrl}" + "Change Server" link
+- **Rewritten in Session 9:** Simplified to 3 fields (username, password, server display), removed signup flow
 - **API:** `POST /auth/login` with `device_id: 'web'`, `device_name: 'Web Browser'`
 - **State written:** `authStore.token` + `authStore.user` (persisted)
 
@@ -89,9 +90,12 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 - **Shows:** List of notification cards with title, message, formatted timestamp. SDUI fallback if set.
 - **API:** `GET /api/notifications` on mount and when `[token, serverUrl]` change. Re-fetches on WS `notification` message.
 
-### `app/(tabs)/modules.tsx` — Module Manager
-- **Shows:** FlatList of built-in and custom modules with icon, name, built-in/custom label, and enabled/disabled badge. Built-ins navigate to their existing tab route; custom modules navigate to `/module/[moduleId]`. SDUI fallback if set.
-- **API:** `GET /api/modules` on mount.
+### `app/(tabs)/modules.tsx` — Module Store
+- **Shows:** Two-mode view: "My Modules" (installed modules with enable/disable toggles) and "Module Store" (all available templates from backend)
+- **Session 9 changes:** Added Module Store view showing all templates (system + custom), tab bar customization via enable/disable toggles
+- **API:** `GET /api/modules` (module list), `GET /api/templates` (template list for store view)
+- **State:** `tabsStore.enabledTabIds` (user's enabled tabs, persisted to AsyncStorage)
+- **Navigation:** Built-in modules route to `/(tabs)/{name}`, custom modules route to `/module/{id}`
 
 ### `app/module/[moduleId].tsx` — Custom Module Route
 - **Shows:** AI-generated SDUI screen for the selected custom module, or `DraftPreview` if draft exists, or empty-state prompt
@@ -104,7 +108,13 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 
 ### `app/(tabs)/settings.tsx` — Settings
 - **Shows:** Server URL, Navigation Mode, Theme, Version (1.0.0), Username, Logout. SDUI fallback if set.
+- **Session 9:** Settings page has 4 items only (Theme, Notifications, Data Sync, About)
 - **No API calls** — display only. Logout → `authStore.logout()` → navigate to connect.
+
+### `app/(tabs)/article.tsx` — Article Reader (NEW in Session 9)
+- **Shows:** Full article content with header image, title, source, published date, and markdown content rendered via `RichTextRendererComponent`
+- **Route params:** title, content, imageUrl, source, publishedAt (passed from ArticleCard navigation)
+- **No API calls** — displays data passed via route params from RSS feed
 
 ---
 
@@ -115,7 +125,7 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 | `useAuthStore` | `src/stores/authStore.ts` | `token`, `user`, `serverUrl`, `isLoading` | SecureStore: `auth_token`, `server_url`, `username` |
 | `useUIStore` | `src/stores/uiStore.ts` | `isConnected`, `errorBanner: {message, retry?}` | No |
 | `useSettingsStore` | `src/stores/settingsStore.ts` | `navigationMode`, `theme` | AsyncStorage: `navigation_mode`, `theme` |
-| `useTabsStore` | `src/stores/tabsStore.ts` | `hiddenTabs: string[]`, `moduleConfigs: Record<string, {name, icon}>` | No (reloaded from server) |
+| `useTabsStore` | `src/stores/tabsStore.ts` | `hiddenTabs: string[]`, `moduleConfigs: Record<string, {name, icon}>`, `enabledTabIds: string[]` | `enabledTabIds` persisted to AsyncStorage |
 | `componentStateStore` | `src/stores/componentStateStore.ts` | `states: Record<componentId, Record<key, any>>` | No (in-session only) |
 
 **Critical notes:**
@@ -123,6 +133,7 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 - `settingsStore.navigationMode` and `settingsStore.theme` are stored but **neither has any effect** on the UI
 - `settingsStore` uses `AsyncStorage` directly instead of the `storage` utility (inconsistency)
 - `tabsStore.hiddenTabs` is repopulated from `GET /api/modules` on every app launch
+- **Session 9:** `tabsStore.enabledTabIds` controls user's customizable tab bar (persisted to AsyncStorage). Tabs are shown if: (1) in `enabledTabIds` AND (2) not in `hiddenTabs` (server-side)
 
 ---
 
@@ -154,6 +165,7 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 | `updateWorkflow(id, w)` | PUT | `/api/workflows/{id}` | |
 | `deleteWorkflow(id)` | DELETE | `/api/workflows/{id}` | |
 | `getModules()` | GET | `/api/modules` | |
+| `getTemplates()` | GET | `/api/templates` | Session 9: used by Module Store view |
 | `hideTab(tabId)` | DELETE | `/api/modules/{tabId}` | |
 | `showTab(tabId)` | POST | `/api/modules/{tabId}/show` | |
 | `configureModule(tabId, config)` | PATCH | `/api/modules/{tabId}/config` | `{name?, icon?}` body |
@@ -333,6 +345,15 @@ Uses `resolveColor()` and `themeShadows` from `src/theme/tokens.ts`.
 | `NotesModule` | Placeholder | Shows "Notes will appear here"; pull-to-refresh via RefreshControl |
 | `InputBar` | Full MVP | Text input + send strip; send stays disabled unless both `onSend` and `dispatch` are available, and typed text is only cleared after a send action actually dispatches |
 
+### V2 SDUI Components (NEW in Session 9)
+
+| Component | File | Key Props | Notes |
+|-----------|------|-----------|-------|
+| `CalendarComponent` | `src/components/sdui/CalendarComponent.tsx` | `events, variant?('month'\|'week'\|'day'\|'agenda'), onEventPress?, onAction?` | Rewritten with variant support and date navigation controls |
+| `TodoComponent` | `src/components/sdui/TodoComponent.tsx` | `items: {id, text, completed}[], placeholder?, onToggle?, onAdd?, onDelete?, dispatch?` | Checkbox list with add/delete actions |
+| `RichTextRendererComponent` | `src/components/sdui/RichTextRendererComponent.tsx` | `content (markdown), theme?('light'\|'dark'), dispatch?` | Custom regex-based markdown parser (headings, bold, italic, lists, links, code blocks, blockquotes) |
+| `ArticleCardComponent` | `src/components/sdui/ArticleCardComponent.tsx` | `title, description, imageUrl?, publishedAt, source, onPress?, dispatch?` | News article card with image, metadata, and tap action |
+
 ### Component Registry (`src/renderer/componentRegistry.ts`)
 
 ```ts
@@ -448,28 +469,34 @@ web/src/
 │   └── AdminLayout.tsx   → Sidebar nav + top bar
 ├── pages/
 │   ├── LoginPage.tsx     → Auth against /auth/login
-│   ├── DashboardPage.tsx → GET /api/admin/stats
-│   ├── UsersPage.tsx     → CRUD /api/admin/users
-│   ├── SessionsPage.tsx  → GET /api/sessions, DELETE /api/sessions/{id}
-│   ├── AuditPage.tsx     → GET /api/audit
-│   ├── WorkflowsPage.tsx → Workflow management
-│   ├── TemplatesPage.tsx → SDUI template CRUD + import/export
-│   ├── ComponentsPage.tsx→ Component registry viewer
+│   ├── UsersPage.tsx     → CRUD /api/admin/users (Session 9: moved to Settings)
+│   ├── WorkflowsPage.tsx → React Flow visual workflow builder (Session 9: major rewrite)
+│   ├── TemplatesPage.tsx → SDUI template CRUD + import/export + preview features (Session 9: added SDUIPreview and AppPreview)
+│   ├── ConnectionsPage.tsx → NEW Session 9: OAuth/API key management with Fernet encryption
+│   ├── LogsPage.tsx      → NEW Session 9: merged Sessions + Audit Logs
+│   ├── VariablesPage.tsx → Custom variable management
 │   └── EditorPage.tsx    → Custom SDUI editor shell + toolbar + status bar; toolbar and status bar use actual `deviceWidth`/`deviceHeight` from Zustand store for display; confirms destructive unsaved-change flows, preserves legacy V1 section titles as heading rows, keeps imported V1 section components vertically stacked by emitting one row per legacy component, and supports module CRUD (create custom modules with name+icon, delete custom modules with ✦ marker)
 ├── editor/
 │   ├── types.ts          → Editor types, row visual props, device presets, component registry; preserves lowercase legacy runtime component types as read-only, non-authorable inspection entries instead of normalizing them away, filters non-authorable picker entries, and requires a non-empty `server_action.function` plus valid JSON-object `params` when provided before persistence
 │   ├── templateLibrary.ts→ Local starter screens + reusable row templates aligned to live component props; starter `InputBar` templates no longer seed dead `send_to_agent.message` defaults
-│   ├── componentSchemas.ts → Dynamic property schema definitions for the inspector; unsupported imported actions fall back to generic editable fields, but only supported authorable actions are offered for new edits
+│   ├── componentSchemas.ts → Dynamic property schema definitions for the inspector; unsupported imported actions fall back to generic editable fields, but only supported authorable actions are offered for new edits; Session 9: added Todo, RichTextRenderer, ArticleCard, Calendar variant schemas
 │   ├── useEditorStore.ts → Rows-first Zustand editor contract, history, selection, device preview state
 │   ├── StructureTree.tsx → Left panel tree + JSON copy actions
-│   ├── EditorCanvas.tsx  → Center canvas with cell resize, row-height resize, stable multi-step row drag (50px threshold, 300ms debounce), no dead component-level move control, and read-only preview plus Inspect semantics for preserved lowercase legacy runtime components
-│   ├── PropertyInspector.tsx → Right panel editor for rows/components with explicit auto width controls, uniform + per-side padding, runtime-aligned props, InputBar-specific action narrowing with fallback handling for imported unknown actions, and read-only summaries for preserved legacy runtime payloads including structured action/list/stat/form data
+│   ├── EditorCanvas.tsx  → Center canvas with cell resize, row-height resize, stable multi-step row drag (50px threshold, 300ms debounce), no dead component-level move control, and read-only preview plus Inspect semantics for preserved lowercase legacy runtime components; Session 9: external drag handles, percentage width rendering
+│   ├── PropertyInspector.tsx → Right panel editor for rows/components with explicit auto width controls, uniform + per-side padding, runtime-aligned props, InputBar-specific action narrowing with fallback handling for imported unknown actions, and read-only summaries for preserved legacy runtime payloads including structured action/list/stat/form data; Session 9: width toggle (flex vs percentage), VariableInput integration
+│   ├── VariablePicker.tsx → NEW Session 9: @ trigger variable picker with namespace support
+│   ├── VariableInput.tsx → NEW Session 9: Text input with variable picker integration
+│   ├── useVariablePicker.tsx → NEW Session 9: Hook for variable picker state management
 │   └── ComponentPicker.tsx → Component type chooser for empty cells
 ├── lib/
-│   ├── api.ts            → Typed fetch wrapper for all admin endpoints; login can suppress the global 401 handler
+│   ├── api.ts            → Typed fetch wrapper for all admin endpoints; login can suppress the global 401 handler; Session 9: added connection endpoints, workflow graph endpoints, template preview
 │   ├── puckConfig.tsx    → Deprecated delete stub; current editor does not import it
 │   ├── sduiAdapter.ts    → Legacy normalization helper retained from the old editor
 │   └── utils.ts          → Shared helpers
+├── components/
+│   ├── AdminLayout.tsx   → Sidebar nav + top bar; Session 9: restructured sidebar (Visual Editor, Templates, Workflows, Variables, Connections, Advanced [Logs], Settings)
+│   ├── SDUIPreview.tsx   → NEW Session 9: Template preview component with simplified component renderers
+│   └── AppPreview.tsx    → NEW Session 9: Whole app preview with tab navigation
 └── stores/
     └── authStore.ts      → Zustand auth store (token, user, serverUrl); failed `/auth/login` requests do not clear stored auth state
 ```
@@ -488,8 +515,10 @@ The editor page (`/editor`) is a custom React + Zustand SDUI editor built from `
 **Editing flow:**
 - Device preview supports presets, rotation, and custom width/height values with an explicit Apply action; the toolbar and status bar read actual `deviceWidth`/`deviceHeight` from the Zustand store (not swapped preset values) so display text stays correct across all device/orientation combinations
 - The canvas provides component previews, add-row buttons, row drag handles, cell width resize handles, and direct row-height drag handles; preserved lowercase legacy runtime components render read-only previews and switch the hover affordance from `Edit` to `Inspect`, multi-step row dragging uses a 50px movement threshold and 300ms debounce to prevent overshoot (rows move exactly 1 position per drag gesture), and adjacent-cell resize changes are previewed live and committed once on mouse-up so undo reverts the full resize in a single step
+- **Session 9:** External drag handles for rows, percentage width rendering in canvas
 - `ComponentPicker` only offers components marked authorable in `types.ts`, so internal-only components stay out of the add-component flow
 - `PropertyInspector` edits row height, cell count, cell widths, background, uniform and per-side padding, horizontal scrollability, and component props/actions; preserved legacy runtime payloads instead get read-only summaries, including structured action/list/stat/form data, cell widths preserve `auto` through explicit Auto controls instead of coercing unset widths to numbers, side-specific padding inputs stay blank when inheriting the uniform row padding value, runtime-aligned schemas no longer expose the removed `ChatModule.showHistory` or `NotesModule.showToolbar` controls, new actions stay limited to the supported authorable set (`navigate`, `server_action`, `open_url`, `go_back`, `send_to_agent`, `dismiss`, `copy_text`), `InputBar` narrows new action authoring further to `None`, `Send to Agent`, and `Server Action`, and imported unsupported actions still fall back to generic editable fields, including imported `InputBar` actions outside that narrowed set
+- **Session 9:** Width toggle (flex vs percentage), VariablePicker with @ trigger for variable insertion in text fields
 - Switching modules, applying saved server templates, importing JSON, applying local screen templates, and appending local row templates all prompt before destructive unsaved-change paths
 - Switching modules loads the live screen and draft together; pending drafts win so review/edit resumes from the newest unsaved state
 - If module or screen fetch fails, `EditorPage` shows the error state and disables editing for that selection instead of fabricating empty module data
@@ -506,3 +535,31 @@ The editor page (`/editor`) is a custom React + Zustand SDUI editor built from `
 - `web/src/lib/puckConfig.tsx` remains only as a deprecated delete stub; the current editor does not import it
 
 No active cosmetic issues are currently documented for the custom editor.
+
+### Session 9 Web Admin Changes Summary
+
+**Sidebar restructure:**
+- New order: Visual Editor, Templates, Workflows, Variables, Connections, Advanced (collapsible), Settings
+- Removed pages: Dashboard (hidden, not deleted), Components, Actions & Triggers
+- New pages: ConnectionsPage, LogsPage (merged Sessions + Audit), WorkflowsPage (React Flow)
+
+**WorkflowsPage:**
+- React Flow visual workflow builder with node inspector
+- Graph-based workflow execution (branching, loops)
+- n8n workflow importer endpoint
+
+**ConnectionsPage:**
+- OAuth and API key management
+- Fernet encryption for sensitive credentials
+- Provider-based connection storage
+
+**TemplatesPage:**
+- Added SDUIPreview component for template preview
+- Added AppPreview component for whole app preview with tab navigation
+- Preview features integrated into template management
+
+**Editor improvements:**
+- Percentage widths for cells (flex vs percentage toggle)
+- VariablePicker with @ trigger for variable insertion
+- External drag handles for rows
+- New component schemas: Todo, RichTextRenderer, ArticleCard, Calendar variant

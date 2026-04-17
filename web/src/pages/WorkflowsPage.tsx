@@ -10,7 +10,7 @@ import ReactFlow, {
 } from 'reactflow';
 import type { Node, Edge, Connection, NodeTypes } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { api, Workflow, WorkflowCreate, WorkflowUpdate } from '../lib/api';
+import { api, type Workflow, type WorkflowCreate, type WorkflowUpdate } from '../lib/api';
 import { Plus, Save, Play, Upload, Trash2, X, Settings, ChevronDown, ChevronRight } from 'lucide-react';
 
 // Custom node components

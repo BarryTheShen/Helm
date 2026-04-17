@@ -63,10 +63,10 @@ Helm/
 │   │   ├── config.py           # Settings (pydantic-settings)
 │   │   ├── database.py         # SQLAlchemy async engine + session
 │   │   ├── dependencies.py     # get_current_user, get_db, require_admin, PaginationParams
-│   │   ├── models/             # SQLAlchemy ORM models (18 models)
-│   │   ├── schemas/            # Pydantic request/response schemas (16 files)
-│   │   ├── routers/            # FastAPI routers (18 route files)
-│   │   ├── services/           # Business logic (auth, agent_proxy, ws_manager, workflow_engine, audit, component_seed, variable_resolver, trigger_engine)
+│   │   ├── models/             # SQLAlchemy ORM models (19 models — added Connection in Session 9)
+│   │   ├── schemas/            # Pydantic request/response schemas (17 files — added connection.py in Session 9)
+│   │   ├── routers/            # FastAPI routers (19 route files — added connections.py in Session 9)
+│   │   ├── services/           # Business logic (auth, agent_proxy, ws_manager, workflow_engine, audit, component_seed, variable_resolver, trigger_engine, connection_service)
 │   │   ├── mcp/                # MCP server (FastMCP) + tool implementations
 │   │   ├── middleware/         # ASGI middleware (sandbox.py)
 │   │   └── utils/              # security.py (JWT, bcrypt)
@@ -88,7 +88,7 @@ Helm/
 ├── web/                          # Web Admin Panel (Vite + React + TypeScript + Tailwind)
 │   ├── src/
 │   │   ├── App.tsx               # React Router, auth guard, AdminLayout
-│   │   ├── pages/                # Login, Dashboard, Users, Sessions, Audit, Workflows, Templates, Components, Editor, Variables, ActionsTriggersPage
+│   │   ├── pages/                # Login, Editor, Templates, Workflows, Variables, Connections, Logs (merged Sessions+Audit), Settings (renamed from Users)
 │   │   ├── lib/
 │   │   │   ├── api.ts            # Typed fetch wrapper for admin endpoints
 │   │   │   ├── sduiAdapter.ts    # Legacy format normalization (Puck conversion removed)
@@ -98,10 +98,11 @@ Helm/
 │   │   │   ├── componentSchemas.ts # Per-component prop schemas for property inspector
 │   │   │   ├── useEditorStore.ts # Zustand store — rows, selection, clipboard, undo/redo, updateCellRules
 │   │   │   ├── StructureTree.tsx # Left panel — screen structure tree with CRUD
-│   │   │   ├── EditorCanvas.tsx  # Center panel — interactive canvas with previews
-│   │   │   ├── PropertyInspector.tsx # Right panel — tabbed (Properties/Rules) contextual editor
+│   │   │   ├── EditorCanvas.tsx  # Center panel — interactive canvas with previews, percentage widths, external drag handles (Session 9)
+│   │   │   ├── PropertyInspector.tsx # Right panel — tabbed (Properties/Rules) contextual editor, VariablePicker with @ trigger (Session 9)
 │   │   │   ├── RuleBuilder.tsx   # Notion-style visual rule builder for action chains
-│   │   │   └── ComponentPicker.tsx # Component type selection popover
+│   │   │   ├── ComponentPicker.tsx # Component type selection popover
+│   │   │   └── VariablePicker.tsx # Variable insertion UI with @ trigger (Session 9)
 │   │   ├── stores/authStore.ts   # Zustand auth state
 │   │   └── components/           # AdminLayout sidebar + top bar
 │   └── vite.config.ts
@@ -431,6 +432,7 @@ Max 5 iterations. After 5, escalate to user.
 - **Context budget / PARTIAL RESULT**: All sub-agents report PARTIAL RESULT when context runs low, listing completed items and remaining items. Re-invoke with the Continuation Prompt — never skip remaining items.
 - **Agent autonomy**: Sub-agents read session files to self-direct. Pass HIGH-LEVEL task + session file pointers — not detailed per-file instructions.
 - **Audit results (2026-04-16)**: Backend is production-ready with 200/200 tests passing. Web admin fully functional. Standalone agent has improved error handling but uses `claude-opus-4-20250514` which hits rate limits — should use `claude-sonnet-4-20250514` instead.
+- **Session 9 architecture (2026-04-17)**: Major overhaul across all three layers. Backend: Connection model for encrypted API key storage, connection.* variable namespace, React Flow workflow graphs with branching/loops, new actions (fetch_rss, fetch_weather, run_workflow), removed actions (open_sheet, dismiss), new components (Todo, RichTextRenderer, ArticleCard), Calendar variant prop, 5 production templates, n8n workflow importer. Web Admin: Sidebar restructure (removed Dashboard/Components/Actions & Triggers, added Connections/Logs, renamed Users→Settings), React Flow workflow editor, percentage widths in editor, VariablePicker with @ trigger, external drag handles, SDUIPreview and AppPreview components. Mobile: Login rewrite (3 fields, no signup), Article Reader screen, customizable tab bar, Module Store view.
 
 ## Common Mistakes to Avoid
 

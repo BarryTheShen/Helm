@@ -36,9 +36,9 @@ Helm is a self-hosted AI super app with three layers:
 
 | Need to change... | Edit this file | Notes |
 |-------------------|---------------|-------|
-| API endpoints | `routers/{domain}.py` | 18 router files |
-| Database models | `models/{model}.py` | 18 model files, all import in `models/__init__.py` |
-| Request/response types | `schemas/{domain}.py` | 16 schema files (includes trigger.py); workflow schemas inline in `routers/workflows.py` |
+| API endpoints | `routers/{domain}.py` | 19 router files (added connections.py in Session 9) |
+| Database models | `models/{model}.py` | 19 model files (added connection.py in Session 9), all import in `models/__init__.py` |
+| Request/response types | `schemas/{domain}.py` | 17 schema files (added connection.py in Session 9); workflow schemas inline in `routers/workflows.py` |
 | Auth logic | `services/auth.py` + `utils/security.py` | Session-based with JWT tokens |
 | Admin-only guard | `dependencies.py::require_admin` | Raises 403 if `user.role != "admin"` |
 | AI chat streaming | `services/agent_proxy.py` | Core feature — LLM streaming + tool calls + XML fallback |
@@ -138,15 +138,17 @@ Helm is a self-hosted AI super app with three layers:
 |-------------------|---------------|-------|
 | App entry / routing | `web/src/App.tsx` | React Router; login guard; `AdminLayout` wrapper; restructured sidebar navigation |
 | Login page | `web/src/pages/LoginPage.tsx` | Authenticates against backend `/auth/login` |
-| User management | `web/src/pages/UsersPage.tsx` | CRUD via `/api/users` |
+| User management | `web/src/pages/UsersPage.tsx` | REMOVED in Session 9 — renamed to SettingsPage |
+| Settings page | `web/src/pages/SettingsPage.tsx` | General preferences (renamed from UsersPage in Session 9) |
 | Workflow management | `web/src/pages/WorkflowsPage.tsx` | React Flow visual workflow builder with node inspector; n8n import support |
 | SDUI template management | `web/src/pages/TemplatesPage.tsx` | CRUD + import/export templates; SDUIPreview and AppPreview components |
 | Variables management | `web/src/pages/VariablesPage.tsx` | Variables CRUD with VariablePicker component (@ trigger) |
 | Connections management | `web/src/pages/ConnectionsPage.tsx` | OAuth/API key management for service integrations |
 | Logs viewer | `web/src/pages/LogsPage.tsx` | Merged Sessions + Audit Logs in single page |
 | Visual SDUI editor | `web/src/pages/EditorPage.tsx` | Custom 3-panel editor: structure tree + template library, draft save/push-live flow, presets + custom device sizes, JSON view/import, undo/redo, status bar (shows actual `deviceWidth`×`deviceHeight` from Zustand store), destructive unsaved-change confirmations, live+draft loading that prefers drafts, surfaced module/screen load errors, delete-screen gating on persisted-or-draft state, legacy V1 section-title normalization into heading rows, V1 import that preserves vertical section stacks by emitting one row per legacy component, read-only preservation of lowercase legacy runtime payloads including legacy forms, and module CRUD (create/delete custom modules); percentage-based cell widths with width toggle |
-| Editor types & presets | `web/src/editor/types.ts` | EditorRow/Cell/Screen types, row visual props, DevicePresets (10 presets), ComponentRegistry, authorable component filtering, `server_action` param validation before persistence, ActionRule/ActionStep types, `rules` field on EditorCell; percentage width support |
-| Component prop schemas | `web/src/editor/componentSchemas.ts` | Per-component property schemas for dynamic form generation in PropertyInspector; includes Todo, RichTextRenderer, ArticleCard, Calendar variants; only supported authorable actions are offered for new edits, while imported unsupported actions fall back to generic editable fields |
+| Editor types & presets | `web/src/editor/types.ts` | EditorRow/Cell/Screen types, row visual props, DevicePresets (10 presets), ComponentRegistry, authorable component filtering, `server_action` param validation before persistence, ActionRule/ActionStep types, `rules` field on EditorCell; percentage width support (Session 9) |
+| Component prop schemas | `web/src/editor/componentSchemas.ts` | Per-component property schemas for dynamic form generation in PropertyInspector; includes Todo, RichTextRenderer, ArticleCard, Calendar variants (Session 9); only supported authorable actions are offered for new edits, while imported unsupported actions fall back to generic editable fields |
+| VariablePicker component | `web/src/editor/VariablePicker.tsx` | Variable insertion UI with @ trigger for text fields (Session 9) |
 | Property inspector (right) | `web/src/editor/PropertyInspector.tsx` | Tabbed UI (Properties/Rules) for interactive components; contextual editor for row height, cell count/widths (percentage toggle), background, per-side padding, scrollable rows, component props/actions; integrated VariablePicker |
 | Editor canvas (center panel) | `web/src/editor/EditorCanvas.tsx` | Interactive canvas with component previews, stable multi-step row drag (50px threshold, 300ms debounce), external drag handles, cell resize handles, direct row-height resize, add-row controls, row boundary visibility (dashed borders, alternating backgrounds); percentage width rendering |
 | Variable picker | `web/src/editor/VariablePicker.tsx` | @ trigger component for variable insertion in text fields |
@@ -289,28 +291,30 @@ The following **incomplete features and known issues** exist:
 ### Recent Fixes (2026-04-17 — Session 9)
 
 - ✅ Backend: Added Connection model with Fernet encryption for API keys
-- ✅ Backend: Added connection.* variable namespace
+- ✅ Backend: Added connection.* variable namespace for accessing stored credentials
 - ✅ Backend: Removed deprecated modal actions (open_sheet, dismiss)
 - ✅ Backend: Added 3 new components (Todo, RichTextRenderer, ArticleCard)
 - ✅ Backend: Added Calendar variant prop (month/week/day/agenda)
 - ✅ Backend: Added fetch_rss, fetch_weather, run_workflow actions
-- ✅ Backend: Updated Workflow model for React Flow graph format
+- ✅ Backend: Updated Workflow model for React Flow graph format (nodes, edges)
 - ✅ Backend: Updated workflow engine to execute React Flow graphs with branching/loops
-- ✅ Backend: Added n8n workflow importer endpoint
+- ✅ Backend: Added n8n workflow importer endpoint (POST /api/workflows/import/n8n)
 - ✅ Backend: Created 5 production templates (Calendar, Chat, News Feed, Weather, Task Manager)
-- ✅ Web Admin: Restructured sidebar (removed Dashboard, Components, Actions & Triggers pages)
+- ✅ Web Admin: Restructured sidebar (removed Dashboard, Components, Actions & Triggers pages; renamed Users→Settings)
 - ✅ Web Admin: Added ConnectionsPage for OAuth/API key management
 - ✅ Web Admin: Added LogsPage merging Sessions and Audit Logs
-- ✅ Web Admin: Added WorkflowsPage with React Flow canvas
-- ✅ Web Admin: Added percentage-based cell widths in editor
-- ✅ Web Admin: Added VariablePicker component with @ trigger
-- ✅ Web Admin: Added SDUIPreview and AppPreview components
-- ✅ Web Admin: Updated component schemas for new components
+- ✅ Web Admin: Added WorkflowsPage with React Flow canvas and node inspector
+- ✅ Web Admin: Added percentage-based cell widths in editor with width toggle
+- ✅ Web Admin: Added VariablePicker component with @ trigger for variable insertion
+- ✅ Web Admin: Added external drag handles for rows in EditorCanvas
+- ✅ Web Admin: Added SDUIPreview and AppPreview components for TemplatesPage
+- ✅ Web Admin: Updated component schemas for new components (Todo, RichTextRenderer, ArticleCard, Calendar variants)
 - ✅ Mobile: Added TodoComponent, RichTextRendererComponent, ArticleCardComponent
-- ✅ Mobile: Updated CalendarComponent with variants and navigation
-- ✅ Mobile: Rewrote login screen to 3 fields only
-- ✅ Mobile: Added Article Reader screen
-- ✅ Mobile: Added customizable tab bar and Module Store
+- ✅ Mobile: Updated CalendarComponent with variants (month/week/day/agenda) and date navigation
+- ✅ Mobile: Rewrote login screen to 3 fields only (username, password, server display) — removed signup flow
+- ✅ Mobile: Added Article Reader screen (app/(tabs)/article.tsx)
+- ✅ Mobile: Added customizable tab bar via tabsStore.enabledTabIds
+- ✅ Mobile: Added Module Store view in modules.tsx showing all available templates
 - ✅ All 216 backend tests passing
 
 ### Previous Fixes (2026-04-16)
@@ -388,10 +392,10 @@ The following **incomplete features and known issues** exist:
 |----------|---------|---------|
 | `DATABASE_URL` | `sqlite+aiosqlite:///./helm.db` | DB connection |
 | `SECRET_KEY` | `dev-secret-key-change-in-production` | JWT signing |
-| `ENCRYPTION_KEY` | `` | Fernet key for API key encryption in Connection model |
+| `ENCRYPTION_KEY` | `` | Fernet key for API key encryption in Connection model (Session 9) |
 | `ACCESS_TOKEN_EXPIRE_HOURS` | `720` | 30-day token lifetimes |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `30` | Refresh token lifetime |
-| `SERVER_HOST` | `0.0.0.0` | Bind address |
+| `SERVER_HOST` | `0.0.0.0` | Bind address (changed from 127.0.0.1 for remote access) |
 | `SERVER_PORT` | `8000` | Port |
 | `OPENAI_API_KEY` | `` | OpenAI key (fallback) |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI endpoint |
