@@ -181,6 +181,48 @@ function InputBarPreview({ placeholder }: any) {
   );
 }
 
+function TodoPreview() {
+  return (
+    <div className="bg-white rounded-lg border p-3">
+      <div className="text-sm font-bold mb-2">✓ To-Do</div>
+      <div className="space-y-1.5 text-xs">
+        <div className="flex items-center gap-2">
+          <input type="checkbox" className="rounded" />
+          <span>Complete project</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <input type="checkbox" checked className="rounded" />
+          <span className="line-through text-gray-400">Review code</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ArticleCardPreview({ title, summary, imageUrl }: any) {
+  return (
+    <div className="bg-white rounded-lg border overflow-hidden">
+      {imageUrl && (
+        <div className="h-32 bg-gray-200 flex items-center justify-center text-gray-400 text-xs">
+          📷 {imageUrl}
+        </div>
+      )}
+      <div className="p-3">
+        <div className="text-sm font-bold mb-1">{title || 'Article Title'}</div>
+        <div className="text-xs text-gray-600">{summary || 'Article summary...'}</div>
+      </div>
+    </div>
+  );
+}
+
+function RichTextRendererPreview({ content }: any) {
+  return (
+    <div className="text-sm text-gray-700 leading-relaxed">
+      {content || 'Rich text content...'}
+    </div>
+  );
+}
+
 function ContainerPreview({ children }: any) {
   return (
     <div className="border border-gray-200 rounded-md p-2">
@@ -210,12 +252,21 @@ const PREVIEW_RENDERERS: Record<string, (props: any) => JSX.Element> = {
   container: ContainerPreview,
   CalendarModule: CalendarPreview,
   calendarmodule: CalendarPreview,
+  calendar: CalendarPreview,
   ChatModule: ChatPreview,
   chatmodule: ChatPreview,
+  chat: ChatPreview,
   NotesModule: NotesPreview,
   notesmodule: NotesPreview,
+  notes: NotesPreview,
   InputBar: InputBarPreview,
   inputbar: InputBarPreview,
+  Todo: TodoPreview,
+  todo: TodoPreview,
+  ArticleCard: ArticleCardPreview,
+  article_card: ArticleCardPreview,
+  RichTextRenderer: RichTextRendererPreview,
+  rich_text_renderer: RichTextRendererPreview,
 };
 
 function ComponentPreview({ component }: { component: SDUIComponent }) {

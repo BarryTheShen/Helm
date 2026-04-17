@@ -58,7 +58,10 @@ export function AppPreview({ onClose }: AppPreviewProps) {
             );
 
             if (data.items && data.items.length > 0) {
-              const template = data.items[0];
+              const templateListItem = data.items[0];
+              // Fetch full template details to get screen_json
+              const template = await api.get<Template>(`/api/templates/${templateListItem.id}`);
+
               // Map first template of each category to tabs
               if (category === 'dashboard') {
                 templateMap['home'] = template;
