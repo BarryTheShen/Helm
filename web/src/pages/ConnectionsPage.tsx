@@ -119,16 +119,26 @@ export function ConnectionsPage() {
     }
   };
 
-  const toggleKeyVisibility = (id: string) => {
-    setVisibleKeys(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
+  const toggleKeyVisibility = async (id: string) => {
+    if (visibleKeys.has(id)) {
+      // Hide key
+      setVisibleKeys(prev => {
+        const next = new Set(prev);
         next.delete(id);
-      } else {
-        next.add(id);
+        return next;
+      });
+    } else {
+      // Show key - fetch full connection details
+      try {
+        const detail = await api.get<Connection & { credentials: { api_key: string } }>(`/api/connections/${id}`);
+        setConnections(prev => prev.map(c =>
+          c.id === id ? { ...c, api_key: detail.credentials.api_key } : c
+        ));
+        setVisibleKeys(prev => new Set(prev).add(id));
+      } catch (e: any) {
+        setError(e.message);
       }
-      return next;
-    });
+    }
   };
 
   const maskKey = (key: string | undefined) => {

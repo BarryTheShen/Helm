@@ -13,7 +13,7 @@ from app.database import get_db
 from app.dependencies import PaginationParams, get_current_user_id
 from app.models.connection import Connection
 from app.schemas.common import PaginatedResponse
-from app.schemas.connection import ConnectionCreate, ConnectionOut, ConnectionUpdate
+from app.schemas.connection import ConnectionCreate, ConnectionDetail, ConnectionOut, ConnectionUpdate
 from app.services.audit import log_audit
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
@@ -105,7 +105,7 @@ async def create_connection(
     return ConnectionOut.model_validate(connection)
 
 
-@router.get("/{connection_id}", response_model=ConnectionOut)
+@router.get("/{connection_id}", response_model=ConnectionDetail)
 async def get_connection(
     connection_id: str,
     user_id: str = Depends(get_current_user_id),
@@ -121,7 +121,18 @@ async def get_connection(
     if connection is None:
         raise HTTPException(status_code=404, detail="Connection not found")
 
-    return ConnectionOut.model_validate(connection)
+    # Decrypt credentials for detail view
+    credentials = _decrypt_credentials(connection.credentials_encrypted)
+
+    return ConnectionDetail(
+        id=connection.id,
+        user_id=connection.user_id,
+        name=connection.name,
+        provider=connection.provider,
+        credentials=credentials,
+        created_at=connection.created_at,
+        updated_at=connection.updated_at,
+    )
 
 
 @router.put("/{connection_id}", response_model=ConnectionOut)
