@@ -10,6 +10,7 @@ import { EditorPage } from './pages/EditorPage';
 import { VariablesPage } from './pages/VariablesPage';
 import { ConnectionsPage } from './pages/ConnectionsPage';
 import { LogsPage } from './pages/LogsPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore(s => s.token);
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/variables" element={<VariablesPage />} />
           <Route path="/connections" element={<ConnectionsPage />} />
           <Route path="/logs" element={<LogsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
