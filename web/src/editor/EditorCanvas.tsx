@@ -10,6 +10,7 @@ import { Plus, GripVertical, X, Edit2, Eye, Copy, Trash2 } from 'lucide-react';
 
 const MIN_ROW_HEIGHT = 48;
 const ROW_DRAG_HANDLE_WIDTH = 24;
+const ROW_DRAG_HANDLE_MARGIN = 32; // Left margin space for drag handle
 const DEFAULT_ROW_RIGHT_PADDING = 4;
 const SCROLLABLE_CELL_WIDTH = 160;
 const SCROLLABLE_CELL_MIN_WIDTH = 120;
@@ -722,6 +723,10 @@ function getRowContentStyle(row: EditorRow): CSSProperties {
 }
 
 function getNumericCellWidth(width: EditorCell['width']): number {
+  if (typeof width === 'string' && width.endsWith('%')) {
+    const parsed = parseFloat(width);
+    return isNaN(parsed) ? 1 : parsed;
+  }
   return typeof width === 'number' ? width : 1;
 }
 
@@ -741,6 +746,16 @@ function getCellStyle(row: EditorRow, cellWidth: EditorCell['width'], totalWidth
     };
   }
 
+  // Handle percentage widths
+  if (typeof cellWidth === 'string' && cellWidth.endsWith('%')) {
+    return {
+      flex: `0 0 ${cellWidth}`,
+      width: cellWidth,
+      minWidth: 40,
+    };
+  }
+
+  // Handle numeric flex weights
   const cellPercent = (getNumericCellWidth(cellWidth) / totalWidth) * 100;
 
   return {
@@ -850,6 +865,12 @@ function RowDragHandle({
     event.stopPropagation();
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', String(rowIndex));
+
+    // Create invisible drag image to hide default ghost
+    const img = new Image();
+    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    event.dataTransfer.setDragImage(img, 0, 0);
+
     onDragStart(rowIndex);
   }, [onDragStart, rowIndex]);
 
@@ -861,12 +882,17 @@ function RowDragHandle({
   return (
     <div
       draggable
-      className={`absolute left-0 top-0 bottom-0 z-10 flex select-none items-center justify-center transition-opacity ${
+      className={`absolute z-10 flex select-none items-center justify-center transition-opacity ${
         isDragging
           ? 'opacity-100 cursor-grabbing'
           : 'opacity-0 cursor-grab group-hover:opacity-100'
       }`}
-      style={{ width: ROW_DRAG_HANDLE_WIDTH }}
+      style={{
+        left: -ROW_DRAG_HANDLE_MARGIN,
+        top: 0,
+        bottom: 0,
+        width: ROW_DRAG_HANDLE_WIDTH
+      }}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onMouseDown={(event) => event.stopPropagation()}
@@ -1064,6 +1090,8 @@ export function EditorCanvas() {
   } | null>(null);
   const [draggedRowIndex, setDraggedRowIndex] = useState<number | null>(null);
   const [dropInsertionIndex, setDropInsertionIndex] = useState<number | null>(null);
+  const [dragGhostPosition, setDragGhostPosition] = useState<{ x: number; y: number } | null>(null);
+  const draggedRowRef = useRef<EditorRow | null>(null);
 
   const handleCellResizePreview = useCallback((rowId: string, cellIndex: number, leftWidth: number, rightWidth: number) => {
     setCellResizePreview({ rowId, cellIndex, leftWidth, rightWidth });
@@ -1124,11 +1152,14 @@ export function EditorCanvas() {
   const handleRowDragStart = useCallback((rowIndex: number) => {
     setDraggedRowIndex(rowIndex);
     setDropInsertionIndex(null);
-  }, []);
+    draggedRowRef.current = rows[rowIndex];
+  }, [rows]);
 
   const handleRowDragEnd = useCallback(() => {
     setDraggedRowIndex(null);
     setDropInsertionIndex(null);
+    setDragGhostPosition(null);
+    draggedRowRef.current = null;
   }, []);
 
   const handleInsertionDragOver = useCallback((insertionIndex: number, event: React.DragEvent<HTMLDivElement>) => {
@@ -1142,6 +1173,7 @@ export function EditorCanvas() {
 
     const targetIndex = getRowDropTargetIndex(draggedRowIndex, insertionIndex);
     setDropInsertionIndex(targetIndex === null ? null : insertionIndex);
+    setDragGhostPosition({ x: event.clientX, y: event.clientY });
   }, [draggedRowIndex]);
 
   const handleInsertionDrop = useCallback((insertionIndex: number, event: React.DragEvent<HTMLDivElement>) => {
@@ -1155,6 +1187,8 @@ export function EditorCanvas() {
     const targetIndex = getRowDropTargetIndex(draggedRowIndex, insertionIndex);
     setDraggedRowIndex(null);
     setDropInsertionIndex(null);
+    setDragGhostPosition(null);
+    draggedRowRef.current = null;
 
     if (targetIndex !== null) {
       moveRow(draggedRowIndex, targetIndex);
@@ -1187,7 +1221,7 @@ export function EditorCanvas() {
           </div>
 
           {/* Canvas content */}
-          <div className="flex-1 overflow-y-auto p-2" onClick={() => setSelection(null)}>
+          <div className="flex-1 overflow-y-auto p-2" style={{ paddingLeft: ROW_DRAG_HANDLE_MARGIN + 8 }} onClick={() => setSelection(null)}>
             {rows.length === 0 && (
               <RowInsertionControl onAdd={(n) => addRow(n)} />
             )}
@@ -1362,6 +1396,27 @@ export function EditorCanvas() {
           onClose={() => setPickerState(null)}
           position={pickerState.position}
         />
+      )}
+
+      {/* Drag ghost - follows cursor during row drag */}
+      {dragGhostPosition && draggedRowRef.current && createPortal(
+        <div
+          className="fixed pointer-events-none z-[9999] bg-white/95 border-2 border-blue-400 rounded-lg shadow-xl px-3 py-2"
+          style={{
+            left: dragGhostPosition.x + 12,
+            top: dragGhostPosition.y + 12,
+            transform: 'translate(0, 0)',
+          }}
+        >
+          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+            <GripVertical size={14} className="text-blue-500" />
+            <span>Row {rows.findIndex(r => r.id === draggedRowRef.current?.id) + 1}</span>
+            <span className="text-xs text-gray-500">
+              ({draggedRowRef.current.cells.length} cell{draggedRowRef.current.cells.length !== 1 ? 's' : ''})
+            </span>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

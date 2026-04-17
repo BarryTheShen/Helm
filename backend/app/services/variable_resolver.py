@@ -8,18 +8,40 @@ Supported scopes:
   - custom.<name> — from CustomVariable by user + name
   - env.<key> — from os.environ
   - data.<source_name>.<field> — from data source cache dict
+  - connection.<connection_name>.<credential_key> — from Connection credentials
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
 import os
 import re
 from typing import Any
+
+from cryptography.fernet import Fernet
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 _EXPRESSION_RE = re.compile(r"\{\{(.+?)\}\}")
 
 
-def _resolve_single(expr: str, context: dict[str, Any]) -> str:
+def _get_fernet(secret_key: str) -> Fernet:
+    """Derive a Fernet key from the app's secret key."""
+    key_material = secret_key.encode()
+    digest = hashlib.sha256(key_material).digest()
+    fernet_key = base64.urlsafe_b64encode(digest)
+    return Fernet(fernet_key)
+
+
+def _decrypt_credentials(encrypted: str, secret_key: str) -> dict:
+    """Decrypt encrypted credentials string, return dict."""
+    json_str = _get_fernet(secret_key).decrypt(encrypted.encode()).decode()
+    return json.loads(json_str)
+
+
+async def _resolve_single(expr: str, context: dict[str, Any]) -> str:
     """Resolve a single expression (without the {{ }} delimiters)."""
     parts = expr.strip().split(".")
 
@@ -79,6 +101,48 @@ def _resolve_single(expr: str, context: dict[str, Any]) -> str:
         if value is not None:
             return str(value)
 
+    # connection.<connection_name>.<credential_key>
+    elif scope == "connection" and len(parts) == 3:
+        connection_name = parts[1]
+        credential_key = parts[2]
+
+        # Try cache first
+        connections_cache = context.get("connections_cache", {})
+        if connection_name in connections_cache:
+            connection_creds = connections_cache[connection_name]
+            value = connection_creds.get(credential_key)
+            if value is not None:
+                return str(value)
+
+        # Query database if cache miss and db/user_id/secret_key available
+        db = context.get("db")
+        user_id = context.get("user_id")
+        secret_key = context.get("secret_key")
+
+        if db is not None and user_id is not None and secret_key is not None:
+            from app.models.connection import Connection
+
+            result = await db.execute(
+                select(Connection).where(
+                    Connection.user_id == user_id,
+                    Connection.name == connection_name,
+                )
+            )
+            connection = result.scalar_one_or_none()
+
+            if connection is not None:
+                try:
+                    credentials = _decrypt_credentials(connection.credentials_encrypted, secret_key)
+                    # Cache for future lookups in this context
+                    if connection_name not in connections_cache:
+                        connections_cache[connection_name] = credentials
+                    value = credentials.get(credential_key)
+                    if value is not None:
+                        return str(value)
+                except Exception:
+                    # Decryption failed or other error — return original
+                    pass
+
     # Unresolved — return original text
     return "{{" + expr + "}}"
 
@@ -89,15 +153,20 @@ async def resolve_expression(expr: str, context: dict[str, Any]) -> str:
     Args:
         expr: A string potentially containing {{...}} expressions.
         context: Dict with keys: user, component_state, self_id,
-                 custom_variables, data_cache.
+                 custom_variables, data_cache, connections_cache, db, secret_key.
 
     Returns:
         The string with all resolvable expressions replaced.
     """
-    def _replacer(match: re.Match[str]) -> str:
-        return _resolve_single(match.group(1), context)
+    async def _replacer(match: re.Match[str]) -> str:
+        return await _resolve_single(match.group(1), context)
 
-    return _EXPRESSION_RE.sub(_replacer, expr)
+    # For async replacement, we need to handle matches manually
+    result = expr
+    for match in reversed(list(_EXPRESSION_RE.finditer(expr))):
+        resolved = await _resolve_single(match.group(1), context)
+        result = result[:match.start()] + resolved + result[match.end():]
+    return result
 
 
 async def resolve_all_expressions(payload: Any, context: dict[str, Any]) -> Any:

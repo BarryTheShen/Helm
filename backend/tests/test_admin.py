@@ -73,14 +73,14 @@ async def _seed_data(client: AsyncClient, db: AsyncSession) -> str:
     wf_id = str(uuid.uuid4())
     db.add(Workflow(
         id=wf_id, user_id=user_id, name="Automation",
-        trigger_type="form_submitted", trigger_config={}, action_config={},
-        is_active=True, run_count=5,
+        trigger_type="form_submitted", trigger_config={}, graph={},
+        enabled=True,
     ))
     # Workflow (inactive)
     db.add(Workflow(
         id=str(uuid.uuid4()), user_id=user_id, name="Disabled WF",
-        trigger_type="schedule", trigger_config={}, action_config={},
-        is_active=False, run_count=0,
+        trigger_type="schedule", trigger_config={}, graph={},
+        enabled=False,
     ))
     # Audit log entries (WORKFLOW_* action types for workflow analytics)
     for _ in range(3):
@@ -174,12 +174,11 @@ async def test_workflow_analytics(auth_client: AsyncClient, db_session: AsyncSes
 
     # Find the active workflow with audit entries
     active = next(w for w in data["items"] if w["name"] == "Automation")
-    assert active["is_active"] is True
-    assert active["run_count"] == 5
+    assert active["enabled"] is True
     assert active["audit_entries"] == 3
 
     inactive = next(w for w in data["items"] if w["name"] == "Disabled WF")
-    assert inactive["is_active"] is False
+    assert inactive["enabled"] is False
     assert inactive["audit_entries"] == 0
 
 

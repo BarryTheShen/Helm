@@ -1,0 +1,2 @@
+Requirement already satisfied: feedparser in /home/barry/.local/share/mise/installs/python/3.14.0/lib/python3.14/site-packages (6.0.12)
+Requirement already satisfied: sgmllib3k in /home/barry/.local/share/mise/installs/python/3.14.0/lib/python3.14/site-packages (from feedparser) (1.0.0)

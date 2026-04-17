@@ -16,6 +16,12 @@ function TabsConfigSync() {
   const ws = useWebSocket();
   const setHiddenTabs = useTabsStore((s) => s.setHiddenTabs);
   const setModuleConfigs = useTabsStore((s) => s.setModuleConfigs);
+  const loadEnabledTabIds = useTabsStore((s) => s.loadEnabledTabIds);
+
+  // Load user's enabled tab IDs from AsyncStorage on mount
+  useEffect(() => {
+    loadEnabledTabIds();
+  }, []);
 
   // Initial load: fetch module list (name, icon, enabled) from REST.
   useEffect(() => {
@@ -77,6 +83,7 @@ export default function TabsLayout() {
   const { token, serverUrl } = useAuthStore();
   const hiddenTabs = useTabsStore((s) => s.hiddenTabs);
   const moduleConfigs = useTabsStore((s) => s.moduleConfigs);
+  const enabledTabIds = useTabsStore((s) => s.enabledTabIds);
 
   // Defensive auth guard: if token was cleared (e.g. 401 → logout), redirect
   // to the login screen immediately. This catches cases where the root layout's
@@ -86,7 +93,12 @@ export default function TabsLayout() {
   }
 
   // href: null hides the tab from the nav bar while keeping the route accessible.
-  const tabHref = (name: string) => (hiddenTabs.includes(name) ? null : undefined);
+  // A tab is shown if: (1) it's in enabledTabIds AND (2) it's not in hiddenTabs (server-side)
+  const tabHref = (name: string) => {
+    if (hiddenTabs.includes(name)) return null;
+    if (!enabledTabIds.includes(name)) return null;
+    return undefined;
+  };
 
   // Resolve tab label and icon from server-provided config, falling back to defaults.
   // Strip leading icon from name to prevent double-icon display when the server
@@ -162,6 +174,30 @@ export default function TabsLayout() {
             tabBarLabel: tabLabel('forms', 'Forms'),
             href: tabHref('forms'),
             tabBarIcon: ({ color }) => <Text accessible={false} style={{ color, fontSize: 22 }}>{tabIcon('forms', '📝')}</Text>,
+          }}
+        />
+        <Tabs.Screen
+          name="alerts"
+          options={{
+            title: tabLabel('alerts', 'Alerts'),
+            tabBarLabel: tabLabel('alerts', 'Alerts'),
+            href: tabHref('alerts'),
+            tabBarIcon: ({ color }) => <Text accessible={false} style={{ color, fontSize: 22 }}>{tabIcon('alerts', '🔔')}</Text>,
+          }}
+        />
+        {/* Settings is always hidden from the tab bar — accessible via the header gear button. */}
+        <Tabs.Screen
+          name="settings"
+          options={{
+            title: 'Settings',
+            href: null,
+            headerRight: () => null,
+          }}
+        />
+      </Tabs>
+    </>
+  );
+}</Text>,
           }}
         />
         <Tabs.Screen

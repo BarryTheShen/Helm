@@ -66,7 +66,8 @@ export type SDUIComponentType =
   | 'stats_row'
   | 'calendar'
   | 'image'
-  | 'progress';
+  | 'progress'
+  | 'richtext';
 
 // ── Component definitions ──────────────────────────────────────────────────
 
@@ -192,6 +193,7 @@ export interface CalendarComponent {
   props: {
     events: Array<{ id: string; title: string; start: string; end: string; allDay?: boolean; color?: string }>;
     view?: 'month' | 'day';
+    variant?: 'month' | 'week' | 'day' | 'agenda';
   };
 }
 
@@ -205,6 +207,12 @@ export interface ProgressComponent {
   type: 'progress';
   id: string;
   props: { value: number; max?: number; label?: string; color?: string };
+}
+
+export interface RichTextComponent {
+  type: 'richtext';
+  id: string;
+  props: { content: string; theme?: 'light' | 'dark' };
 }
 
 // Discriminated union over all component types
@@ -225,7 +233,8 @@ export type SDUIComponent =
   | StatsRowComponent
   | CalendarComponent
   | ImageComponent
-  | ProgressComponent;
+  | ProgressComponent
+  | RichTextComponent;
 
 // ── Screen & Section ───────────────────────────────────────────────────────
 
@@ -343,7 +352,10 @@ export type SDUIComponentTypeV2 =
   | 'CalendarModule'
   | 'ChatModule'
   | 'NotesModule'
-  | 'InputBar';
+  | 'InputBar'
+  // SDUI components
+  | 'Todo'
+  | 'ArticleCard';
 
 /** Data binding configuration for connecting a component to a data source */
 export interface SDUIDataBinding {

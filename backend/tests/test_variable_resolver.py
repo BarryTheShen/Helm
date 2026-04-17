@@ -144,3 +144,64 @@ async def test_no_expressions_passthrough():
     ctx = {"user": _make_user()}
     result = await resolve_expression("No expressions here", ctx)
     assert result == "No expressions here"
+
+
+async def test_resolve_connection_from_cache():
+    ctx = {
+        "connections_cache": {
+            "weather_api": {"api_key": "secret123", "endpoint": "https://api.weather.com"},
+        },
+    }
+    result = await resolve_expression("Key: {{connection.weather_api.api_key}}", ctx)
+    assert result == "Key: secret123"
+
+
+async def test_resolve_connection_from_db(db_session, test_user):
+    """Test connection resolution by querying the database."""
+    from app.config import settings
+    from app.models.connection import Connection
+    from app.routers.connections import _encrypt_credentials
+
+    # Create a connection in the database
+    connection = Connection(
+        id="conn123",
+        user_id=test_user.id,
+        name="weather_api",
+        provider="openweather",
+        credentials_encrypted=_encrypt_credentials({"api_key": "db_secret_456"}),
+    )
+    db_session.add(connection)
+    await db_session.commit()
+
+    ctx = {
+        "db": db_session,
+        "user_id": test_user.id,
+        "secret_key": settings.secret_key,
+        "connections_cache": {},
+    }
+    result = await resolve_expression("API Key: {{connection.weather_api.api_key}}", ctx)
+    assert result == "API Key: db_secret_456"
+
+    # Verify cache was populated
+    assert "weather_api" in ctx["connections_cache"]
+    assert ctx["connections_cache"]["weather_api"]["api_key"] == "db_secret_456"
+
+
+async def test_resolve_connection_not_found():
+    """Connection not found should return original expression."""
+    ctx = {
+        "connections_cache": {},
+    }
+    result = await resolve_expression("{{connection.nonexistent.api_key}}", ctx)
+    assert result == "{{connection.nonexistent.api_key}}"
+
+
+async def test_resolve_connection_missing_credential_key():
+    """Missing credential key should return original expression."""
+    ctx = {
+        "connections_cache": {
+            "weather_api": {"api_key": "secret123"},
+        },
+    }
+    result = await resolve_expression("{{connection.weather_api.missing_key}}", ctx)
+    assert result == "{{connection.weather_api.missing_key}}"

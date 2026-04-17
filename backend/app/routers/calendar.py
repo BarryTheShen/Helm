@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.calendar_event import CalendarEvent
-from app.models.workflow import TriggerType
 from app.services.workflow_engine import fire_trigger
 from app.models.module_state import ModuleState
 from app.models.user import User
@@ -168,7 +167,7 @@ async def create_event(
     await log_audit(db, str(current_user.id), "EVENT_CREATED", "event", str(event.id), ip=request.client.host if request.client else None)
     await db.commit()
 
-    await fire_trigger(TriggerType.EVENT_CREATED, str(current_user.id), {
+    await fire_trigger("event_created", str(current_user.id), {
         "event_id": str(event.id), "title": event.title,
         "start_time": str(event.start_time), "end_time": str(event.end_time)
     })
@@ -259,7 +258,7 @@ async def add_meeting(
     await db.flush()
     await db.commit()
 
-    await fire_trigger(TriggerType.EVENT_CREATED, str(current_user.id), {
+    await fire_trigger("event_created", str(current_user.id), {
         "event_id": str(event.id), "title": event.title,
         "start_time": str(event.start_time), "end_time": str(event.end_time)
     })
@@ -301,7 +300,7 @@ async def update_event(
     await log_audit(db, str(current_user.id), "EVENT_UPDATED", "event", str(event.id), ip=request.client.host if request.client else None)
     await db.commit()
 
-    await fire_trigger(TriggerType.EVENT_UPDATED, str(current_user.id), {
+    await fire_trigger("event_updated", str(current_user.id), {
         "event_id": str(event.id), "changed_fields": list(update_data.keys())
     })
 

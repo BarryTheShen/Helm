@@ -31,7 +31,6 @@ from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.agent_config import AgentConfig
 from app.models.chat_message import ChatMessage
-from app.models.workflow import TriggerType
 from app.services.websocket_manager import manager
 from app.services.workflow_engine import fire_trigger
 
@@ -62,7 +61,7 @@ async def handle_chat_message(
             db.add(user_msg)
             await db.commit()
 
-        await fire_trigger(TriggerType.MESSAGE_RECEIVED, user_id, {
+        await fire_trigger("message_received", user_id, {
             "content": content,
             "conversation_id": str(conversation_id) if conversation_id else None
         })

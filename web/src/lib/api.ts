@@ -44,6 +44,61 @@ export interface VariableUpdate {
   description?: string;
 }
 
+// --- Workflows ---
+export interface Workflow {
+  id: string;
+  name: string;
+  description: string | null;
+  graph: Record<string, any>;
+  trigger_type: string;
+  trigger_config: Record<string, any>;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+export interface WorkflowCreate {
+  name: string;
+  description?: string;
+  graph?: Record<string, any>;
+  trigger_type: string;
+  trigger_config?: Record<string, any>;
+}
+export interface WorkflowUpdate {
+  name?: string;
+  description?: string;
+  graph?: Record<string, any>;
+  trigger_config?: Record<string, any>;
+  enabled?: boolean;
+}
+export interface WorkflowExecuteResponse {
+  execution_id: string;
+  status: string;
+  result: any;
+}
+export interface N8nImportResponse {
+  workflow: Record<string, any>;
+  warnings: string[];
+}
+
+// --- Connections ---
+export interface Connection {
+  id: string;
+  user_id: string;
+  name: string;
+  provider: string;
+  created_at: string;
+  updated_at: string;
+}
+export interface ConnectionCreate {
+  name: string;
+  provider: string;
+  credentials: Record<string, unknown>;
+}
+export interface ConnectionUpdate {
+  name?: string;
+  credentials?: Record<string, unknown>;
+}
+
 // --- Data Sources ---
 export interface DataSource {
   id: string;
@@ -227,6 +282,43 @@ class ApiClient {
   }
   testTrigger(id: number | string) {
     return this.post<TriggerTestResult>(`/api/triggers/${id}/test`);
+  }
+
+  // --- Connections ---
+  getConnections(params?: PaginationParams) {
+    return this.get<PaginatedResponse<Connection>>(`/api/connections${this.buildQuery(params)}`);
+  }
+  createConnection(data: ConnectionCreate) {
+    return this.post<Connection>('/api/connections', data);
+  }
+  updateConnection(id: string, data: ConnectionUpdate) {
+    return this.put<Connection>(`/api/connections/${id}`, data);
+  }
+  deleteConnection(id: string) {
+    return this.del<void>(`/api/connections/${id}`);
+  }
+
+  // --- Workflows ---
+  getWorkflows(params?: PaginationParams) {
+    return this.get<PaginatedResponse<Workflow>>(`/api/workflows${this.buildQuery(params)}`);
+  }
+  getWorkflow(id: string) {
+    return this.get<Workflow>(`/api/workflows/${id}`);
+  }
+  createWorkflow(data: WorkflowCreate) {
+    return this.post<Workflow>('/api/workflows', data);
+  }
+  updateWorkflow(id: string, data: WorkflowUpdate) {
+    return this.put<Workflow>(`/api/workflows/${id}`, data);
+  }
+  deleteWorkflow(id: string) {
+    return this.del<void>(`/api/workflows/${id}`);
+  }
+  executeWorkflow(id: string, input?: Record<string, any>) {
+    return this.post<WorkflowExecuteResponse>(`/api/workflows/${id}/execute`, input || {});
+  }
+  importN8nWorkflow(n8nJson: Record<string, any>) {
+    return this.post<N8nImportResponse>('/api/workflows/import/n8n', n8nJson);
   }
 }
 

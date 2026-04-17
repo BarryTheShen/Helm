@@ -177,6 +177,33 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
       { label: 'Month', value: 'month' },
     ] },
   ],
+  Calendar: [
+    { key: 'variant', label: 'Variant', type: 'select', defaultValue: 'month', options: [
+      { label: 'Month', value: 'month' },
+      { label: 'Week', value: 'week' },
+      { label: 'Day', value: 'day' },
+      { label: 'Agenda', value: 'agenda' },
+    ] },
+    { key: 'events', label: 'Events (JSON)', type: 'textarea', placeholder: '[{"id":"1","title":"Event","start":"2026-04-17T10:00:00Z","end":"2026-04-17T11:00:00Z"}]' },
+  ],
+  Todo: [
+    { key: 'items', label: 'Items (JSON)', type: 'textarea', placeholder: '[{"id":"1","text":"Task 1","completed":false}]' },
+    { key: 'placeholder', label: 'Placeholder', type: 'text', defaultValue: 'Add a new task...' },
+  ],
+  RichTextRenderer: [
+    { key: 'content', label: 'Content (Markdown)', type: 'textarea', placeholder: '# Heading\n\nParagraph with **bold** and *italic*.' },
+    { key: 'theme', label: 'Theme', type: 'select', defaultValue: 'light', options: [
+      { label: 'Light', value: 'light' },
+      { label: 'Dark', value: 'dark' },
+    ] },
+  ],
+  ArticleCard: [
+    { key: 'title', label: 'Title', type: 'text', defaultValue: 'Article Title' },
+    { key: 'description', label: 'Description', type: 'textarea', placeholder: 'Brief article description...' },
+    { key: 'imageUrl', label: 'Image URL', type: 'text', placeholder: 'https://example.com/image.jpg' },
+    { key: 'publishedAt', label: 'Published At', type: 'text', placeholder: '2026-04-17T10:00:00Z' },
+    { key: 'source', label: 'Source', type: 'text', placeholder: 'Source name' },
+  ],
   ChatModule: [
     { key: 'threadId', label: 'Thread ID', type: 'text', placeholder: 'Optional conversation thread ID' },
   ],

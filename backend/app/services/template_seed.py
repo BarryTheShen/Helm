@@ -19,108 +19,204 @@ def _cell(comp_type: str, props: dict) -> dict:
 
 SEED_TEMPLATES = [
     {
-        "name": "Dashboard Landing Page",
-        "description": "A welcome dashboard with stat cards and quick action buttons.",
+        "name": "Home",
+        "description": "Weather widget with quick action buttons",
         "category": "dashboard",
         "screen_json": {
             "rows": [
-                _row([_cell("text", {"content": "Welcome to Helm", "fontSize": 24, "fontWeight": "bold"})]),
-                _row([
-                    _cell("text", {"content": "12 Events", "fontSize": 18, "fontWeight": "semibold"}),
-                    _cell("text", {"content": "5 Notes", "fontSize": 18, "fontWeight": "semibold"}),
-                ]),
+                _row([_cell("text", {"content": "Good morning, {{user.name}}", "fontSize": 24, "fontWeight": "bold"})]),
                 _row([_cell("divider", {})]),
-                _row([_cell("text", {"content": "Quick Actions", "fontSize": 16, "fontWeight": "semibold"})]),
+                _row([_cell("text", {"content": "Weather", "fontSize": 18, "fontWeight": "semibold"})]),
+                _row([_cell("text", {"content": "San Francisco", "fontSize": 16, "color": "#666666"})]),
+                _row([_cell("button", {
+                    "label": "Refresh Weather",
+                    "variant": "outline",
+                    "size": "small",
+                    "action": {
+                        "type": "server_action",
+                        "function": "fetch_weather",
+                        "params": {
+                            "location": "San Francisco",
+                            "connection_id": "{{connection.weather_api.id}}"
+                        }
+                    }
+                })]),
+                _row([_cell("divider", {})]),
+                _row([_cell("text", {"content": "Quick Actions", "fontSize": 18, "fontWeight": "semibold"})]),
                 _row([
-                    _cell("button", {"label": "Open Calendar", "variant": "primary", "size": "medium"}),
-                    _cell("button", {"label": "New Note", "variant": "secondary", "size": "medium"}),
+                    _cell("button", {
+                        "label": "Calendar",
+                        "variant": "primary",
+                        "size": "medium",
+                        "action": {"type": "navigate", "screen": "calendar"}
+                    }),
+                    _cell("button", {
+                        "label": "Chat",
+                        "variant": "secondary",
+                        "size": "medium",
+                        "action": {"type": "navigate", "screen": "chat"}
+                    }),
+                ]),
+                _row([
+                    _cell("button", {
+                        "label": "Feed",
+                        "variant": "outline",
+                        "size": "medium",
+                        "action": {"type": "navigate", "screen": "feed"}
+                    }),
+                    _cell("button", {
+                        "label": "Settings",
+                        "variant": "ghost",
+                        "size": "medium",
+                        "action": {"type": "navigate", "screen": "settings"}
+                    }),
                 ]),
             ]
         },
     },
     {
-        "name": "Calendar Page",
-        "description": "A calendar module page with quick event creation.",
-        "category": "planner",
-        "screen_json": {
-            "rows": [
-                _row([_cell("text", {"content": "My Calendar", "fontSize": 24, "fontWeight": "bold"})]),
-                _row([_cell("calendar", {"showTimeBlock": True, "defaultView": "month"})]),
-                _row([_cell("inputbar", {"placeholder": "Add a quick event..."})]),
-            ]
-        },
-    },
-    {
-        "name": "Chat Interface",
-        "description": "AI chat assistant with input bar.",
+        "name": "Chat",
+        "description": "AI assistant interface with message list and input",
         "category": "custom",
         "screen_json": {
             "rows": [
                 _row([_cell("text", {"content": "AI Assistant", "fontSize": 24, "fontWeight": "bold"})]),
-                _row([_cell("chat", {"showHistory": True})]),
-                _row([_cell("inputbar", {"placeholder": "Type a message..."})]),
+                _row([_cell("divider", {})]),
+                _row([_cell("chat", {"showHistory": True})], height="flex"),
+                _row([_cell("inputbar", {
+                    "placeholder": "Ask me anything...",
+                    "action": {
+                        "type": "server_action",
+                        "function": "send_to_agent",
+                        "params": {"message": "{{self.value}}"}
+                    }
+                })]),
             ]
         },
     },
     {
-        "name": "Notes Page",
-        "description": "Note editor with create button.",
+        "name": "Daily Planner",
+        "description": "Calendar component with todo list",
+        "category": "planner",
+        "screen_json": {
+            "rows": [
+                _row([_cell("text", {"content": "Daily Planner", "fontSize": 24, "fontWeight": "bold"})]),
+                _row([_cell("divider", {})]),
+                _row([_cell("calendar", {"variant": "day", "showTimeBlock": True})]),
+                _row([_cell("divider", {})]),
+                _row([_cell("text", {"content": "Today's Tasks", "fontSize": 18, "fontWeight": "semibold"})]),
+                _row([_cell("todo", {
+                    "items": [
+                        {"id": "1", "text": "Review morning emails", "completed": False},
+                        {"id": "2", "text": "Team standup at 10am", "completed": False},
+                        {"id": "3", "text": "Finish project proposal", "completed": False},
+                    ]
+                })]),
+                _row([_cell("button", {
+                    "label": "Add Task",
+                    "variant": "primary",
+                    "size": "medium",
+                    "action": {"type": "show_alert", "title": "Add Task", "message": "Task creation coming soon"}
+                })]),
+            ]
+        },
+    },
+    {
+        "name": "Feed",
+        "description": "RSS reader with article cards",
         "category": "custom",
         "screen_json": {
             "rows": [
-                _row([_cell("text", {"content": "My Notes", "fontSize": 24, "fontWeight": "bold"})]),
-                _row([_cell("notes", {})]),
+                _row([_cell("text", {"content": "News Feed", "fontSize": 24, "fontWeight": "bold"})]),
                 _row([_cell("divider", {})]),
-                _row([_cell("button", {"label": "Create New Note", "variant": "primary", "size": "medium"})]),
+                _row([_cell("button", {
+                    "label": "Refresh Feed",
+                    "variant": "outline",
+                    "size": "small",
+                    "action": {
+                        "type": "server_action",
+                        "function": "fetch_rss",
+                        "params": {"feed_url": "https://hnrss.org/frontpage"}
+                    }
+                })]),
+                _row([_cell("article_card", {
+                    "title": "Welcome to Your Feed",
+                    "description": "Tap 'Refresh Feed' to load the latest articles from Hacker News.",
+                    "source": "Helm",
+                    "publishedAt": "2026-04-17T00:00:00Z",
+                })]),
+                _row([_cell("rich_text_renderer", {
+                    "content": "## How to use\n\nThis feed pulls articles from Hacker News RSS. You can customize the feed URL in the template editor to follow any RSS source.\n\n**Supported sources:**\n- News sites (BBC, CNN, etc.)\n- Blogs with RSS feeds\n- Reddit subreddits\n- YouTube channels",
+                    "theme": "light"
+                })]),
             ]
         },
     },
     {
-        "name": "Simple Form",
-        "description": "A basic contact form with text inputs and submit button.",
-        "category": "form",
+        "name": "Settings",
+        "description": "App settings with theme toggle, notifications, account info, and logout",
+        "category": "custom",
         "screen_json": {
             "rows": [
-                _row([_cell("text", {"content": "Contact Form", "fontSize": 24, "fontWeight": "bold"})]),
-                _row([_cell("textinput", {"label": "Name", "placeholder": "Enter your name..."})]),
-                _row([_cell("textinput", {"label": "Email", "placeholder": "Enter your email..."})]),
-                _row([_cell("textinput", {"label": "Message", "placeholder": "Enter your message...", "multiline": True})]),
-                _row([_cell("button", {"label": "Submit", "variant": "primary", "size": "medium"})]),
-            ]
-        },
-    },
-    {
-        "name": "Stats Tracker",
-        "description": "Activity tracker displaying fitness statistics.",
-        "category": "tracker",
-        "screen_json": {
-            "rows": [
-                _row([_cell("text", {"content": "Activity Tracker", "fontSize": 24, "fontWeight": "bold"})]),
-                _row([
-                    _cell("text", {"content": "Steps: 8,432", "fontSize": 18}),
-                    _cell("text", {"content": "Calories: 2,100", "fontSize": 18}),
-                ]),
+                _row([_cell("text", {"content": "Settings", "fontSize": 24, "fontWeight": "bold"})]),
                 _row([_cell("divider", {})]),
-                _row([
-                    _cell("text", {"content": "Distance: 5.2 km", "fontSize": 18}),
-                    _cell("text", {"content": "Active: 45 min", "fontSize": 18}),
-                ]),
-                _row([_cell("button", {"label": "View Details", "variant": "primary", "size": "medium"})]),
+                _row([_cell("text", {"content": "Appearance", "fontSize": 18, "fontWeight": "semibold"})]),
+                _row([_cell("button", {
+                    "label": "Toggle Dark Mode",
+                    "variant": "outline",
+                    "size": "medium",
+                    "action": {
+                        "type": "server_action",
+                        "function": "set_variable",
+                        "params": {"name": "theme", "value": "dark"}
+                    }
+                })]),
+                _row([_cell("divider", {})]),
+                _row([_cell("text", {"content": "Notifications", "fontSize": 18, "fontWeight": "semibold"})]),
+                _row([_cell("button", {
+                    "label": "Toggle Push Notifications",
+                    "variant": "outline",
+                    "size": "medium",
+                    "action": {
+                        "type": "server_action",
+                        "function": "set_variable",
+                        "params": {"name": "notifications_enabled", "value": "true"}
+                    }
+                })]),
+                _row([_cell("divider", {})]),
+                _row([_cell("text", {"content": "Account", "fontSize": 18, "fontWeight": "semibold"})]),
+                _row([_cell("text", {"content": "Username: {{user.username}}", "fontSize": 14, "color": "#666666"})]),
+                _row([_cell("text", {"content": "User ID: {{user.id}}", "fontSize": 12, "color": "#999999"})]),
+                _row([_cell("divider", {})]),
+                _row([_cell("button", {
+                    "label": "Logout",
+                    "variant": "danger",
+                    "size": "medium",
+                    "action": {"type": "navigate", "screen": "logout"}
+                })]),
             ]
         },
     },
 ]
 
 
-async def seed_templates(db: AsyncSession) -> None:
-    """Insert default SDUI templates if the table is empty."""
+async def seed_templates(db: AsyncSession, replace: bool = False) -> None:
+    """Insert default SDUI templates. If replace=True, delete existing templates first."""
     count = (await db.execute(
         select(func.count()).select_from(SDUITemplate)
     )).scalar_one()
 
     if count > 0:
-        logger.info(f"Template table already has {count} entries — skipping seed")
-        return
+        if not replace:
+            logger.info(f"Template table already has {count} entries — skipping seed")
+            return
+
+        # Delete all existing templates
+        logger.info(f"Replacing {count} existing templates with new seed data")
+        result = await db.execute(select(SDUITemplate))
+        for template in result.scalars().all():
+            await db.delete(template)
+        await db.commit()
 
     for data in SEED_TEMPLATES:
         db.add(SDUITemplate(

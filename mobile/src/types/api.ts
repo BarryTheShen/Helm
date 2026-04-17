@@ -99,6 +99,21 @@ export interface Module {
   enabled: boolean;
 }
 
+export interface Template {
+  id: string;
+  name: string;
+  description?: string;
+  category: string;
+  is_public: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface TemplateDetail extends Template {
+  screen_json: Record<string, any>;
+}
+
 export interface Device {
   id: string;
   user_id: string;

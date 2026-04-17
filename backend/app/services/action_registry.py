@@ -9,12 +9,18 @@ Architecture Decision: Session 2, Section 5 — Named Functions vs Raw Endpoints
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
 import logging
 from typing import Any, Callable, Awaitable
 
+import feedparser
+import httpx
+from cryptography.fernet import Fernet
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.workflow import TriggerType
+from app.config import settings
 from app.services.workflow_engine import fire_trigger
 
 logger = logging.getLogger(__name__)
@@ -128,7 +134,7 @@ async def _submit_form(user_id: str, params: dict[str, Any], db: AsyncSession) -
 
     await db.commit()
 
-    await fire_trigger(TriggerType.FORM_SUBMITTED, user_id, {
+    await fire_trigger("form_submitted", user_id, {
         "form_id": form_id, "submission_data": params
     })
 
@@ -307,14 +313,6 @@ async def _open_url(user_id: str, params: dict[str, Any], db: AsyncSession) -> d
     return {"status": "client_only", "action": "open_url"}
 
 
-async def _open_sheet(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
-    return {"status": "client_only", "action": "open_sheet"}
-
-
-async def _dismiss(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
-    return {"status": "client_only", "action": "dismiss"}
-
-
 async def _set_component_state(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
     return {"status": "client_only", "action": "set_component_state"}
 
@@ -366,6 +364,124 @@ async def _server_action(user_id: str, params: dict[str, Any], db: AsyncSession)
     return await registry.execute(function_name, user_id, params, db)
 
 
+async def _fetch_rss(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    """Fetch and parse an RSS feed, returning normalized article data."""
+    feed_url = params.get("feed_url")
+    if not feed_url:
+        return {"status": "error", "detail": "feed_url parameter is required"}
+
+    try:
+        # Parse the RSS feed
+        feed = feedparser.parse(feed_url)
+
+        # Check for parsing errors
+        if feed.bozo and not feed.entries:
+            error_msg = getattr(feed.bozo_exception, "getMessage", lambda: str(feed.bozo_exception))()
+            return {"status": "error", "detail": f"Failed to parse RSS feed: {error_msg}"}
+
+        # Extract and normalize entries
+        articles = []
+        for entry in feed.entries:
+            article = {
+                "title": entry.get("title", "Untitled"),
+                "description": entry.get("summary", entry.get("description", "")),
+                "link": entry.get("link", ""),
+                "published": entry.get("published", entry.get("updated", "")),
+                "source": feed.feed.get("title", feed_url),
+            }
+            articles.append(article)
+
+        return {"status": "ok", "articles": articles}
+
+    except Exception as e:
+        logger.error(f"Error fetching RSS feed {feed_url}: {e}")
+        return {"status": "error", "detail": f"Failed to fetch RSS feed: {str(e)}"}
+
+
+def _get_fernet() -> Fernet:
+    """Derive a Fernet key from the app's secret key."""
+    key_material = settings.secret_key.encode()
+    digest = hashlib.sha256(key_material).digest()
+    fernet_key = base64.urlsafe_b64encode(digest)
+    return Fernet(fernet_key)
+
+
+def _decrypt_credentials(encrypted: str) -> dict:
+    """Decrypt encrypted credentials string, return dict."""
+    json_str = _get_fernet().decrypt(encrypted.encode()).decode()
+    return json.loads(json_str)
+
+
+async def _fetch_weather(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    """Fetch weather data from OpenWeatherMap API."""
+    location = params.get("location")
+    connection_id = params.get("connection_id")
+
+    if not location:
+        return {"status": "error", "detail": "Missing 'location' parameter"}
+    if not connection_id:
+        return {"status": "error", "detail": "Missing 'connection_id' parameter"}
+
+    # Query connection
+    from app.models.connection import Connection
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(Connection).where(
+            Connection.id == connection_id,
+            Connection.user_id == user_id,
+        )
+    )
+    connection = result.scalar_one_or_none()
+    if connection is None:
+        return {"status": "error", "detail": "Connection not found"}
+
+    # Decrypt credentials to get API key
+    try:
+        credentials = _decrypt_credentials(connection.credentials_encrypted)
+        api_key = credentials.get("api_key")
+        if not api_key:
+            return {"status": "error", "detail": "API key not found in connection credentials"}
+    except Exception as e:
+        logger.exception("Failed to decrypt connection credentials")
+        return {"status": "error", "detail": f"Failed to decrypt credentials: {str(e)}"}
+
+    # Call OpenWeatherMap API
+    url = "https://api.openweathermap.org/data/2.5/weather"
+    params_dict = {
+        "q": location,
+        "appid": api_key,
+        "units": "metric",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params_dict)
+            response.raise_for_status()
+            data = response.json()
+
+        # Extract relevant fields
+        temperature = data.get("main", {}).get("temp")
+        description = data.get("weather", [{}])[0].get("description", "")
+        icon = data.get("weather", [{}])[0].get("icon", "")
+
+        return {
+            "status": "ok",
+            "temperature": temperature,
+            "description": description,
+            "icon": icon,
+        }
+    except httpx.HTTPStatusError as e:
+        logger.error(f"OpenWeatherMap API error: {e.response.status_code} - {e.response.text}")
+        return {"status": "error", "detail": f"API error: {e.response.status_code}"}
+    except httpx.RequestError as e:
+        logger.error(f"Network error calling OpenWeatherMap: {e}")
+        return {"status": "error", "detail": f"Network error: {str(e)}"}
+    except Exception as e:
+        logger.exception("Weather fetch failed")
+        return {"status": "error", "detail": str(e)}
+
+
 # ── Singleton Registry ─────────────────────────────────────────────────────
 
 registry = ActionRegistry()
@@ -385,8 +501,6 @@ registry.register("set_variable", _set_variable)
 registry.register("navigate", _navigate)
 registry.register("go_back", _go_back)
 registry.register("open_url", _open_url)
-registry.register("open_sheet", _open_sheet)
-registry.register("dismiss", _dismiss)
 
 # Session 8 additions — data
 registry.register("server_action", _server_action)
@@ -408,3 +522,58 @@ registry.register("delay", _delay)
 # Session 8 additions — flow control
 registry.register("chain", _chain)
 registry.register("conditional", _conditional)
+
+# Session 9 additions — RSS feed fetching
+registry.register("fetch_rss", _fetch_rss)
+
+# Session 9 additions — weather fetching
+registry.register("fetch_weather", _fetch_weather)
+
+
+async def _run_workflow(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    """Execute a workflow by ID."""
+    from app.models.workflow import Workflow
+    from sqlalchemy import select
+
+    workflow_id = params.get("workflow_id")
+    if not workflow_id:
+        return {"status": "error", "detail": "workflow_id is required"}
+
+    # Query workflow
+    result = await db.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.user_id == user_id,
+        )
+    )
+    workflow = result.scalars().first()
+
+    if workflow is None:
+        return {"status": "error", "detail": "Workflow not found"}
+
+    if not workflow.enabled:
+        return {"status": "error", "detail": "Workflow is disabled"}
+
+    # Execute workflow
+    try:
+        from app.services.workflow_engine import _execute_workflow
+
+        # Execute workflow with optional event data
+        event_data = params.get("event_data", {})
+        await _execute_workflow(workflow_id, event_data)
+
+        return {
+            "status": "ok",
+            "result": {
+                "workflow_id": workflow_id,
+                "workflow_name": workflow.name,
+                "executed": True,
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to execute workflow {workflow_id}: {e}")
+        return {"status": "error", "detail": f"Workflow execution failed: {str(e)}"}
+
+
+# Session 9 additions — workflow execution
+registry.register("run_workflow", _run_workflow)

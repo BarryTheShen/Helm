@@ -7,15 +7,14 @@ import { colors, spacing, typography } from '@/theme/colors';
 
 export default function ConnectScreen() {
   const router = useRouter();
-  const setServerUrl = useAuthStore((state) => state.setServerUrl);
-  const { setToken, setUser } = useAuthStore();
+  const { setServerUrl, setToken, setUser } = useAuthStore();
   const [url, setUrl] = useState('http://localhost:8000');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSetup = async () => {
+  const handleLogin = async () => {
     setError(null);
 
     if (!url.trim()) {
@@ -30,30 +29,26 @@ export default function ConnectScreen() {
 
     setIsLoading(true);
     try {
+      await setServerUrl(url);
       const authService = new AuthService(url);
-      const response = await authService.setup({ username, password });
+      const response = await authService.login({
+        username,
+        password,
+        device_id: 'mobile',
+        device_name: 'Mobile App',
+      });
 
-      if (response.user_id) {
-        await setServerUrl(url);
-        router.replace('/(auth)/login');
-      } else {
-        setError('Setup failed — unexpected response');
-      }
+      await setToken(response.session_token);
+      await setUser({
+        id: response.user_id,
+        username: response.username,
+        email: '',
+        created_at: '',
+      });
+      router.replace('/(tabs)/chat');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to setup';
-      // 409 Conflict means server is already set up — try to auto-login with the typed credentials
-      if (msg.includes('409') || msg.toLowerCase().includes('conflict') || msg.toLowerCase().includes('already set up')) {
-        await setServerUrl(url);
-        try {
-          const loginResp = await authService.login({ username, password, device_id: 'web', device_name: 'Web Browser' });
-          await setToken(loginResp.session_token);
-          await setUser({ id: loginResp.user_id, username: loginResp.username, email: '', created_at: '' });
-          router.replace('/(tabs)/chat');
-        } catch {
-          // Credentials wrong or other issue — send to login screen to try again
-          router.replace('/(auth)/login');
-        }
-      } else if (msg.toLowerCase().includes('fetch') || msg.toLowerCase().includes('network')) {
+      const msg = err instanceof Error ? err.message : 'Login failed';
+      if (msg.toLowerCase().includes('fetch') || msg.toLowerCase().includes('network')) {
         setError('Cannot reach the server. Check the URL and try again.');
       } else {
         setError(msg);
@@ -67,7 +62,7 @@ export default function ConnectScreen() {
     <View style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>Welcome to Helm</Text>
-        <Text style={styles.subtitle}>Setup your server and create an account</Text>
+        <Text style={styles.subtitle}>Connect to your server</Text>
 
         {error && (
           <View style={styles.errorContainer}>
@@ -118,24 +113,13 @@ export default function ConnectScreen() {
 
         <Pressable
           style={[styles.button, isLoading && styles.buttonDisabled]}
-          onPress={isLoading ? undefined : handleSetup}
+          onPress={handleLogin}
           disabled={isLoading}
-          accessibilityRole="button"
         >
-          <Text style={styles.buttonText}>{isLoading ? 'Setting up...' : 'Setup'}</Text>
-        </Pressable>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Already have an account?</Text>
-          <Text style={styles.link} onPress={async () => {
-            if (url.trim()) {
-              await setServerUrl(url.trim());
-            }
-            router.push('/(auth)/login');
-          }}>
-            Sign In
+          <Text style={styles.buttonText}>
+            {isLoading ? 'Logging in...' : 'Login'}
           </Text>
-        </View>
+        </Pressable>
       </View>
     </View>
   );
@@ -207,20 +191,5 @@ const styles = StyleSheet.create({
   buttonText: {
     ...typography.headline,
     color: '#FFFFFF',
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: spacing.lg,
-    gap: spacing.xs,
-  },
-  footerText: {
-    ...typography.caption1,
-    color: colors.textSecondary,
-  },
-  link: {
-    ...typography.caption1,
-    color: colors.primary,
   },
 });

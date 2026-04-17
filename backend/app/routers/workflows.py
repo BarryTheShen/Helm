@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import PaginationParams, get_current_user_id
-from app.models.workflow import Workflow, TriggerType
+from app.models.workflow import Workflow
 from app.schemas.common import BulkDeleteRequest, PaginatedResponse
 from app.services.audit import log_audit
 from app.services.workflow_engine import register_workflow, unregister_workflow
@@ -18,27 +18,30 @@ router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
 class WorkflowCreate(BaseModel):
     name: str
-    trigger_type: TriggerType
+    description: str | None = None
+    graph: dict[str, Any] = {}
+    trigger_type: str  # onSchedule | onDataChange | onServerEvent | manual
     trigger_config: dict[str, Any] = {}
-    action_config: dict[str, Any] = {}
 
 
 class WorkflowUpdate(BaseModel):
     name: str | None = None
+    description: str | None = None
+    graph: dict[str, Any] | None = None
     trigger_config: dict[str, Any] | None = None
-    action_config: dict[str, Any] | None = None
-    is_active: bool | None = None
+    enabled: bool | None = None
 
 
 class WorkflowResponse(BaseModel):
     id: str
     name: str
+    description: str | None
+    graph: dict[str, Any]
     trigger_type: str
     trigger_config: dict[str, Any]
-    action_config: dict[str, Any]
-    is_active: bool
-    run_count: int
-    last_run_at: str | None
+    enabled: bool
+    created_at: str
+    updated_at: str
 
     model_config = {"from_attributes": True}
 
@@ -65,12 +68,13 @@ async def list_workflows(
         WorkflowResponse(
             id=str(w.id),
             name=w.name,
-            trigger_type=w.trigger_type.value,
+            description=w.description,
+            graph=w.graph or {},
+            trigger_type=w.trigger_type,
             trigger_config=w.trigger_config or {},
-            action_config=w.action_config or {},
-            is_active=w.is_active,
-            run_count=w.run_count or 0,
-            last_run_at=w.last_run_at.isoformat() if w.last_run_at else None,
+            enabled=w.enabled,
+            created_at=w.created_at.isoformat(),
+            updated_at=w.updated_at.isoformat(),
         )
         for w in workflows
     ]
@@ -95,23 +99,37 @@ async def create_workflow(
         id=str(uuid4()),
         user_id=user_id,
         name=body.name,
+        description=body.description,
+        graph=body.graph,
         trigger_type=body.trigger_type,
         trigger_config=body.trigger_config,
-        action_config=body.action_config,
     )
     db.add(wf)
     await log_audit(db, user_id, "WORKFLOW_CREATED", "workflow", str(wf.id), ip=request.client.host if request.client else None)
+
+    # Capture values before commit to avoid lazy loading issues
+    wf_id = str(wf.id)
+    wf_name = wf.name
+    wf_description = wf.description
+    wf_graph = wf.graph or {}
+    wf_trigger_type = wf.trigger_type
+    wf_trigger_config = wf.trigger_config or {}
+    wf_enabled = wf.enabled if wf.enabled is not None else True  # Default to True if not set
+
     await db.commit()
-    await register_workflow(wf)
+    await db.refresh(wf)  # Refresh to get server-generated timestamps
+
+    await register_workflow(wf_id, wf_trigger_type, wf_trigger_config, wf_enabled)
     return WorkflowResponse(
-        id=str(wf.id),
-        name=wf.name,
-        trigger_type=wf.trigger_type.value,
-        trigger_config=wf.trigger_config or {},
-        action_config=wf.action_config or {},
-        is_active=wf.is_active,
-        run_count=0,
-        last_run_at=None,
+        id=wf_id,
+        name=wf_name,
+        description=wf_description,
+        graph=wf_graph,
+        trigger_type=wf_trigger_type,
+        trigger_config=wf_trigger_config,
+        enabled=wf_enabled,
+        created_at=wf.created_at.isoformat(),
+        updated_at=wf.updated_at.isoformat(),
     )
 
 
@@ -131,27 +149,44 @@ async def update_workflow(
         raise HTTPException(status_code=404, detail="Workflow not found")
     if body.name is not None:
         wf.name = body.name
+    if body.description is not None:
+        wf.description = body.description
+    if body.graph is not None:
+        wf.graph = body.graph
     if body.trigger_config is not None:
         wf.trigger_config = body.trigger_config
-    if body.action_config is not None:
-        wf.action_config = body.action_config
-    if body.is_active is not None:
-        wf.is_active = body.is_active
-        if not body.is_active:
+    if body.enabled is not None:
+        wf.enabled = body.enabled
+        if not body.enabled:
             await unregister_workflow(workflow_id)
-        else:
-            await register_workflow(wf)
     await log_audit(db, user_id, "WORKFLOW_UPDATED", "workflow", str(wf.id), ip=request.client.host if request.client else None)
+
+    # Capture values before commit to avoid lazy loading issues
+    wf_id = str(wf.id)
+    wf_name = wf.name
+    wf_description = wf.description
+    wf_graph = wf.graph or {}
+    wf_trigger_type = wf.trigger_type
+    wf_trigger_config = wf.trigger_config or {}
+    wf_enabled = wf.enabled if wf.enabled is not None else True  # Default to True if not set
+
     await db.commit()
+    await db.refresh(wf)  # Refresh to get updated timestamp
+
+    # Register workflow after commit to avoid session issues
+    if body.enabled is not None and body.enabled:
+        await register_workflow(workflow_id, wf_trigger_type, wf_trigger_config, wf_enabled)
+
     return WorkflowResponse(
-        id=str(wf.id),
-        name=wf.name,
-        trigger_type=wf.trigger_type.value,
-        trigger_config=wf.trigger_config or {},
-        action_config=wf.action_config or {},
-        is_active=wf.is_active,
-        run_count=wf.run_count or 0,
-        last_run_at=wf.last_run_at.isoformat() if wf.last_run_at else None,
+        id=wf_id,
+        name=wf_name,
+        description=wf_description,
+        graph=wf_graph,
+        trigger_type=wf_trigger_type,
+        trigger_config=wf_trigger_config,
+        enabled=wf_enabled,
+        created_at=wf.created_at.isoformat(),
+        updated_at=wf.updated_at.isoformat(),
     )
 
 
@@ -188,3 +223,96 @@ async def bulk_delete_workflows(
     )
     await db.commit()
     return {"deleted": result.rowcount}
+
+
+class N8nImportRequest(BaseModel):
+    workflow: dict[str, Any]
+
+
+class N8nImportResponse(BaseModel):
+    workflow: dict[str, Any]
+    warnings: list[str]
+
+
+@router.post("/import/n8n", response_model=N8nImportResponse)
+async def import_n8n_workflow(
+    body: N8nImportRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Import n8n workflow JSON and translate to Helm workflow format.
+
+    n8n format:
+    {
+        "name": "...",
+        "nodes": [{"id": "...", "type": "...", "parameters": {...}, "position": [x, y]}],
+        "connections": {"node_id": {"main": [[{"node": "target_id", "type": "main", "index": 0}]]}}
+    }
+
+    Helm format (React Flow):
+    {
+        "nodes": [{"id": "...", "type": "action", "data": {...}, "position": {"x": x, "y": y}}],
+        "edges": [{"id": "...", "source": "...", "target": "..."}]
+    }
+    """
+    n8n_wf = body.workflow
+    warnings: list[str] = []
+
+    # Node type mapping
+    node_type_map = {
+        "n8n-nodes-base.httpRequest": "action",
+        "n8n-nodes-base.webhook": "action",
+        "n8n-nodes-base.set": "action",
+        "n8n-nodes-base.if": "condition",
+        "n8n-nodes-base.switch": "switch",
+        "n8n-nodes-base.code": "action",
+        "n8n-nodes-base.function": "action",
+        "n8n-nodes-base.merge": "action",
+        "n8n-nodes-base.splitInBatches": "loop",
+    }
+
+    # Translate nodes
+    helm_nodes = []
+    for n8n_node in n8n_wf.get("nodes", []):
+        node_id = n8n_node.get("id") or n8n_node.get("name", str(uuid4()))
+        node_type = n8n_node.get("type", "")
+        helm_type = node_type_map.get(node_type, "action")
+
+        if node_type not in node_type_map:
+            warnings.append(f"Unsupported node type '{node_type}' (node: {node_id}) — mapped to 'action'")
+
+        position = n8n_node.get("position", [0, 0])
+        helm_nodes.append({
+            "id": node_id,
+            "type": helm_type,
+            "data": {
+                "label": n8n_node.get("name", node_id),
+                "action": node_type,
+                "params": n8n_node.get("parameters", {}),
+                "n8n_original_type": node_type,
+            },
+            "position": {"x": position[0] if len(position) > 0 else 0, "y": position[1] if len(position) > 1 else 0},
+        })
+
+    # Translate connections
+    helm_edges = []
+    connections = n8n_wf.get("connections", {})
+    for source_id, outputs in connections.items():
+        main_outputs = outputs.get("main", [])
+        for output_index, targets in enumerate(main_outputs):
+            for target in targets:
+                target_id = target.get("node")
+                if target_id:
+                    edge_id = f"{source_id}-{target_id}-{output_index}"
+                    helm_edges.append({
+                        "id": edge_id,
+                        "source": source_id,
+                        "target": target_id,
+                        "sourceHandle": str(output_index) if output_index > 0 else None,
+                    })
+
+    helm_workflow = {
+        "nodes": helm_nodes,
+        "edges": helm_edges,
+    }
+
+    return N8nImportResponse(workflow=helm_workflow, warnings=warnings)

@@ -32,7 +32,5 @@ class WorkflowAnalyticsItem(BaseModel):
 
     id: str
     name: str
-    is_active: bool
-    run_count: int
-    last_run_at: datetime | None
+    enabled: bool
     audit_entries: int

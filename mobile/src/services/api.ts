@@ -7,6 +7,8 @@ import type {
   Workflow,
   Module,
   ChatMessage,
+  Template,
+  TemplateDetail,
 } from '@/types/api';
 import type { SDUIDraftResponse, SDUIScreenResponse } from '@/types/sdui';
 
@@ -202,6 +204,26 @@ export class ApiClient {
     return this.request<any>('/api/actions/execute', {
       method: 'POST',
       body: JSON.stringify({ function: functionName, params }),
+    });
+  }
+
+  // Templates
+  async getTemplates(category?: string, search?: string): Promise<{ items: Template[]; total: number; page: number; page_size: number }> {
+    const params = new URLSearchParams();
+    if (category) params.append('category', category);
+    if (search) params.append('search', search);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return this.request<{ items: Template[]; total: number; page: number; page_size: number }>(`/api/templates${query}`);
+  }
+
+  async getTemplateDetail(templateId: string): Promise<TemplateDetail> {
+    return this.request<TemplateDetail>(`/api/templates/${templateId}`);
+  }
+
+  async applyTemplate(templateId: string, moduleId: string): Promise<void> {
+    return this.request<void>(`/api/templates/${templateId}/apply`, {
+      method: 'POST',
+      body: JSON.stringify({ module_id: moduleId }),
     });
   }
 }

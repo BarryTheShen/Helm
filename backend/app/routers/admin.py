@@ -37,7 +37,7 @@ async def get_admin_stats(
     total_events = (await db.execute(select(func.count()).select_from(CalendarEvent))).scalar_one()
     total_workflows = (await db.execute(select(func.count()).select_from(Workflow))).scalar_one()
     active_workflows = (await db.execute(
-        select(func.count()).select_from(Workflow).where(Workflow.is_active == True)  # noqa: E712
+        select(func.count()).select_from(Workflow).where(Workflow.enabled == True)  # noqa: E712
     )).scalar_one()
     total_notifications = (await db.execute(select(func.count()).select_from(Notification))).scalar_one()
     unread_notifications = (await db.execute(
@@ -91,9 +91,7 @@ async def get_workflow_analytics(
         select(
             Workflow.id,
             Workflow.name,
-            Workflow.is_active,
-            Workflow.run_count,
-            Workflow.last_run_at,
+            Workflow.enabled,
             func.coalesce(audit_sub.c.audit_count, 0).label("audit_entries"),
         )
         .outerjoin(audit_sub, Workflow.id == audit_sub.c.resource_id)
@@ -107,9 +105,7 @@ async def get_workflow_analytics(
         WorkflowAnalyticsItem(
             id=row.id,
             name=row.name,
-            is_active=row.is_active,
-            run_count=row.run_count,
-            last_run_at=row.last_run_at,
+            enabled=row.enabled,
             audit_entries=row.audit_entries,
         )
         for row in rows

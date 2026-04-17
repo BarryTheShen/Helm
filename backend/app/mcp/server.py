@@ -300,7 +300,6 @@ async def helm_set_screen(module_id: str, screen: dict | str) -> dict:
     ── ACTION TYPES ───────────────────────────────────────────────────────────
       {"type": "navigate", "screen": "<module_id>", "params"?: {}}
       {"type": "server_action", "function": "<registered_name>", "params"?: {}}
-      {"type": "dismiss"}
       {"type": "copy_text", "text": "..."}
       {"type": "open_url", "url": "https://..."}
 

@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../lib/api';
-import { Globe, Trash2, Search, Eye, Upload } from 'lucide-react';
+import { Globe, Trash2, Search, Eye, Upload, Smartphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { SDUIPreview } from '../components/SDUIPreview';
+import { AppPreview } from '../components/AppPreview';
 
 interface Template {
   id: string;
@@ -50,6 +52,9 @@ export function TemplatesPage() {
   const [applyingTemplate, setApplyingTemplate] = useState<string | null>(null);
   const [applyModuleId, setApplyModuleId] = useState('');
   const [modules, setModules] = useState<ModuleInfo[]>([]);
+
+  // App preview modal
+  const [showAppPreview, setShowAppPreview] = useState(false);
 
   const navigate = useNavigate();
 
@@ -122,48 +127,25 @@ export function TemplatesPage() {
     });
   };
 
-  const renderScreenPreview = (screenJson: any) => {
-    if (!screenJson?.rows) return <div className="text-gray-400 text-sm">No content</div>;
-    return (
-      <div className="space-y-2">
-        {screenJson.rows.map((row: any, ri: number) => (
-          <div key={ri} className="flex gap-2 p-2 border rounded bg-gray-50">
-            {(row.cells || []).map((cell: any, ci: number) => {
-              const comp = cell.content ?? cell.component;
-              return (
-                <div key={ci} className="flex-1 text-xs">
-                  {comp ? (
-                    <div className="bg-white rounded p-2 border">
-                      <span className="font-mono text-blue-600">{comp.type}</span>
-                      {comp.props?.content && (
-                        <span className="text-gray-500 ml-1">"{String(comp.props.content).slice(0, 30)}"</span>
-                      )}
-                      {comp.props?.label && (
-                        <span className="text-gray-500 ml-1">"{String(comp.props.label).slice(0, 30)}"</span>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="bg-gray-100 rounded p-2 text-gray-400">empty</div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-    );
-  };
-
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold">Templates</h2>
-        <button
-          onClick={() => navigate('/editor')}
-          className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-md"
-        >
-          Open Editor
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAppPreview(true)}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-md"
+          >
+            <Smartphone size={16} />
+            Preview Whole App
+          </button>
+          <button
+            onClick={() => navigate('/editor')}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-md"
+          >
+            Open Editor
+          </button>
+        </div>
       </div>
 
       {message && (
@@ -265,14 +247,11 @@ export function TemplatesPage() {
             </div>
             <p className="text-sm text-gray-500 mb-4">{previewTemplate.description || 'No description'}</p>
             {showJson ? (
-              <pre className="mt-2 text-xs font-mono bg-gray-50 p-3 rounded overflow-auto max-h-64 mb-4">{JSON.stringify(previewTemplate.screen_json, null, 2)}</pre>
+              <pre className="mt-2 text-xs font-mono bg-gray-50 p-3 rounded overflow-auto max-h-96 mb-4">{JSON.stringify(previewTemplate.screen_json, null, 2)}</pre>
             ) : (
-              <div className="border rounded-lg p-4 bg-gray-50 mb-4" style={{ maxWidth: 390, margin: '0 auto' }}>
-                <div className="text-xs text-gray-400 mb-2 text-center">Mobile Preview (390px)</div>
-                {renderScreenPreview(previewTemplate.screen_json)}
-              </div>
+              <SDUIPreview json={previewTemplate.screen_json} maxWidth={390} maxHeight={600} />
             )}
-            <div className="flex gap-2 justify-end">
+            <div className="flex gap-2 justify-end mt-4">
               <button
                 onClick={() => {
                   setPreviewTemplate(null);
@@ -334,6 +313,11 @@ export function TemplatesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* App Preview Modal */}
+      {showAppPreview && (
+        <AppPreview onClose={() => setShowAppPreview(false)} />
       )}
     </div>
   );

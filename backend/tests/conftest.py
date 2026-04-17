@@ -112,3 +112,21 @@ async def auth_client(client):
     token = resp.json()["session_token"]
     client.headers.update({"Authorization": f"Bearer {token}"})
     return client
+
+
+@pytest.fixture(scope="function")
+async def test_user(db_session):
+    """Create a test user in the database."""
+    from app.models.user import User
+    from app.utils.security import hash_password
+
+    user = User(
+        id="test-user-123",
+        username="testuser",
+        password_hash=hash_password("password123"),
+        role="user",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user

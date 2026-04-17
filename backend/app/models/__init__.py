@@ -4,6 +4,7 @@ from app.models.base import Base
 from app.models.calendar_event import CalendarEvent
 from app.models.chat_message import ChatMessage
 from app.models.component_registry import ComponentRegistry
+from app.models.connection import Connection
 from app.models.custom_variable import CustomVariable
 from app.models.data_source import DataSource
 from app.models.device import Device
@@ -26,6 +27,7 @@ __all__ = [
     "ChatMessage",
     "CalendarEvent",
     "ComponentRegistry",
+    "Connection",
     "CustomVariable",
     "DataSource",
     "Notification",

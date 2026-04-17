@@ -294,3 +294,47 @@ async def test_set_variable_in_functions_list(auth_client):
     """set_variable should appear in the functions list."""
     resp = await auth_client.get("/api/actions/functions")
     assert "set_variable" in resp.json()["functions"]
+
+
+# ── Execute — fetch_weather ────────────────────────────────────────────────
+
+async def test_execute_fetch_weather_missing_location(auth_client):
+    """fetch_weather without location returns error."""
+    resp = await auth_client.post(
+        "/api/actions/execute",
+        json={"function": "fetch_weather", "params": {"connection_id": "test-id"}},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["result"]["status"] == "error"
+    assert "location" in data["result"]["detail"]
+
+
+async def test_execute_fetch_weather_missing_connection_id(auth_client):
+    """fetch_weather without connection_id returns error."""
+    resp = await auth_client.post(
+        "/api/actions/execute",
+        json={"function": "fetch_weather", "params": {"location": "London"}},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["result"]["status"] == "error"
+    assert "connection_id" in data["result"]["detail"]
+
+
+async def test_execute_fetch_weather_invalid_connection(auth_client):
+    """fetch_weather with non-existent connection returns error."""
+    resp = await auth_client.post(
+        "/api/actions/execute",
+        json={"function": "fetch_weather", "params": {"location": "London", "connection_id": "nonexistent"}},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["result"]["status"] == "error"
+    assert "not found" in data["result"]["detail"]
+
+
+async def test_fetch_weather_in_functions_list(auth_client):
+    """fetch_weather should appear in the functions list."""
+    resp = await auth_client.get("/api/actions/functions")
+    assert "fetch_weather" in resp.json()["functions"]

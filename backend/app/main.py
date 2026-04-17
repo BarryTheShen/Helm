@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
     from app.services.template_seed import seed_templates  # noqa: PLC0415
     async with AsyncSessionLocal() as seed_db:
         await seed_components(seed_db)
-        await seed_templates(seed_db)
+        await seed_templates(seed_db, replace=True)  # Replace old templates with new ones
 
     # Start the 2-minute time alert task (opt-in via DEMO_TIME_ALERTS=true in .env)
     import asyncio as _asyncio
@@ -136,7 +136,7 @@ async def health():
 
 
 # Register routers
-from app.routers import auth, modules, chat, calendar, notifications, agent_config, websocket, workflows, actions, users, sessions, audit, components, templates, admin, variables, data_sources, triggers  # noqa: E402
+from app.routers import auth, modules, chat, calendar, notifications, agent_config, websocket, workflows, actions, users, sessions, audit, components, templates, admin, variables, data_sources, triggers, connections  # noqa: E402
 
 app.include_router(auth.router)
 app.include_router(modules.router)
@@ -155,6 +155,7 @@ app.include_router(admin.router)
 app.include_router(variables.router)
 app.include_router(data_sources.router)
 app.include_router(triggers.router)
+app.include_router(connections.router)
 app.include_router(websocket.router)
 
 # Mount MCP server

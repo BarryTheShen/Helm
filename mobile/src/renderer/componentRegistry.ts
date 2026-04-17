@@ -29,6 +29,9 @@ import { SDUIBadge } from '@/components/sdui/SDUIBadge';
 import { SDUIStat } from '@/components/sdui/SDUIStat';
 import { ListComponent } from '@/components/sdui/ListComponent';
 import { AlertComponent } from '@/components/sdui/AlertComponent';
+import { TodoComponent } from '@/components/sdui/TodoComponent';
+import { RichTextRendererComponent } from '@/components/sdui/RichTextRendererComponent';
+import { ArticleCardComponent } from '@/components/sdui/ArticleCardComponent';
 
 // Registry: type string → React component
 // Components receive { ...props, dispatch, children? }
@@ -51,6 +54,9 @@ const registry: Record<string, ComponentType<any>> = {
   Stat: SDUIStat,
   List: ListComponent,
   Alert: AlertComponent,
+  Todo: TodoComponent,
+  RichText: RichTextRendererComponent,
+  ArticleCard: ArticleCardComponent,
 };
 
 // Build a case-insensitive index: lowercase key → canonical PascalCase key

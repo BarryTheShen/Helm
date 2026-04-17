@@ -8,6 +8,7 @@ import { Settings, Rows3, Box, Minus, Plus } from 'lucide-react';
 import { RuleBuilder } from './RuleBuilder';
 import { api } from '../lib/api';
 import type { DataSource } from '../lib/api';
+import { VariableInput } from './VariableInput';
 
 const INTERACTIVE_COMPONENTS = new Set(['Button', 'TextInput', 'InputBar']);
 
@@ -569,57 +570,21 @@ const DATA_BINDING_SOURCE_TYPE: Record<string, string> = {
 
 // ── Field Renderers ──────────────────────────────────────────────────────────
 
-function FieldRenderer({ field, value, onChange }: {
+function FieldRenderer({ field, value, onChange, screenComponents }: {
   field: FieldSchema;
   value: unknown;
   onChange: (value: unknown) => void;
+  screenComponents?: Array<{ id: string; type: string }>;
 }) {
-  const [showVarMenu, setShowVarMenu] = useState(false);
   switch (field.type) {
     case 'text':
       return (
-        <div className="relative">
-          <div className="flex gap-1 items-center">
-            <input
-              type="text"
-              value={coerceStringValue(value, field.defaultValue ?? '')}
-              onChange={e => onChange(e.target.value)}
-              placeholder={field.placeholder}
-              className="flex-1 px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            />
-            <button
-              type="button"
-              onMouseDown={e => e.preventDefault()}
-              onClick={() => setShowVarMenu(v => !v)}
-              className="text-[9px] px-1 py-0.5 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded text-gray-500 whitespace-nowrap"
-            >
-              {'{x}'}
-            </button>
-          </div>
-          {showVarMenu && (
-            <div className="absolute right-0 top-full mt-0.5 z-50 bg-white border border-gray-200 rounded-md shadow-lg py-1 min-w-[160px]">
-              {VARIABLE_GROUPS.map(group => (
-                <div key={group.label}>
-                  <div className="px-2 py-0.5 text-[9px] font-semibold text-gray-400 uppercase tracking-wide">{group.label}</div>
-                  {group.vars.map(varStr => (
-                    <button
-                      key={varStr}
-                      type="button"
-                      onMouseDown={e => {
-                        e.preventDefault();
-                        onChange(coerceStringValue(value, field.defaultValue ?? '') + varStr);
-                        setShowVarMenu(false);
-                      }}
-                      className="w-full text-left px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50 font-mono"
-                    >
-                      {varStr}
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <VariableInput
+          value={coerceStringValue(value, field.defaultValue ?? '')}
+          onChange={onChange}
+          placeholder={field.placeholder}
+          screenComponents={screenComponents}
+        />
       );
     case 'number':
       {
@@ -662,48 +627,13 @@ function FieldRenderer({ field, value, onChange }: {
         const textareaStr = typeof textareaValue === 'string' ? textareaValue : JSON.stringify(textareaValue, null, 2);
 
       return (
-        <div className="relative">
-          <div className="flex gap-1 items-start">
-            <textarea
-              value={textareaStr}
-              onChange={e => onChange(e.target.value)}
-              placeholder={field.placeholder}
-              rows={3}
-              className="flex-1 px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono resize-y"
-            />
-            <button
-              type="button"
-              onMouseDown={e => e.preventDefault()}
-              onClick={() => setShowVarMenu(v => !v)}
-              className="text-[9px] px-1 py-0.5 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded text-gray-500 whitespace-nowrap mt-1"
-            >
-              {'{x}'}
-            </button>
-          </div>
-          {showVarMenu && (
-            <div className="absolute right-0 top-full mt-0.5 z-50 bg-white border border-gray-200 rounded-md shadow-lg py-1 min-w-[160px]">
-              {VARIABLE_GROUPS.map(group => (
-                <div key={group.label}>
-                  <div className="px-2 py-0.5 text-[9px] font-semibold text-gray-400 uppercase tracking-wide">{group.label}</div>
-                  {group.vars.map(varStr => (
-                    <button
-                      key={varStr}
-                      type="button"
-                      onMouseDown={e => {
-                        e.preventDefault();
-                        onChange(textareaStr + varStr);
-                        setShowVarMenu(false);
-                      }}
-                      className="w-full text-left px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50 font-mono"
-                    >
-                      {varStr}
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <VariableInput
+          value={textareaStr}
+          onChange={onChange}
+          placeholder={field.placeholder}
+          multiline={true}
+          screenComponents={screenComponents}
+        />
       );
       }
     case 'color':
@@ -777,9 +707,16 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
     updateRowProps(rowId, { padding: parseOptionalNumberInput(value, 0) });
   };
 
-  const handleCellWidthChange = (cellIndex: number, value: string) => {
-    const nextWidth = parseOptionalNumberInput(value, 0.25);
-    updateCellWidth(rowId, cellIndex, nextWidth === undefined ? 'auto' : nextWidth);
+  const handleCellWidthChange = (cellIndex: number, value: string, unit: 'px' | '%' | 'flex') => {
+    if (unit === '%') {
+      const parsed = parseFloat(value);
+      if (!isNaN(parsed) && parsed > 0) {
+        updateCellWidth(rowId, cellIndex, `${parsed}%`);
+      }
+    } else {
+      const nextWidth = parseOptionalNumberInput(value, 0.25);
+      updateCellWidth(rowId, cellIndex, nextWidth === undefined ? 'auto' : nextWidth);
+    }
   };
 
   return (
@@ -840,30 +777,71 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Cell Widths</label>
         <div className="space-y-1">
-          {row.cells.map((cell, cellIdx) => (
-            <div key={cell.id} className="flex items-center gap-1.5">
-              <span className="text-[10px] text-gray-400 w-12">Cell {cellIdx + 1}</span>
-              <button
-                onClick={() => updateCellWidth(rowId, cellIdx, 'auto')}
-                className={`px-2 py-1 text-xs rounded border transition-colors ${
-                  cell.width === 'auto' ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                Auto
-              </button>
-              <input
-                type="number"
-                value={getOptionalNumberInputValue(cell.width)}
-                onChange={e => handleCellWidthChange(cellIdx, e.target.value)}
-                step={0.25}
-                min={0.25}
-                placeholder="flex"
-                className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none"
-              />
-            </div>
-          ))}
+          {row.cells.map((cell, cellIdx) => {
+            const isPercentage = typeof cell.width === 'string' && cell.width.endsWith('%');
+            const isAuto = cell.width === 'auto';
+            const unit = isPercentage ? '%' : 'flex';
+            const numericValue = isAuto
+              ? ''
+              : isPercentage
+                ? parseFloat(String(cell.width))
+                : getOptionalNumberInputValue(cell.width);
+
+            return (
+              <div key={cell.id} className="flex items-center gap-1.5">
+                <span className="text-[10px] text-gray-400 w-12">Cell {cellIdx + 1}</span>
+                <button
+                  onClick={() => updateCellWidth(rowId, cellIdx, 'auto')}
+                  className={`px-2 py-1 text-xs rounded border transition-colors ${
+                    isAuto ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  Auto
+                </button>
+                <input
+                  type="number"
+                  value={numericValue}
+                  onChange={e => handleCellWidthChange(cellIdx, e.target.value, unit)}
+                  step={unit === '%' ? 1 : 0.25}
+                  min={unit === '%' ? 1 : 0.25}
+                  placeholder={unit === '%' ? '%' : 'flex'}
+                  className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+                <div className="flex border border-gray-200 rounded overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentValue = isAuto ? 1 : (typeof cell.width === 'number' ? cell.width : parseFloat(String(cell.width)) || 1);
+                      updateCellWidth(rowId, cellIdx, currentValue);
+                    }}
+                    className={`px-1.5 py-1 text-[10px] font-medium transition-colors ${
+                      !isPercentage && !isAuto
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    flex
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentValue = isAuto ? 50 : (typeof cell.width === 'number' ? cell.width : parseFloat(String(cell.width)) || 50);
+                      updateCellWidth(rowId, cellIdx, `${currentValue}%`);
+                    }}
+                    className={`px-1.5 py-1 text-[10px] font-medium transition-colors ${
+                      isPercentage
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    %
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <div className="text-[10px] text-gray-300 mt-1">Relative flex weights (e.g., 1:2:1)</div>
+        <div className="text-[10px] text-gray-300 mt-1">Relative flex weights (e.g., 1:2:1) or percentage</div>
       </div>
 
       {/* Background color */}
@@ -970,6 +948,11 @@ function ComponentPropertiesPanel({ rowId, cellIndex }: { rowId: string; cellInd
     updateComponentProps(rowId, cellIndex, { [key]: value });
   };
 
+  // Collect all screen components for variable picker
+  const screenComponents = rows.flatMap(r =>
+    r.cells.map(c => c.content).filter((comp): comp is EditorComponent => comp !== null)
+  ).map(comp => ({ id: comp.id, type: comp.type }));
+
   const actionPropName = getActionPropName(type);
   const authorableActionSchemas = getAuthorableActionSchemas(type);
   const hasAction = actionPropName !== null;
@@ -1032,6 +1015,7 @@ function ComponentPropertiesPanel({ rowId, cellIndex }: { rowId: string; cellInd
                 field={field}
                 value={props[field.key]}
                 onChange={(val) => handleChange(field.key, val)}
+                screenComponents={screenComponents}
               />
             </div>
           ))}
@@ -1093,6 +1077,7 @@ function ComponentPropertiesPanel({ rowId, cellIndex }: { rowId: string; cellInd
                     field={actionField}
                     value={action?.[actionField.key]}
                     onChange={(val) => handleActionFieldChange(actionField.key, val)}
+                    screenComponents={screenComponents}
                   />
                 </div>
               );
@@ -1113,6 +1098,7 @@ function ComponentPropertiesPanel({ rowId, cellIndex }: { rowId: string; cellInd
                         ? parseUnknownActionFieldInput(nextValue)
                         : nextValue,
                     )}
+                    screenComponents={screenComponents}
                   />
                 </div>
               );

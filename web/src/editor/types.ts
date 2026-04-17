@@ -21,7 +21,7 @@ export interface EditorComponent {
 
 export interface EditorCell {
   id: string;
-  width: number | 'auto';
+  width: number | string;
   content: EditorComponent | null;
   rules?: ActionRule[];
   [key: string]: unknown;
