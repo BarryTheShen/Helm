@@ -7,11 +7,11 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   addEdge,
-  Connection,
   NodeTypes,
   MarkerType,
   Panel,
 } from 'reactflow';
+import type { Connection } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { api, Workflow, WorkflowCreate, WorkflowUpdate } from '../lib/api';
 import { Plus, Save, Play, Upload, Trash2, X, Settings, ChevronDown, ChevronRight } from 'lucide-react';

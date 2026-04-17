@@ -4,8 +4,8 @@
 > Read this FIRST before making any changes. It tells you exactly where everything is,
 > what connects to what, and what the known pitfalls are.
 >
-> Last updated: 2026-04-16
-> Last audit: 2026-04-16 — ✅ PRODUCTION-READY (200/200 backend tests passing, web admin fully functional)
+> Last updated: 2026-04-17
+> Last audit: 2026-04-16 — ✅ PRODUCTION-READY (216/216 backend tests passing, web admin fully functional)
 
 ---
 
@@ -44,13 +44,15 @@ Helm is a self-hosted AI super app with three layers:
 | AI chat streaming | `services/agent_proxy.py` | Core feature — LLM streaming + tool calls + XML fallback |
 | External agent routing | `services/agent_proxy.py` | When `settings.external_agent_url` is set, all chat is forwarded to `api_server.py` |
 | WebSocket handling | `routers/websocket.py` + `services/websocket_manager.py` | token in query param; device_id tracked; `module_action` dispatches to action registry |
-| Action handlers | `services/action_registry.py` | 25 named function handlers (9 server-side + 16 client-only stubs); add here to register new functions |
+| Action handlers | `services/action_registry.py` | 28 named function handlers (12 server-side + 16 client-only stubs); includes fetch_rss, fetch_weather, run_workflow; removed open_sheet, dismiss |
 | Actions router | `routers/actions.py` | Actions whitelist (POST /api/actions/execute, GET /api/actions/functions); prevents SSRF |
 | User management CLI | `manage.py` (backend root) | CLI user management (since /auth/setup is locked after first user) |
 | MCP tools (for AI agents) | `mcp/tools.py` | Shared between agent proxy and MCP server |
 | MCP server config | `mcp/server.py` | FastMCP wrapper, mounted at `/mcp` |
-| Workflow automation | `services/workflow_engine.py` | APScheduler-based |
-| Variable resolver | `services/variable_resolver.py` | Resolves `{{expression}}` syntax; scopes: user.*, component.*.value, self.value, custom.*, env.*, data.*.* |
+| Workflow automation | `services/workflow_engine.py` | APScheduler-based; executes React Flow graph format with branching/loops |
+| Workflow model | `models/workflow.py` | Updated for React Flow graph format (nodes, edges) |
+| Workflow router | `routers/workflows.py` | CRUD + n8n importer endpoint |
+| Variable resolver | `services/variable_resolver.py` | Resolves `{{expression}}` syntax; scopes: user.*, component.*.value, self.value, custom.*, env.*, data.*.*, connection.*.* |
 | Trigger engine | `services/trigger_engine.py` | `fire_trigger()` executes action chains from TriggerDefinition records |
 | Trigger model | `models/trigger.py` | TriggerDefinition ORM model (schedule/data_change/server_event) |
 | Trigger schemas | `schemas/trigger.py` | TriggerCreate, TriggerUpdate, TriggerOut |
@@ -68,7 +70,11 @@ Helm is a self-hosted AI super app with three layers:
 | SDUI templates | `routers/templates.py` | CRUD + apply + import + rows |
 | Admin stats | `routers/admin.py` | System stats, workflow stats, WebSocket stats |
 | Audit service | `services/audit.py` | `log_audit()` helper — wired into auth, calendar, workflows, etc. |
-| Component seed | `services/component_seed.py` | Seeds 11 default components (7 atomic + 4 hardcoded) |
+| Component seed | `services/component_seed.py` | Seeds 14 default components (10 atomic + 4 hardcoded); includes Todo, RichTextRenderer, ArticleCard |
+| Template seed | `services/template_seed.py` | Seeds 5 production templates: Calendar, Chat, News Feed, Weather, Task Manager |
+| Connection model | `models/connection.py` | OAuth/API key storage with Fernet encryption |
+| Connection router | `routers/connections.py` | CRUD for service connections (OAuth, API keys) |
+| Connection schemas | `schemas/connection.py` | ConnectionCreate, ConnectionUpdate, ConnectionOut |
 | Sandbox middleware | `middleware/sandbox.py` | ASGI middleware; `X-Helm-Sandbox` header → intercepts DB commits |
 | Sandbox DB support | `database.py` | `contextvars sandbox_mode`; `get_db` intercepts commits in sandbox mode |
 
@@ -77,11 +83,11 @@ Helm is a self-hosted AI super app with three layers:
 | Need to change... | Edit this file | Notes |
 |-------------------|---------------|-------|
 | Auth guard / routing | `app/_layout.tsx` | Redirects based on token presence |
-| Auth screens | `app/(auth)/connect.tsx`, `app/(auth)/login.tsx` | Default URL: `http://localhost:8000` |
-| Tab screens | `app/(tabs)/{screen}.tsx` | 7 built-in tabs: home, chat, modules, calendar, forms, alerts, settings |
-| Modules launcher | `app/(tabs)/modules.tsx` | Built-ins jump to tab routes; custom modules open `/module/[moduleId]`; list labels built-in vs custom |
-| Custom module route | `app/module/[moduleId].tsx` | Dedicated runtime route for non-built-in modules; uses `useSDUIScreen(moduleId)` + `DraftPreview` approval flow |
-| Tab bar config | `app/(tabs)/_layout.tsx` | Tab icons/labels; AI-controlled visibility via tabsStore; TabsConfigSync here |
+| Auth screens | `app/(auth)/connect.tsx`, `app/(auth)/login.tsx` | Login rewritten to 3 fields only (no signup); default URL: `http://localhost:8000` |
+| Tab screens | `app/(tabs)/{screen}.tsx` | 7 built-in tabs: home, chat, modules, calendar, forms, alerts, settings; plus article.tsx for Article Reader |
+| Modules launcher | `app/(tabs)/modules.tsx` | Module Store with built-ins + custom modules; built-ins jump to tab routes; custom modules open `/template/[id]` |
+| Custom module route | `app/template/[id].tsx` | Dedicated runtime route for custom modules; uses `useSDUIScreen(moduleId)` + `DraftPreview` approval flow |
+| Tab bar config | `app/(tabs)/_layout.tsx` | Customizable tab bar with AI-controlled visibility via tabsStore; TabsConfigSync here |
 | Home SDUI screen | `app/(tabs)/home.tsx` | Fully AI-driven via `useSDUIScreen('home')` |
 | Forms SDUI screen | `app/(tabs)/forms.tsx` | Purely SDUI — no fallback native UI |
 | API calls | `src/services/api.ts` | `ApiClient` class with all endpoints |
@@ -95,7 +101,7 @@ Helm is a self-hosted AI super app with three layers:
 | SDUI component registry (V2) | `src/renderer/componentRegistry.ts` | Type string → React component map; `registerComponent()` to extend |
 | SDUI atomic components (V2) | `src/components/atomic/*.tsx` | SDUIText, SDUIMarkdown, SDUIButton, SDUIImage, SDUITextInput, SDUIIcon, SDUIDivider (indent + margin aware) |
 | SDUI structural components (V2) | `src/components/structural/SDUIContainer.tsx` | Flexbox container with shadow + color tokens |
-| SDUI composite components (V2) | `src/components/composite/*.tsx` | CalendarModule, ChatModule, NotesModule, InputBar |
+| SDUI composite components (V2) | `src/components/composite/*.tsx` | CalendarModule (with month/week/day/agenda variants + date navigation), ChatModule, NotesModule, InputBar, TodoComponent, RichTextRendererComponent, ArticleCardComponent |
 | SDUI V1 legacy components | `src/components/sdui/*.tsx` | AlertComponent, CalendarComponent, DraftPreview, FormComponent, ListComponent |
 | Draft preview UI | `src/components/sdui/DraftPreview.tsx` | Approve/Reject/Feedback UI for pending SDUI drafts |
 | Common components | `src/components/common/*.tsx` | Button, Card, ErrorBanner, Input |
@@ -130,29 +136,23 @@ Helm is a self-hosted AI super app with three layers:
 
 | Need to change... | Edit this file | Notes |
 |-------------------|---------------|-------|
-| App entry / routing | `web/src/App.tsx` | React Router; login guard; `AdminLayout` wrapper |
+| App entry / routing | `web/src/App.tsx` | React Router; login guard; `AdminLayout` wrapper; restructured sidebar navigation |
 | Login page | `web/src/pages/LoginPage.tsx` | Authenticates against backend `/auth/login` |
-| Dashboard (stats) | `web/src/pages/DashboardPage.tsx` | Admin stats from `/api/admin/stats` |
 | User management | `web/src/pages/UsersPage.tsx` | CRUD via `/api/users` |
-| Session management | `web/src/pages/SessionsPage.tsx` | List + revoke via `/api/sessions` |
-| Audit log viewer | `web/src/pages/AuditPage.tsx` | Filterable list from `/api/audit` |
-| Workflow management | `web/src/pages/WorkflowsPage.tsx` | Manage workflows |
-| SDUI template management | `web/src/pages/TemplatesPage.tsx` | CRUD + import/export templates |
-| Component registry | `web/src/pages/ComponentsPage.tsx` | View/edit registered SDUI components |
-| Variables & Data Sources | `web/src/pages/VariablesPage.tsx` | Two-tab page: Variables CRUD + Data Sources management |
-| Actions & Triggers | `web/src/pages/ActionsTriggersPage.tsx` | Two-tab page: Action catalog (hardcoded) + Trigger CRUD with test |
-| Rule builder | `web/src/editor/RuleBuilder.tsx` | Notion-style visual rule builder for action chains on interactive components |
-| Visual SDUI editor | `web/src/pages/EditorPage.tsx` | Custom 3-panel editor: structure tree + template library, draft save/push-live flow, presets + custom device sizes, JSON view/import, undo/redo, status bar (shows actual `deviceWidth`×`deviceHeight` from Zustand store), destructive unsaved-change confirmations, live+draft loading that prefers drafts, surfaced module/screen load errors, delete-screen gating on persisted-or-draft state, legacy V1 section-title normalization into heading rows, V1 import that preserves vertical section stacks by emitting one row per legacy component, read-only preservation of lowercase legacy runtime payloads including legacy forms, and module CRUD (create/delete custom modules) |
-| Editor types & presets | `web/src/editor/types.ts` | EditorRow/Cell/Screen types, row visual props, DevicePresets (10 presets), ComponentRegistry, authorable component filtering, `server_action` param validation before persistence, ActionRule/ActionStep types, `rules` field on EditorCell |
-| Local template library | `web/src/editor/templateLibrary.ts` | Built-in starter screen templates + reusable row templates shown in the left panel, aligned to live runtime props |
-| Component prop schemas | `web/src/editor/componentSchemas.ts` | Per-component property schemas for dynamic form generation in PropertyInspector; only supported authorable actions are offered for new edits, while imported unsupported actions fall back to generic editable fields |
-| Editor state (Zustand) | `web/src/editor/useEditorStore.ts` | Rows-first editor contract: rows, selection, history/historyIndex, device dimensions/orientation, screen load/apply/get helpers, row/cell/component mutators, `updateCellRules()` method |
-| Structure tree (left panel) | `web/src/editor/StructureTree.tsx` | Screen root item + expandable rows/cells with CRUD, row reorder, and JSON copy actions |
-| Editor canvas (center panel) | `web/src/editor/EditorCanvas.tsx` | Interactive canvas with component previews, stable multi-step row drag (50px threshold, 300ms debounce), cell resize handles, direct row-height resize, add-row controls, row boundary visibility (dashed borders, alternating backgrounds) |
-| Property inspector (right) | `web/src/editor/PropertyInspector.tsx` | Tabbed UI (Properties/Rules) for interactive components; contextual editor for row height, cell count/widths, background, per-side padding, scrollable rows, component props/actions |
-| Component picker | `web/src/editor/ComponentPicker.tsx` | Component type selection popover, grouped by category, using authorable registry entries only |
-| SDUI adapter (legacy) | `web/src/lib/sduiAdapter.ts` | Legacy normalization helper retained from the old editor; not used by the current custom editor |
-| Puck config (deprecated) | `web/src/lib/puckConfig.tsx` | Delete-stub only — current editor does not import it |
+| Workflow management | `web/src/pages/WorkflowsPage.tsx` | React Flow visual workflow builder with node inspector; n8n import support |
+| SDUI template management | `web/src/pages/TemplatesPage.tsx` | CRUD + import/export templates; SDUIPreview and AppPreview components |
+| Variables management | `web/src/pages/VariablesPage.tsx` | Variables CRUD with VariablePicker component (@ trigger) |
+| Connections management | `web/src/pages/ConnectionsPage.tsx` | OAuth/API key management for service integrations |
+| Logs viewer | `web/src/pages/LogsPage.tsx` | Merged Sessions + Audit Logs in single page |
+| Visual SDUI editor | `web/src/pages/EditorPage.tsx` | Custom 3-panel editor: structure tree + template library, draft save/push-live flow, presets + custom device sizes, JSON view/import, undo/redo, status bar (shows actual `deviceWidth`×`deviceHeight` from Zustand store), destructive unsaved-change confirmations, live+draft loading that prefers drafts, surfaced module/screen load errors, delete-screen gating on persisted-or-draft state, legacy V1 section-title normalization into heading rows, V1 import that preserves vertical section stacks by emitting one row per legacy component, read-only preservation of lowercase legacy runtime payloads including legacy forms, and module CRUD (create/delete custom modules); percentage-based cell widths with width toggle |
+| Editor types & presets | `web/src/editor/types.ts` | EditorRow/Cell/Screen types, row visual props, DevicePresets (10 presets), ComponentRegistry, authorable component filtering, `server_action` param validation before persistence, ActionRule/ActionStep types, `rules` field on EditorCell; percentage width support |
+| Component prop schemas | `web/src/editor/componentSchemas.ts` | Per-component property schemas for dynamic form generation in PropertyInspector; includes Todo, RichTextRenderer, ArticleCard, Calendar variants; only supported authorable actions are offered for new edits, while imported unsupported actions fall back to generic editable fields |
+| Property inspector (right) | `web/src/editor/PropertyInspector.tsx` | Tabbed UI (Properties/Rules) for interactive components; contextual editor for row height, cell count/widths (percentage toggle), background, per-side padding, scrollable rows, component props/actions; integrated VariablePicker |
+| Editor canvas (center panel) | `web/src/editor/EditorCanvas.tsx` | Interactive canvas with component previews, stable multi-step row drag (50px threshold, 300ms debounce), external drag handles, cell resize handles, direct row-height resize, add-row controls, row boundary visibility (dashed borders, alternating backgrounds); percentage width rendering |
+| Variable picker | `web/src/editor/VariablePicker.tsx` | @ trigger component for variable insertion in text fields |
+| Variable input | `web/src/editor/VariableInput.tsx` | Text input with integrated variable picker |
+| SDUI preview | `web/src/components/SDUIPreview.tsx` | Template preview component for TemplatesPage |
+| App preview | `web/src/components/AppPreview.tsx` | Whole app preview component for TemplatesPage |
 | API client | `web/src/lib/api.ts` | Typed fetch wrapper for all admin endpoints; the global 401 handler can be suppressed per request |
 | Utilities | `web/src/lib/utils.ts` | Shared helpers |
 | Auth store | `web/src/stores/authStore.ts` | Zustand store for admin auth state; `/auth/login` suppresses the global unauthorized handler so expected 401s do not clear the session |
@@ -255,6 +255,7 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 | Variable Resolver | 5 | ✅ |
 | Variables | 8 | ✅ |
 | Workflows | 13 | ✅ |
+| **TOTAL** | **216** | **✅** |
 
 ### Coverage Gaps
 
@@ -285,7 +286,34 @@ The following **incomplete features and known issues** exist:
 | 9 | Agent | ⚠️ Issue | `send_prompt.py` requires a manually set session token; no automated auth flow |
 | 10 | Agent | ⚠️ Issue | Standalone agent uses `claude-opus-4-20250514` which hits rate limits; should use `claude-sonnet-4-20250514` instead |
 
-### Recent Fixes (2026-04-16)
+### Recent Fixes (2026-04-17 — Session 9)
+
+- ✅ Backend: Added Connection model with Fernet encryption for API keys
+- ✅ Backend: Added connection.* variable namespace
+- ✅ Backend: Removed deprecated modal actions (open_sheet, dismiss)
+- ✅ Backend: Added 3 new components (Todo, RichTextRenderer, ArticleCard)
+- ✅ Backend: Added Calendar variant prop (month/week/day/agenda)
+- ✅ Backend: Added fetch_rss, fetch_weather, run_workflow actions
+- ✅ Backend: Updated Workflow model for React Flow graph format
+- ✅ Backend: Updated workflow engine to execute React Flow graphs with branching/loops
+- ✅ Backend: Added n8n workflow importer endpoint
+- ✅ Backend: Created 5 production templates (Calendar, Chat, News Feed, Weather, Task Manager)
+- ✅ Web Admin: Restructured sidebar (removed Dashboard, Components, Actions & Triggers pages)
+- ✅ Web Admin: Added ConnectionsPage for OAuth/API key management
+- ✅ Web Admin: Added LogsPage merging Sessions and Audit Logs
+- ✅ Web Admin: Added WorkflowsPage with React Flow canvas
+- ✅ Web Admin: Added percentage-based cell widths in editor
+- ✅ Web Admin: Added VariablePicker component with @ trigger
+- ✅ Web Admin: Added SDUIPreview and AppPreview components
+- ✅ Web Admin: Updated component schemas for new components
+- ✅ Mobile: Added TodoComponent, RichTextRendererComponent, ArticleCardComponent
+- ✅ Mobile: Updated CalendarComponent with variants and navigation
+- ✅ Mobile: Rewrote login screen to 3 fields only
+- ✅ Mobile: Added Article Reader screen
+- ✅ Mobile: Added customizable tab bar and Module Store
+- ✅ All 216 backend tests passing
+
+### Previous Fixes (2026-04-16)
 
 - ✅ Agent error handling improved — now shows actionable error messages instead of generic "Agent error occurred"
 - ✅ Web admin port corrected in documentation (5174, not 5173)
@@ -323,10 +351,22 @@ The following **incomplete features and known issues** exist:
 | Web admin login 401 suppression | `web/src/stores/authStore.ts` + `web/src/lib/api.ts` | Expected `/auth/login` 401s do not fire the global unauthorized handler, so failed logins do not clear admin session state |
 | Agent streaming message IDs | `services/agent_proxy.py` | `chat_start`, streamed `chat_token`s, and `chat_complete` reuse one assistant `message_id` in both built-in and external-agent paths |
 | XML tool-call fallback | `agent_proxy._parse_xml_tool_calls()` | Supports stepfun and other non-function-calling models |
-| Variable expression resolver | `backend/app/services/variable_resolver.py` + `mobile/src/utils/variableResolver.ts` | `{{scope.path}}` syntax resolved server-side and client-side; scopes: user, component, self, custom, env, data |
-| Trigger definitions | `backend/app/models/trigger.py` + `routers/triggers.py` | Server-event / schedule / data-change triggers with action chain JSON; `fire_trigger()` in trigger_engine.py walks the chain through action_registry |
-| Action catalog (22 total) | `backend/app/services/action_registry.py` | 9 server-side handlers + 13 client-only stubs; expandable via `registry.register()` |
-| Rule builder | `web/src/editor/RuleBuilder.tsx` | Notion-style visual builder for per-cell action rules (trigger → action steps); stored as `rules` on EditorCell |
+| Variable expression resolver | `backend/app/services/variable_resolver.py` + `mobile/src/utils/variableResolver.ts` | `{{scope.path}}` syntax resolved server-side and client-side; scopes: user, component, self, custom, env, data, connection |
+| Connection namespace | `services/variable_resolver.py` | `{{connection.provider.key}}` resolves to decrypted API keys from Connection model |
+| Action catalog (28 total) | `backend/app/services/action_registry.py` | 12 server-side handlers (includes fetch_rss, fetch_weather, run_workflow) + 16 client-only stubs; removed open_sheet, dismiss |
+| Workflow engine | `backend/app/services/workflow_engine.py` | Executes React Flow graph format with nodes, edges, branching, and loops |
+| n8n importer | `backend/app/routers/workflows.py` | POST /api/workflows/import/n8n converts n8n workflows to React Flow format |
+| Template seed | `backend/app/services/template_seed.py` | Seeds 5 production templates: Calendar, Chat, News Feed, Weather, Task Manager |
+| Component seed | `backend/app/services/component_seed.py` | Seeds 14 default components (10 atomic + 4 hardcoded); includes Todo, RichTextRenderer, ArticleCard |
+| Calendar variants | `mobile/src/components/sdui/CalendarComponent.tsx` + `web/src/editor/componentSchemas.ts` | Supports month/week/day/agenda views with date navigation |
+| Web admin sidebar | `web/src/components/AdminLayout.tsx` | Restructured: Visual Editor, Templates, Workflows, Variables, Connections, Advanced (Logs), Settings |
+| Percentage widths | `web/src/editor/types.ts` + `EditorCanvas.tsx` + `PropertyInspector.tsx` | Cell widths support percentage-based layout with width toggle |
+| Variable picker | `web/src/editor/VariablePicker.tsx` + `VariableInput.tsx` | @ trigger for variable insertion in text fields |
+| SDUI preview components | `web/src/components/SDUIPreview.tsx` + `AppPreview.tsx` | Template preview and whole app preview in TemplatesPage |
+| Mobile login | `mobile/app/(auth)/login.tsx` | Rewritten to 3 fields only (no signup flow) |
+| Article Reader | `mobile/app/(tabs)/article.tsx` | New screen for news/content viewing |
+| Module Store | `mobile/app/(tabs)/modules.tsx` | Customizable module launcher with built-ins + custom modules |
+| Tab bar customization | `mobile/app/(tabs)/_layout.tsx` + `src/stores/tabsStore.ts` | AI-controlled tab visibility and configuration |
 
 ---
 
@@ -348,7 +388,7 @@ The following **incomplete features and known issues** exist:
 |----------|---------|---------|
 | `DATABASE_URL` | `sqlite+aiosqlite:///./helm.db` | DB connection |
 | `SECRET_KEY` | `dev-secret-key-change-in-production` | JWT signing |
-| `ENCRYPTION_KEY` | `` | Fernet key for API key encryption |
+| `ENCRYPTION_KEY` | `` | Fernet key for API key encryption in Connection model |
 | `ACCESS_TOKEN_EXPIRE_HOURS` | `720` | 30-day token lifetimes |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `30` | Refresh token lifetime |
 | `SERVER_HOST` | `0.0.0.0` | Bind address |
