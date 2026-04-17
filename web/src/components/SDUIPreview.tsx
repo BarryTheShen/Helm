@@ -187,11 +187,11 @@ function TodoPreview() {
       <div className="text-sm font-bold mb-2">✓ To-Do</div>
       <div className="space-y-1.5 text-xs">
         <div className="flex items-center gap-2">
-          <input type="checkbox" className="rounded" />
+          <input type="checkbox" className="rounded" readOnly />
           <span>Complete project</span>
         </div>
         <div className="flex items-center gap-2">
-          <input type="checkbox" checked className="rounded" />
+          <input type="checkbox" defaultChecked className="rounded" readOnly />
           <span className="line-through text-gray-400">Review code</span>
         </div>
       </div>
