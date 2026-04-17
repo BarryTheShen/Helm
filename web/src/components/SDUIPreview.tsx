@@ -193,17 +193,29 @@ function ContainerPreview({ children }: any) {
 
 const PREVIEW_RENDERERS: Record<string, (props: any) => JSX.Element> = {
   Text: TextPreview,
+  text: TextPreview,
   Markdown: MarkdownPreview,
+  markdown: MarkdownPreview,
   Button: ButtonPreview,
+  button: ButtonPreview,
   Image: ImagePreview,
+  image: ImagePreview,
   TextInput: TextInputPreview,
+  textinput: TextInputPreview,
   Icon: IconPreview,
+  icon: IconPreview,
   Divider: DividerPreview,
+  divider: DividerPreview,
   Container: ContainerPreview,
+  container: ContainerPreview,
   CalendarModule: CalendarPreview,
+  calendarmodule: CalendarPreview,
   ChatModule: ChatPreview,
+  chatmodule: ChatPreview,
   NotesModule: NotesPreview,
+  notesmodule: NotesPreview,
   InputBar: InputBarPreview,
+  inputbar: InputBarPreview,
 };
 
 function ComponentPreview({ component }: { component: SDUIComponent }) {
