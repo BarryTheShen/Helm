@@ -197,30 +197,5 @@ export default function TabsLayout() {
       </Tabs>
     </>
   );
-}</Text>,
-          }}
-        />
-        <Tabs.Screen
-          name="alerts"
-          options={{
-            title: tabLabel('alerts', 'Alerts'),
-            tabBarLabel: tabLabel('alerts', 'Alerts'),
-            href: tabHref('alerts'),
-            tabBarIcon: ({ color }) => <Text accessible={false} style={{ color, fontSize: 22 }}>{tabIcon('alerts', '🔔')}</Text>,
-          }}
-        />
-        {/* Settings is always hidden from the tab bar — accessible via the header gear button. */}
-        <Tabs.Screen
-          name="settings"
-          options={{
-            title: 'Settings',
-            href: null,
-            headerRight: () => null,
-          }}
-        />
-      </Tabs>
-    </>
-  );
 }
-
 
