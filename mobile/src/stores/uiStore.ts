@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import Toast from 'react-native-toast-message';
 
 interface UIState {
   isConnected: boolean;
@@ -15,7 +16,10 @@ export const useUIStore = create<UIState>((set) => ({
 
   setConnected: (connected) => set({ isConnected: connected }),
 
-  showError: (message, retry) => set({ errorBanner: { message, retry } }),
+  showError: (message, retry) => {
+    set({ errorBanner: { message, retry } });
+    Toast.show({ type: 'error', text1: message });
+  },
 
   hideError: () => set({ errorBanner: null }),
 }));

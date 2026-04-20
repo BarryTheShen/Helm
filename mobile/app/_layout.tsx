@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
+import Toast from 'react-native-toast-message';
 import { WebSocketProvider } from '@/contexts/WebSocketContext';
 import { useAuthStore } from '@/stores/authStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -37,6 +38,7 @@ export default function RootLayout() {
   return (
     <WebSocketProvider>
       <Stack screenOptions={{ headerShown: false }} />
+      <Toast />
     </WebSocketProvider>
   );
 }
