@@ -91,7 +91,7 @@ Helm is a self-hosted AI super app with three layers:
 | Home SDUI screen | `app/(tabs)/home.tsx` | Fully AI-driven via `useSDUIScreen('home')` |
 | Forms SDUI screen | `app/(tabs)/forms.tsx` | Purely SDUI — no fallback native UI |
 | API calls | `src/services/api.ts` | `ApiClient` class with all endpoints |
-| WebSocket client | `src/services/websocket.ts` | ReconnectingWebSocket wrapper (maxRetries=10, 30s ping) |
+| WebSocket client | `src/services/websocket.ts` | ReconnectingWebSocket wrapper (maxRetries=10, 30s ping/pong heartbeat — client sends `{type:"ping"}`, server replies `{type:"pong"}`) |
 | Auth service | `src/services/auth.ts` | Setup + login (pre-token) |
 | Shared WS instance | `src/contexts/WebSocketContext.tsx` | Single WS shared across all tabs |
 | SDUI screen hook | `src/hooks/useSDUIScreen.ts` | Fetch + live-update SDUI screen per module; supports V1+V2 |
@@ -344,12 +344,24 @@ The following **incomplete features and known issues** exist:
 
 ---
 
+## Assessed and Rejected Libraries (Phase F)
+
+These were evaluated during the modernization branch and deliberately not adopted:
+
+| Library | Reason rejected |
+|---------|----------------|
+| `fastapi-users` | Too opinionated — would require rewriting the existing session/device/audit model |
+| `socket.io` | Adds a protocol layer on top of WS; plain WebSocket is sufficient and already working |
+| `Refine` | Admin framework too heavy; the custom 3-panel editor already covers all needed admin UI |
+
+---
+
 ## Critical Patterns
 
 | Pattern | Where | Why |
 |---------|-------|-----|
 | All DB models use UUID string PKs | `models/*.py` | Consistent; use `str(uuid4())` as default |
-| Auth is session-based | `sessions` table + `dependencies.py` | JWT token validated server-side every request |
+| Auth is session-based | `sessions` table + `dependencies.py` | JWT token validated server-side every request; `POST /auth/refresh` invalidates old session and issues a fresh 24h token |
 | MCP tools shared between proxy+server | `mcp/tools.py` + `execute_tool()` | Single source of truth for all tool logic |
 | Frontend state: Zustand | `src/stores/*.ts` | 4 stores: auth, ui, settings, tabs |
 | Frontend routing: Expo Router | `app/` file-based | `(auth)/` and `(tabs)/` groups |
@@ -372,6 +384,7 @@ The following **incomplete features and known issues** exist:
 | Modules tab launcher | `mobile/app/(tabs)/modules.tsx` + `mobile/app/module/[moduleId].tsx` | Built-ins navigate to their tab route; custom modules open a dedicated SDUI route with the same draft approval UX |
 | Draft-cleared contract | `services/sdui_state.py` + `src/hooks/useSDUIScreen.ts` | Clearing or replacing a draft emits `sdui_draft_update` with `screen: null, version: 0`; legacy `sdui_draft_rejected` still follows for compatibility |
 | Web admin login 401 suppression | `web/src/stores/authStore.ts` + `web/src/lib/api.ts` | Expected `/auth/login` 401s do not fire the global unauthorized handler, so failed logins do not clear admin session state |
+| `useResource` hook pattern | `web/src/` | Thin wrapper around `api.ts` for data fetching with loading/error state; preferred over raw `fetch` in page components |
 | Agent streaming message IDs | `services/agent_proxy.py` | `chat_start`, streamed `chat_token`s, and `chat_complete` reuse one assistant `message_id` in both built-in and external-agent paths |
 | XML tool-call fallback | `agent_proxy._parse_xml_tool_calls()` | Supports stepfun and other non-function-calling models |
 | Variable expression resolver | `backend/app/services/variable_resolver.py` + `mobile/src/utils/variableResolver.ts` | `{{scope.path}}` syntax; backend uses chevron (Python mustache), mobile uses mustache npm package; scopes: user, component, self, custom, env, data, connection |

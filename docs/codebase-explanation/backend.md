@@ -313,6 +313,8 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 
 **Connection:** `ws://<host>/ws?token=<session_token>&device_id=<optional>`
 
+**Heartbeat:** Client sends `{type: "ping"}` every 30 seconds; server replies `{type: "pong"}`. The mobile `ReconnectingWebSocket` wrapper handles this automatically.
+
 ### Client → Server messages
 
 | `type` | Payload | Action |
