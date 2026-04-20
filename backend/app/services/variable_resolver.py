@@ -1,6 +1,11 @@
 """
 Variable Expression Resolver — resolves {{expression}} syntax in SDUI payloads.
 
+Uses the chevron library (Python mustache) for template rendering. Unresolvable
+expressions are preserved as-is (the original {{expression}} text) by pre-scanning
+the template, replacing unresolvable tokens with unique placeholders, calling
+chevron.render for the resolvable ones, then restoring the originals.
+
 Supported scopes:
   - user.name, user.id, user.email — from the current user object
   - component.<id>.value — from component state dict
@@ -12,20 +17,22 @@ Supported scopes:
 """
 from __future__ import annotations
 
-import base64
-import hashlib
 import json
 import os
 import re
 from typing import Any
 
+import chevron
 from cryptography.fernet import Fernet
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 _EXPRESSION_RE = re.compile(r"\{\{(.+?)\}\}")
 
+
+# ---------------------------------------------------------------------------
+# Fernet helpers (unchanged)
+# ---------------------------------------------------------------------------
 
 def _get_fernet(encryption_key: str) -> Fernet:
     """Get Fernet cipher using the encryption key."""
@@ -40,114 +47,118 @@ def _decrypt_credentials(encrypted: str, encryption_key: str) -> dict:
     return json.loads(json_str)
 
 
-async def _resolve_single(expr: str, context: dict[str, Any]) -> str:
-    """Resolve a single expression (without the {{ }} delimiters)."""
-    parts = expr.strip().split(".")
+# ---------------------------------------------------------------------------
+# Scope resolution helpers
+# ---------------------------------------------------------------------------
 
+def _resolve_from_context_sync(expr: str, context: dict[str, Any]) -> str | None:
+    """Synchronously resolve a single expression (no connection.* scope).
+
+    Returns the resolved string value, or None if unresolvable.
+    """
+    parts = expr.strip().split(".")
     if not parts:
-        return "{{" + expr + "}}"
+        return None
 
     scope = parts[0]
 
-    # user.name / user.id / user.email
     if scope == "user" and len(parts) == 2:
         user = context.get("user")
         if user is not None:
-            attr = parts[1]
-            value = getattr(user, attr, None)
+            value = getattr(user, parts[1], None)
             if value is not None:
                 return str(value)
 
-    # self.value — shorthand for current component
     elif scope == "self" and len(parts) == 2 and parts[1] == "value":
         self_id = context.get("self_id")
         if self_id:
-            component_state = context.get("component_state", {})
-            value = component_state.get(self_id, {}).get("value")
+            value = context.get("component_state", {}).get(self_id, {}).get("value")
             if value is not None:
                 return str(value)
 
-    # component.<id>.value
     elif scope == "component" and len(parts) == 3 and parts[2] == "value":
-        component_id = parts[1]
-        component_state = context.get("component_state", {})
-        value = component_state.get(component_id, {}).get("value")
+        value = context.get("component_state", {}).get(parts[1], {}).get("value")
         if value is not None:
             return str(value)
 
-    # custom.<name>
     elif scope == "custom" and len(parts) == 2:
-        name = parts[1]
-        custom_variables = context.get("custom_variables", {})
-        value = custom_variables.get(name)
+        value = context.get("custom_variables", {}).get(parts[1])
         if value is not None:
             return str(value)
 
-    # env.<key>
     elif scope == "env" and len(parts) == 2:
-        key = parts[1]
-        value = os.environ.get(key)
+        value = os.environ.get(parts[1])
         if value is not None:
             return str(value)
 
-    # data.<source_name>.<field>
     elif scope == "data" and len(parts) == 3:
-        source_name = parts[1]
-        field = parts[2]
-        data_cache = context.get("data_cache", {})
-        source_data = data_cache.get(source_name, {})
-        value = source_data.get(field)
+        value = context.get("data_cache", {}).get(parts[1], {}).get(parts[2])
         if value is not None:
             return str(value)
 
-    # connection.<connection_name>.<credential_key>
-    elif scope == "connection" and len(parts) == 3:
-        connection_name = parts[1]
-        credential_key = parts[2]
+    return None
 
-        # Try cache first
-        connections_cache = context.get("connections_cache", {})
-        if connection_name in connections_cache:
-            connection_creds = connections_cache[connection_name]
-            value = connection_creds.get(credential_key)
-            if value is not None:
-                return str(value)
 
-        # Query database if cache miss and db/user_id/encryption_key available
-        db = context.get("db")
-        user_id = context.get("user_id")
-        encryption_key = context.get("encryption_key")
+async def _resolve_connection_scope(
+    expr: str, context: dict[str, Any]
+) -> str | None:
+    """Resolve a connection.* expression, querying DB if needed.
 
-        if db is not None and user_id is not None and encryption_key is not None:
-            from app.models.connection import Connection
+    Returns the resolved string value, or None if unresolvable.
+    """
+    parts = expr.strip().split(".")
+    if len(parts) != 3 or parts[0] != "connection":
+        return None
 
-            result = await db.execute(
-                select(Connection).where(
-                    Connection.user_id == user_id,
-                    Connection.name == connection_name,
-                )
+    connection_name = parts[1]
+    credential_key = parts[2]
+
+    connections_cache = context.get("connections_cache", {})
+    if connection_name in connections_cache:
+        value = connections_cache[connection_name].get(credential_key)
+        return str(value) if value is not None else None
+
+    db = context.get("db")
+    user_id = context.get("user_id")
+    encryption_key = context.get("encryption_key")
+
+    if db is not None and user_id is not None and encryption_key is not None:
+        from app.models.connection import Connection  # noqa: PLC0415
+
+        result = await db.execute(
+            select(Connection).where(
+                Connection.user_id == user_id,
+                Connection.name == connection_name,
             )
-            connection = result.scalar_one_or_none()
+        )
+        connection = result.scalar_one_or_none()
+        if connection is not None:
+            try:
+                credentials = _decrypt_credentials(connection.credentials_encrypted, encryption_key)
+                connections_cache[connection_name] = credentials
+                value = credentials.get(credential_key)
+                return str(value) if value is not None else None
+            except Exception:
+                pass
 
-            if connection is not None:
-                try:
-                    credentials = _decrypt_credentials(connection.credentials_encrypted, encryption_key)
-                    # Cache for future lookups in this context
-                    if connection_name not in connections_cache:
-                        connections_cache[connection_name] = credentials
-                    value = credentials.get(credential_key)
-                    if value is not None:
-                        return str(value)
-                except Exception:
-                    # Decryption failed or other error — return original
-                    pass
+    return None
 
-    # Unresolved — return original text
-    return "{{" + expr + "}}"
 
+# ---------------------------------------------------------------------------
+# Public async API
+# ---------------------------------------------------------------------------
 
 async def resolve_expression(expr: str, context: dict[str, Any]) -> str:
-    """Resolve all {{...}} expressions within a string.
+    """Resolve all {{...}} expressions within a string using chevron (mustache).
+
+    Unresolvable expressions are preserved as the original {{expression}} text.
+
+    Strategy:
+      1. Find all {{expr}} tokens in the template.
+      2. Resolve each one (async for connection.*, sync for others).
+      3. Build a flat chevron view: resolved tokens map to their values;
+         unresolved tokens are replaced with unique placeholders that chevron
+         passes through unchanged, then restored to {{expr}} after rendering.
 
     Args:
         expr: A string potentially containing {{...}} expressions.
@@ -157,15 +168,69 @@ async def resolve_expression(expr: str, context: dict[str, Any]) -> str:
     Returns:
         The string with all resolvable expressions replaced.
     """
-    async def _replacer(match: re.Match[str]) -> str:
-        return await _resolve_single(match.group(1), context)
+    if "{{" not in expr:
+        return expr
 
-    # For async replacement, we need to handle matches manually
-    result = expr
-    for match in reversed(list(_EXPRESSION_RE.finditer(expr))):
-        resolved = await _resolve_single(match.group(1), context)
-        result = result[:match.start()] + resolved + result[match.end():]
-    return result
+    tokens = list(dict.fromkeys(m.group(1) for m in _EXPRESSION_RE.finditer(expr)))
+
+    # Resolve each token
+    resolved: dict[str, str] = {}
+    for token in tokens:
+        raw = token.strip()
+        if raw.startswith("connection."):
+            value = await _resolve_connection_scope(raw, context)
+        else:
+            value = _resolve_from_context_sync(raw, context)
+
+        if value is not None:
+            resolved[token] = value
+
+    # Build a working template where ALL tokens use triple-mustache ({{{...}}})
+    # to disable HTML escaping — SDUI values are plain text, not HTML.
+    # Unresolved tokens get placeholder keys; resolved tokens keep their path.
+    unresolved_map: dict[str, str] = {}  # placeholder → original {{token}}
+    working = expr
+    for i, token in enumerate(tokens):
+        if token not in resolved:
+            placeholder = f"__HELM_UNRESOLVED_{i}__"
+            unresolved_map[placeholder] = "{{" + token + "}}"
+            working = working.replace("{{" + token + "}}", "{{{" + placeholder + "}}}")
+        else:
+            # Replace {{token}} with {{{token}}} to skip HTML escaping
+            working = working.replace("{{" + token + "}}", "{{{" + token + "}}}")
+
+    # Build chevron view: resolved tokens use dot-path keys (chevron walks them),
+    # placeholder keys are flat strings that chevron looks up directly.
+    # We use a flat view with dot-path strings as keys — chevron resolves
+    # {{a.b}} by walking nested dicts, so we need a nested view for resolved
+    # tokens and a flat view for placeholders.
+    #
+    # Simplest approach: build a nested dict for resolved paths + flat entries
+    # for placeholders, then merge into one view dict.
+    view: dict[str, Any] = {}
+
+    # Add placeholder pass-throughs (flat keys, no dots)
+    for placeholder, original in unresolved_map.items():
+        view[placeholder] = original
+
+    # Add resolved values as nested dicts
+    for token, value in resolved.items():
+        parts = token.strip().split(".")
+        node = view
+        for part in parts[:-1]:
+            if part not in node or not isinstance(node[part], dict):
+                node[part] = {}
+            node = node[part]
+        node[parts[-1]] = value
+
+    rendered = chevron.render(working, view)
+
+    # Restore any placeholders that chevron may have left (shouldn't happen,
+    # but defensive in case chevron skips unknown keys).
+    for placeholder, original in unresolved_map.items():
+        rendered = rendered.replace(placeholder, original)
+
+    return rendered
 
 
 async def resolve_all_expressions(payload: Any, context: dict[str, Any]) -> Any:
