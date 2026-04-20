@@ -1,5 +1,4 @@
-import { TouchableOpacity, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
-import { colors, spacing, typography } from '@/theme/colors';
+import { TouchableOpacity, Text, ViewStyle } from 'react-native';
 
 interface ButtonProps {
   title: string;
@@ -10,68 +9,33 @@ interface ButtonProps {
 }
 
 export function Button({ title, onPress, variant = 'primary', disabled = false, style }: ButtonProps) {
+  const baseClass = 'py-2 px-4 rounded-lg items-center justify-center';
+
+  const variantClass =
+    variant === 'primary'
+      ? 'bg-blue-500'
+      : variant === 'secondary'
+        ? 'bg-gray-100'
+        : 'bg-transparent border border-gray-300';
+
+  const textClass =
+    variant === 'primary'
+      ? 'text-white text-base font-semibold'
+      : variant === 'secondary'
+        ? 'text-black text-base font-semibold'
+        : 'text-blue-500 text-base font-semibold';
+
   return (
     <TouchableOpacity
-      style={[
-        styles.button,
-        variant === 'primary' && styles.primary,
-        variant === 'secondary' && styles.secondary,
-        variant === 'outline' && styles.outline,
-        disabled && styles.disabled,
-        style,
-      ]}
+      className={`${baseClass} ${variantClass} ${disabled ? 'opacity-50' : ''}`}
+      style={style}
       onPress={onPress}
       disabled={disabled}
       activeOpacity={0.7}
       accessibilityRole="button"
       accessibilityLabel={title}
     >
-      <Text
-        style={[
-          styles.text,
-          variant === 'primary' && styles.primaryText,
-          variant === 'secondary' && styles.secondaryText,
-          variant === 'outline' && styles.outlineText,
-        ]}
-      >
-        {title}
-      </Text>
+      <Text className={textClass}>{title}</Text>
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  button: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primary: {
-    backgroundColor: colors.primary,
-  },
-  secondary: {
-    backgroundColor: colors.surface,
-  },
-  outline: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-  text: {
-    ...typography.headline,
-  },
-  primaryText: {
-    color: '#FFFFFF',
-  },
-  secondaryText: {
-    color: colors.text,
-  },
-  outlineText: {
-    color: colors.primary,
-  },
-});

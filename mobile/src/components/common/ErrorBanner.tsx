@@ -1,6 +1,5 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text } from 'react-native';
 import { Button } from './Button';
-import { colors, spacing, typography } from '@/theme/colors';
 
 interface ErrorBannerProps {
   message: string;
@@ -10,39 +9,16 @@ interface ErrorBannerProps {
 
 export function ErrorBanner({ message, onRetry, onDismiss }: ErrorBannerProps) {
   return (
-    <View style={styles.container}>
-      <Text style={styles.message}>{message}</Text>
-      <View style={styles.actions}>
+    <View className="bg-red-500 p-4 rounded-lg mx-4 my-2">
+      <Text className="text-white text-base font-normal leading-snug mb-2">{message}</Text>
+      <View className="flex-row gap-2">
         {onRetry && (
-          <Button title="Retry" onPress={onRetry} variant="outline" style={styles.button} />
+          <Button title="Retry" onPress={onRetry} variant="outline" style={{ flex: 1, borderColor: '#FFFFFF' }} />
         )}
         {onDismiss && (
-          <Button title="Dismiss" onPress={onDismiss} variant="outline" style={styles.button} />
+          <Button title="Dismiss" onPress={onDismiss} variant="outline" style={{ flex: 1, borderColor: '#FFFFFF' }} />
         )}
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: colors.error,
-    padding: spacing.md,
-    borderRadius: 8,
-    marginHorizontal: spacing.md,
-    marginVertical: spacing.sm,
-  },
-  message: {
-    ...typography.body,
-    color: '#FFFFFF',
-    marginBottom: spacing.sm,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  button: {
-    flex: 1,
-    borderColor: '#FFFFFF',
-  },
-});
