@@ -10,11 +10,11 @@
  *  - SDUI override (AI can replace this screen entirely)
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import {
   View,
   Text,
   TextInput,
-  FlatList,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -157,7 +157,7 @@ export default function ChatScreen() {
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
   const [agentOffline, setAgentOffline] = useState(false);
 
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef = useRef<FlashListRef<UIMessage>>(null);
   // Stable ref so the WS subscription (set up when ws changes) always calls the
   // current handler version without needing to re-subscribe on every render.
   const wsHandlerRef = useRef<(msg: any) => void>(() => {});
@@ -425,7 +425,7 @@ export default function ChatScreen() {
       )}
 
       {/* ── Message list ── */}
-      <FlatList
+      <FlashList
         ref={flatListRef}
         data={messages}
         renderItem={({ item }) => <MessageBubble msg={item} />}
