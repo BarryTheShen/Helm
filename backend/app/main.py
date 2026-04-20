@@ -136,7 +136,7 @@ async def health():
 
 
 # Register routers
-from app.routers import auth, modules, chat, calendar, notifications, agent_config, websocket, workflows, actions, users, sessions, audit, components, templates, admin, variables, data_sources, triggers, connections  # noqa: E402
+from app.routers import auth, modules, chat, calendar, notifications, agent_config, websocket, workflows, actions, users, sessions, audit, components, templates, admin, variables, data_sources, triggers, connections, module_instances  # noqa: E402
 
 app.include_router(auth.router)
 app.include_router(modules.router)
@@ -156,6 +156,7 @@ app.include_router(variables.router)
 app.include_router(data_sources.router)
 app.include_router(triggers.router)
 app.include_router(connections.router)
+app.include_router(module_instances.router)
 app.include_router(websocket.router)
 
 # Mount MCP server
