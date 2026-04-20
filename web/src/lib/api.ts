@@ -1,3 +1,6 @@
+// NOTE: New API calls should use the generated SDK in src/api/generated/ (run `npm run generate:api`
+// while the backend is running to regenerate from http://localhost:8000/openapi.json).
+// This manual ApiClient is kept for backward compatibility with existing pages.
 const API_BASE = '';  // Uses Vite proxy
 
 interface ApiOptions {
