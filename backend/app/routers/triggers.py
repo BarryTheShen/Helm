@@ -50,6 +50,17 @@ async def create_trigger(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
+    # `schedule` triggers were removed from TriggerDefinition in Phase 1.
+    # Cron scheduling belongs to Workflow.trigger_type == "onSchedule" (workflow_engine).
+    # This guard handles any client that bypasses Pydantic validation (e.g. raw HTTP).
+    if body.trigger_type == "schedule":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "TriggerDefinition no longer supports trigger_type='schedule'. "
+                "Use a Workflow with trigger_type='onSchedule' for cron-based scheduling."
+            ),
+        )
     trigger = TriggerDefinition(
         id=str(uuid4()),
         user_id=user_id,

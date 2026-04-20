@@ -27,18 +27,33 @@ async def test_create_trigger(auth_client):
     resp = await auth_client.post(
         TRIGGERS,
         json={
-            "name": "Daily check",
-            "trigger_type": "schedule",
-            "config_json": json.dumps({"cron": "0 8 * * *"}),
+            "name": "Data watcher",
+            "trigger_type": "data_change",
+            "config_json": json.dumps({"watch": "calendar"}),
             "action_chain_json": json.dumps([{"type": "show_notification", "params": {"title": "Hello"}}]),
         },
     )
     assert resp.status_code == 201
     data = resp.json()
-    assert data["name"] == "Daily check"
-    assert data["trigger_type"] == "schedule"
+    assert data["name"] == "Data watcher"
+    assert data["trigger_type"] == "data_change"
     assert data["enabled"] is True
     assert "id" in data
+
+
+async def test_create_schedule_trigger_rejected(auth_client):
+    """schedule trigger_type must be rejected with 422; use Workflow.onSchedule instead."""
+    resp = await auth_client.post(
+        TRIGGERS,
+        json={
+            "name": "Cron job",
+            "trigger_type": "schedule",
+            "config_json": json.dumps({"cron": "0 8 * * *"}),
+            "action_chain_json": "[]",
+        },
+    )
+    # Pydantic rejects the invalid literal before the router even runs
+    assert resp.status_code == 422
 
 
 async def test_list_triggers_after_create(auth_client):
@@ -70,7 +85,7 @@ async def test_update_trigger(auth_client):
         TRIGGERS,
         json={
             "name": "Old name",
-            "trigger_type": "schedule",
+            "trigger_type": "data_change",
             "config_json": "{}",
             "action_chain_json": "[]",
         },
@@ -92,7 +107,7 @@ async def test_delete_trigger(auth_client):
         TRIGGERS,
         json={
             "name": "Delete me",
-            "trigger_type": "schedule",
+            "trigger_type": "server_event",
             "config_json": "{}",
             "action_chain_json": "[]",
         },
