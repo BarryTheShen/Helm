@@ -1,6 +1,6 @@
 # Frontend — React Native (Expo) Mobile App + Web Admin
 
-> Last updated: 2026-04-17
+> Last updated: 2026-04-20
 
 ## Tier 1: TLDR
 
@@ -75,7 +75,7 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 - **Reject draft:** `POST /api/actions/execute {function: "reject_draft", ...}`
 
 ### `app/(tabs)/chat.tsx` — AI Chat
-- **Shows:** Chat message list (FlatList), typing indicator (`●●●`), text input + Send button. If AI set SDUI for chat tab, renders that instead.
+- **Shows:** Chat message list (FlashList v2), typing indicator (`●●●`), text input + Send button. If AI set SDUI for chat tab, renders that instead.
 - **API:** `GET /api/chat/history` on mount (reversed for display)
 - **WS sent:** `{type: 'chat_message', content, conversation_id: 'default'}`
 - **WS handled:** `chat_start`, `chat_token` (streaming), `chat_message_replace` (strips XML tool calls), `chat_complete`, `chat_error`, `tool_result`, `tool_error`
@@ -308,20 +308,18 @@ Detects format via `isSDUIPage()` type guard and dispatches to `SDUIPageRenderer
 | Component | Notes |
 |-----------|-------|
 | `AlertComponent` | Severity-colored card; `dismissible`, `onAction` |
-| `CalendarComponent` | Event list with color bars |
 | `DraftPreview` | Banner + preview + Approve/Reject/Add Feedback buttons |
-| `FormComponent` | Controlled form; validates required fields |
 | `ListComponent` | FlatList with icon/title/subtitle/chevron |
 | `SDUIRenderer` / `SDUIScreenRenderer` / `SDUIPageRenderer` / `SDUIUniversalRenderer` | Main renderer |
 
-**⚠️ Dead code:** `AlertComponent`, `CalendarComponent`, `FormComponent`, `ListComponent` are NOT used by `SDUIRenderer.tsx` (it renders all V1 types inline). These files exist but are not imported.
+**Note:** `CalendarComponent.tsx` and `FormComponent.tsx` were deleted in Session 10 (Phase A) — they were not in the component registry and had zero callers. `AlertComponent` and `ListComponent` still exist but are not imported by `SDUIRenderer.tsx` (it renders all V1 types inline).
 
 ### V2 Atomic (`src/components/atomic/`)
 
 | Component | Key Props |
 |-----------|-----------|
 | `SDUIText` | `content, variant?('heading'\|'body'\|'caption'), color?, bold?, italic?, underline?, strikethrough?, align?, numberOfLines?, selectable?` |
-| `SDUIMarkdown` | `content` — regex-based inline + block-level markdown parsing |
+| `SDUIMarkdown` | `content` — uses `react-native-markdown-display` library |
 | `SDUIButton` | `label?, icon?, variant?('primary'\|'secondary'\|'ghost'\|'icon'\|'destructive'), size?('sm'\|'md'\|'lg'), loading?, fullWidth?, dispatch?` |
 | `SDUIImage` | `src, alt?, width?, height?, aspectRatio?, borderRadius?, onPress?, placeholder?('blur'\|'skeleton'\|'none')` |
 | `SDUITextInput` | `value?, onChangeText?, placeholder?, multiline?, maxLines?, secureTextEntry?, keyboardType?, editable?` |
@@ -340,9 +338,9 @@ Uses `resolveColor()` and `themeShadows` from `src/theme/tokens.ts`.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `CalendarModule` | Full MVP | Month grid + 3-day view stub; event dots; day agenda; pull-to-refresh via RefreshControl |
+| `CalendarModule` | Full MVP | Uses `react-native-calendars`; month/week/day/agenda variants; event dots; day agenda; pull-to-refresh |
 | `ChatModule` | Placeholder | Shows "navigate to Chat tab"; pull-to-refresh via RefreshControl |
-| `NotesModule` | Placeholder | Shows "Notes will appear here"; pull-to-refresh via RefreshControl |
+| `NotesModule` | Implemented | TextInput + SDUIMarkdown preview; pull-to-refresh via RefreshControl |
 | `InputBar` | Full MVP | Text input + send strip; send stays disabled unless both `onSend` and `dispatch` are available, and typed text is only cleared after a send action actually dispatches |
 
 ### V2 SDUI Components (NEW in Session 9)
@@ -439,6 +437,12 @@ ChatMessage, CalendarEvent, Notification, AgentConfig, Workflow, Module, Device
 | `@react-navigation/bottom-tabs` | ^7.15.6 |
 | `react-native-gesture-handler` | ^2.30.0 |
 | `react-native-reanimated` | ^4.2.3 |
+| `@shopify/flash-list` | ^2.x | Session 10: replaces FlatList in chat |
+| `react-native-markdown-display` | ^7.x | Session 10: replaces custom regex parser in SDUIMarkdown |
+| `react-native-calendars` | ^1.x | Session 10: used in CalendarModule |
+| `react-native-toast-message` | ^2.x | Session 10: wired to uiStore.showError() |
+| `mustache` | ^4.x | Session 10: used in variableResolver.ts |
+| `nativewind` | ^4.x | Session 10: Tailwind className styling for RN |
 | `typescript` | ~5.9.2 |
 
 ---
@@ -456,6 +460,11 @@ A separate React + TypeScript web application for backend administration. **Not 
 | Tailwind CSS | Styling |
 | Zustand | Auth state management |
 | React Router | Client-side routing |
+| React Flow | Workflow visual editor |
+| @dnd-kit/sortable | Row drag-and-drop in EditorCanvas (Session 10) |
+| React Hook Form + Zod | Form state + validation in ConnectionsPage and VariablesPage (Session 10) |
+| sonner | Toast notifications (Session 10) |
+| openapi-ts | Typed SDK generation from OpenAPI spec (`npm run generate:api`) |
 | Custom editor components | Visual SDUI editor built from React + Zustand editor primitives |
 
 ### Architecture
@@ -482,7 +491,7 @@ web/src/
 │   ├── componentSchemas.ts → Dynamic property schema definitions for the inspector; unsupported imported actions fall back to generic editable fields, but only supported authorable actions are offered for new edits; Session 9: added Todo, RichTextRenderer, ArticleCard, Calendar variant schemas
 │   ├── useEditorStore.ts → Rows-first Zustand editor contract, history, selection, device preview state
 │   ├── StructureTree.tsx → Left panel tree + JSON copy actions
-│   ├── EditorCanvas.tsx  → Center canvas with cell resize, row-height resize, stable multi-step row drag (50px threshold, 300ms debounce), no dead component-level move control, and read-only preview plus Inspect semantics for preserved lowercase legacy runtime components; Session 9: external drag handles, percentage width rendering
+│   ├── EditorCanvas.tsx  → Center canvas with cell resize, row-height resize, stable multi-step row drag via @dnd-kit/sortable (replaced HTML5 DnD in Session 10), external drag handles, percentage width rendering
 │   ├── PropertyInspector.tsx → Right panel editor for rows/components with explicit auto width controls, uniform + per-side padding, runtime-aligned props, InputBar-specific action narrowing with fallback handling for imported unknown actions, and read-only summaries for preserved legacy runtime payloads including structured action/list/stat/form data; Session 9: width toggle (flex vs percentage), VariableInput integration
 │   ├── VariablePicker.tsx → NEW Session 9: @ trigger variable picker with namespace support
 │   ├── VariableInput.tsx → NEW Session 9: Text input with variable picker integration

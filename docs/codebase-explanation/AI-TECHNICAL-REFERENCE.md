@@ -4,7 +4,7 @@
 > Read this FIRST before making any changes. It tells you exactly where everything is,
 > what connects to what, and what the known pitfalls are.
 >
-> Last updated: 2026-04-17
+> Last updated: 2026-04-20
 > Last audit: 2026-04-16 — ✅ PRODUCTION-READY (216/216 backend tests passing, web admin fully functional)
 
 ---
@@ -52,7 +52,7 @@ Helm is a self-hosted AI super app with three layers:
 | Workflow automation | `services/workflow_engine.py` | APScheduler-based; executes React Flow graph format with branching/loops |
 | Workflow model | `models/workflow.py` | Updated for React Flow graph format (nodes, edges) |
 | Workflow router | `routers/workflows.py` | CRUD + n8n importer endpoint |
-| Variable resolver | `services/variable_resolver.py` | Resolves `{{expression}}` syntax; scopes: user.*, component.*.value, self.value, custom.*, env.*, data.*.*, connection.*.* |
+| Variable resolver | `services/variable_resolver.py` | Resolves `{{expression}}` syntax via chevron (Python mustache); scopes: user.*, component.*.value, self.value, custom.*, env.*, data.*.*, connection.*.* |
 | Trigger engine | `services/trigger_engine.py` | `fire_trigger()` executes action chains from TriggerDefinition records |
 | Trigger model | `models/trigger.py` | TriggerDefinition ORM model (schedule/data_change/server_event) |
 | Trigger schemas | `schemas/trigger.py` | TriggerCreate, TriggerUpdate, TriggerOut |
@@ -99,10 +99,10 @@ Helm is a self-hosted AI super app with three layers:
 | Breakpoint hook | `src/hooks/useBreakpoint.ts` | Returns `'compact'` or `'regular'` based on screen width (breakpoint: 768px) |
 | SDUI renderer (V1+V2) | `src/components/sdui/SDUIRenderer.tsx` | V1 `SDUIScreenRenderer`, V2 `SDUIPageRenderer`, auto-dispatch `SDUIUniversalRenderer`; V2 rows honor per-side padding with `padding` as fallback; rows with fixed height apply `overflow: 'hidden'` to prevent calendar-type content bleed |
 | SDUI component registry (V2) | `src/renderer/componentRegistry.ts` | Type string → React component map; `registerComponent()` to extend |
-| SDUI atomic components (V2) | `src/components/atomic/*.tsx` | SDUIText, SDUIMarkdown, SDUIButton, SDUIImage, SDUITextInput, SDUIIcon, SDUIDivider (indent + margin aware) |
+| SDUI atomic components (V2) | `src/components/atomic/*.tsx` | SDUIText, SDUIMarkdown (react-native-markdown-display), SDUIButton, SDUIImage, SDUITextInput, SDUIIcon, SDUIDivider (indent + margin aware) |
 | SDUI structural components (V2) | `src/components/structural/SDUIContainer.tsx` | Flexbox container with shadow + color tokens |
-| SDUI composite components (V2) | `src/components/composite/*.tsx` | CalendarModule (with month/week/day/agenda variants + date navigation), ChatModule, NotesModule, InputBar, TodoComponent, RichTextRendererComponent, ArticleCardComponent |
-| SDUI V1 legacy components | `src/components/sdui/*.tsx` | AlertComponent, CalendarComponent, DraftPreview, FormComponent, ListComponent |
+| SDUI composite components (V2) | `src/components/composite/*.tsx` | CalendarModule (react-native-calendars; month/week/day/agenda variants + date navigation), ChatModule, NotesModule, InputBar, TodoComponent, RichTextRendererComponent, ArticleCardComponent |
+| SDUI V1 legacy components | `src/components/sdui/*.tsx` | AlertComponent, DraftPreview, ListComponent — FormComponent and CalendarComponent deleted (Phase A) |
 | Draft preview UI | `src/components/sdui/DraftPreview.tsx` | Approve/Reject/Feedback UI for pending SDUI drafts |
 | Common components | `src/components/common/*.tsx` | Button, Card, ErrorBanner, Input |
 | Auth state | `src/stores/authStore.ts` | Token, serverUrl, user |
@@ -110,7 +110,7 @@ Helm is a self-hosted AI super app with three layers:
 | Settings state | `src/stores/settingsStore.ts` | Nav mode, theme (both stubs — not applied to UI) |
 | Tab visibility state | `src/stores/tabsStore.ts` | hiddenTabs[], set by AI via WS or REST |
 | Variable context hook | `src/hooks/useVariableContext.ts` | Assembles VariableContext from auth store, component state, and custom vars (fetched from backend) |
-| Variable resolver | `src/utils/variableResolver.ts` | Resolves `{{expression}}` mustache templates with NOT_FOUND sentinel; `resolveAllExpressions()` for deep objects |
+| Variable resolver | `src/utils/variableResolver.ts` | Resolves `{{expression}}` mustache templates via mustache npm package with Proxy-based view; NOT_FOUND sentinel preserved for unresolvable paths; `resolveAllExpressions()` for deep objects |
 | Design tokens | `src/theme/colors.ts` | Colors, spacing, typography |
 | Theme tokens (V2) | `src/theme/tokens.ts` | `themeColors`, `themeShadows`, `resolveColor()` |
 | API types | `src/types/api.ts` | TypeScript interfaces for all backend responses |
@@ -280,15 +280,34 @@ The following **incomplete features and known issues** exist:
 | 1 | Frontend | Not tested | Calendar tab is read-only — no create/edit/delete UI in the frontend |
 | 2 | Frontend | Not tested | `conversation_id: 'default'` is hardcoded — no multi-conversation support |
 | 3 | Frontend | Not tested | `settingsStore.navigationMode` and `.theme` are persisted but neither value is applied to the UI |
-| 4 | Frontend | Not tested | Four legacy V1 SDUI component files (`AlertComponent.tsx`, `CalendarComponent.tsx`, `FormComponent.tsx`, `ListComponent.tsx`) — exist but only used for V1 rendering |
-| 5 | Backend | ✅ Tested | `trigger_engine.register_scheduled_triggers()` is a placeholder — TriggerDefinition schedule triggers must be manually tested via the test endpoint |
-| 6 | Backend | ✅ Tested | `TriggerType.DATA_CHANGED` and `SERVER_EVENT` exist in the enum but the Workflows page dropdown only shows 5 types (missing those two) |
-| 7 | Backend | ✅ Tested | `demo_time_alerts=True` by default — broadcasts time notifications every 2 minutes in production unless explicitly disabled |
-| 8 | Web | Not tested | `web/src/lib/sduiAdapter.ts` — dead code (legacy Puck stub, retained but unused) |
-| 9 | Agent | ⚠️ Issue | `send_prompt.py` requires a manually set session token; no automated auth flow |
-| 10 | Agent | ⚠️ Issue | Standalone agent uses `claude-opus-4-20250514` which hits rate limits; should use `claude-sonnet-4-20250514` instead |
+| 4 | Backend | ✅ Tested | `trigger_engine.register_scheduled_triggers()` is a placeholder — TriggerDefinition schedule triggers must be manually tested via the test endpoint |
+| 5 | Backend | ✅ Tested | `TriggerType.DATA_CHANGED` and `SERVER_EVENT` exist in the enum but the Workflows page dropdown only shows 5 types (missing those two) |
+| 6 | Backend | ✅ Tested | `demo_time_alerts=True` by default — broadcasts time notifications every 2 minutes in production unless explicitly disabled |
+| 7 | Agent | ⚠️ Issue | `send_prompt.py` requires a manually set session token; no automated auth flow |
+| 8 | Agent | ⚠️ Issue | Standalone agent uses `claude-opus-4-20250514` which hits rate limits; should use `claude-sonnet-4-20250514` instead |
 
-### Recent Fixes (2026-04-17 — Session 9)
+### Recent Fixes (2026-04-20 — Session 10 / Modernization Branch)
+
+- ✅ Mobile: Deleted dead V1 SDUI files `FormComponent.tsx` and `CalendarComponent.tsx` (not in component registry)
+- ✅ Web: Deleted dead `web/src/lib/sduiAdapter.ts` (legacy Puck stub, zero callers)
+- ✅ Mobile: Added `react-native-toast-message`; `uiStore.showError()` now wires to `Toast.show()`
+- ✅ Web: Added `sonner` with `<Toaster>` in `App.tsx`
+- ✅ Mobile: Replaced `FlatList` with `FlashList` v2 in `chat.tsx` for better scroll performance
+- ✅ Mobile: Replaced custom regex markdown parser with `react-native-markdown-display` in `SDUIMarkdown`
+- ✅ Mobile: Replaced custom month grid with `react-native-calendars` `Calendar` in `CalendarModule`
+- ✅ Mobile: Implemented `NotesModule` with `TextInput` + `SDUIMarkdown`
+- ✅ Mobile: Variable resolver now uses `mustache` npm package (Proxy-based view preserves `{{expr}}` for unresolvable paths)
+- ✅ Backend: Variable resolver now uses `chevron` (Python mustache) with placeholder-swap approach
+- ✅ Backend: Mounted SQLAdmin at `/admin/db` with BasicAuth (all 16 models registered)
+- ✅ Web: Replaced HTML5 DnD on row drag handles with `@dnd-kit/sortable` in `EditorCanvas`
+- ✅ Web: Added `React Hook Form` + `Zod` to `ConnectionsPage` and `VariablesPage` forms
+- ✅ Mobile: Configured `openapi-ts` SDK generation pipeline (`npm run generate:api`)
+- ✅ Web: Configured `openapi-ts` SDK generation pipeline (`npm run generate:api`)
+- ✅ Mobile: NativeWind v4 configured (babel plugin, metro config, tailwind.config.js, global.css)
+- ✅ Mobile: `ErrorBanner` and `Button` common components migrated to NativeWind `className` props
+- ✅ Mobile: Added `mobile/src/components/ui/button.tsx` — React Native Reusables-style Button with 5 variants
+
+### Previous Fixes (2026-04-17 — Session 9)
 
 - ✅ Backend: Added Connection model with Fernet encryption for API keys
 - ✅ Backend: Added connection.* variable namespace for accessing stored credentials
@@ -355,14 +374,14 @@ The following **incomplete features and known issues** exist:
 | Web admin login 401 suppression | `web/src/stores/authStore.ts` + `web/src/lib/api.ts` | Expected `/auth/login` 401s do not fire the global unauthorized handler, so failed logins do not clear admin session state |
 | Agent streaming message IDs | `services/agent_proxy.py` | `chat_start`, streamed `chat_token`s, and `chat_complete` reuse one assistant `message_id` in both built-in and external-agent paths |
 | XML tool-call fallback | `agent_proxy._parse_xml_tool_calls()` | Supports stepfun and other non-function-calling models |
-| Variable expression resolver | `backend/app/services/variable_resolver.py` + `mobile/src/utils/variableResolver.ts` | `{{scope.path}}` syntax resolved server-side and client-side; scopes: user, component, self, custom, env, data, connection |
+| Variable expression resolver | `backend/app/services/variable_resolver.py` + `mobile/src/utils/variableResolver.ts` | `{{scope.path}}` syntax; backend uses chevron (Python mustache), mobile uses mustache npm package; scopes: user, component, self, custom, env, data, connection |
 | Connection namespace | `services/variable_resolver.py` | `{{connection.provider.key}}` resolves to decrypted API keys from Connection model |
 | Action catalog (28 total) | `backend/app/services/action_registry.py` | 12 server-side handlers (includes fetch_rss, fetch_weather, run_workflow) + 16 client-only stubs; removed open_sheet, dismiss |
 | Workflow engine | `backend/app/services/workflow_engine.py` | Executes React Flow graph format with nodes, edges, branching, and loops |
 | n8n importer | `backend/app/routers/workflows.py` | POST /api/workflows/import/n8n converts n8n workflows to React Flow format |
 | Template seed | `backend/app/services/template_seed.py` | Seeds 5 production templates: Calendar, Chat, News Feed, Weather, Task Manager |
 | Component seed | `backend/app/services/component_seed.py` | Seeds 14 default components (10 atomic + 4 hardcoded); includes Todo, RichTextRenderer, ArticleCard |
-| Calendar variants | `mobile/src/components/sdui/CalendarComponent.tsx` + `web/src/editor/componentSchemas.ts` | Supports month/week/day/agenda views with date navigation |
+| Calendar variants | `mobile/src/components/composite/CalendarModule.tsx` + `web/src/editor/componentSchemas.ts` | Uses react-native-calendars; supports month/week/day/agenda views with date navigation |
 | Web admin sidebar | `web/src/components/AdminLayout.tsx` | Restructured: Visual Editor, Templates, Workflows, Variables, Connections, Advanced (Logs), Settings |
 | Percentage widths | `web/src/editor/types.ts` + `EditorCanvas.tsx` + `PropertyInspector.tsx` | Cell widths support percentage-based layout with width toggle |
 | Variable picker | `web/src/editor/VariablePicker.tsx` + `VariableInput.tsx` | @ trigger for variable insertion in text fields |
@@ -371,6 +390,13 @@ The following **incomplete features and known issues** exist:
 | Article Reader | `mobile/app/(tabs)/article.tsx` | New screen for news/content viewing |
 | Module Store | `mobile/app/(tabs)/modules.tsx` | Customizable module launcher with built-ins + custom modules |
 | Tab bar customization | `mobile/app/(tabs)/_layout.tsx` + `src/stores/tabsStore.ts` | AI-controlled tab visibility and configuration |
+| SQLAdmin DB browser | `backend/app/main.py` | Mounted at `/admin/db` with BasicAuth; all 16 models registered; separate from FastAPI auth |
+| Editor DnD | `web/src/editor/EditorCanvas.tsx` | Row reordering uses @dnd-kit/sortable (replaced HTML5 DnD) |
+| Admin forms validation | `web/src/pages/ConnectionsPage.tsx` + `VariablesPage.tsx` | React Hook Form + Zod for form state and validation |
+| NativeWind styling | `mobile/tailwind.config.js` + `mobile/global.css` + `mobile/babel.config.js` | NativeWind v4 configured; use `className` props on components; `nativewind-env.d.ts` for TS support |
+| Reusables-style Button | `mobile/src/components/ui/button.tsx` | 5 variants: primary/secondary/destructive/outline/ghost; NativeWind-based |
+| openapi-ts SDK pipeline | `mobile/openapi-ts.config.ts` + `web/openapi-ts.config.ts` | Run `npm run generate:api` (with backend running) to generate typed SDK from OpenAPI spec |
+| Toast notifications | `mobile/app/_layout.tsx` + `mobile/src/stores/uiStore.ts` | react-native-toast-message wired to `uiStore.showError()`; web uses sonner `<Toaster>` in App.tsx |
 
 ---
 

@@ -1,6 +1,6 @@
 # Backend — Python FastAPI Server
 
-> Last updated: 2026-04-17
+> Last updated: 2026-04-20
 
 ## Tier 1: TLDR
 
@@ -85,6 +85,8 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 **Routers registered:** auth, modules, chat, calendar, notifications, agent_config, workflows, actions, websocket, users, sessions, audit, components, templates, admin, variables, data_sources, triggers
 
 **MCP mounted:** `app.mount(settings.mcp_path, _MCPAuthMiddleware(mcp.streamable_http_app()))` → at `/mcp`
+
+**SQLAdmin mounted:** `app.mount("/admin/db", admin)` — SQLAdmin with BasicAuth (username/password from `ADMIN_USERNAME`/`ADMIN_PASSWORD` env vars, default `admin`/`admin`); all 16 models registered; separate from FastAPI JWT auth
 
 ---
 
@@ -382,7 +384,7 @@ Registered built-in actions (singleton `registry`):
 
 ### `services/variable_resolver.py`
 
-Resolves `{{expression}}` mustache syntax in SDUI payloads server-side.
+Resolves `{{expression}}` mustache syntax in SDUI payloads server-side using **chevron** (Python mustache library). Uses a placeholder-swap approach to preserve `{{expr}}` for unresolved tokens.
 
 **Supported scopes:**
 | Scope | Pattern | Source |

@@ -91,8 +91,7 @@ Helm/
 │   │   ├── pages/                # Login, Editor, Templates, Workflows, Variables, Connections, Logs (merged Sessions+Audit), Settings (renamed from Users)
 │   │   ├── lib/
 │   │   │   ├── api.ts            # Typed fetch wrapper for admin endpoints
-│   │   │   ├── sduiAdapter.ts    # Legacy format normalization (Puck conversion removed)
-│   │   │   └── utils.ts          # Shared helpers
+│   │   │   └── utils.ts          # Shared helpers (sduiAdapter.ts deleted in Session 10)
 │   │   ├── editor/               # Custom 3-panel SDUI editor (replaced Puck)
 │   │   │   ├── types.ts          # EditorRow/Cell/Screen types, DevicePresets, ComponentRegistry, ActionRule/ActionStep
 │   │   │   ├── componentSchemas.ts # Per-component prop schemas for property inspector
@@ -433,6 +432,7 @@ Max 5 iterations. After 5, escalate to user.
 - **Agent autonomy**: Sub-agents read session files to self-direct. Pass HIGH-LEVEL task + session file pointers — not detailed per-file instructions.
 - **Audit results (2026-04-16)**: Backend is production-ready with 200/200 tests passing. Web admin fully functional. Standalone agent has improved error handling but uses `claude-opus-4-20250514` which hits rate limits — should use `claude-sonnet-4-20250514` instead.
 - **Session 9 architecture (2026-04-17)**: Major overhaul across all three layers. Backend: Connection model for encrypted API key storage, connection.* variable namespace, React Flow workflow graphs with branching/loops, new actions (fetch_rss, fetch_weather, run_workflow), removed actions (open_sheet, dismiss), new components (Todo, RichTextRenderer, ArticleCard), Calendar variant prop, 5 production templates, n8n workflow importer. Web Admin: Sidebar restructure (removed Dashboard/Components/Actions & Triggers, added Connections/Logs, renamed Users→Settings), React Flow workflow editor, percentage widths in editor, VariablePicker with @ trigger, external drag handles, SDUIPreview and AppPreview components. Mobile: Login rewrite (3 fields, no signup), Article Reader screen, customizable tab bar, Module Store view.
+- **Session 10 / Modernization Branch (2026-04-20)**: Library modernization across all layers. Mobile: deleted dead V1 files (FormComponent, CalendarComponent), added FlashList (chat), react-native-markdown-display (SDUIMarkdown), react-native-calendars (CalendarModule), NotesModule implemented, mustache for variable resolver, NativeWind v4 + React Native Reusables Button, react-native-toast-message wired to uiStore, openapi-ts SDK pipeline. Backend: chevron (Python mustache) for variable resolver, SQLAdmin at /admin/db with BasicAuth. Web Admin: @dnd-kit/sortable for row DnD in EditorCanvas, React Hook Form + Zod in ConnectionsPage/VariablesPage, sonner toasts, openapi-ts SDK pipeline, deleted sduiAdapter.ts.
 
 ## Common Mistakes to Avoid
 
