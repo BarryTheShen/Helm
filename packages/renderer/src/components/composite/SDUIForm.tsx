@@ -30,18 +30,26 @@ interface FormFieldDef {
 }
 
 interface SDUIFormProps {
-  form_id: string;
+  form_id?: string;
+  title?: string;
   fields: FormFieldDef[];
   submitLabel?: string;
+  submit_label?: string;
+  submit_action?: SDUIAction;
   dispatch?: (action: SDUIAction) => void;
 }
 
 export function SDUIForm({
   form_id,
+  title,
   fields = [],
-  submitLabel = 'Submit',
+  submitLabel,
+  submit_label,
+  submit_action,
   dispatch,
 }: SDUIFormProps) {
+  const resolvedSubmitLabel = submitLabel ?? submit_label ?? 'Submit';
+  const resolvedFormId = form_id ?? title ?? 'form';
   const [values, setValues] = useState<Record<string, unknown>>(() => {
     const initial: Record<string, unknown> = {};
     for (const field of fields) {
@@ -89,11 +97,18 @@ export function SDUIForm({
       return;
     }
 
-    dispatch({
-      type: 'form_submit',
-      form_id,
-      data: { ...values },
-    });
+    // If a submit_action is provided (e.g. server_action), dispatch it with form data as params
+    if (submit_action) {
+      const merged = { ...submit_action } as any;
+      merged.params = { ...(merged.params ?? {}), ...values };
+      dispatch(merged as SDUIAction);
+    } else {
+      dispatch({
+        type: 'form_submit',
+        form_id: resolvedFormId,
+        data: { ...values },
+      });
+    }
   }, [dispatch, form_id, fields, values]);
 
   const getKeyboardType = (fieldType: string) => {
@@ -167,7 +182,7 @@ export function SDUIForm({
         onPress={handleSubmit}
         activeOpacity={0.75}
       >
-        <Text style={styles.submitLabel}>{submitLabel}</Text>
+        <Text style={styles.submitLabel}>{resolvedSubmitLabel}</Text>
       </TouchableOpacity>
     </View>
   );

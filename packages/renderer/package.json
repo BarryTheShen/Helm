@@ -9,6 +9,11 @@
       "types": "./dist/index.d.ts",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./presets/paper": {
+      "types": "./dist/presets/paper.d.ts",
+      "require": "./dist/presets/paper.js",
+      "default": "./dist/presets/paper.js"
     }
   },
   "scripts": {

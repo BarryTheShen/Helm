@@ -18,8 +18,33 @@ export function SDUIMarkdown({ content }: SDUIMarkdownProps) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
+    // LaTeX display block ($$...$$)
+    if (line.trim().startsWith('$$')) {
+      const mathLines: string[] = [];
+      const singleLine = line.trim().slice(2);
+      if (singleLine.endsWith('$$') && singleLine.length > 2) {
+        // Single-line display math: $$...$$ on one line
+        mathLines.push(singleLine.slice(0, -2));
+      } else {
+        if (singleLine) mathLines.push(singleLine);
+        i++;
+        while (i < lines.length && !lines[i].trim().endsWith('$$')) {
+          mathLines.push(lines[i]);
+          i++;
+        }
+        if (i < lines.length) {
+          const last = lines[i].trim().slice(0, -2);
+          if (last) mathLines.push(last);
+        }
+      }
+      elements.push(
+        <View key={`math-${i}`} style={styles.mathBlock}>
+          <Text style={styles.mathText}>{mathLines.join('\n')}</Text>
+        </View>
+      );
+    }
     // Headings
-    if (line.startsWith('### ')) {
+    else if (line.startsWith('### ')) {
       elements.push(
         <Text key={i} style={styles.h3}>{renderInline(line.slice(4))}</Text>
       );
@@ -31,6 +56,50 @@ export function SDUIMarkdown({ content }: SDUIMarkdownProps) {
       elements.push(
         <Text key={i} style={styles.h1}>{renderInline(line.slice(2))}</Text>
       );
+    }
+    // Markdown table
+    else if (line.includes('|') && line.trim().startsWith('|')) {
+      const tableRows: string[][] = [];
+      let j = i;
+      while (j < lines.length && lines[j].trim().startsWith('|')) {
+        const row = lines[j].trim();
+        // Skip separator rows (|---|---|)
+        if (/^\|[\s\-:]+\|/.test(row) && !row.replace(/[\s|:\-]/g, '')) {
+          j++;
+          continue;
+        }
+        const cells = row.split('|').filter((_, idx, arr) =>
+          idx > 0 && idx < arr.length - 1
+        ).map(c => c.trim());
+        if (cells.length > 0) tableRows.push(cells);
+        j++;
+      }
+      i = j - 1; // advance past table
+
+      if (tableRows.length > 0) {
+        const headerRow = tableRows[0];
+        const dataRows = tableRows.slice(1);
+        elements.push(
+          <View key={`table-${i}`} style={styles.table}>
+            <View style={styles.tableHeaderRow}>
+              {headerRow.map((cell, ci) => (
+                <View key={ci} style={[styles.tableCell, styles.tableHeaderCell, { flex: 1 }]}>
+                  <Text style={styles.tableHeaderText}>{cell}</Text>
+                </View>
+              ))}
+            </View>
+            {dataRows.map((row, ri) => (
+              <View key={ri} style={styles.tableRow}>
+                {row.map((cell, ci) => (
+                  <View key={ci} style={[styles.tableCell, { flex: 1 }]}>
+                    <Text style={styles.body}>{renderInline(cell)}</Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+        );
+      }
     }
     // List items
     else if (line.startsWith('- ') || line.startsWith('* ')) {
@@ -90,11 +159,11 @@ export function SDUIMarkdown({ content }: SDUIMarkdownProps) {
   return <View style={styles.container}>{elements}</View>;
 }
 
-/** Parse inline markdown: **bold**, *italic*, `code`, ~~strike~~ */
+/** Parse inline markdown: **bold**, *italic*, `code`, ~~strike~~, $latex$ */
 function renderInline(text: string): React.ReactNode {
   const parts: React.ReactNode[] = [];
-  // Match bold, italic, code, strikethrough
-  const regex = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|~~(.+?)~~)/g;
+  // Match bold, italic, code, strikethrough, inline math
+  const regex = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|~~(.+?)~~|\$(.+?)\$)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -119,6 +188,11 @@ function renderInline(text: string): React.ReactNode {
       // ~~strikethrough~~
       parts.push(
         <Text key={match.index} style={{ textDecorationLine: 'line-through' }}>{match[5]}</Text>
+      );
+    } else if (match[6]) {
+      // $inline math$
+      parts.push(
+        <Text key={match.index} style={styles.inlineMath}>{match[6]}</Text>
       );
     }
 
@@ -154,4 +228,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4, borderRadius: 3,
   },
   spacer: { height: 8 },
+  // Table styles
+  table: {
+    borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 6,
+    overflow: 'hidden' as const, marginVertical: 6,
+  },
+  tableHeaderRow: {
+    flexDirection: 'row' as const, backgroundColor: '#F5F5F5',
+    borderBottomWidth: 1, borderBottomColor: '#E0E0E0',
+  },
+  tableRow: {
+    flexDirection: 'row' as const,
+    borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
+  },
+  tableCell: {
+    paddingHorizontal: 10, paddingVertical: 8,
+    borderRightWidth: 1, borderRightColor: '#F0F0F0',
+  },
+  tableHeaderCell: {
+    backgroundColor: '#F5F5F5',
+  },
+  tableHeaderText: {
+    fontSize: 14, fontWeight: '600' as const, color: '#333',
+  },
+  // Math styles
+  mathBlock: {
+    backgroundColor: '#F8F6FF', borderRadius: 8, padding: 14,
+    marginVertical: 6, borderLeftWidth: 3, borderLeftColor: '#7C4DFF',
+  },
+  mathText: {
+    fontFamily: 'monospace', fontSize: 15, lineHeight: 22,
+    color: '#4A148C', textAlign: 'center' as const,
+  },
+  inlineMath: {
+    fontFamily: 'monospace', fontSize: 14, color: '#4A148C',
+    backgroundColor: '#F3E8FF', paddingHorizontal: 4, borderRadius: 3,
+  },
 });

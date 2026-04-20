@@ -27,6 +27,7 @@ function PaperButtonAdapter({
   label,
   icon,
   iconPosition = 'left',
+  action,
   onPress,
   disabled,
   loading,
@@ -38,6 +39,7 @@ function PaperButtonAdapter({
   label?: string;
   icon?: string;
   iconPosition?: 'left' | 'right';
+  action?: SDUIAction;
   onPress?: SDUIAction;
   disabled?: boolean;
   loading?: boolean;
@@ -46,8 +48,9 @@ function PaperButtonAdapter({
   size?: 'sm' | 'md' | 'lg';
   dispatch?: (action: SDUIAction) => void;
 }) {
+  const pressAction = action ?? onPress;
   const handlePress = () => {
-    if (onPress && dispatch) dispatch(onPress);
+    if (pressAction && dispatch) dispatch(pressAction);
   };
 
   if (variant === 'icon') {
@@ -340,10 +343,16 @@ function PaperContainerAdapter({
   );
 }
 
+// --- Markdown (re-export built-in SDUIMarkdown) ---
+// The SDUIMarkdown atomic component handles its own rendering with regex-based
+// markdown parsing, so no Paper-specific adapter is needed.
+import { SDUIMarkdown } from '../components/atomic/SDUIMarkdown';
+
 /** React Native Paper preset — Material Design 3 components. */
 export const PaperPreset: Preset = {
   Button: PaperButtonAdapter,
   Text: PaperTextAdapter,
+  Markdown: SDUIMarkdown,
   TextInput: PaperTextInputAdapter,
   Divider: PaperDividerAdapter,
   Icon: PaperIconAdapter,

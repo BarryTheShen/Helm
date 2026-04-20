@@ -1,0 +1,187 @@
+[
+  {
+    "id": 1,
+    "name": "Student info collection",
+    "message": "I need to collect information from 10 students - name, email, grade, and major. Can you help me set that up?",
+    "expect_screen": true,
+    "expect_components": [
+      "Form"
+    ],
+    "description": "Should generate an editable Form with fields for student data",
+    "got_screen": true,
+    "got_components": [
+      "Container",
+      "Form",
+      "Text",
+      "Divider",
+      "Button"
+    ],
+    "response_text": "Absolutely! Here's a clean way to collect this information in a structured format. You can copy/paste this into a document or share it directly with students:\n\n### Student Information Collection\n*(Ple",
+    "screen_json": "{\"schema_version\": \"1.0.0\", \"module_id\": \"ai-4835de20\", \"title\": \"Student Information Collection\", \"rows\": [{\"id\": \"r1\", \"cells\": [{\"id\": \"c1\", \"width\": 1, \"content\": {\"type\": \"Text\", \"id\": \"t1\", \"props\": {\"content\": \"Student Information Collection\", \"variant\": \"heading\", \"bold\": true, \"color\": \"#1E88E5\"}}}]}, {\"id\": \"r2\", \"cells\": [{\"id\": \"c2\", \"width\": 1, \"content\": {\"type\": \"Text\", \"id\": \"t2\", \"props\": {\"content\": \"(Please fill in your details below)\", \"variant\": \"heading\", \"bold\": false, \"co",
+    "pass": true,
+    "issues": []
+  },
+  {
+    "id": 2,
+    "name": "Weekly schedule planning",
+    "message": "I'm trying to plan my weekly schedule. I have classes Mon/Wed/Fri and work Tue/Thu. Can you help me organize this?",
+    "expect_screen": true,
+    "expect_components": [
+      "Container",
+      "Text"
+    ],
+    "description": "Should generate a structured schedule/table layout",
+    "got_screen": true,
+    "got_components": [
+      "Container",
+      "Button",
+      "Text"
+    ],
+    "response_text": "Here's a clear weekly schedule for you using a structured format:\n\n### Weekly Schedule Template\n#### Monday / Wednesday / Friday\n```\n\u23f0 8:00am - 12:00pm | Classes  \n\ud83c\udf7d\ufe0f 12:00pm - 1:00pm | Lunch Break  \n",
+    "screen_json": "{\"schema_version\": \"1.0.0\", \"module_id\": \"ai-d1a5f72d\", \"title\": \"Weekly Schedule\", \"rows\": [{\"id\": \"r1\", \"cells\": [{\"id\": \"c1\", \"width\": 1, \"content\": {\"type\": \"Text\", \"id\": \"t1\", \"props\": {\"content\": \"Weekly Schedule Template\", \"variant\": \"heading\", \"bold\": true, \"color\": \"#6200EE\"}}}]}, {\"id\": \"r2\", \"cells\": [{\"id\": \"c2\", \"width\": 1, \"content\": {\"type\": \"Text\", \"id\": \"t2\", \"props\": {\"content\": \"Monday / Wednesday / Friday\", \"variant\": \"heading\", \"bold\": false, \"color\": \"#3700B3\"}}}]}, {\"id\": ",
+    "pass": true,
+    "issues": []
+  },
+  {
+    "id": 3,
+    "name": "Simple greeting",
+    "message": "Hey, how are you doing today?",
+    "expect_screen": false,
+    "expect_components": [],
+    "description": "Simple greeting \u2014 should be text-only, no SDUI screen",
+    "got_screen": false,
+    "got_components": [],
+    "response_text": "I'm doing great, thank you for asking! \ud83d\ude0a Hope you're having a wonderful day too. What's on your mind?  \n\n(Feel free to chat, ask questions, or let me know if you need help with anything!)",
+    "screen_json": null,
+    "pass": true,
+    "issues": []
+  },
+  {
+    "id": 4,
+    "name": "Budget tracker setup",
+    "message": "I want to track my monthly expenses. I spend about $1200 on rent, $400 on food, $150 on transport, and $200 on entertainment. Can you show me a breakdown?",
+    "expect_screen": true,
+    "expect_components": [
+      "Container",
+      "Text"
+    ],
+    "description": "Should generate a visual budget dashboard with stats",
+    "got_screen": false,
+    "got_components": [],
+    "response_text": "",
+    "screen_json": null,
+    "pass": false,
+    "issues": [
+      "ERROR: no close frame received or sent"
+    ]
+  },
+  {
+    "id": 5,
+    "name": "Feedback survey",
+    "message": "I'm running a workshop next week and need to gather feedback from attendees. What's the best way to do that?",
+    "expect_screen": true,
+    "expect_components": [
+      "Form"
+    ],
+    "description": "Should suggest and render a feedback form with rating fields",
+    "got_screen": false,
+    "got_components": [],
+    "response_text": "",
+    "screen_json": null,
+    "pass": false,
+    "issues": [
+      "ERROR: Multiple exceptions: [Errno 61] Connect call failed ('::1', 8765, 0, 0), [Errno 61] Connect call failed ('127.0.0.1', 8765)"
+    ]
+  },
+  {
+    "id": 6,
+    "name": "Comparison of options",
+    "message": "I'm choosing between three laptops: MacBook Pro ($2499), ThinkPad X1 ($1899), and Dell XPS ($2199). Can you help me compare them?",
+    "expect_screen": true,
+    "expect_components": [
+      "Container",
+      "Text"
+    ],
+    "description": "Should generate a structured comparison layout",
+    "got_screen": false,
+    "got_components": [],
+    "response_text": "",
+    "screen_json": null,
+    "pass": false,
+    "issues": [
+      "ERROR: Multiple exceptions: [Errno 61] Connect call failed ('::1', 8765, 0, 0), [Errno 61] Connect call failed ('127.0.0.1', 8765)"
+    ]
+  },
+  {
+    "id": 7,
+    "name": "Quick factual question",
+    "message": "What's the capital of France?",
+    "expect_screen": false,
+    "expect_components": [],
+    "description": "Simple factual Q&A \u2014 should be text-only",
+    "got_screen": false,
+    "got_components": [],
+    "response_text": "",
+    "screen_json": null,
+    "pass": false,
+    "issues": [
+      "ERROR: Multiple exceptions: [Errno 61] Connect call failed ('::1', 8765, 0, 0), [Errno 61] Connect call failed ('127.0.0.1', 8765)"
+    ]
+  },
+  {
+    "id": 8,
+    "name": "Todo list creation",
+    "message": "I have a bunch of things to do this weekend: grocery shopping, clean the house, fix the leaky faucet, call mom, and finish the report. Help me organize these by priority.",
+    "expect_screen": true,
+    "expect_components": [
+      "Container",
+      "Text"
+    ],
+    "description": "Should generate a structured todo/task list with priority indicators",
+    "got_screen": false,
+    "got_components": [],
+    "response_text": "",
+    "screen_json": null,
+    "pass": false,
+    "issues": [
+      "ERROR: Multiple exceptions: [Errno 61] Connect call failed ('::1', 8765, 0, 0), [Errno 61] Connect call failed ('127.0.0.1', 8765)"
+    ]
+  },
+  {
+    "id": 9,
+    "name": "Contact form for website",
+    "message": "I'm building a small business website and need a way for customers to reach out. What info should I collect from them?",
+    "expect_screen": true,
+    "expect_components": [
+      "Form"
+    ],
+    "description": "Should generate a contact form with appropriate fields",
+    "got_screen": false,
+    "got_components": [],
+    "response_text": "",
+    "screen_json": null,
+    "pass": false,
+    "issues": [
+      "ERROR: Multiple exceptions: [Errno 61] Connect call failed ('::1', 8765, 0, 0), [Errno 61] Connect call failed ('127.0.0.1', 8765)"
+    ]
+  },
+  {
+    "id": 10,
+    "name": "Recipe with steps",
+    "message": "Can you give me a recipe for chocolate chip cookies with all the steps?",
+    "expect_screen": true,
+    "expect_components": [
+      "Container",
+      "Text"
+    ],
+    "description": "Should generate a structured recipe card with numbered steps",
+    "got_screen": false,
+    "got_components": [],
+    "response_text": "",
+    "screen_json": null,
+    "pass": false,
+    "issues": [
+      "ERROR: Multiple exceptions: [Errno 61] Connect call failed ('::1', 8765, 0, 0), [Errno 61] Connect call failed ('127.0.0.1', 8765)"
+    ]
+  }
+]

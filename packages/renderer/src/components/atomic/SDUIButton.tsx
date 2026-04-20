@@ -13,6 +13,8 @@ interface SDUIButtonProps {
   label?: string;
   icon?: string;
   iconPosition?: 'left' | 'right';
+  /** SDUI action to dispatch on press. Protocol uses "action"; "onPress" is accepted as alias. */
+  action?: SDUIAction;
   onPress?: SDUIAction;
   disabled?: boolean;
   loading?: boolean;
@@ -31,6 +33,7 @@ export function SDUIButton({
   label,
   icon,
   iconPosition = 'left',
+  action,
   onPress,
   disabled,
   loading,
@@ -42,10 +45,11 @@ export function SDUIButton({
   const height = sizeHeights[size] ?? 44;
   const fontSize = sizeFontSizes[size] ?? 16;
   const px = sizePadding[size] ?? 12;
+  const pressAction = action ?? onPress;
 
   const handlePress = () => {
-    if (disabled || loading || !onPress || !dispatch) return;
-    dispatch(onPress);
+    if (disabled || loading || !pressAction || !dispatch) return;
+    dispatch(pressAction);
   };
 
   const variantStyle = getVariantStyle(variant);

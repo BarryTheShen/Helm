@@ -1,11 +1,8 @@
 /**
- * Keel Demo App — Chat-style interface with inline SDUI screens.
+ * Keel Demo App — AI chat interface with inline SDUI screens.
  *
- * Demonstrates the full Keel loop as a natural conversation:
- * 1. User types a message in the input bar
- * 2. Server responds with text + an interactive SDUI screen
- * 3. Screens appear inline in the chat, user taps buttons/submits forms
- * 4. Actions flow back to the server, which responds with new messages + screens
+ * A natural chat experience where the AI responds conversationally and
+ * renders interactive Keel SDUI screens inline when rich UI is helpful.
  *
  * Run: cd examples/keel-demo && npm install && npx expo start
  * Server: cd examples/keel-demo/server && uvicorn main:app --port 8765
@@ -22,7 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { PaperProvider, Text } from 'react-native-paper';
-import { SDUIPageRenderer, registerPreset } from '@keel/renderer';
+import { SDUIPageRenderer, SDUIMarkdown, registerPreset } from '@keel/renderer';
 import { PaperPreset } from '@keel/renderer/presets/paper';
 
 import './WeatherWidget';
@@ -32,61 +29,168 @@ import type { SDUIAction, SDUIPage } from '@keel/protocol';
 
 const WS_URL = 'ws://localhost:8765/ws';
 
+// Error boundary to catch silent rendering crashes
+class SDUIErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[KEEL:ErrorBoundary] Renderer crashed:', error.message);
+    console.error('[KEEL:ErrorBoundary] Stack:', info.componentStack);
+  }
+  render() {
+    if (this.state.error) {
+      return React.createElement(View, { style: { padding: 12, backgroundColor: '#FFE0E0', borderRadius: 8 } },
+        React.createElement(Text, { style: { color: '#D32F2F', fontWeight: '600' } }, 'SDUI Render Error:'),
+        React.createElement(Text, { style: { color: '#D32F2F', fontSize: 12, marginTop: 4 } }, this.state.error.message),
+      );
+    }
+    return this.props.children;
+  }
+}
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text?: string;
   screen?: SDUIPage;
+  streaming?: boolean;
 }
 
 export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [connected, setConnected] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const msgIdRef = useRef(0);
+  const streamingIdRef = useRef<string | null>(null);
 
   const nextId = () => String(++msgIdRef.current);
 
   // ── WebSocket ──────────────────────────────────────────────────────
 
-  const connect = useCallback(() => {
-    const ws = new WebSocket(WS_URL);
+  useEffect(() => {
+    let cancelled = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-    ws.onopen = () => setConnected(true);
+    function connect() {
+      if (cancelled) return;
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+        wsRef.current = null;
+      }
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'screen_update' && data.screen) {
-          const msg: ChatMessage = {
-            id: nextId(),
-            role: 'assistant',
-            text: data.text,
-            screen: data.screen as SDUIPage,
-          };
-          setMessages((prev) => [...prev, msg]);
+      const ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        if (cancelled) { ws.close(); return; }
+        console.log('[KEEL] WS connected');
+        setConnected(true);
+      };
+
+      ws.onmessage = (event) => {
+        if (cancelled) return;
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.type === 'text_delta') {
+            // Streaming text — append to current streaming message
+            setIsTyping(false);
+            setMessages((prev) => {
+              const streamId = streamingIdRef.current;
+              if (!streamId) {
+                // Create new streaming message
+                const newId = nextId();
+                streamingIdRef.current = newId;
+                return [...prev, {
+                  id: newId,
+                  role: 'assistant' as const,
+                  text: data.delta,
+                  streaming: true,
+                }];
+              }
+              // Append to existing streaming message
+              return prev.map((msg) =>
+                msg.id === streamId
+                  ? { ...msg, text: (msg.text || '') + data.delta }
+                  : msg
+              );
+            });
+          } else if (data.type === 'response_done') {
+            // Final response — finalize streaming message or create new one
+            setIsTyping(false);
+            const streamId = streamingIdRef.current;
+            streamingIdRef.current = null;
+
+            if (streamId) {
+              // Finalize the streaming message with screen if present
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === streamId
+                    ? {
+                        ...msg,
+                        text: data.text || msg.text,
+                        screen: data.screen as SDUIPage | undefined,
+                        streaming: false,
+                      }
+                    : msg
+                )
+              );
+            } else {
+              // No streaming happened — create complete message
+              setMessages((prev) => [...prev, {
+                id: nextId(),
+                role: 'assistant' as const,
+                text: data.text,
+                screen: data.screen as SDUIPage | undefined,
+              }]);
+            }
+          } else if (data.type === 'screen_update' && data.screen) {
+            // Legacy screen_update for backwards compatibility
+            setMessages((prev) => [...prev, {
+              id: nextId(),
+              role: 'assistant' as const,
+              text: data.text,
+              screen: data.screen as SDUIPage,
+            }]);
+          }
+        } catch (e) {
+          console.warn('[KEEL] Parse error:', e);
         }
-      } catch (e) {
-        console.warn('Parse error:', e);
+      };
+
+      ws.onclose = () => {
+        if (cancelled) return;
+        console.log('[KEEL] WS disconnected, will reconnect in 3s');
+        setConnected(false);
+        setIsTyping(false);
+        wsRef.current = null;
+        reconnectTimer = setTimeout(connect, 3000);
+      };
+
+      ws.onerror = (e) => console.warn('[KEEL] WS error:', e);
+
+      wsRef.current = ws;
+    }
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+        wsRef.current = null;
       }
     };
-
-    ws.onclose = () => {
-      setConnected(false);
-      wsRef.current = null;
-      setTimeout(connect, 3000);
-    };
-
-    ws.onerror = () => {};
-
-    wsRef.current = ws;
-  }, []);
-
-  useEffect(() => {
-    connect();
-    return () => wsRef.current?.close();
   }, []);
 
   useEffect(() => {
@@ -99,6 +203,8 @@ export default function App() {
     if (!text.trim() || !wsRef.current) return;
     const userMsg: ChatMessage = { id: nextId(), role: 'user', text: text.trim() };
     setMessages((prev) => [...prev, userMsg]);
+    setIsTyping(true);
+    streamingIdRef.current = null;
     wsRef.current.send(JSON.stringify({ type: 'send_to_agent', message: text.trim() }));
     setInput('');
   }, []);
@@ -106,7 +212,13 @@ export default function App() {
   // ── Action handler ─────────────────────────────────────────────────
 
   const handleAction = useCallback((action: SDUIAction) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    console.log('[KEEL] Action dispatched:', JSON.stringify(action));
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.warn('[KEEL] WS not open, cannot dispatch action');
+      return;
+    }
+    setIsTyping(true);
+    streamingIdRef.current = null;
     wsRef.current.send(JSON.stringify(action));
   }, []);
 
@@ -142,8 +254,8 @@ export default function App() {
                 <View style={styles.empty}>
                   <Text variant="headlineSmall" style={styles.emptyTitle}>Welcome to Keel</Text>
                   <Text style={styles.emptyHint}>
-                    Type a message below. Try "hello", "form", "dashboard", or "buttons".
-                    {'\n\n'}The AI will respond with interactive UI that you can tap and explore.
+                    Chat naturally with the AI assistant. It can answer questions,
+                    help with tasks, and show interactive UI when it's useful.
                   </Text>
                 </View>
               )}
@@ -164,18 +276,31 @@ export default function App() {
                     msg.role === 'user' ? styles.userBubble : styles.aiBubble,
                   ]}
                 >
-                  {msg.text && (
-                    <Text style={msg.role === 'user' ? styles.userText : styles.aiText}>
-                      {msg.text}
-                    </Text>
-                  )}
+                  {msg.text ? (
+                    msg.role === 'user' ? (
+                      <Text style={styles.userText}>{msg.text}</Text>
+                    ) : (
+                      <View style={styles.aiTextWrap}>
+                        <SDUIMarkdown content={msg.text} />
+                        {msg.streaming && <Text style={styles.cursor}>|</Text>}
+                      </View>
+                    )
+                  ) : null}
                   {msg.screen && (
                     <View style={styles.screenCard}>
-                      <SDUIPageRenderer page={msg.screen} onAction={handleAction} />
+                      <SDUIErrorBoundary>
+                        <SDUIPageRenderer page={msg.screen} onAction={handleAction} />
+                      </SDUIErrorBoundary>
                     </View>
                   )}
                 </View>
               ))}
+
+              {isTyping && (
+                <View style={[styles.bubble, styles.aiBubble]}>
+                  <Text style={styles.typingText}>Thinking...</Text>
+                </View>
+              )}
             </ScrollView>
 
             {/* Input bar */}
@@ -289,6 +414,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingHorizontal: 16,
     paddingTop: 12,
+    paddingBottom: 8,
+  },
+  aiTextWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  typingText: {
+    color: '#999',
+    fontSize: 14,
+    fontStyle: 'italic',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  cursor: {
+    color: '#007AFF',
+    fontWeight: '300',
   },
   screenCard: {
     padding: 8,

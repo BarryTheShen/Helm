@@ -28,18 +28,38 @@ function extractFlatProps(comp: SDUIComponent): Record<string, any> {
 interface SDUIPageRendererProps {
   page: SDUIPage;
   onAction: ActionDispatcher;
+  /** When true, wraps content in a ScrollView. Default false (use View for inline/embedded rendering). */
+  scrollable?: boolean;
 }
 
-export function SDUIPageRenderer({ page, onAction }: SDUIPageRendererProps) {
+export function SDUIPageRenderer({ page, onAction, scrollable = false }: SDUIPageRendererProps) {
   const dispatch: ActionDispatcher = onAction;
   const breakpoint = useBreakpoint();
 
+  console.log('[KEEL:Renderer] Rendering page, rows:', page?.rows?.length, 'title:', (page as any)?.title);
+  if (!page?.rows) {
+    console.warn('[KEEL:Renderer] No rows in page!', JSON.stringify(page)?.substring(0, 200));
+  }
+
+  const content = page.rows.map((row, idx) => {
+    console.log('[KEEL:Renderer] Row', idx, 'id:', row.id, 'cells:', row.cells?.length);
+    return (
+      <RowRenderer key={row.id ?? `row-${idx}`} row={row} dispatch={dispatch} breakpoint={breakpoint} />
+    );
+  });
+
+  if (scrollable) {
+    return (
+      <ScrollView style={styles.screenContainer} contentContainerStyle={styles.screenContent}>
+        {content}
+      </ScrollView>
+    );
+  }
+
   return (
-    <ScrollView style={styles.screenContainer} contentContainerStyle={styles.screenContent}>
-      {page.rows.map((row, idx) => (
-        <RowRenderer key={row.id ?? `row-${idx}`} row={row} dispatch={dispatch} breakpoint={breakpoint} />
-      ))}
-    </ScrollView>
+    <View style={[styles.screenContainer, styles.screenContent]}>
+      {content}
+    </View>
   );
 }
 
@@ -157,6 +177,7 @@ function V2ComponentRenderer({
     : (component.props ?? {});
 
   const Comp = resolveComponent(component.type);
+  console.log('[KEEL:Renderer] Component type:', component.type, 'resolved:', !!Comp, 'props keys:', Object.keys(props));
   if (Comp) {
     // Render children recursively if present (check multiple locations where agents place them)
     const kids = component.children
