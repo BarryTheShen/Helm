@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     # Example: EXTERNAL_AGENT_URL=http://localhost:7860
     external_agent_url: str = ""
 
+    # CORS — comma-separated list of allowed origins.
+    # In production set to the actual frontend URL(s), e.g.:
+    #   CORS_ALLOW_ORIGINS=https://app.example.com,https://admin.example.com
+    # The default keeps the Vite dev server and web admin working out of the box.
+    cors_allow_origins: list[str] = ["http://localhost:5173", "http://localhost:5174"]
+
     # Demo features
     # Set to false to disable the 2-minute "Time Check" notification broadcast.
     # Enabled by default in dev so the Alerts tab shows live WebSocket push demos.
