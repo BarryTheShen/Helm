@@ -176,7 +176,7 @@ async def test_resolve_connection_from_db(db_session, test_user):
     ctx = {
         "db": db_session,
         "user_id": test_user.id,
-        "secret_key": settings.secret_key,
+        "encryption_key": settings.encryption_key,
         "connections_cache": {},
     }
     result = await resolve_expression("API Key: {{connection.weather_api.api_key}}", ctx)
