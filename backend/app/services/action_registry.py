@@ -17,11 +17,10 @@ from typing import Any, Callable, Awaitable
 
 import feedparser
 import httpx
-from cryptography.fernet import Fernet
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.services.workflow_engine import fire_trigger
+from app.utils.crypto import get_fernet
 
 logger = logging.getLogger(__name__)
 
@@ -398,16 +397,9 @@ async def _fetch_rss(user_id: str, params: dict[str, Any], db: AsyncSession) -> 
         return {"status": "error", "detail": f"Failed to fetch RSS feed: {str(e)}"}
 
 
-def _get_fernet() -> Fernet:
-    """Get Fernet cipher using the encryption key from settings."""
-    if not settings.encryption_key:
-        raise ValueError("ENCRYPTION_KEY must be set in environment variables")
-    return Fernet(settings.encryption_key.encode())
-
-
 def _decrypt_credentials(encrypted: str) -> dict:
-    """Decrypt encrypted credentials string, return dict."""
-    json_str = _get_fernet().decrypt(encrypted.encode()).decode()
+    """Decrypt Fernet ciphertext, return credentials dict."""
+    json_str = get_fernet().decrypt(encrypted.encode()).decode()
     return json.loads(json_str)
 
 

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -56,3 +57,15 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Fail fast if encryption key is missing, unless the developer has explicitly
+# opted out via HELM_ALLOW_INSECURE_DEV=1. Without a key, any endpoint that
+# reads/writes encrypted columns will fail at runtime with a cryptic error;
+# it is far safer to refuse to start.
+if not settings.encryption_key and os.environ.get("HELM_ALLOW_INSECURE_DEV") != "1":
+    raise RuntimeError(
+        "ENCRYPTION_KEY is not set. "
+        "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\" "
+        "and add it to your .env file as ENCRYPTION_KEY=<value>. "
+        "To skip this check in local dev (insecure), set HELM_ALLOW_INSECURE_DEV=1."
+    )
