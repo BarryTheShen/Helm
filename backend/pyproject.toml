@@ -23,6 +23,7 @@ dependencies = [
     "pydantic-ai>=0.2.0",
     "feedparser>=6.0.0",
     "chevron>=0.14.0",
+    "sqladmin>=0.20.0",
 ]
 
 [project.optional-dependencies]

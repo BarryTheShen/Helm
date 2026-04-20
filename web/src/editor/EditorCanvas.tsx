@@ -1,6 +1,20 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { CSSProperties, JSX } from 'react';
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useEditorStore } from './useEditorStore';
 import { getComponentDefinition } from './types';
 import type { EditorCell, EditorComponent, EditorRow, EditorRowHeight } from './types';
@@ -845,44 +859,22 @@ function CellResizeHandle({
 
 // ── Row Drag Handle ──────────────────────────────────────────────────────────
 
-function getRowDropTargetIndex(draggedRowIndex: number, insertionIndex: number): number | null {
-  const targetIndex = insertionIndex > draggedRowIndex ? insertionIndex - 1 : insertionIndex;
-  return targetIndex === draggedRowIndex ? null : targetIndex;
-}
-
 function RowDragHandle({
-  rowIndex,
   isDragging,
-  onDragStart,
-  onDragEnd,
+  attributes,
+  listeners,
 }: {
-  rowIndex: number;
   isDragging: boolean;
-  onDragStart: (rowIndex: number) => void;
-  onDragEnd: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  attributes: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  listeners: Record<string, any> | undefined;
 }) {
-  const handleDragStart = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.stopPropagation();
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', String(rowIndex));
-
-    // Create invisible drag image to hide default ghost
-    const img = new Image();
-    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-    event.dataTransfer.setDragImage(img, 0, 0);
-
-    onDragStart(rowIndex);
-  }, [onDragStart, rowIndex]);
-
-  const handleDragEnd = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.stopPropagation();
-    onDragEnd();
-  }, [onDragEnd]);
-
   return (
     <div
-      draggable
-      className={`absolute z-10 flex select-none items-center justify-center transition-opacity ${
+      {...attributes}
+      {...listeners}
+      className={`absolute z-10 flex select-none items-center justify-center transition-opacity touch-none ${
         isDragging
           ? 'opacity-100 cursor-grabbing'
           : 'opacity-0 cursor-grab group-hover:opacity-100'
@@ -893,9 +885,6 @@ function RowDragHandle({
         bottom: 0,
         width: ROW_DRAG_HANDLE_WIDTH
       }}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-      onMouseDown={(event) => event.stopPropagation()}
       title="Drag to reorder row"
     >
       <GripVertical size={12} className={isDragging ? 'text-blue-500' : 'text-gray-400'} />
@@ -972,15 +961,9 @@ function RowHeightResizeHandle({
 function RowInsertionControl({
   onAdd,
   between,
-  isDropTarget,
-  onDragOver,
-  onDrop,
 }: {
   onAdd: (cellCount: number) => void;
   between?: boolean;
-  isDropTarget?: boolean;
-  onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
-  onDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
 }) {
   const [showPicker, setShowPicker] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -1009,32 +992,17 @@ function RowInsertionControl({
 
   return (
     <div
-      className={`relative z-10 flex items-center justify-center pointer-events-none ${between ? 'h-10 py-1' : 'py-3'} ${
-        isDropTarget ? 'rounded-md bg-blue-50/80' : ''
-      }`}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
+      className={`relative z-10 flex items-center justify-center pointer-events-none ${between ? 'h-10 py-1' : 'py-3'}`}
     >
       {between && (
-        <div
-          className={`absolute left-0 right-0 top-1/2 border-t border-dashed transition-colors ${
-            isDropTarget ? 'border-blue-300' : 'border-gray-200'
-          }`}
-        />
-      )}
-      {(onDragOver || onDrop) && (
-        <div className="absolute inset-0 pointer-events-auto" onDragOver={onDragOver} onDrop={onDrop} />
+        <div className="absolute left-0 right-0 top-1/2 border-t border-dashed border-gray-200" />
       )}
       <button
         ref={buttonRef}
         onClick={handleToggle}
         className={`pointer-events-auto relative z-10 flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
           between
-            ? `border shadow-sm ${
-                isDropTarget
-                  ? 'bg-white border-blue-300 text-blue-700'
-                  : 'bg-white border-gray-200 text-gray-400 hover:text-blue-600 hover:border-blue-300'
-              }`
+            ? 'border shadow-sm bg-white border-gray-200 text-gray-400 hover:text-blue-600 hover:border-blue-300'
             : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
         }`}
       >
@@ -1059,6 +1027,178 @@ function RowInsertionControl({
         </div>,
         document.body
       )}
+    </div>
+  );
+}
+
+// ── Sortable Row ─────────────────────────────────────────────────────────────
+
+function SortableRow({
+  row, rowIdx, isRowSelected, isCellSelected,
+  rowResizePreview, getDisplayedCellWidth,
+  handleEmptyCellClick, handleComponentClick,
+  handleCellResizePreview, handleCellResizeCommit,
+  handleRowResizePreview, handleRowResizeCommit,
+  addRow, deleteRow, setSelection, copySelection, removeComponent,
+}: {
+  row: EditorRow;
+  rowIdx: number;
+  isRowSelected: boolean;
+  isCellSelected: (rowId: string, cellIdx: number) => boolean;
+  rowResizePreview: { rowId: string; height: number } | null;
+  getDisplayedCellWidth: (rowId: string, cellIndex: number, width: EditorCell['width']) => EditorCell['width'];
+  handleEmptyCellClick: (rowId: string, cellIndex: number, e: React.MouseEvent) => void;
+  handleComponentClick: (rowId: string, cellIndex: number, e: React.MouseEvent) => void;
+  handleCellResizePreview: (rowId: string, cellIndex: number, leftWidth: number, rightWidth: number) => void;
+  handleCellResizeCommit: (rowId: string, cellIndex: number, leftWidth: number, rightWidth: number) => void;
+  handleRowResizePreview: (rowId: string, height: number) => void;
+  handleRowResizeCommit: (rowId: string, height: number) => void;
+  addRow: (cellCount?: number, index?: number) => void;
+  deleteRow: (rowId: string) => void;
+  setSelection: (sel: import('./types').Selection | null) => void;
+  copySelection: () => void;
+  removeComponent: (rowId: string, cellIndex: number) => void;
+}) {
+  const { setNodeRef, transform, transition, attributes, listeners, isDragging } = useSortable({ id: row.id });
+
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      {/* Insert point before first row */}
+      {rowIdx === 0 && (
+        <RowInsertionControl onAdd={(n) => addRow(n, 0)} between />
+      )}
+
+      {/* Row */}
+      <div
+        className={`relative z-0 group rounded-lg transition-all mb-1 border border-dashed ${
+          isDragging ? 'opacity-60 ring-1 ring-blue-200 border-blue-200' : ''
+        } ${
+          isRowSelected
+            ? 'ring-2 ring-blue-500 border-blue-300'
+            : `border-gray-200 hover:border-gray-400 hover:ring-1 hover:ring-gray-300 ${
+                rowIdx % 2 === 0 ? 'bg-white/60' : 'bg-gray-50/40'
+              }`
+        }`}
+        style={getRowContainerStyle(
+          row,
+          rowResizePreview?.rowId === row.id ? rowResizePreview.height : undefined,
+        )}
+        onClick={(e) => { e.stopPropagation(); setSelection({ type: 'row', rowId: row.id }); }}
+      >
+        {/* Drag handle */}
+        <RowDragHandle isDragging={isDragging} attributes={attributes} listeners={listeners} />
+
+        {/* Delete row button */}
+        <button
+          className="absolute -right-1 -top-1 p-0.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:bg-red-600"
+          onClick={(e) => { e.stopPropagation(); deleteRow(row.id); }}
+          title="Delete row"
+        >
+          <X size={10} />
+        </button>
+
+        {/* Cells container */}
+        <div className="flex min-h-[48px] items-stretch gap-1" style={getRowContentStyle(row)}>
+          {row.cells.map((cell, cellIdx) => {
+            const displayedCellWidths = row.cells.map((entry, index) => getDisplayedCellWidth(row.id, index, entry.width));
+            const totalWidth = displayedCellWidths.reduce<number>((sum, width) => sum + getNumericCellWidth(width), 0);
+            const displayedWidth = displayedCellWidths[cellIdx] ?? cell.width;
+            const adjacentDisplayedWidth = displayedCellWidths[cellIdx + 1] ?? row.cells[cellIdx + 1]?.width ?? 1;
+            const componentInfo = cell.content ? getComponentDefinition(cell.content.type) : undefined;
+            const isReadOnlyRuntimeComponent = componentInfo?.readOnly === true;
+
+            return (
+              <div
+                key={cell.id}
+                className={`relative rounded transition-all p-1 ${
+                  isCellSelected(row.id, cellIdx)
+                    ? 'ring-2 ring-blue-400 bg-blue-50/50'
+                    : cell.content ? 'bg-white' : 'bg-gray-50 border border-dashed border-gray-200'
+                }`}
+                style={getCellStyle(row, displayedWidth, totalWidth)}
+              >
+                {cell.content ? (
+                  <div
+                    className="cursor-pointer relative group/cell"
+                    onClick={(e) => handleComponentClick(row.id, cellIdx, e)}
+                  >
+                    {/* Floating toolbar */}
+                    <div className="absolute -top-5 left-0 right-0 flex items-center gap-0.5 justify-center opacity-0 group-hover/cell:opacity-100 transition-opacity z-20">
+                      <button
+                        className={`p-0.5 bg-white border border-gray-200 rounded text-[9px] ${
+                          isReadOnlyRuntimeComponent
+                            ? 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                            : 'text-gray-500 hover:text-blue-600 hover:border-blue-300'
+                        }`}
+                        onClick={(e) => handleComponentClick(row.id, cellIdx, e)}
+                        title={isReadOnlyRuntimeComponent ? 'Inspect' : 'Edit'}
+                      >
+                        {isReadOnlyRuntimeComponent ? <Eye size={9} /> : <Edit2 size={9} />}
+                      </button>
+                      <button
+                        className="p-0.5 bg-white border border-gray-200 rounded text-gray-500 hover:text-blue-600 hover:border-blue-300 text-[9px]"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelection({ type: 'component', rowId: row.id, cellIndex: cellIdx });
+                          copySelection();
+                        }}
+                        title="Copy"
+                      >
+                        <Copy size={9} />
+                      </button>
+                      <button
+                        className="p-0.5 bg-white border border-gray-200 rounded text-gray-500 hover:text-red-500 hover:border-red-300 text-[9px]"
+                        onClick={(e) => { e.stopPropagation(); removeComponent(row.id, cellIdx); }}
+                        title="Delete"
+                      >
+                        <Trash2 size={9} />
+                      </button>
+                    </div>
+
+                    {/* Component preview */}
+                    <div className="pointer-events-none overflow-hidden">
+                      <ComponentPreview component={cell.content} />
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className="flex items-center justify-center h-full min-h-[40px] cursor-pointer hover:bg-blue-50 hover:border-blue-300 rounded transition-colors"
+                    onClick={(e) => handleEmptyCellClick(row.id, cellIdx, e)}
+                  >
+                    <Plus size={16} className="text-gray-300" />
+                  </div>
+                )}
+
+                {/* Cell resize handle (between cells, not on last) */}
+                {cellIdx < row.cells.length - 1 && (
+                  <CellResizeHandle
+                    rowId={row.id}
+                    cellIndex={cellIdx}
+                    leftWidth={getNumericCellWidth(displayedWidth)}
+                    rightWidth={getNumericCellWidth(adjacentDisplayedWidth)}
+                    onPreview={handleCellResizePreview}
+                    onCommit={handleCellResizeCommit}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <RowHeightResizeHandle
+          rowId={row.id}
+          onPreview={handleRowResizePreview}
+          onCommit={handleRowResizeCommit}
+        />
+      </div>
+
+      {/* Insert point after row */}
+      <RowInsertionControl onAdd={(n) => addRow(n, rowIdx + 1)} between />
     </div>
   );
 }
@@ -1088,10 +1228,9 @@ export function EditorCanvas() {
     leftWidth: number;
     rightWidth: number;
   } | null>(null);
-  const [draggedRowIndex, setDraggedRowIndex] = useState<number | null>(null);
-  const [dropInsertionIndex, setDropInsertionIndex] = useState<number | null>(null);
-  const [dragGhostPosition, setDragGhostPosition] = useState<{ x: number; y: number } | null>(null);
-  const draggedRowRef = useRef<EditorRow | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
 
   const handleCellResizePreview = useCallback((rowId: string, cellIndex: number, leftWidth: number, rightWidth: number) => {
     setCellResizePreview({ rowId, cellIndex, leftWidth, rightWidth });
@@ -1149,51 +1288,15 @@ export function EditorCanvas() {
     updateRowHeight(rowId, height);
   }, [updateRowHeight]);
 
-  const handleRowDragStart = useCallback((rowIndex: number) => {
-    setDraggedRowIndex(rowIndex);
-    setDropInsertionIndex(null);
-    draggedRowRef.current = rows[rowIndex];
-  }, [rows]);
-
-  const handleRowDragEnd = useCallback(() => {
-    setDraggedRowIndex(null);
-    setDropInsertionIndex(null);
-    setDragGhostPosition(null);
-    draggedRowRef.current = null;
-  }, []);
-
-  const handleInsertionDragOver = useCallback((insertionIndex: number, event: React.DragEvent<HTMLDivElement>) => {
-    if (draggedRowIndex === null) {
-      return;
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const fromIndex = rows.findIndex(r => r.id === active.id);
+    const toIndex = rows.findIndex(r => r.id === over.id);
+    if (fromIndex !== -1 && toIndex !== -1) {
+      moveRow(fromIndex, toIndex);
     }
-
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = 'move';
-
-    const targetIndex = getRowDropTargetIndex(draggedRowIndex, insertionIndex);
-    setDropInsertionIndex(targetIndex === null ? null : insertionIndex);
-    setDragGhostPosition({ x: event.clientX, y: event.clientY });
-  }, [draggedRowIndex]);
-
-  const handleInsertionDrop = useCallback((insertionIndex: number, event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (draggedRowIndex === null) {
-      return;
-    }
-
-    const targetIndex = getRowDropTargetIndex(draggedRowIndex, insertionIndex);
-    setDraggedRowIndex(null);
-    setDropInsertionIndex(null);
-    setDragGhostPosition(null);
-    draggedRowRef.current = null;
-
-    if (targetIndex !== null) {
-      moveRow(draggedRowIndex, targetIndex);
-    }
-  }, [draggedRowIndex, moveRow]);
+  }, [rows, moveRow]);
 
   const frameScale = Math.min(1, MAX_PREVIEW_WIDTH / deviceWidth, MAX_PREVIEW_HEIGHT / deviceHeight);
   const previewWidth = Math.round(deviceWidth * frameScale);
@@ -1226,160 +1329,36 @@ export function EditorCanvas() {
               <RowInsertionControl onAdd={(n) => addRow(n)} />
             )}
 
-            {rows.map((row, rowIdx) => (
-              <div key={row.id}>
-                {/* Insert point before row */}
-                {rowIdx === 0 && rows.length > 0 && (
-                  <RowInsertionControl
-                    onAdd={(n) => addRow(n, 0)}
-                    between
-                    isDropTarget={draggedRowIndex !== null && dropInsertionIndex === 0}
-                    onDragOver={(event) => handleInsertionDragOver(0, event)}
-                    onDrop={(event) => handleInsertionDrop(0, event)}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext items={rows.map(r => r.id)} strategy={verticalListSortingStrategy}>
+                {rows.map((row, rowIdx) => (
+                  <SortableRow
+                    key={row.id}
+                    row={row}
+                    rowIdx={rowIdx}
+                    isRowSelected={isRowSelected(row.id)}
+                    isCellSelected={isCellSelected}
+                    rowResizePreview={rowResizePreview}
+                    getDisplayedCellWidth={getDisplayedCellWidth}
+                    handleEmptyCellClick={handleEmptyCellClick}
+                    handleComponentClick={handleComponentClick}
+                    handleCellResizePreview={handleCellResizePreview}
+                    handleCellResizeCommit={handleCellResizeCommit}
+                    handleRowResizePreview={handleRowResizePreview}
+                    handleRowResizeCommit={handleRowResizeCommit}
+                    addRow={addRow}
+                    deleteRow={deleteRow}
+                    setSelection={setSelection}
+                    copySelection={copySelection}
+                    removeComponent={removeComponent}
                   />
-                )}
-
-                {/* Row */}
-                <div
-                  className={`relative z-0 group rounded-lg transition-all mb-1 border border-dashed ${
-                    draggedRowIndex === rowIdx
-                      ? 'opacity-60 ring-1 ring-blue-200 border-blue-200'
-                      : ''
-                  } ${
-                    isRowSelected(row.id)
-                      ? 'ring-2 ring-blue-500 border-blue-300'
-                      : `border-gray-200 hover:border-gray-400 hover:ring-1 hover:ring-gray-300 ${
-                          rowIdx % 2 === 0 ? 'bg-white/60' : 'bg-gray-50/40'
-                        }`
-                  }`}
-                  style={getRowContainerStyle(
-                    row,
-                    rowResizePreview?.rowId === row.id ? rowResizePreview.height : undefined,
-                  )}
-                  onClick={(e) => { e.stopPropagation(); setSelection({ type: 'row', rowId: row.id }); }}
-                >
-                  {/* Drag handle */}
-                  <RowDragHandle
-                    rowIndex={rowIdx}
-                    isDragging={draggedRowIndex === rowIdx}
-                    onDragStart={handleRowDragStart}
-                    onDragEnd={handleRowDragEnd}
-                  />
-
-                  {/* Delete row button */}
-                  <button
-                    className="absolute -right-1 -top-1 p-0.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:bg-red-600"
-                    onClick={(e) => { e.stopPropagation(); deleteRow(row.id); }}
-                    title="Delete row"
-                  >
-                    <X size={10} />
-                  </button>
-
-                  {/* Cells container */}
-                  <div className="flex min-h-[48px] items-stretch gap-1" style={getRowContentStyle(row)}>
-                    {row.cells.map((cell, cellIdx) => {
-                      const displayedCellWidths = row.cells.map((entry, index) => getDisplayedCellWidth(row.id, index, entry.width));
-                      const totalWidth = displayedCellWidths.reduce<number>((sum, width) => sum + getNumericCellWidth(width), 0);
-                      const displayedWidth = displayedCellWidths[cellIdx] ?? cell.width;
-                      const adjacentDisplayedWidth = displayedCellWidths[cellIdx + 1] ?? row.cells[cellIdx + 1]?.width ?? 1;
-                      const componentInfo = cell.content ? getComponentDefinition(cell.content.type) : undefined;
-                      const isReadOnlyRuntimeComponent = componentInfo?.readOnly === true;
-
-                      return (
-                        <div
-                          key={cell.id}
-                          className={`relative rounded transition-all p-1 ${
-                            isCellSelected(row.id, cellIdx)
-                              ? 'ring-2 ring-blue-400 bg-blue-50/50'
-                              : cell.content ? 'bg-white' : 'bg-gray-50 border border-dashed border-gray-200'
-                          }`}
-                          style={getCellStyle(row, displayedWidth, totalWidth)}
-                        >
-                          {cell.content ? (
-                            <div
-                              className="cursor-pointer relative group/cell"
-                              onClick={(e) => handleComponentClick(row.id, cellIdx, e)}
-                            >
-                              {/* Floating toolbar */}
-                              <div className="absolute -top-5 left-0 right-0 flex items-center gap-0.5 justify-center opacity-0 group-hover/cell:opacity-100 transition-opacity z-20">
-                                <button
-                                  className={`p-0.5 bg-white border border-gray-200 rounded text-[9px] ${
-                                    isReadOnlyRuntimeComponent
-                                      ? 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                                      : 'text-gray-500 hover:text-blue-600 hover:border-blue-300'
-                                  }`}
-                                  onClick={(e) => handleComponentClick(row.id, cellIdx, e)}
-                                  title={isReadOnlyRuntimeComponent ? 'Inspect' : 'Edit'}
-                                >
-                                  {isReadOnlyRuntimeComponent ? <Eye size={9} /> : <Edit2 size={9} />}
-                                </button>
-                                <button
-                                  className="p-0.5 bg-white border border-gray-200 rounded text-gray-500 hover:text-blue-600 hover:border-blue-300 text-[9px]"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelection({ type: 'component', rowId: row.id, cellIndex: cellIdx });
-                                    copySelection();
-                                  }}
-                                  title="Copy"
-                                >
-                                  <Copy size={9} />
-                                </button>
-                                <button
-                                  className="p-0.5 bg-white border border-gray-200 rounded text-gray-500 hover:text-red-500 hover:border-red-300 text-[9px]"
-                                  onClick={(e) => { e.stopPropagation(); removeComponent(row.id, cellIdx); }}
-                                  title="Delete"
-                                >
-                                  <Trash2 size={9} />
-                                </button>
-                              </div>
-
-                              {/* Component preview */}
-                              <div className="pointer-events-none overflow-hidden">
-                                <ComponentPreview component={cell.content} />
-                              </div>
-                            </div>
-                          ) : (
-                            <div
-                              className="flex items-center justify-center h-full min-h-[40px] cursor-pointer hover:bg-blue-50 hover:border-blue-300 rounded transition-colors"
-                              onClick={(e) => handleEmptyCellClick(row.id, cellIdx, e)}
-                            >
-                              <Plus size={16} className="text-gray-300" />
-                            </div>
-                          )}
-
-                          {/* Cell resize handle (between cells, not on last) */}
-                          {cellIdx < row.cells.length - 1 && (
-                            <CellResizeHandle
-                              rowId={row.id}
-                              cellIndex={cellIdx}
-                              leftWidth={getNumericCellWidth(displayedWidth)}
-                              rightWidth={getNumericCellWidth(adjacentDisplayedWidth)}
-                              onPreview={handleCellResizePreview}
-                              onCommit={handleCellResizeCommit}
-                            />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <RowHeightResizeHandle
-                    rowId={row.id}
-                    onPreview={handleRowResizePreview}
-                    onCommit={handleRowResizeCommit}
-                  />
-                </div>
-
-                {/* Insert point after row */}
-                <RowInsertionControl
-                  onAdd={(n) => addRow(n, rowIdx + 1)}
-                  between
-                  isDropTarget={draggedRowIndex !== null && dropInsertionIndex === rowIdx + 1}
-                  onDragOver={(event) => handleInsertionDragOver(rowIdx + 1, event)}
-                  onDrop={(event) => handleInsertionDrop(rowIdx + 1, event)}
-                />
-              </div>
-            ))}
+                ))}
+              </SortableContext>
+            </DndContext>
           </div>
 
           {/* Phone home indicator mock */}
@@ -1396,27 +1375,6 @@ export function EditorCanvas() {
           onClose={() => setPickerState(null)}
           position={pickerState.position}
         />
-      )}
-
-      {/* Drag ghost - follows cursor during row drag */}
-      {dragGhostPosition && draggedRowRef.current && createPortal(
-        <div
-          className="fixed pointer-events-none z-[9999] bg-white/95 border-2 border-blue-400 rounded-lg shadow-xl px-3 py-2"
-          style={{
-            left: dragGhostPosition.x + 12,
-            top: dragGhostPosition.y + 12,
-            transform: 'translate(0, 0)',
-          }}
-        >
-          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-            <GripVertical size={14} className="text-blue-500" />
-            <span>Row {rows.findIndex(r => r.id === draggedRowRef.current?.id) + 1}</span>
-            <span className="text-xs text-gray-500">
-              ({draggedRowRef.current.cells.length} cell{draggedRowRef.current.cells.length !== 1 ? 's' : ''})
-            </span>
-          </div>
-        </div>,
-        document.body
       )}
     </div>
   );

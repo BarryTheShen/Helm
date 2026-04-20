@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import { api, type Variable, type VariableCreate, type VariableUpdate, type DataSource, type DataSourceCreate, type DataSourceSchema, type PaginatedResponse } from '../lib/api';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { api, type Variable, type VariableCreate, type DataSource, type DataSourceCreate, type DataSourceSchema } from '../lib/api';
 import { Plus, Trash2, Pencil, X, Eye } from 'lucide-react';
 
 type Tab = 'variables' | 'data-sources';
@@ -9,6 +12,19 @@ const typeBadge: Record<string, string> = {
   number: 'bg-green-100 text-green-700',
   boolean: 'bg-purple-100 text-purple-700',
 };
+
+const variableSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  type: z.enum(['text', 'number', 'boolean']),
+  value: z.string(),
+  description: z.string().optional(),
+});
+
+type VariableFormValues = z.infer<typeof variableSchema>;
+
+const inputClass = 'px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+const inputClassFull = `w-full ${inputClass}`;
+const errorClass = 'text-xs text-red-600 mt-1';
 
 export function VariablesPage() {
   const [tab, setTab] = useState<Tab>('variables');
@@ -40,10 +56,17 @@ function VariablesTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
-  const [newVar, setNewVar] = useState<VariableCreate>({ name: '', value: '', type: 'text', description: '' });
   const [editingVar, setEditingVar] = useState<Variable | null>(null);
-  const [editForm, setEditForm] = useState<VariableUpdate>({});
   const [confirmDel, setConfirmDel] = useState<{id: string; name: string; onConfirm: () => void} | null>(null);
+
+  const createForm = useForm<VariableFormValues>({
+    resolver: zodResolver(variableSchema),
+    defaultValues: { name: '', type: 'text', value: '', description: '' },
+  });
+
+  const editForm = useForm<VariableFormValues>({
+    resolver: zodResolver(variableSchema),
+  });
 
   const loadVariables = () => {
     setLoading(true);
@@ -55,21 +78,17 @@ function VariablesTab() {
 
   useEffect(() => { loadVariables(); }, []);
 
-  const createVariable = async () => {
-    if (!newVar.name.trim()) {
-      setError('Name is required');
-      return;
-    }
+  const handleCreate = createForm.handleSubmit(async (values) => {
     try {
-      await api.createVariable(newVar);
+      await api.createVariable(values as VariableCreate);
       setShowCreate(false);
-      setNewVar({ name: '', value: '', type: 'text', description: '' });
+      createForm.reset();
       setError('');
       loadVariables();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed');
     }
-  };
+  });
 
   const deleteVariable = (v: Variable) => {
     setConfirmDel({ id: v.id, name: v.name, onConfirm: async () => {
@@ -84,20 +103,20 @@ function VariablesTab() {
 
   const startEdit = (v: Variable) => {
     setEditingVar(v);
-    setEditForm({ name: v.name, value: v.value, type: v.type as VariableCreate['type'], description: v.description ?? '' });
+    editForm.reset({ name: v.name, value: v.value, type: v.type as VariableFormValues['type'], description: v.description ?? '' });
   };
 
-  const saveEdit = async () => {
+  const handleEdit = editForm.handleSubmit(async (values) => {
     if (!editingVar) return;
     try {
-      await api.updateVariable(editingVar.id, editForm);
+      await api.updateVariable(editingVar.id, values);
       setEditingVar(null);
       setError('');
       loadVariables();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed');
     }
-  };
+  });
 
   if (loading) return <div className="text-sm text-gray-500">Loading variables…</div>;
 
@@ -114,16 +133,15 @@ function VariablesTab() {
       {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-lg mb-4">{error}</div>}
 
       {showCreate && (
-        <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg mb-4 flex flex-wrap items-end gap-3">
+        <form onSubmit={handleCreate} className="bg-gray-50 border border-gray-200 p-4 rounded-lg mb-4 flex flex-wrap items-end gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
-            <input placeholder="Name" value={newVar.name} onChange={e => setNewVar(v => ({ ...v, name: e.target.value }))}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input {...createForm.register('name')} placeholder="Name" className={inputClass} />
+            {createForm.formState.errors.name && <p className={errorClass}>{createForm.formState.errors.name.message}</p>}
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
-            <select value={newVar.type} onChange={e => setNewVar(v => ({ ...v, type: e.target.value as VariableCreate['type'] }))}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <select {...createForm.register('type')} className={inputClass}>
               <option value="text">Text</option>
               <option value="number">Number</option>
               <option value="boolean">Boolean</option>
@@ -131,16 +149,14 @@ function VariablesTab() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Value</label>
-            <input placeholder="Value" value={newVar.value} onChange={e => setNewVar(v => ({ ...v, value: e.target.value }))}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input {...createForm.register('value')} placeholder="Value" className={inputClass} />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Description</label>
-            <input placeholder="Description (optional)" value={newVar.description ?? ''} onChange={e => setNewVar(v => ({ ...v, description: e.target.value }))}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input {...createForm.register('description')} placeholder="Description (optional)" className={inputClass} />
           </div>
-          <button onClick={createVariable} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors">Save</button>
-        </div>
+          <button type="submit" className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors">Save</button>
+        </form>
       )}
 
       {editingVar && (
@@ -150,34 +166,33 @@ function VariablesTab() {
               <h3 className="text-lg font-semibold">Edit Variable</h3>
               <button onClick={() => setEditingVar(null)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
             </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-              <input value={editForm.name ?? ''} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-              <select value={editForm.type ?? 'text'} onChange={e => setEditForm(f => ({ ...f, type: e.target.value as VariableCreate['type'] }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="text">Text</option>
-                <option value="number">Number</option>
-                <option value="boolean">Boolean</option>
-              </select>
-            </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Value</label>
-              <input value={editForm.value ?? ''} onChange={e => setEditForm(f => ({ ...f, value: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <input value={editForm.description ?? ''} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setEditingVar(null)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors">Cancel</button>
-              <button onClick={saveEdit} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors">Save Changes</button>
-            </div>
+            <form onSubmit={handleEdit}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <input {...editForm.register('name')} className={inputClassFull} />
+                {editForm.formState.errors.name && <p className={errorClass}>{editForm.formState.errors.name.message}</p>}
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <select {...editForm.register('type')} className={inputClassFull}>
+                  <option value="text">Text</option>
+                  <option value="number">Number</option>
+                  <option value="boolean">Boolean</option>
+                </select>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Value</label>
+                <input {...editForm.register('value')} className={inputClassFull} />
+              </div>
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <input {...editForm.register('description')} className={inputClassFull} />
+              </div>
+              <div className="flex justify-end gap-3">
+                <button type="button" onClick={() => setEditingVar(null)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors">Save Changes</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { api } from '../lib/api';
 import { Plus, Trash2, Pencil, X, Eye, EyeOff } from 'lucide-react';
 
@@ -9,18 +12,6 @@ interface Connection {
   api_key?: string;
   created_at: string;
   updated_at: string;
-}
-
-interface ConnectionCreate {
-  name: string;
-  provider: string;
-  api_key: string;
-}
-
-interface ConnectionUpdate {
-  name?: string;
-  provider?: string;
-  api_key?: string;
 }
 
 const providerOptions = [
@@ -35,17 +26,42 @@ const providerBadge: Record<string, string> = {
   custom: 'bg-gray-100 text-gray-700',
 };
 
+const createSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  provider: z.string().min(1, 'Provider is required'),
+  api_key: z.string().min(1, 'API key is required'),
+});
+
+const editSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  provider: z.string().min(1, 'Provider is required'),
+  api_key: z.string().optional(),
+});
+
+type CreateFormValues = z.infer<typeof createSchema>;
+type EditFormValues = z.infer<typeof editSchema>;
+
+const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500';
+const errorClass = 'text-xs text-red-600 mt-1';
+
 export function ConnectionsPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
-  const [newConn, setNewConn] = useState<ConnectionCreate>({ name: '', provider: 'openweathermap', api_key: '' });
   const [editingConn, setEditingConn] = useState<Connection | null>(null);
-  const [editForm, setEditForm] = useState<ConnectionUpdate>({});
   const [confirmDel, setConfirmDel] = useState<{id: string; name: string; onConfirm: () => void} | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
+
+  const createForm = useForm<CreateFormValues>({
+    resolver: zodResolver(createSchema),
+    defaultValues: { name: '', provider: 'openweathermap', api_key: '' },
+  });
+
+  const editForm = useForm<EditFormValues>({
+    resolver: zodResolver(editSchema),
+  });
 
   const loadConnections = () => {
     setLoading(true);
@@ -60,30 +76,21 @@ export function ConnectionsPage() {
 
   useEffect(() => { loadConnections(); }, []);
 
-  const createConnection = async () => {
-    if (!newConn.name.trim()) {
-      setError('Name is required');
-      return;
-    }
-    if (!newConn.api_key.trim()) {
-      setError('API key is required');
-      return;
-    }
+  const handleCreate = createForm.handleSubmit(async (values) => {
     try {
-      // Transform to backend schema: credentials is a dict
       await api.post<Connection>('/api/connections', {
-        name: newConn.name,
-        provider: newConn.provider,
-        credentials: { api_key: newConn.api_key }
+        name: values.name,
+        provider: values.provider,
+        credentials: { api_key: values.api_key },
       });
       setShowCreate(false);
-      setNewConn({ name: '', provider: 'openweathermap', api_key: '' });
+      createForm.reset();
       setError('');
       loadConnections();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed');
     }
-  };
+  });
 
   const deleteConnection = (c: Connection) => {
     setConfirmDel({ id: c.id, name: c.name, onConfirm: async () => {
@@ -98,45 +105,34 @@ export function ConnectionsPage() {
 
   const startEdit = (c: Connection) => {
     setEditingConn(c);
-    setEditForm({ name: c.name, provider: c.provider, api_key: c.api_key });
+    editForm.reset({ name: c.name, provider: c.provider, api_key: '' });
   };
 
-  const saveEdit = async () => {
+  const handleEdit = editForm.handleSubmit(async (values) => {
     if (!editingConn) return;
     try {
-      // Transform to backend schema: credentials is a dict
       const payload: { name?: string; credentials?: { api_key: string } } = {};
-      if (editForm.name !== undefined) payload.name = editForm.name;
-      if (editForm.api_key !== undefined) payload.credentials = { api_key: editForm.api_key };
-
+      if (values.name) payload.name = values.name;
+      if (values.api_key) payload.credentials = { api_key: values.api_key };
       await api.put<Connection>(`/api/connections/${editingConn.id}`, payload);
       setEditingConn(null);
-      setEditForm({});
       setError('');
       loadConnections();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed');
     }
-  };
+  });
 
   const toggleKeyVisibility = async (id: string) => {
     if (visibleKeys.has(id)) {
-      // Hide key
-      setVisibleKeys(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
+      setVisibleKeys(prev => { const next = new Set(prev); next.delete(id); return next; });
     } else {
-      // Show key - fetch full connection details
       try {
         const detail = await api.get<Connection & { credentials: { api_key: string } }>(`/api/connections/${id}`);
-        setConnections(prev => prev.map(c =>
-          c.id === id ? { ...c, api_key: detail.credentials.api_key } : c
-        ));
+        setConnections(prev => prev.map(c => c.id === id ? { ...c, api_key: detail.credentials.api_key } : c));
         setVisibleKeys(prev => new Set(prev).add(id));
-      } catch (e: any) {
-        setError(e.message);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed');
       }
     }
   };
@@ -160,9 +156,7 @@ export function ConnectionsPage() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
-          {error}
-        </div>
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">{error}</div>
       )}
 
       {showCreate && (
@@ -170,48 +164,30 @@ export function ConnectionsPage() {
           <div className="bg-white rounded-lg shadow-xl w-[500px] p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">New Connection</h3>
-              <button onClick={() => { setShowCreate(false); setError(''); }} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
+              <button onClick={() => { setShowCreate(false); createForm.reset(); }} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
             </div>
-            <div className="space-y-4">
+            <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                <input
-                  type="text"
-                  value={newConn.name}
-                  onChange={e => setNewConn({...newConn, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="My Weather API"
-                />
+                <input {...createForm.register('name')} className={inputClass} placeholder="My Weather API" />
+                {createForm.formState.errors.name && <p className={errorClass}>{createForm.formState.errors.name.message}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Provider</label>
-                <select
-                  value={newConn.provider}
-                  onChange={e => setNewConn({...newConn, provider: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {providerOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
+                <select {...createForm.register('provider')} className={inputClass}>
+                  {providerOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-                <input
-                  type="password"
-                  value={newConn.api_key}
-                  onChange={e => setNewConn({...newConn, api_key: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter API key"
-                />
+                <input {...createForm.register('api_key')} type="password" className={inputClass} placeholder="Enter API key" />
+                {createForm.formState.errors.api_key && <p className={errorClass}>{createForm.formState.errors.api_key.message}</p>}
               </div>
-            </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <button onClick={() => { setShowCreate(false); setError(''); }} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md">Cancel</button>
-              <button onClick={createConnection} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md">Create</button>
-            </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => { setShowCreate(false); createForm.reset(); }} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md">Create</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -221,47 +197,29 @@ export function ConnectionsPage() {
           <div className="bg-white rounded-lg shadow-xl w-[500px] p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Edit Connection</h3>
-              <button onClick={() => { setEditingConn(null); setEditForm({}); setError(''); }} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
+              <button onClick={() => setEditingConn(null)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
             </div>
-            <div className="space-y-4">
+            <form onSubmit={handleEdit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                <input
-                  type="text"
-                  value={editForm.name ?? ''}
-                  onChange={e => setEditForm({...editForm, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <input {...editForm.register('name')} className={inputClass} />
+                {editForm.formState.errors.name && <p className={errorClass}>{editForm.formState.errors.name.message}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Provider</label>
-                <select
-                  value={editForm.provider ?? ''}
-                  onChange={e => setEditForm({...editForm, provider: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {providerOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
+                <select {...editForm.register('provider')} className={inputClass}>
+                  {providerOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-                <input
-                  type="password"
-                  value={editForm.api_key ?? ''}
-                  onChange={e => setEditForm({...editForm, api_key: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Leave blank to keep current key"
-                />
+                <input {...editForm.register('api_key')} type="password" className={inputClass} placeholder="Leave blank to keep current key" />
               </div>
-            </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <button onClick={() => { setEditingConn(null); setEditForm({}); setError(''); }} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md">Cancel</button>
-              <button onClick={saveEdit} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md">Save</button>
-            </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setEditingConn(null)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md">Save</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -299,26 +257,16 @@ export function ConnectionsPage() {
                       <code className="text-xs text-gray-600 font-mono">
                         {visibleKeys.has(c.id) ? c.api_key : maskKey(c.api_key)}
                       </code>
-                      <button
-                        onClick={() => toggleKeyVisibility(c.id)}
-                        className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                        title={visibleKeys.has(c.id) ? 'Hide key' : 'Show key'}
-                      >
+                      <button onClick={() => toggleKeyVisibility(c.id)} className="p-1 text-gray-400 hover:text-gray-600 transition-colors" title={visibleKeys.has(c.id) ? 'Hide key' : 'Show key'}>
                         {visibleKeys.has(c.id) ? <EyeOff size={14} /> : <Eye size={14} />}
                       </button>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {new Date(c.created_at).toLocaleDateString()}
-                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">{new Date(c.created_at).toLocaleDateString()}</td>
                   <td className="px-6 py-4 text-sm text-right">
                     <div className="flex justify-end gap-2">
-                      <button onClick={() => startEdit(c)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Edit">
-                        <Pencil size={14} />
-                      </button>
-                      <button onClick={() => deleteConnection(c)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Delete">
-                        <Trash2 size={14} />
-                      </button>
+                      <button onClick={() => startEdit(c)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Edit"><Pencil size={14} /></button>
+                      <button onClick={() => deleteConnection(c)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Delete"><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
@@ -347,3 +295,4 @@ export function ConnectionsPage() {
     </div>
   );
 }
+

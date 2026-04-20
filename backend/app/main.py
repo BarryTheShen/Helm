@@ -121,6 +121,10 @@ app = FastAPI(
 from app.middleware.sandbox import SandboxMiddleware  # noqa: E402
 app.add_middleware(SandboxMiddleware)
 
+# SessionMiddleware is required by SQLAdmin's authentication backend
+from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
+app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -166,6 +170,132 @@ try:
     logger.info(f"MCP server mounted at {settings.mcp_path}")
 except Exception as exc:
     logger.warning(f"MCP server not mounted: {exc}")
+
+# Mount SQLAdmin database browser at /admin/db
+try:
+    from sqladmin import Admin, ModelView
+    from sqladmin.authentication import AuthenticationBackend
+    from starlette.requests import Request as StarletteRequest
+    from app.models import (
+        User, Session, AuditLog, ChatMessage, CalendarEvent,
+        ComponentRegistry, Connection, CustomVariable, DataSource,
+        Notification, AgentConfig, ModuleState, SDUITemplate,
+        TriggerDefinition, Workflow,
+    )
+    from app.database import engine
+
+    class HelmAdminAuth(AuthenticationBackend):
+        async def login(self, request: StarletteRequest) -> bool:
+            form = await request.form()
+            username = form.get("username", "")
+            password = form.get("password", "")
+            if username == "admin" and password == settings.secret_key:
+                request.session.update({"admin_authenticated": True})
+                return True
+            return False
+
+        async def logout(self, request: StarletteRequest) -> bool:
+            request.session.clear()
+            return True
+
+        async def authenticate(self, request: StarletteRequest) -> bool:
+            return request.session.get("admin_authenticated", False)
+
+    class UserAdmin(ModelView, model=User):
+        column_list = ["id", "username", "email", "is_admin", "created_at"]
+        name = "User"
+        name_plural = "Users"
+
+    class SessionAdmin(ModelView, model=Session):
+        column_list = ["id", "user_id", "created_at", "expires_at"]
+        name = "Session"
+        name_plural = "Sessions"
+
+    class AuditLogAdmin(ModelView, model=AuditLog):
+        column_list = ["id", "user_id", "action", "resource_type", "created_at"]
+        name = "Audit Log"
+        name_plural = "Audit Logs"
+
+    class ChatMessageAdmin(ModelView, model=ChatMessage):
+        column_list = ["id", "user_id", "role", "created_at"]
+        name = "Chat Message"
+        name_plural = "Chat Messages"
+
+    class CalendarEventAdmin(ModelView, model=CalendarEvent):
+        column_list = ["id", "user_id", "title", "start_time", "end_time"]
+        name = "Calendar Event"
+        name_plural = "Calendar Events"
+
+    class ComponentRegistryAdmin(ModelView, model=ComponentRegistry):
+        column_list = ["id", "type", "name", "tier", "authorable"]
+        name = "Component"
+        name_plural = "Components"
+
+    class ConnectionAdmin(ModelView, model=Connection):
+        column_list = ["id", "user_id", "name", "provider", "created_at"]
+        name = "Connection"
+        name_plural = "Connections"
+
+    class CustomVariableAdmin(ModelView, model=CustomVariable):
+        column_list = ["id", "user_id", "name", "type", "value"]
+        name = "Variable"
+        name_plural = "Variables"
+
+    class DataSourceAdmin(ModelView, model=DataSource):
+        column_list = ["id", "user_id", "name", "type", "connector"]
+        name = "Data Source"
+        name_plural = "Data Sources"
+
+    class NotificationAdmin(ModelView, model=Notification):
+        column_list = ["id", "user_id", "title", "severity", "read", "created_at"]
+        name = "Notification"
+        name_plural = "Notifications"
+
+    class AgentConfigAdmin(ModelView, model=AgentConfig):
+        column_list = ["id", "user_id", "model", "updated_at"]
+        name = "Agent Config"
+        name_plural = "Agent Configs"
+
+    class ModuleStateAdmin(ModelView, model=ModuleState):
+        column_list = ["id", "user_id", "module_id", "enabled"]
+        name = "Module State"
+        name_plural = "Module States"
+
+    class TemplateAdmin(ModelView, model=SDUITemplate):
+        column_list = ["id", "name", "category", "is_public", "created_at"]
+        name = "Template"
+        name_plural = "Templates"
+
+    class TriggerAdmin(ModelView, model=TriggerDefinition):
+        column_list = ["id", "user_id", "name", "trigger_type", "enabled"]
+        name = "Trigger"
+        name_plural = "Triggers"
+
+    class WorkflowAdmin(ModelView, model=Workflow):
+        column_list = ["id", "user_id", "name", "enabled", "created_at"]
+        name = "Workflow"
+        name_plural = "Workflows"
+
+    _sqladmin_auth = HelmAdminAuth(secret_key=settings.secret_key)
+    sqladmin = Admin(app, engine, base_url="/admin/db", authentication_backend=_sqladmin_auth)
+    sqladmin.add_view(UserAdmin)
+    sqladmin.add_view(SessionAdmin)
+    sqladmin.add_view(AuditLogAdmin)
+    sqladmin.add_view(ChatMessageAdmin)
+    sqladmin.add_view(CalendarEventAdmin)
+    sqladmin.add_view(ComponentRegistryAdmin)
+    sqladmin.add_view(ConnectionAdmin)
+    sqladmin.add_view(CustomVariableAdmin)
+    sqladmin.add_view(DataSourceAdmin)
+    sqladmin.add_view(NotificationAdmin)
+    sqladmin.add_view(AgentConfigAdmin)
+    sqladmin.add_view(ModuleStateAdmin)
+    sqladmin.add_view(TemplateAdmin)
+    sqladmin.add_view(TriggerAdmin)
+    sqladmin.add_view(WorkflowAdmin)
+    logger.info("SQLAdmin mounted at /admin/db")
+except Exception as exc:
+    logger.warning(f"SQLAdmin not mounted: {exc}")
 
 # Mount admin panel static files if built
 import os
