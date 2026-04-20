@@ -11,6 +11,8 @@ from app.services.websocket_manager import manager
 
 router = APIRouter(tags=["websocket"])
 
+_HEARTBEAT_INTERVAL = 30  # seconds
+
 
 async def _authenticate_ws(token: str | None) -> tuple[str | None, str | None]:
     """Validate WS token and return (user_id, device_id), or (None, None) if invalid."""
@@ -21,6 +23,22 @@ async def _authenticate_ws(token: str | None) -> tuple[str | None, str | None]:
         if session is None:
             return None, None
         return str(session.user_id), session.device_id
+
+
+async def _heartbeat(websocket: WebSocket, user_id: str) -> None:
+    """Send server-initiated pings every 30s; exits when the connection closes."""
+    try:
+        while True:
+            await asyncio.sleep(_HEARTBEAT_INTERVAL)
+            try:
+                await websocket.send_json({"type": "ping"})
+            except Exception:
+                # Connection is dead — disconnect and stop
+                manager.disconnect(websocket, user_id)
+                logger.info(f"WS heartbeat pruned stale connection: user={user_id}")
+                return
+    except asyncio.CancelledError:
+        pass
 
 
 @router.websocket("/ws")
@@ -39,6 +57,8 @@ async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket, user_id, device_id)
     await manager.send(user_id, {"type": "connected", "user_id": user_id, "device_id": device_id})
 
+    heartbeat_task = asyncio.create_task(_heartbeat(websocket, user_id))
+
     try:
         while True:
             data = await websocket.receive_json()
@@ -48,6 +68,8 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as exc:
         logger.exception(f"WS error for user={user_id}: {exc}")
         manager.disconnect(websocket, user_id)
+    finally:
+        heartbeat_task.cancel()
 
 
 async def _handle_message(websocket: WebSocket, user_id: str, data: dict[str, Any]) -> None:

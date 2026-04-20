@@ -89,6 +89,19 @@ class ConnectionManager:
                 result.append((user_id, conn))
         return result
 
+    async def ping_all(self) -> None:
+        """Send a server-initiated ping to all connections; prune any that fail."""
+        for user_id in list(self._connections.keys()):
+            dead: list[WebSocket] = []
+            for conn in self._connections.get(user_id, []):
+                try:
+                    await conn.websocket.send_json({"type": "ping"})
+                except Exception:
+                    dead.append(conn.websocket)
+            for ws in dead:
+                self.disconnect(ws, user_id)
+                logger.info(f"WS pruned stale connection: user={user_id}")
+
 
 # Singleton shared across the app
 manager = ConnectionManager()

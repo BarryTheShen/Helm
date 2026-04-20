@@ -1,5 +1,10 @@
 import type { SetupRequest, SetupResponse, LoginRequest, LoginResponse } from '@/types/api';
 
+export interface RefreshResponse {
+  session_token: string;
+  expires_at: string;
+}
+
 export class AuthService {
   private baseUrl: string;
 
@@ -32,6 +37,20 @@ export class AuthService {
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: response.statusText }));
       throw new Error(error.detail || 'Login failed');
+    }
+
+    return response.json();
+  }
+
+  async refresh(token: string): Promise<RefreshResponse> {
+    const response = await fetch(`${this.baseUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || 'Token refresh failed');
     }
 
     return response.json();

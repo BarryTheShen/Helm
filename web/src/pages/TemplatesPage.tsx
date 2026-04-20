@@ -5,6 +5,7 @@ import { Globe, Trash2, Search, Eye, Upload, Smartphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { SDUIPreview } from '../components/SDUIPreview';
 import { AppPreview } from '../components/AppPreview';
+import { useResource } from '../hooks/useResource';
 
 interface Template {
   id: string;
@@ -39,10 +40,8 @@ const categoryColors: Record<string, string> = {
 };
 
 export function TemplatesPage() {
-  const [templates, setTemplates] = useState<Template[]>([]);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [loading, setLoading] = useState(true);
 
   // Preview modal
   const [previewTemplate, setPreviewTemplate] = useState<TemplateDetail | null>(null);
@@ -58,26 +57,19 @@ export function TemplatesPage() {
 
   const navigate = useNavigate();
 
-  const fetchTemplates = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data: templateData, loading, refetch: fetchTemplates } = useResource<PaginatedResponse<Template>>(
+    () => {
       let url = '/api/templates';
       const params: string[] = [];
       if (search) params.push(`search=${encodeURIComponent(search)}`);
       if (categoryFilter) params.push(`category=${encodeURIComponent(categoryFilter)}`);
       if (params.length > 0) url += '?' + params.join('&');
-      const data = await api.get<PaginatedResponse<Template>>(url);
-      setTemplates(data.items || []);
-    } catch {
-      setTemplates([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [search, categoryFilter]);
+      return api.get<PaginatedResponse<Template>>(url);
+    },
+    [search, categoryFilter],
+  );
 
-  useEffect(() => {
-    fetchTemplates();
-  }, [fetchTemplates]);
+  const templates = templateData?.items ?? [];
 
   useEffect(() => {
     if (!applyingTemplate) return;

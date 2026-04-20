@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import ReactFlow, {
   Controls,
@@ -9,10 +9,11 @@ import ReactFlow, {
   MarkerType,
   Panel,
 } from 'reactflow';
-import type { Node, Edge, Connection, NodeTypes } from 'reactflow';
+import type { Node, Connection, NodeTypes } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { api, type Workflow, type WorkflowCreate, type WorkflowUpdate } from '../lib/api';
-import { Plus, Save, Play, Upload, Trash2, X, Settings, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Save, Play, Upload, Trash2, X } from 'lucide-react';
+import { useResource } from '../hooks/useResource';
 
 // Custom node components
 function ActionNode({ data }: { data: any }) {
@@ -68,7 +69,6 @@ interface WorkflowListItem {
 }
 
 export function WorkflowsPage() {
-  const [workflows, setWorkflows] = useState<WorkflowListItem[]>([]);
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -85,18 +85,11 @@ export function WorkflowsPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importJson, setImportJson] = useState('');
 
-  const loadWorkflows = useCallback(async () => {
-    try {
-      const data = await api.getWorkflows();
-      setWorkflows(data.items);
-    } catch (err) {
-      toast.error('Failed to load workflows');
-    }
-  }, []);
-
-  useEffect(() => {
-    loadWorkflows();
-  }, [loadWorkflows]);
+  const { data: workflowData, refetch: loadWorkflows } = useResource<{ items: WorkflowListItem[] }>(
+    () => api.getWorkflows(),
+    [],
+  );
+  const workflows = workflowData?.items ?? [];
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge({ ...params, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
