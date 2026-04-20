@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { toast } from 'sonner';
 import ReactFlow, {
   Controls,
   Background,
@@ -74,7 +75,6 @@ export function WorkflowsPage() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [showWorkflowList, setShowWorkflowList] = useState(true);
   const [showNodeInspector, setShowNodeInspector] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
   // Create workflow modal
@@ -85,19 +85,14 @@ export function WorkflowsPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importJson, setImportJson] = useState('');
 
-  const showMsg = useCallback((type: 'success' | 'error', text: string) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 3000);
-  }, []);
-
   const loadWorkflows = useCallback(async () => {
     try {
       const data = await api.getWorkflows();
       setWorkflows(data.items);
     } catch (err) {
-      showMsg('error', 'Failed to load workflows');
+      toast.error('Failed to load workflows');
     }
-  }, [showMsg]);
+  }, []);
 
   useEffect(() => {
     loadWorkflows();
@@ -133,11 +128,11 @@ export function WorkflowsPage() {
 
       setShowWorkflowList(false);
     } catch (err) {
-      showMsg('error', 'Failed to load workflow');
+      toast.error('Failed to load workflow');
     } finally {
       setLoading(false);
     }
-  }, [setNodes, setEdges, showMsg]);
+  }, [setNodes, setEdges]);
 
   const saveWorkflow = useCallback(async () => {
     if (!selectedWorkflow) return;
@@ -148,13 +143,13 @@ export function WorkflowsPage() {
         graph: { nodes, edges },
       };
       await api.updateWorkflow(selectedWorkflow.id, update);
-      showMsg('success', 'Workflow saved');
+      toast.success('Workflow saved');
     } catch (err) {
-      showMsg('error', 'Failed to save workflow');
+      toast.error('Failed to save workflow');
     } finally {
       setLoading(false);
     }
-  }, [selectedWorkflow, nodes, edges, showMsg]);
+  }, [selectedWorkflow, nodes, edges]);
 
   const executeWorkflow = useCallback(async () => {
     if (!selectedWorkflow) return;
@@ -162,13 +157,13 @@ export function WorkflowsPage() {
     setLoading(true);
     try {
       const result = await api.executeWorkflow(selectedWorkflow.id);
-      showMsg('success', `Workflow executed: ${result.status}`);
+      toast.success(`Workflow executed: ${result.status}`);
     } catch (err) {
-      showMsg('error', 'Failed to execute workflow');
+      toast.error('Failed to execute workflow');
     } finally {
       setLoading(false);
     }
-  }, [selectedWorkflow, showMsg]);
+  }, [selectedWorkflow]);
 
   const createWorkflow = useCallback(async () => {
     if (!createForm.name.trim()) return;
@@ -184,15 +179,15 @@ export function WorkflowsPage() {
       const newWf = await api.createWorkflow(data);
       setShowCreateModal(false);
       setCreateForm({ name: '', description: '', trigger_type: 'manual' });
-      showMsg('success', 'Workflow created');
+      toast.success('Workflow created');
       await loadWorkflows();
       loadWorkflow(newWf.id);
     } catch (err) {
-      showMsg('error', 'Failed to create workflow');
+      toast.error('Failed to create workflow');
     } finally {
       setLoading(false);
     }
-  }, [createForm, loadWorkflows, loadWorkflow, showMsg]);
+  }, [createForm, loadWorkflows, loadWorkflow]);
 
   const deleteWorkflow = useCallback(async (id: string) => {
     if (!confirm('Delete this workflow?')) return;
@@ -200,7 +195,7 @@ export function WorkflowsPage() {
     setLoading(true);
     try {
       await api.deleteWorkflow(id);
-      showMsg('success', 'Workflow deleted');
+      toast.success('Workflow deleted');
       await loadWorkflows();
       if (selectedWorkflow?.id === id) {
         setSelectedWorkflow(null);
@@ -209,11 +204,11 @@ export function WorkflowsPage() {
         setShowWorkflowList(true);
       }
     } catch (err) {
-      showMsg('error', 'Failed to delete workflow');
+      toast.error('Failed to delete workflow');
     } finally {
       setLoading(false);
     }
-  }, [selectedWorkflow, loadWorkflows, setNodes, setEdges, showMsg]);
+  }, [selectedWorkflow, loadWorkflows, setNodes, setEdges]);
 
   const importN8n = useCallback(async () => {
     if (!importJson.trim()) return;
@@ -231,13 +226,13 @@ export function WorkflowsPage() {
       setEdges((result.workflow.edges || []).map((e: any) => ({ ...e, markerEnd: { type: MarkerType.ArrowClosed } })));
       setShowImportModal(false);
       setImportJson('');
-      showMsg('success', 'n8n workflow imported');
+      toast.success('n8n workflow imported');
     } catch (err) {
-      showMsg('error', 'Failed to import n8n workflow');
+      toast.error('Failed to import n8n workflow');
     } finally {
       setLoading(false);
     }
-  }, [importJson, setNodes, setEdges, showMsg]);
+  }, [importJson, setNodes, setEdges]);
 
   const addNode = useCallback((type: 'action' | 'condition' | 'switch' | 'loop') => {
     const id = `${type}-${Date.now()}`;
@@ -313,13 +308,6 @@ export function WorkflowsPage() {
           </button>
         </div>
       </div>
-
-      {/* Message Banner */}
-      {message && (
-        <div className={`px-6 py-3 text-sm ${message.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
-          {message.text}
-        </div>
-      )}
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">

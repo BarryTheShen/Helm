@@ -880,7 +880,7 @@ function RowDragHandle({
           : 'opacity-0 cursor-grab group-hover:opacity-100'
       }`}
       style={{
-        left: -ROW_DRAG_HANDLE_MARGIN,
+        left: 4,
         top: 0,
         bottom: 0,
         width: ROW_DRAG_HANDLE_WIDTH

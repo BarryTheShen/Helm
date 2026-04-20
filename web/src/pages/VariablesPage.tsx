@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -54,7 +55,6 @@ function VariablesTab() {
   const [variables, setVariables] = useState<Variable[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [editingVar, setEditingVar] = useState<Variable | null>(null);
   const [confirmDel, setConfirmDel] = useState<{id: string; name: string; onConfirm: () => void} | null>(null);
@@ -73,7 +73,7 @@ function VariablesTab() {
     api.getVariables().then(data => {
       setVariables(data.items);
       setTotal(data.total);
-    }).catch(e => setError(e.message)).finally(() => setLoading(false));
+    }).catch(e => toast.error(e.message)).finally(() => setLoading(false));
   };
 
   useEffect(() => { loadVariables(); }, []);
@@ -83,10 +83,10 @@ function VariablesTab() {
       await api.createVariable(values as VariableCreate);
       setShowCreate(false);
       createForm.reset();
-      setError('');
+      toast.success('Variable created');
       loadVariables();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed');
+      toast.error(e instanceof Error ? e.message : 'Failed');
     }
   });
 
@@ -94,9 +94,10 @@ function VariablesTab() {
     setConfirmDel({ id: v.id, name: v.name, onConfirm: async () => {
       try {
         await api.deleteVariable(v.id);
+        toast.success('Variable deleted');
         loadVariables();
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed');
+        toast.error(e instanceof Error ? e.message : 'Failed');
       }
     }});
   };
@@ -111,10 +112,10 @@ function VariablesTab() {
     try {
       await api.updateVariable(editingVar.id, values);
       setEditingVar(null);
-      setError('');
+      toast.success('Variable updated');
       loadVariables();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed');
+      toast.error(e instanceof Error ? e.message : 'Failed');
     }
   });
 
@@ -129,8 +130,6 @@ function VariablesTab() {
           Add Variable
         </button>
       </div>
-
-      {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-lg mb-4">{error}</div>}
 
       {showCreate && (
         <form onSubmit={handleCreate} className="bg-gray-50 border border-gray-200 p-4 rounded-lg mb-4 flex flex-wrap items-end gap-3">
@@ -281,8 +280,6 @@ function DataSourcesTab() {
   const [sources, setSources] = useState<DataSource[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [newSource, setNewSource] = useState<DataSourceCreate>({ name: '', type: '', connector: '', config_json: '{}' });
   const [editingSource, setEditingSource] = useState<DataSource | null>(null);
@@ -296,38 +293,38 @@ function DataSourcesTab() {
     api.getDataSources().then(data => {
       setSources(data.items);
       setTotal(data.total);
-    }).catch(e => setError(e.message)).finally(() => setLoading(false));
+    }).catch(e => toast.error(e.message)).finally(() => setLoading(false));
   };
 
   useEffect(() => { loadSources(); }, []);
 
   const createSource = async () => {
     if (!newSource.name.trim()) {
-      setError('Name is required');
+      toast.error('Name is required');
       return;
     }
     if (!newSource.type.trim()) {
-      setError('Type is required');
+      toast.error('Type is required');
       return;
     }
     if (!newSource.connector.trim()) {
-      setError('Connector is required');
+      toast.error('Connector is required');
       return;
     }
     try {
       JSON.parse(newSource.config_json ?? '{}');
     } catch {
-      setError('Config must be valid JSON');
+      toast.error('Config must be valid JSON');
       return;
     }
     try {
       await api.createDataSource(newSource);
       setShowCreate(false);
       setNewSource({ name: '', type: '', connector: '', config_json: '{}' });
-      setError('');
+      toast.success('Data source created');
       loadSources();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed');
+      toast.error(e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -335,11 +332,10 @@ function DataSourcesTab() {
     setConfirmDel({ id: s.id, name: s.name, onConfirm: async () => {
       try {
         await api.deleteDataSource(s.id);
-        setSuccess('Data source deleted');
-        setTimeout(() => setSuccess(''), 3000);
+        toast.success('Data source deleted');
         loadSources();
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed');
+        toast.error(e instanceof Error ? e.message : 'Failed');
       }
     }});
   };
@@ -354,18 +350,16 @@ function DataSourcesTab() {
     try {
       JSON.parse(editForm.config_json || '{}');
     } catch {
-      setError('Config must be valid JSON');
+      toast.error('Config must be valid JSON');
       return;
     }
     try {
       await api.updateDataSource(editingSource.id, editForm);
       setEditingSource(null);
-      setSuccess('Data source updated');
-      setError('');
-      setTimeout(() => setSuccess(''), 3000);
+      toast.success('Data source updated');
       loadSources();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed');
+      toast.error(e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -375,7 +369,7 @@ function DataSourcesTab() {
       const schema = await api.getDataSourceSchema(s.id);
       setSchemaModal(schema);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load schema');
+      toast.error(e instanceof Error ? e.message : 'Failed to load schema');
     } finally {
       setSchemaLoading(false);
     }
@@ -392,9 +386,6 @@ function DataSourcesTab() {
           Add Data Source
         </button>
       </div>
-
-      {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-lg mb-4">{error}</div>}
-      {success && <div className="text-green-600 text-sm bg-green-50 p-3 rounded-lg mb-4">{success}</div>}
 
       {showCreate && (
         <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg mb-4 flex flex-col gap-3">

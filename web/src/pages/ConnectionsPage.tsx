@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -48,7 +49,6 @@ export function ConnectionsPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [editingConn, setEditingConn] = useState<Connection | null>(null);
   const [confirmDel, setConfirmDel] = useState<{id: string; name: string; onConfirm: () => void} | null>(null);
@@ -70,7 +70,7 @@ export function ConnectionsPage() {
         setConnections(data.items);
         setTotal(data.total);
       })
-      .catch(e => setError(e.message))
+      .catch(e => toast.error(e.message))
       .finally(() => setLoading(false));
   };
 
@@ -85,10 +85,10 @@ export function ConnectionsPage() {
       });
       setShowCreate(false);
       createForm.reset();
-      setError('');
+      toast.success('Connection created');
       loadConnections();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed');
+      toast.error(e instanceof Error ? e.message : 'Failed');
     }
   });
 
@@ -96,9 +96,10 @@ export function ConnectionsPage() {
     setConfirmDel({ id: c.id, name: c.name, onConfirm: async () => {
       try {
         await api.del<void>(`/api/connections/${c.id}`);
+        toast.success('Connection deleted');
         loadConnections();
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed');
+        toast.error(e instanceof Error ? e.message : 'Failed');
       }
     }});
   };
@@ -116,10 +117,10 @@ export function ConnectionsPage() {
       if (values.api_key) payload.credentials = { api_key: values.api_key };
       await api.put<Connection>(`/api/connections/${editingConn.id}`, payload);
       setEditingConn(null);
-      setError('');
+      toast.success('Connection updated');
       loadConnections();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed');
+      toast.error(e instanceof Error ? e.message : 'Failed');
     }
   });
 
@@ -132,7 +133,7 @@ export function ConnectionsPage() {
         setConnections(prev => prev.map(c => c.id === id ? { ...c, api_key: detail.credentials.api_key } : c));
         setVisibleKeys(prev => new Set(prev).add(id));
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Failed');
+        toast.error(e instanceof Error ? e.message : 'Failed');
       }
     }
   };
@@ -154,10 +155,6 @@ export function ConnectionsPage() {
           Add Connection
         </button>
       </div>
-
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">{error}</div>
-      )}
 
       {showCreate && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

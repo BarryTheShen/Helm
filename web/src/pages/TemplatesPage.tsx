@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { Globe, Trash2, Search, Eye, Upload, Smartphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -42,7 +43,6 @@ export function TemplatesPage() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Preview modal
   const [previewTemplate, setPreviewTemplate] = useState<TemplateDetail | null>(null);
@@ -57,11 +57,6 @@ export function TemplatesPage() {
   const [showAppPreview, setShowAppPreview] = useState(false);
 
   const navigate = useNavigate();
-
-  const showMsg = useCallback((type: 'success' | 'error', text: string) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 3000);
-  }, []);
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
@@ -95,31 +90,31 @@ export function TemplatesPage() {
     if (!confirm(`Delete template "${name}"?`)) return;
     try {
       await api.del(`/api/templates/${id}`);
-      showMsg('success', 'Template deleted');
+      toast.success('Template deleted');
       fetchTemplates();
     } catch (err) {
-      showMsg('error', err instanceof Error ? err.message : 'Delete failed');
+      toast.error(err instanceof Error ? err.message : 'Delete failed');
     }
-  }, [fetchTemplates, showMsg]);
+  }, [fetchTemplates]);
 
   const handlePreview = useCallback(async (id: string) => {
     try {
       const detail = await api.get<TemplateDetail>(`/api/templates/${id}`);
       setPreviewTemplate(detail);
     } catch (err) {
-      showMsg('error', err instanceof Error ? err.message : 'Preview failed');
+      toast.error(err instanceof Error ? err.message : 'Preview failed');
     }
-  }, [showMsg]);
+  }, []);
 
   const handleApply = useCallback(async (templateId: string, moduleId: string) => {
     try {
       await api.post(`/api/templates/${templateId}/apply`, { module_id: moduleId });
-      showMsg('success', `Template applied to ${moduleId} as draft`);
+      toast.success(`Template applied to ${moduleId} as draft`);
       setApplyingTemplate(null);
     } catch (err) {
-      showMsg('error', err instanceof Error ? err.message : 'Apply failed');
+      toast.error(err instanceof Error ? err.message : 'Apply failed');
     }
-  }, [showMsg]);
+  }, []);
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', {
@@ -147,12 +142,6 @@ export function TemplatesPage() {
           </button>
         </div>
       </div>
-
-      {message && (
-        <div className={`mb-4 px-4 py-2 rounded text-sm ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-          {message.text}
-        </div>
-      )}
 
       {/* Search and filter bar */}
       <div className="flex items-center gap-3 mb-6">
