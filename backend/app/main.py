@@ -202,7 +202,7 @@ try:
             return request.session.get("admin_authenticated", False)
 
     class UserAdmin(ModelView, model=User):
-        column_list = ["id", "username", "email", "is_admin", "created_at"]
+        column_list = ["id", "username", "role", "created_at"]
         name = "User"
         name_plural = "Users"
 

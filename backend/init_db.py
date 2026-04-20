@@ -34,17 +34,17 @@ async def init_database():
         else:
             admin = User(
                 username="barry",
-                password_hash=hash_password("BarryShen1121"),
-                is_admin=True
+                password_hash=hash_password("BarryShen1121!"),
+                role="admin"
             )
             db.add(admin)
             await db.commit()
-            print("✓ Admin user 'barry' created with password 'BarryShen1121'")
+            print("✓ Admin user 'barry' created with password 'BarryShen1121!'")
 
     await engine.dispose()
     print("\n✓ Database initialization complete!")
     print("  Username: barry")
-    print("  Password: BarryShen1121")
+    print("  Password: BarryShen1121!")
 
 
 if __name__ == "__main__":
