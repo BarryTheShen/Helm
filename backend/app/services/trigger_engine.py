@@ -19,11 +19,14 @@ from app.models.trigger import TriggerDefinition
 logger = logging.getLogger(__name__)
 
 
-async def fire_trigger(trigger: TriggerDefinition, db: AsyncSession) -> list[dict[str, Any]]:
+async def fire_event_trigger(trigger: TriggerDefinition, db: AsyncSession) -> list[dict[str, Any]]:
     """Execute a trigger's action chain.
 
     Parses action_chain_json and runs each action through the action registry.
     Returns a list of results, one per action in the chain.
+
+    Named fire_event_trigger (not fire_trigger) to avoid collision with
+    workflow_engine.fire_trigger(trigger_type, user_id, event_data).
     """
     from app.services.action_registry import registry
 

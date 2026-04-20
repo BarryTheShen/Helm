@@ -158,6 +158,6 @@ async def test_trigger(
     if trigger is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trigger not found")
 
-    from app.services.trigger_engine import fire_trigger
-    fire_result = await fire_trigger(trigger, db)
+    from app.services.trigger_engine import fire_event_trigger
+    fire_result = await fire_event_trigger(trigger, db)
     return {"status": "ok", "trigger_id": trigger_id, "result": fire_result}
