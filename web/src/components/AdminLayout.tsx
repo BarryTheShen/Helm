@@ -1,7 +1,6 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { Users, Workflow, FileText, Paintbrush, Braces, Plug, ScrollText, LogOut, ChevronDown, ChevronRight } from 'lucide-react';
-import { useState } from 'react';
+import { Users, Workflow, FileText, Paintbrush, Braces, Plug, ScrollText, LogOut } from 'lucide-react';
 
 const navItems = [
   { to: '/editor', label: 'Visual Editor', icon: Paintbrush },
@@ -9,12 +8,19 @@ const navItems = [
   { to: '/workflows', label: 'Workflows', icon: Workflow },
   { to: '/variables', label: 'Variables', icon: Braces },
   { to: '/connections', label: 'Connections', icon: Plug },
+  { to: '/logs', label: 'Logs', icon: ScrollText },
 ];
+
+// Pages that require a wide viewport to be usable (admin tooling, not mobile UI)
+const WIDE_VIEWPORT_PAGES = ['/editor'];
+const MIN_EDITOR_WIDTH = 1024;
 
 export function AdminLayout() {
   const logout = useAuthStore(s => s.logout);
   const user = useAuthStore(s => s.user);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const location = useLocation();
+
+  const requiresWideViewport = WIDE_VIEWPORT_PAGES.some(p => location.pathname.startsWith(p));
 
   return (
     <div className="flex h-screen">
@@ -32,23 +38,6 @@ export function AdminLayout() {
             </NavLink>
           ))}
 
-          <button
-            onClick={() => setAdvancedOpen(!advancedOpen)}
-            className="w-full flex items-center gap-3 px-5 py-2.5 text-sm text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-          >
-            {advancedOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-            Advanced
-          </button>
-
-          {advancedOpen && (
-            <NavLink to="/logs" className={({ isActive }) =>
-              `flex items-center gap-3 pl-12 pr-5 py-2.5 text-sm transition-colors ${isActive ? 'text-blue-400 bg-blue-950 border-l-2 border-blue-400' : 'text-gray-400 hover:text-white hover:bg-gray-800 border-l-2 border-transparent'}`
-            }>
-              <ScrollText size={18} />
-              Logs
-            </NavLink>
-          )}
-
           <NavLink to="/settings" className={({ isActive }) =>
             `flex items-center gap-3 px-5 py-2.5 text-sm transition-colors mt-4 ${isActive ? 'text-blue-400 bg-blue-950 border-l-2 border-blue-400' : 'text-gray-400 hover:text-white hover:bg-gray-800 border-l-2 border-transparent'}`
           }>
@@ -65,6 +54,12 @@ export function AdminLayout() {
         </div>
       </aside>
       <main className="flex-1 bg-gray-50 p-6 overflow-auto">
+        {requiresWideViewport && (
+          // Shown only below 1024px (lg breakpoint) — CSS-driven, always reactive to resize
+          <div className="lg:hidden mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 font-medium">
+            The Visual Editor requires a screen at least {MIN_EDITOR_WIDTH}px wide for full functionality.
+          </div>
+        )}
         <Outlet />
       </main>
     </div>

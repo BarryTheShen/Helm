@@ -579,10 +579,11 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
       return;
     }
 
+    const content = cell.content;
     set(() => ({
       clipboard: {
         type: 'component',
-        data: cloneEditorComponent(cell.content),
+        data: cloneEditorComponent(content),
       },
     }));
   },

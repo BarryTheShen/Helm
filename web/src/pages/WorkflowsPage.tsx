@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import ReactFlow, {
   Controls,
   Background,
@@ -8,10 +8,10 @@ import ReactFlow, {
   MarkerType,
   Panel,
 } from 'reactflow';
-import type { Node, Edge, Connection, NodeTypes } from 'reactflow';
+import type { Node, Connection, NodeTypes } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { api, type Workflow, type WorkflowCreate, type WorkflowUpdate } from '../lib/api';
-import { Plus, Save, Play, Upload, Trash2, X, Settings, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Save, Play, Upload, Trash2, X } from 'lucide-react';
 
 // Custom node components
 function ActionNode({ data }: { data: any }) {

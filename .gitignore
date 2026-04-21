@@ -65,3 +65,8 @@ backend/.pytest_*.txt
 # The folder itself is tracked via .gitkeep; only the contents are ignored
 .helm-sessions/current/
 .helm-sessions/archive/
+
+# oh-my-claudecode runtime state (project memory, sessions, subagent tracking)
+.omc/
+**/.omc/
+**/subagent-tracking.json

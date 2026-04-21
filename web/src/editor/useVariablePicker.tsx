@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, KeyboardEvent, ChangeEvent } from 'react';
+import { useState, useCallback, useRef } from 'react';
+import type { KeyboardEvent, ChangeEvent } from 'react';
 
 export interface VariablePickerState {
   isOpen: boolean;
@@ -94,7 +95,6 @@ export function useVariablePicker() {
 
     const target = inputRef.current;
     const value = target.value;
-    const { cursorPosition } = pickerState;
 
     // Find the @ symbol and replace @filter with {{variable}}
     const textBeforeCursor = value.slice(0, target.selectionStart || 0);

@@ -57,12 +57,6 @@ const ACTION_CATEGORIES: ActionCategory[] = [
   },
 ];
 
-const ALL_ACTIONS = ACTION_CATEGORIES.flatMap((cat) => cat.actions);
-
-function getActionLabel(type: string): string {
-  return ALL_ACTIONS.find((a) => a.type === type)?.label ?? type;
-}
-
 interface ParamFieldDef {
   key: string;
   label: string;
