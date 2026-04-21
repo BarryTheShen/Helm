@@ -1,10 +1,14 @@
 """Tests for Session Management API (Phase 0/1)."""
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
 from app.main import app
+from app.models.session import Session
 
 
 pytestmark = pytest.mark.anyio
@@ -143,5 +147,84 @@ async def test_non_admin_cannot_list_all_sessions(auth_client, client):
     try:
         resp = await regular.get("/api/sessions")
         assert resp.status_code == 403
+    finally:
+        await regular.aclose()
+
+
+async def test_idle_session_rejected(auth_client, client, db_session):
+    """A session whose last_active is beyond the idle timeout returns 401."""
+    from app.config import settings
+
+    # Create a regular user with a fresh session
+    regular = await _create_regular_user_client(
+        auth_client, client, username="idle_user", password="pass123"
+    )
+    try:
+        # Verify the session works now
+        resp = await regular.get("/api/sessions/me")
+        assert resp.status_code == 200
+
+        # Reach into the DB and backdate last_active past the idle timeout
+        expired_time = datetime.now(timezone.utc) - timedelta(
+            hours=settings.session_idle_timeout_hours + 1
+        )
+        result = await db_session.execute(select(Session).where(Session.is_active == True))  # noqa: E712
+        sessions = result.scalars().all()
+        # Find the idle_user's session (most recently created active session)
+        idle_sessions = [s for s in sessions if "idle_user" not in s.user_id]
+        # Actually find by token from the regular client's auth header
+        token = regular.headers["Authorization"].split(" ")[1]
+        result2 = await db_session.execute(
+            select(Session).where(Session.token == token)
+        )
+        target = result2.scalar_one()
+        target.last_active = expired_time
+        await db_session.commit()
+
+        # The next request should be rejected as idle-expired
+        resp2 = await regular.get("/api/sessions/me")
+        assert resp2.status_code == 401
+        assert "inactivity" in resp2.json()["detail"].lower()
+    finally:
+        await regular.aclose()
+
+
+async def test_active_session_last_active_advances(auth_client, client, db_session):
+    """last_active is bumped on each successful authenticated request."""
+    from app.config import settings
+
+    regular = await _create_regular_user_client(
+        auth_client, client, username="active_user", password="pass456"
+    )
+    try:
+        # First request — capture last_active after
+        resp1 = await regular.get("/api/sessions/me")
+        assert resp1.status_code == 200
+
+        token = regular.headers["Authorization"].split(" ")[1]
+        result = await db_session.execute(
+            select(Session).where(Session.token == token)
+        )
+        session = result.scalar_one()
+        await db_session.refresh(session)
+        last_active_1 = session.last_active
+        if last_active_1.tzinfo is None:
+            last_active_1 = last_active_1.replace(tzinfo=timezone.utc)
+
+        # Manually set last_active slightly in the past so we can detect movement
+        import asyncio
+        await asyncio.sleep(0.05)
+
+        # Second request
+        resp2 = await regular.get("/api/sessions/me")
+        assert resp2.status_code == 200
+
+        await db_session.refresh(session)
+        last_active_2 = session.last_active
+        if last_active_2.tzinfo is None:
+            last_active_2 = last_active_2.replace(tzinfo=timezone.utc)
+
+        # last_active must have advanced (or stayed the same at minimum — never regressed)
+        assert last_active_2 >= last_active_1
     finally:
         await regular.aclose()

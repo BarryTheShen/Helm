@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     encryption_key: str = ""
     access_token_expire_hours: int = 720  # 30 days
     refresh_token_expire_days: int = 30
+    # Sessions idle longer than this many hours are rejected; default 7 days.
+    session_idle_timeout_hours: int = 168
 
     # Server
     server_name: str = "Helm"
