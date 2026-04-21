@@ -12,6 +12,14 @@ class ModuleInstanceCreate(BaseModel):
     version: str = "0.0.0"
 
 
+class ModuleInstallRequest(BaseModel):
+    """Request body for POST /api/modules/install."""
+
+    template_id: str
+    name: str | None = None
+    config: dict | None = None
+
+
 class ModuleInstanceUpdate(BaseModel):
     name: str | None = None
     status: str | None = None  # active | disabled | uninstalled
