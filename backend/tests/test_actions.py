@@ -338,3 +338,90 @@ async def test_fetch_weather_in_functions_list(auth_client):
     """fetch_weather should appear in the functions list."""
     resp = await auth_client.get("/api/actions/functions")
     assert "fetch_weather" in resp.json()["functions"]
+
+
+# ── Execute — run_workflow ─────────────────────────────────────────────────
+
+async def test_execute_run_workflow_missing_id(auth_client):
+    """run_workflow without workflow_id returns error."""
+    resp = await auth_client.post(
+        "/api/actions/execute",
+        json={"function": "run_workflow", "params": {}},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["result"]["status"] == "error"
+    assert "workflow_id is required" in data["result"]["detail"]
+
+
+async def test_execute_run_workflow_not_found(auth_client):
+    """run_workflow with non-existent workflow returns error."""
+    resp = await auth_client.post(
+        "/api/actions/execute",
+        json={"function": "run_workflow", "params": {"workflow_id": "nonexistent"}},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["result"]["status"] == "error"
+    assert "not found" in data["result"]["detail"]
+
+
+async def test_execute_run_workflow_disabled(auth_client):
+    """run_workflow with disabled workflow returns error."""
+    # Create a disabled workflow
+    create_resp = await auth_client.post(
+        "/api/workflows",
+        json={
+            "name": "Disabled Workflow",
+            "description": "Test workflow",
+            "enabled": False,
+            "trigger_type": "manual",
+            "graph": {"nodes": [], "edges": []},
+        },
+    )
+    workflow_id = create_resp.json()["id"]
+
+    # Try to run it
+    resp = await auth_client.post(
+        "/api/actions/execute",
+        json={"function": "run_workflow", "params": {"workflow_id": workflow_id}},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["result"]["status"] == "error"
+    assert "disabled" in data["result"]["detail"]
+
+
+async def test_execute_run_workflow_success(auth_client):
+    """run_workflow executes an enabled workflow."""
+    # Create an enabled workflow
+    create_resp = await auth_client.post(
+        "/api/workflows",
+        json={
+            "name": "Test Workflow",
+            "description": "Test workflow",
+            "enabled": True,
+            "trigger_type": "manual",
+            "graph": {"nodes": [], "edges": []},
+        },
+    )
+    workflow_id = create_resp.json()["id"]
+
+    # Run it
+    resp = await auth_client.post(
+        "/api/actions/execute",
+        json={"function": "run_workflow", "params": {"workflow_id": workflow_id}},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["result"]["workflow_id"] == workflow_id
+    assert data["result"]["workflow_name"] == "Test Workflow"
+    assert data["result"]["executed"] is True
+
+
+async def test_run_workflow_in_functions_list(auth_client):
+    """run_workflow should appear in the functions list."""
+    resp = await auth_client.get("/api/actions/functions")
+    assert "run_workflow" in resp.json()["functions"]

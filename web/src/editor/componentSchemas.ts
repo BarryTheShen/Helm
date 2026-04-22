@@ -1,6 +1,6 @@
 // Component property schemas for the dynamic property inspector.
 
-export type FieldType = 'text' | 'number' | 'select' | 'toggle' | 'textarea' | 'color';
+export type FieldType = 'text' | 'number' | 'select' | 'toggle' | 'textarea' | 'color' | 'icon-picker' | 'action-params';
 
 export interface FieldSchema {
   key: string;
@@ -10,6 +10,7 @@ export interface FieldSchema {
   options?: Array<{ label: string; value: unknown }>;
   placeholder?: string;
   group?: string;
+  visibleWhen?: (props: Record<string, unknown>) => boolean;
 }
 
 export interface ActionSchema {
@@ -24,15 +25,23 @@ export const ACTION_TYPES: ActionSchema[] = [
     type: 'navigate',
     label: 'Navigate',
     fields: [
-      { key: 'screen', label: 'Screen', type: 'text', placeholder: 'e.g. home, chat, settings' },
+      { key: 'screen', label: 'Screen', type: 'select', placeholder: 'Select module' },
     ],
   },
   {
     type: 'server_action',
     label: 'Server Action',
     fields: [
-      { key: 'function', label: 'Function Name', type: 'text', placeholder: 'e.g. submit_form' },
-      { key: 'params', label: 'Parameters (JSON)', type: 'textarea', placeholder: '{"key": "value"}' },
+      { key: 'function', label: 'Function', type: 'select', placeholder: 'Select function' },
+      { key: 'params', label: 'Parameters', type: 'action-params' },
+    ],
+  },
+  {
+    type: 'run_workflow',
+    label: 'Run Workflow',
+    fields: [
+      { key: 'workflow', label: 'Workflow', type: 'select', placeholder: 'Select workflow' },
+      { key: 'params', label: 'Parameters', type: 'action-params' },
     ],
   },
   {
@@ -50,7 +59,6 @@ export const ACTION_TYPES: ActionSchema[] = [
       { key: 'message', label: 'Message', type: 'text', placeholder: 'Message to send' },
     ],
   },
-  { type: 'dismiss', label: 'Dismiss', fields: [] },
   {
     type: 'copy_text',
     label: 'Copy Text',
@@ -83,23 +91,21 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'content', label: 'Content', type: 'textarea', defaultValue: '# Heading\n\nParagraph text' },
   ],
   Button: [
-    { key: 'label', label: 'Label', type: 'text', defaultValue: 'Button' },
-    { key: 'icon', label: 'Icon', type: 'text', defaultValue: '' },
+    {
+      key: 'label',
+      label: 'Label',
+      type: 'text',
+      defaultValue: 'Button',
+      visibleWhen: (props) => props.variant !== 'icon',
+    },
+    { key: 'icon', label: 'Icon', type: 'icon-picker', defaultValue: '' },
     { key: 'variant', label: 'Variant', type: 'select', defaultValue: 'primary', options: [
       { label: 'Primary', value: 'primary' },
       { label: 'Secondary', value: 'secondary' },
       { label: 'Ghost', value: 'ghost' },
       { label: 'Destructive', value: 'destructive' },
-      { label: 'Icon', value: 'icon' },
+      { label: 'Icon Only', value: 'icon' },
     ] },
-    { key: 'size', label: 'Size', type: 'select', defaultValue: 'md', options: [
-      { label: 'Small', value: 'sm' },
-      { label: 'Medium', value: 'md' },
-      { label: 'Large', value: 'lg' },
-    ] },
-    { key: 'fullWidth', label: 'Full Width', type: 'toggle', defaultValue: false },
-    { key: 'disabled', label: 'Disabled', type: 'toggle', defaultValue: false },
-    { key: 'loading', label: 'Loading', type: 'toggle', defaultValue: false },
   ],
   Image: [
     { key: 'src', label: 'Image URL', type: 'text', defaultValue: 'https://via.placeholder.com/300x200' },
@@ -116,7 +122,7 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
     ] },
   ],
   TextInput: [
-    { key: 'value', label: 'Value', type: 'text', defaultValue: '' },
+    { key: 'value', label: 'Default Value', type: 'text', defaultValue: '' },
     { key: 'placeholder', label: 'Placeholder', type: 'text', defaultValue: 'Enter text...' },
     { key: 'multiline', label: 'Multiline', type: 'toggle', defaultValue: false },
     { key: 'maxLines', label: 'Max Lines', type: 'number', defaultValue: 3 },
@@ -131,14 +137,9 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'editable', label: 'Editable', type: 'toggle', defaultValue: true },
   ],
   Icon: [
-    { key: 'name', label: 'Icon Name', type: 'text', defaultValue: 'star' },
-    { key: 'size', label: 'Size', type: 'number', defaultValue: 24 },
+    { key: 'name', label: 'Icon', type: 'icon-picker', defaultValue: 'star' },
+    { key: 'size', label: 'Size', type: 'number', defaultValue: 24, placeholder: '24' },
     { key: 'color', label: 'Color', type: 'color', defaultValue: '#000000' },
-  ],
-  Divider: [
-    { key: 'color', label: 'Color', type: 'color', defaultValue: '#E0E0E0' },
-    { key: 'thickness', label: 'Thickness', type: 'number', defaultValue: 1 },
-    { key: 'margin', label: 'Margin', type: 'number', defaultValue: 8 },
   ],
   Container: [
     { key: 'direction', label: 'Direction', type: 'select', defaultValue: 'column', options: [
@@ -173,8 +174,12 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
     ] },
   ],
   CalendarModule: [
-    { key: 'defaultView', label: 'Default View', type: 'select', defaultValue: 'month', options: [
+    { key: 'defaultView', label: 'Variant', type: 'select', defaultValue: 'month', options: [
       { label: 'Month', value: 'month' },
+      { label: 'Week', value: 'week' },
+      { label: 'Day', value: 'day' },
+      { label: 'Event List', value: 'agenda' },
+      { label: 'Compact', value: 'compact' },
     ] },
   ],
   Calendar: [
@@ -182,7 +187,8 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
       { label: 'Month', value: 'month' },
       { label: 'Week', value: 'week' },
       { label: 'Day', value: 'day' },
-      { label: 'Agenda', value: 'agenda' },
+      { label: 'Event List', value: 'agenda' },
+      { label: 'Compact', value: 'compact' },
     ] },
     { key: 'events', label: 'Events (JSON)', type: 'textarea', placeholder: '[{"id":"1","title":"Event","start":"2026-04-17T10:00:00Z","end":"2026-04-17T11:00:00Z"}]' },
   ],
@@ -209,9 +215,14 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
   ],
   NotesModule: [],
   InputBar: [
+    { key: 'value', label: 'Default Value', type: 'text', defaultValue: '' },
     { key: 'placeholder', label: 'Placeholder', type: 'text', defaultValue: 'Type a message...' },
     { key: 'maxLines', label: 'Max Lines', type: 'number', defaultValue: 6 },
-    { key: 'disabled', label: 'Disabled', type: 'toggle', defaultValue: false },
+  ],
+  Empty: [
+    { key: 'gap', label: 'Gap', type: 'number', defaultValue: 8 },
+    { key: 'padding', label: 'Padding', type: 'number', defaultValue: 0 },
+    { key: 'backgroundColor', label: 'Background', type: 'color', defaultValue: '#FFFFFF' },
   ],
 };
 

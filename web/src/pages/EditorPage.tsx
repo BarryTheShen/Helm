@@ -4,6 +4,7 @@ import { useEditorStore } from '../editor/useEditorStore';
 import { StructureTree } from '../editor/StructureTree';
 import { EditorCanvas } from '../editor/EditorCanvas';
 import { PropertyInspector } from '../editor/PropertyInspector';
+import { AppPreview } from '../components/AppPreview';
 import { DEVICE_PRESETS, getEditorPersistenceValidationError } from '../editor/types';
 import type { DevicePreset, EditorComponent, EditorScreen } from '../editor/types';
 import {
@@ -14,7 +15,7 @@ import {
 import type { LocalTemplateDefinition } from '../editor/templateLibrary';
 import {
   Save, Rocket, Undo2, Redo2, CheckCircle, XCircle, FileText,
-  RefreshCw, Monitor, RotateCw, ChevronDown, Code, Plus, Trash2
+  RefreshCw, Monitor, RotateCw, ChevronDown, Code, Plus, Trash2, Smartphone
 } from 'lucide-react';
 
 interface ModuleInfo {
@@ -240,6 +241,7 @@ export function EditorPage() {
   // Template modals
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [showLoadTemplate, setShowLoadTemplate] = useState(false);
+  const [showAppPreview, setShowAppPreview] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [templateName, setTemplateName] = useState('');
@@ -1107,6 +1109,10 @@ export function EditorPage() {
             className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors">
             <FileText size={11} /> Save as Template
           </button>
+          <button onClick={() => setShowAppPreview(true)}
+            className="flex items-center gap-1 px-2 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors">
+            <Smartphone size={11} /> Preview App
+          </button>
 
           <div className="w-px h-4 bg-gray-200 mx-0.5" />
 
@@ -1487,6 +1493,11 @@ export function EditorPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* App Preview Modal */}
+      {showAppPreview && (
+        <AppPreview onClose={() => setShowAppPreview(false)} />
       )}
     </div>
   );

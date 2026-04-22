@@ -68,6 +68,14 @@ async def reset_password(username: str, password: str) -> None:
         print(f"Password for '{username}' reset successfully.")
 
 
+async def reseed_templates() -> None:
+    """Re-seed templates (replaces existing templates)."""
+    from app.services.template_seed import seed_templates
+    async with AsyncSessionLocal() as db:
+        await seed_templates(db, replace=True)
+        print("Templates re-seeded successfully.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Helm server management CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -84,6 +92,9 @@ def main():
     reset_parser = subparsers.add_parser("reset_password", help="Reset a user's password")
     reset_parser.add_argument("--username", "-u", help="Username")
     reset_parser.add_argument("--password", "-p", help="New password (prompted if not provided)")
+
+    # reseed_templates
+    subparsers.add_parser("reseed_templates", help="Re-seed templates (replaces existing)")
 
     args = parser.parse_args()
 
@@ -111,6 +122,9 @@ def main():
             print("Error: Password cannot be empty.")
             sys.exit(1)
         asyncio.run(reset_password(username, password))
+
+    elif args.command == "reseed_templates":
+        asyncio.run(reseed_templates())
 
     else:
         parser.print_help()

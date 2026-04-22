@@ -5,12 +5,33 @@ import type { ActionRule, ActionStep } from './types';
 export interface RuleBuilderProps {
   rules: ActionRule[];
   onChange: (rules: ActionRule[]) => void;
+  componentType?: string;
 }
 
-const TRIGGER_OPTIONS: Array<{ value: ActionRule['trigger']; label: string }> = [
+const ALL_TRIGGER_OPTIONS: Array<{ value: ActionRule['trigger']; label: string }> = [
   { value: 'onPress', label: 'On Press' },
   { value: 'onSubmit', label: 'On Submit' },
+  { value: 'onSend', label: 'On Send' },
 ];
+
+const COMPONENT_TRIGGER_MAP: Record<string, ActionRule['trigger'][]> = {
+  Button: ['onPress'],
+  TextInput: ['onSubmit'],
+  InputBar: ['onSend'],
+};
+
+function getTriggerOptions(componentType?: string): Array<{ value: ActionRule['trigger']; label: string }> {
+  if (!componentType) {
+    return ALL_TRIGGER_OPTIONS;
+  }
+
+  const allowedTriggers = COMPONENT_TRIGGER_MAP[componentType];
+  if (!allowedTriggers) {
+    return ALL_TRIGGER_OPTIONS;
+  }
+
+  return ALL_TRIGGER_OPTIONS.filter(opt => allowedTriggers.includes(opt.value));
+}
 
 interface ActionCategory {
   label: string;
@@ -30,6 +51,7 @@ const ACTION_CATEGORIES: ActionCategory[] = [
   {
     label: 'Data',
     actions: [
+      { type: 'send_to_agent', label: 'Send to Agent' },
       { type: 'set_variable', label: 'Set Variable' },
       { type: 'set_component_state', label: 'Set Component State' },
       { type: 'submit_form', label: 'Submit Form' },
@@ -76,6 +98,10 @@ function getParamFields(actionType: string): ParamFieldDef[] {
       return [{ key: 'target', label: 'Target', type: 'text', placeholder: 'Screen or module name' }];
     case 'open_url':
       return [{ key: 'url', label: 'URL', type: 'text', placeholder: 'https://example.com' }];
+    case 'send_to_agent':
+      return [
+        { key: 'message', label: 'Message', type: 'text', placeholder: 'Message to send to agent' },
+      ];
     case 'set_variable':
       return [
         { key: 'name', label: 'Name', type: 'text', placeholder: 'Variable name' },
@@ -226,12 +252,16 @@ function RuleCard({
   index,
   onUpdate,
   onDelete,
+  componentType,
 }: {
   rule: ActionRule;
   index: number;
   onUpdate: (rule: ActionRule) => void;
   onDelete: () => void;
+  componentType?: string;
 }) {
+  const triggerOptions = getTriggerOptions(componentType);
+
   const handleTriggerChange = (trigger: ActionRule['trigger']) => {
     onUpdate({ ...rule, trigger });
   };
@@ -278,7 +308,7 @@ function RuleCard({
             onChange={(e) => handleTriggerChange(e.target.value as ActionRule['trigger'])}
             className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none bg-white"
           >
-            {TRIGGER_OPTIONS.map((opt) => (
+            {triggerOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
@@ -313,11 +343,14 @@ function RuleCard({
   );
 }
 
-export function RuleBuilder({ rules, onChange }: RuleBuilderProps) {
+export function RuleBuilder({ rules, onChange, componentType }: RuleBuilderProps) {
+  const triggerOptions = getTriggerOptions(componentType);
+  const defaultTrigger = triggerOptions[0]?.value ?? 'onPress';
+
   const handleAddRule = () => {
     const newRule: ActionRule = {
       id: crypto.randomUUID(),
-      trigger: 'onPress',
+      trigger: defaultTrigger,
       actions: [],
     };
     onChange([...rules, newRule]);
@@ -347,6 +380,7 @@ export function RuleBuilder({ rules, onChange }: RuleBuilderProps) {
           index={index}
           onUpdate={(updated) => handleUpdateRule(index, updated)}
           onDelete={() => handleDeleteRule(index)}
+          componentType={componentType}
         />
       ))}
 

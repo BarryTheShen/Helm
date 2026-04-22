@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useEditorStore } from './useEditorStore';
-import { COMPONENT_REGISTRY } from './types';
+import { COMPONENT_REGISTRY, ROW_PRESETS } from './types';
+import type { RowPreset } from './types';
 import {
   ChevronDown, ChevronRight, Plus, Trash2, Copy, ArrowUp, ArrowDown,
   Rows3, Box
@@ -35,7 +36,7 @@ function getComponentName(type: string): string {
 }
 
 interface AddRowPopoverProps {
-  onAdd: (cellCount: number) => void;
+  onAdd: (cellCount: number, preset?: RowPreset) => void;
   onClose: () => void;
   anchorRect: { top: number; left: number; bottom: number };
 }
@@ -46,6 +47,7 @@ interface StructureTreeProps {
 
 function AddRowPopover({ onAdd, onClose, anchorRect }: AddRowPopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const [showPresets, setShowPresets] = useState(true);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -56,19 +58,52 @@ function AddRowPopover({ onAdd, onClose, anchorRect }: AddRowPopoverProps) {
   }, [onClose]);
 
   return createPortal(
-    <div ref={ref} className="fixed bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-[9999] w-48"
+    <div ref={ref} className="fixed bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-[9999] w-56"
       style={{ top: anchorRect.bottom + 4, left: anchorRect.left }}>
-      <div className="text-xs font-medium text-gray-500 px-2 py-1">Number of cells</div>
-      <div className="flex gap-1 px-2 py-1">
-        {[1, 2, 3, 4].map(n => (
-          <button
-            key={n}
-            onClick={() => { onAdd(n); onClose(); }}
-            className="flex-1 py-2 text-sm font-medium bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded border border-gray-200 hover:border-blue-300 transition-colors"
-          >
-            {n}
-          </button>
-        ))}
+      <div className="flex items-center justify-between px-2 py-1 border-b border-gray-100 mb-1">
+        <span className="text-xs font-medium text-gray-500">Add Row</span>
+        <button
+          onClick={() => setShowPresets(!showPresets)}
+          className="text-[10px] text-blue-600 hover:text-blue-700 font-medium"
+        >
+          {showPresets ? 'Hide Presets' : 'Show Presets'}
+        </button>
+      </div>
+
+      {showPresets && (
+        <>
+          <div className="px-2 py-1">
+            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Presets</div>
+            <div className="grid grid-cols-2 gap-1">
+              {ROW_PRESETS.map(preset => (
+                <button
+                  key={preset.name}
+                  onClick={() => { onAdd(preset.cellCount, preset); onClose(); }}
+                  className="flex flex-col items-center gap-1 px-2 py-2 rounded border border-gray-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors text-center"
+                >
+                  <span className="text-base">{preset.icon || '▭'}</span>
+                  <span className="text-[10px] font-medium leading-tight">{preset.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="my-1 border-t border-gray-100" />
+        </>
+      )}
+
+      <div className="px-2 py-1">
+        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Custom</div>
+        <div className="flex gap-1">
+          {[1, 2, 3, 4].map(n => (
+            <button
+              key={n}
+              onClick={() => { onAdd(n); onClose(); }}
+              className="flex-1 py-2 text-sm font-medium bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded border border-gray-200 hover:border-blue-300 transition-colors"
+            >
+              {n}
+            </button>
+          ))}
+        </div>
       </div>
     </div>,
     document.body
@@ -129,7 +164,18 @@ export function StructureTree({ screenLabel = 'Current Screen' }: StructureTreeP
             <Plus size={14} className="text-gray-600" />
           </button>
           {showAddRow && (
-            <AddRowPopover onAdd={(n) => addRow(n)} onClose={() => setShowAddRow(false)} anchorRect={addRowRect} />
+            <AddRowPopover
+              onAdd={(n, preset) => {
+                if (preset) {
+                  const { cellCount, height, props, ...rest } = preset;
+                  addRow(cellCount, undefined, { height: height || 'auto', ...props });
+                } else {
+                  addRow(n);
+                }
+              }}
+              onClose={() => setShowAddRow(false)}
+              anchorRect={addRowRect}
+            />
           )}
         </div>
       </div>

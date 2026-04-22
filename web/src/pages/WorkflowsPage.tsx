@@ -12,47 +12,17 @@ import ReactFlow, {
 import type { Node, Connection, NodeTypes } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { api, type Workflow, type WorkflowCreate, type WorkflowUpdate } from '../lib/api';
-import { Plus, Save, Play, Upload, Trash2, X } from 'lucide-react';
+import { Plus, Save, Play, Upload, Trash2 } from 'lucide-react';
 import { useResource } from '../hooks/useResource';
-
-// Custom node components
-function ActionNode({ data }: { data: any }) {
-  return (
-    <div className="px-4 py-3 bg-blue-50 border-2 border-blue-500 rounded-lg shadow-sm min-w-[180px]">
-      <div className="font-semibold text-sm text-blue-900">{data.label || 'Action'}</div>
-      {data.action && <div className="text-xs text-blue-600 mt-1">{data.action}</div>}
-    </div>
-  );
-}
-
-function ConditionNode({ data }: { data: any }) {
-  return (
-    <div className="px-4 py-3 bg-yellow-50 border-2 border-yellow-500 rounded-lg shadow-sm min-w-[180px]">
-      <div className="font-semibold text-sm text-yellow-900">{data.label || 'Condition'}</div>
-      {data.condition && <div className="text-xs text-yellow-600 mt-1">{data.condition}</div>}
-    </div>
-  );
-}
-
-function SwitchNode({ data }: { data: any }) {
-  return (
-    <div className="px-4 py-3 bg-purple-50 border-2 border-purple-500 rounded-lg shadow-sm min-w-[180px]">
-      <div className="font-semibold text-sm text-purple-900">{data.label || 'Switch'}</div>
-      {data.cases && <div className="text-xs text-purple-600 mt-1">{data.cases} cases</div>}
-    </div>
-  );
-}
-
-function LoopNode({ data }: { data: any }) {
-  return (
-    <div className="px-4 py-3 bg-green-50 border-2 border-green-500 rounded-lg shadow-sm min-w-[180px]">
-      <div className="font-semibold text-sm text-green-900">{data.label || 'Loop'}</div>
-      {data.iterator && <div className="text-xs text-green-600 mt-1">{data.iterator}</div>}
-    </div>
-  );
-}
+import { TriggerNode } from '../components/workflow/TriggerNode';
+import { ActionNode } from '../components/workflow/ActionNode';
+import { ConditionNode } from '../components/workflow/ConditionNode';
+import { SwitchNode } from '../components/workflow/SwitchNode';
+import { LoopNode } from '../components/workflow/LoopNode';
+import { NodeInspector } from '../components/workflow/NodeInspector';
 
 const nodeTypes: NodeTypes = {
+  trigger: TriggerNode,
   action: ActionNode,
   condition: ConditionNode,
   switch: SwitchNode,
@@ -227,13 +197,20 @@ export function WorkflowsPage() {
     }
   }, [importJson, setNodes, setEdges]);
 
-  const addNode = useCallback((type: 'action' | 'condition' | 'switch' | 'loop') => {
+  const addNode = useCallback((type: 'trigger' | 'action' | 'condition' | 'switch' | 'loop') => {
     const id = `${type}-${Date.now()}`;
     const newNode: Node = {
       id,
       type,
       position: { x: 250, y: 100 + nodes.length * 100 },
-      data: { label: `New ${type}` },
+      data: {
+        label: `New ${type}`,
+        ...(type === 'trigger' && { triggerType: 'manual' }),
+        ...(type === 'action' && { action: '', params: {} }),
+        ...(type === 'condition' && { condition: '' }),
+        ...(type === 'switch' && { value: '', cases: [] }),
+        ...(type === 'loop' && { items: '', iterations: 1, variable: 'item' }),
+      },
     };
     setNodes((nds) => [...nds, newNode]);
   }, [nodes.length, setNodes]);
@@ -368,6 +345,12 @@ export function WorkflowsPage() {
               <Controls />
               <Panel position="top-left" className="bg-white rounded-lg shadow-md p-2 flex gap-2">
                 <button
+                  onClick={() => addNode('trigger')}
+                  className="px-3 py-1.5 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200"
+                >
+                  + Trigger
+                </button>
+                <button
                   onClick={() => addNode('action')}
                   className="px-3 py-1.5 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 rounded border border-blue-200"
                 >
@@ -402,95 +385,12 @@ export function WorkflowsPage() {
 
         {/* Node Inspector */}
         {showNodeInspector && selectedNode && (
-          <div className="w-80 bg-white border-l overflow-y-auto">
-            <div className="p-4 border-b flex items-center justify-between">
-              <h2 className="font-semibold text-gray-900">Node Inspector</h2>
-              <button onClick={() => setShowNodeInspector(false)} className="p-1 hover:bg-gray-100 rounded">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Label</label>
-                <input
-                  type="text"
-                  value={selectedNode.data.label || ''}
-                  onChange={(e) => updateNodeData(selectedNode.id, { label: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-md text-sm"
-                />
-              </div>
-
-              {selectedNode.type === 'action' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Action</label>
-                  <input
-                    type="text"
-                    value={selectedNode.data.action || ''}
-                    onChange={(e) => updateNodeData(selectedNode.id, { action: e.target.value })}
-                    placeholder="e.g., send_notification"
-                    className="w-full px-3 py-2 border rounded-md text-sm"
-                  />
-                  <label className="block text-sm font-medium text-gray-700 mb-1 mt-3">Parameters (JSON)</label>
-                  <textarea
-                    value={JSON.stringify(selectedNode.data.params || {}, null, 2)}
-                    onChange={(e) => {
-                      try {
-                        const params = JSON.parse(e.target.value);
-                        updateNodeData(selectedNode.id, { params });
-                      } catch {}
-                    }}
-                    className="w-full px-3 py-2 border rounded-md text-sm font-mono h-32"
-                  />
-                </div>
-              )}
-
-              {selectedNode.type === 'condition' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
-                  <input
-                    type="text"
-                    value={selectedNode.data.condition || ''}
-                    onChange={(e) => updateNodeData(selectedNode.id, { condition: e.target.value })}
-                    placeholder="e.g., user.age > 18"
-                    className="w-full px-3 py-2 border rounded-md text-sm"
-                  />
-                </div>
-              )}
-
-              {selectedNode.type === 'switch' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Cases</label>
-                  <input
-                    type="number"
-                    value={selectedNode.data.cases || 2}
-                    onChange={(e) => updateNodeData(selectedNode.id, { cases: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 border rounded-md text-sm"
-                  />
-                </div>
-              )}
-
-              {selectedNode.type === 'loop' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Iterator</label>
-                  <input
-                    type="text"
-                    value={selectedNode.data.iterator || ''}
-                    onChange={(e) => updateNodeData(selectedNode.id, { iterator: e.target.value })}
-                    placeholder="e.g., items"
-                    className="w-full px-3 py-2 border rounded-md text-sm"
-                  />
-                </div>
-              )}
-
-              <button
-                onClick={deleteNode}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete Node
-              </button>
-            </div>
-          </div>
+          <NodeInspector
+            node={selectedNode}
+            onClose={() => setShowNodeInspector(false)}
+            onUpdate={updateNodeData}
+            onDelete={deleteNode}
+          />
         )}
       </div>
 

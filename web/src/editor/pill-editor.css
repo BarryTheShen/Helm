@@ -1,0 +1,52 @@
+/* TipTap ProseMirror base styles */
+.ProseMirror {
+  outline: none;
+  min-height: 32px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ProseMirror p {
+  margin: 0;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #9ca3af;
+  pointer-events: none;
+  height: 0;
+}
+
+/* Variable pill styles */
+.ProseMirror span[data-type="variable-pill"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  margin: 0 2px;
+  background-color: #dbeafe;
+  color: #1e40af;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: default;
+  user-select: none;
+}
+
+.ProseMirror span[data-type="variable-pill"]:hover {
+  background-color: #bfdbfe;
+}
+
+/* Selection styles */
+.ProseMirror .ProseMirror-selectednode {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+  border-radius: 9999px;
+}
+
+/* Multiline editor */
+.ProseMirror.multiline {
+  min-height: 80px;
+}

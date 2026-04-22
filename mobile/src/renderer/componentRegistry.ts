@@ -17,6 +17,7 @@ import { SDUIDivider } from '@/components/atomic/SDUIDivider';
 
 // Tier 1 — Structural
 import { SDUIContainer } from '@/components/structural/SDUIContainer';
+import { SDUIEmpty } from '@/components/structural/SDUIEmpty';
 
 // Tier 3 — Composite
 import { CalendarModule } from '@/components/composite/CalendarModule';
@@ -45,6 +46,7 @@ const registry: Record<string, ComponentType<any>> = {
   Icon: SDUIIcon,
   Divider: SDUIDivider,
   Container: SDUIContainer,
+  Empty: SDUIEmpty,
   CalendarModule: CalendarModule,
   ChatModule: ChatModule,
   NotesModule: NotesModule,
@@ -57,6 +59,10 @@ const registry: Record<string, ComponentType<any>> = {
   Todo: TodoComponent,
   RichText: RichTextRendererComponent,
   ArticleCard: ArticleCardComponent,
+  // Backend snake_case aliases
+  article_card: ArticleCardComponent,
+  rich_text_renderer: RichTextRendererComponent,
+  todo: TodoComponent,
 };
 
 // Build a case-insensitive index: lowercase key → canonical PascalCase key

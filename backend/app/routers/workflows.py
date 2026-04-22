@@ -22,6 +22,7 @@ class WorkflowCreate(BaseModel):
     graph: dict[str, Any] = {}
     trigger_type: str  # onSchedule | onDataChange | onServerEvent | manual
     trigger_config: dict[str, Any] = {}
+    enabled: bool = True
 
 
 class WorkflowUpdate(BaseModel):
@@ -103,6 +104,7 @@ async def create_workflow(
         graph=body.graph,
         trigger_type=body.trigger_type,
         trigger_config=body.trigger_config,
+        enabled=body.enabled,
     )
     db.add(wf)
     await log_audit(db, user_id, "WORKFLOW_CREATED", "workflow", str(wf.id), ip=request.client.host if request.client else None)
@@ -114,7 +116,7 @@ async def create_workflow(
     wf_graph = wf.graph or {}
     wf_trigger_type = wf.trigger_type
     wf_trigger_config = wf.trigger_config or {}
-    wf_enabled = wf.enabled if wf.enabled is not None else True  # Default to True if not set
+    wf_enabled = wf.enabled
 
     await db.commit()
     await db.refresh(wf)  # Refresh to get server-generated timestamps
@@ -194,7 +196,7 @@ async def update_workflow(
     wf_graph = wf.graph or {}
     wf_trigger_type = wf.trigger_type
     wf_trigger_config = wf.trigger_config or {}
-    wf_enabled = wf.enabled if wf.enabled is not None else True  # Default to True if not set
+    wf_enabled = wf.enabled
 
     await db.commit()
     await db.refresh(wf)  # Refresh to get updated timestamp

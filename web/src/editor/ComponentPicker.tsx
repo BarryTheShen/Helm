@@ -1,9 +1,9 @@
-import { useRef, useEffect } from 'react';
-import { getAuthorableComponents } from './types';
-import type { ComponentDefinition } from './types';
+import { useRef, useEffect, useState } from 'react';
+import { getAuthorableComponents, COMPONENT_PRESETS } from './types';
+import type { ComponentDefinition, ComponentPreset } from './types';
 
 interface ComponentPickerProps {
-  onSelect: (componentType: string) => void;
+  onSelect: (componentType: string, props?: Record<string, unknown>) => void;
   onClose: () => void;
   position?: { x: number; y: number };
 }
@@ -11,7 +11,7 @@ interface ComponentPickerProps {
 function CategoryGroup({ title, components, onSelect }: {
   title: string;
   components: ComponentDefinition[];
-  onSelect: (type: string) => void;
+  onSelect: (type: string, props?: Record<string, unknown>) => void;
 }) {
   return (
     <div>
@@ -35,8 +35,32 @@ function CategoryGroup({ title, components, onSelect }: {
   );
 }
 
+function PresetGroup({ presets, onSelect }: {
+  presets: ComponentPreset[];
+  onSelect: (type: string, props?: Record<string, unknown>) => void;
+}) {
+  return (
+    <div>
+      <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-2 py-1">Presets</div>
+      <div className="grid grid-cols-2 gap-1 px-2">
+        {presets.map(preset => (
+          <button
+            key={preset.name}
+            onClick={() => onSelect(preset.type, preset.props)}
+            className="flex flex-col items-center gap-1 px-2 py-2 rounded border border-gray-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors text-center"
+          >
+            <span className="text-base">{preset.icon || '📦'}</span>
+            <span className="text-[10px] font-medium leading-tight">{preset.name}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ComponentPicker({ onSelect, onClose, position }: ComponentPickerProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const [showPresets, setShowPresets] = useState(true);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -56,15 +80,15 @@ export function ComponentPicker({ onSelect, onClose, position }: ComponentPicker
   const authorableComponents = getAuthorableComponents();
   const sections = [
     {
-      title: 'Basic',
+      title: 'Atomic Components',
       components: authorableComponents.filter((component) => component.category === 'atomic'),
     },
     {
-      title: 'Layout',
+      title: 'Structural',
       components: authorableComponents.filter((component) => component.category === 'structural'),
     },
     {
-      title: 'Modules',
+      title: 'Components',
       components: authorableComponents.filter((component) => component.category === 'composite'),
     },
   ].filter((section) => section.components.length > 0);
@@ -75,19 +99,38 @@ export function ComponentPicker({ onSelect, onClose, position }: ComponentPicker
     top: position.y,
   } : {};
 
+  const handleSelect = (type: string, props?: Record<string, unknown>) => {
+    onSelect(type, props);
+    onClose();
+  };
+
   return (
     <div
       ref={ref}
-      className="bg-white border border-gray-200 rounded-lg shadow-xl p-2 z-50 w-56 max-h-80 overflow-y-auto"
+      className="bg-white border border-gray-200 rounded-lg shadow-xl p-2 z-50 w-64 max-h-96 overflow-y-auto"
       style={style}
     >
-      <div className="text-xs font-semibold text-gray-600 px-2 py-1 border-b border-gray-100 mb-1">
-        Add Component
+      <div className="flex items-center justify-between px-2 py-1 border-b border-gray-100 mb-1">
+        <span className="text-xs font-semibold text-gray-600">Add Component</span>
+        <button
+          onClick={() => setShowPresets(!showPresets)}
+          className="text-[10px] text-blue-600 hover:text-blue-700 font-medium"
+        >
+          {showPresets ? 'Hide Presets' : 'Show Presets'}
+        </button>
       </div>
+
+      {showPresets && (
+        <>
+          <PresetGroup presets={COMPONENT_PRESETS} onSelect={handleSelect} />
+          <div className="my-1 border-t border-gray-100" />
+        </>
+      )}
+
       {sections.map((section, index) => (
         <div key={section.title}>
           {index > 0 && <div className="my-1 border-t border-gray-100" />}
-          <CategoryGroup title={section.title} components={section.components} onSelect={onSelect} />
+          <CategoryGroup title={section.title} components={section.components} onSelect={handleSelect} />
         </div>
       ))}
     </div>

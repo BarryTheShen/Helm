@@ -8,7 +8,7 @@ export interface ActionStep {
 
 export interface ActionRule {
   id: string;
-  trigger: 'onPress' | 'onSubmit';
+  trigger: 'onPress' | 'onSubmit' | 'onSend';
   actions: ActionStep[];
 }
 
@@ -204,21 +204,24 @@ const READ_ONLY_RUNTIME_COMPONENTS: ComponentDefinition[] = [
 ];
 
 export const COMPONENT_REGISTRY: ComponentDefinition[] = [
-  // Atomic
+  // Atomic Components
   { type: 'Text', displayName: 'Text', icon: '📝', category: 'atomic', description: 'Text content with styling' },
   { type: 'Markdown', displayName: 'Markdown', icon: '📄', category: 'atomic', description: 'Rich markdown content' },
   { type: 'Button', displayName: 'Button', icon: '🔘', category: 'atomic', description: 'Interactive button with actions' },
   { type: 'Image', displayName: 'Image', icon: '🖼️', category: 'atomic', description: 'Display an image' },
   { type: 'TextInput', displayName: 'Text Input', icon: '✏️', category: 'atomic', description: 'User text input field' },
   { type: 'Icon', displayName: 'Icon', icon: '⭐', category: 'atomic', description: 'Display an icon' },
-  { type: 'Divider', displayName: 'Divider', icon: '➖', category: 'atomic', description: 'Horizontal divider line' },
   // Structural
+  { type: 'Empty', displayName: 'Empty', icon: '📦', category: 'structural', description: 'Container for vertical stacking of components' },
   { type: 'Container', displayName: 'Container', icon: '🧱', category: 'structural', description: 'Flex layout container with nested children', authorable: false },
-  // Composite modules
+  // Components (Composite)
   { type: 'CalendarModule', displayName: 'Calendar', icon: '📅', category: 'composite', description: 'Calendar view with events' },
-  { type: 'ChatModule', displayName: 'Chat', icon: '💬', category: 'composite', description: 'Chat interface module' },
-  { type: 'NotesModule', displayName: 'Notes', icon: '📓', category: 'composite', description: 'Notes editor module' },
+  { type: 'ChatModule', displayName: 'Chat', icon: '💬', category: 'composite', description: 'Chat interface' },
+  { type: 'NotesModule', displayName: 'Notes', icon: '📓', category: 'composite', description: 'Notes editor' },
   { type: 'InputBar', displayName: 'Input Bar', icon: '💬', category: 'composite', description: 'Message input bar with send' },
+  { type: 'Todo', displayName: 'Todo', icon: '✅', category: 'composite', description: 'Todo list with checkboxes' },
+  { type: 'ArticleCard', displayName: 'Article Card', icon: '📰', category: 'composite', description: 'Article preview card' },
+  { type: 'RichTextRenderer', displayName: 'Rich Text Renderer', icon: '📝', category: 'composite', description: 'Rich text markdown renderer' },
   ...READ_ONLY_RUNTIME_COMPONENTS,
 ];
 
@@ -229,6 +232,45 @@ export function getComponentDefinition(type: string): ComponentDefinition | unde
 export function getAuthorableComponents(): ComponentDefinition[] {
   return COMPONENT_REGISTRY.filter((definition) => definition.authorable !== false && definition.readOnly !== true);
 }
+
+// Preset definitions for quick component/row creation
+export interface ComponentPreset {
+  name: string;
+  type: string;
+  props: Record<string, unknown>;
+  icon?: string;
+}
+
+export interface RowPreset {
+  name: string;
+  cellCount: number;
+  height?: 'auto' | number;
+  props?: Record<string, unknown>;
+  icon?: string;
+}
+
+export const COMPONENT_PRESETS: ComponentPreset[] = [
+  { name: 'Heading', type: 'Text', props: { content: 'Heading', variant: 'heading' }, icon: '📰' },
+  { name: 'Body Text', type: 'Text', props: { content: 'Body text', variant: 'body' }, icon: '📝' },
+  { name: 'Caption', type: 'Text', props: { content: 'Caption text', variant: 'caption' }, icon: '🏷️' },
+  { name: 'Primary Button', type: 'Button', props: { label: 'Button', variant: 'primary' }, icon: '🔵' },
+  { name: 'Secondary Button', type: 'Button', props: { label: 'Button', variant: 'secondary' }, icon: '⚪' },
+  { name: 'Icon Button', type: 'Button', props: { icon: 'star', variant: 'icon' }, icon: '⭐' },
+  { name: 'Text Input', type: 'TextInput', props: { placeholder: 'Enter text...' }, icon: '✏️' },
+  { name: 'Image', type: 'Image', props: { src: 'https://via.placeholder.com/300x200', aspectRatio: 1.5 }, icon: '🖼️' },
+  { name: 'Icon', type: 'Icon', props: { name: 'star', size: 24, color: '#000000' }, icon: '⭐' },
+  { name: 'Empty Container', type: 'Empty', props: { gap: 8, padding: 0 }, icon: '📦' },
+];
+
+export const ROW_PRESETS: RowPreset[] = [
+  { name: 'Single Column', cellCount: 1, height: 'auto', icon: '▭' },
+  { name: 'Two Columns', cellCount: 2, height: 'auto', icon: '▭▭' },
+  { name: 'Three Columns', cellCount: 3, height: 'auto', icon: '▭▭▭' },
+  { name: 'Four Columns', cellCount: 4, height: 'auto', icon: '▭▭▭▭' },
+  { name: 'Header Row', cellCount: 1, height: 80, props: { backgroundColor: '#f8f9fa', padding: 16 }, icon: '📋' },
+  { name: 'Content Row', cellCount: 1, height: 'auto', props: { padding: 16 }, icon: '📄' },
+  { name: 'Footer Row', cellCount: 1, height: 60, props: { backgroundColor: '#f8f9fa', padding: 12 }, icon: '🔻' },
+];
 
 export type ActionPropName = 'onPress' | 'onSubmit' | 'onSend';
 

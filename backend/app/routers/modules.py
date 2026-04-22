@@ -20,6 +20,8 @@ from app.schemas.modules import (
     ModuleInfo,
     ModuleListResponse,
     ModuleStateResponse,
+    PinModuleRequest,
+    ReorderModulesRequest,
     SDUIScreenRequest,
     TabConfigRequest,
 )
@@ -94,8 +96,8 @@ async def _get_tab_overrides(db: AsyncSession, user_id: str) -> dict[str, dict]:
     return (state.state_json or {}).get("tab_overrides", {})
 
 
-async def _get_tabs_config(db: AsyncSession, user_id: str) -> dict:
-    """Return the full tabs config dict for a user (hidden_tabs + tab_overrides)."""
+async def _get_pinned_modules(db: AsyncSession, user_id: str) -> list[str]:
+    """Return list of pinned module IDs in display order."""
     result = await db.execute(
         select(ModuleState).where(
             ModuleState.user_id == user_id,
@@ -104,10 +106,30 @@ async def _get_tabs_config(db: AsyncSession, user_id: str) -> dict:
     )
     state = result.scalars().first()
     if state is None:
-        return {"hidden_tabs": [], "tab_overrides": {}}
+        # Default: pin first 5 built-in tabs
+        return ["home", "chat", "modules", "calendar", "forms"]
+    return (state.state_json or {}).get("pinned_modules", ["home", "chat", "modules", "calendar", "forms"])
+
+
+async def _get_tabs_config(db: AsyncSession, user_id: str) -> dict:
+    """Return the full tabs config dict for a user (hidden_tabs + tab_overrides + pinned_modules)."""
+    result = await db.execute(
+        select(ModuleState).where(
+            ModuleState.user_id == user_id,
+            ModuleState.module_type == _TABS_CONFIG_KEY,
+        )
+    )
+    state = result.scalars().first()
+    if state is None:
+        return {
+            "hidden_tabs": [],
+            "tab_overrides": {},
+            "pinned_modules": ["home", "chat", "modules", "calendar", "forms"],
+        }
     cfg = state.state_json or {}
     cfg.setdefault("hidden_tabs", [])
     cfg.setdefault("tab_overrides", {})
+    cfg.setdefault("pinned_modules", ["home", "chat", "modules", "calendar", "forms"])
     return cfg
 
 
@@ -197,26 +219,37 @@ async def _set_hidden_tabs(db: AsyncSession, user_id: str, hidden_tabs: list[str
 def _build_module_list(
     hidden: list[str],
     overrides: dict[str, dict],
+    pinned: list[str],
     custom_modules: list[dict] | None = None,
 ) -> list[ModuleInfo]:
     """Build the full module list applying per-user overrides on top of defaults."""
-    result = [
-        ModuleInfo(
+    result = []
+
+    # Add built-in modules
+    for m in _ALL_TABS:
+        tab_order = pinned.index(m.id) if m.id in pinned else 999
+        result.append(ModuleInfo(
             id=m.id,
             name=overrides.get(m.id, {}).get("name", m.name),
             icon=overrides.get(m.id, {}).get("icon", m.icon),
             enabled=m.id not in hidden,
-        )
-        for m in _ALL_TABS
-    ]
+            pinned=m.id in pinned,
+            tab_order=tab_order,
+        ))
+
+    # Add custom modules
     for cm in (custom_modules or []):
         mid = cm["id"]
+        tab_order = pinned.index(mid) if mid in pinned else 999
         result.append(ModuleInfo(
             id=mid,
             name=overrides.get(mid, {}).get("name", cm.get("name", mid)),
             icon=overrides.get(mid, {}).get("icon", cm.get("icon", "📦")),
             enabled=mid not in hidden,
+            pinned=mid in pinned,
+            tab_order=tab_order,
         ))
+
     return result
 
 DEFAULT_MODULE_STATES: dict[str, dict[str, Any]] = {
@@ -233,10 +266,15 @@ async def list_modules(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return all tabs with per-user enabled/disabled status and name/icon overrides."""
+    """Return all tabs with per-user enabled/disabled status, name/icon overrides, and pinning."""
     config = await _get_tabs_config(db, str(current_user.id))
     custom = await _get_custom_modules(db, str(current_user.id))
-    modules = _build_module_list(config["hidden_tabs"], config["tab_overrides"], custom)
+    modules = _build_module_list(
+        config["hidden_tabs"],
+        config["tab_overrides"],
+        config["pinned_modules"],
+        custom
+    )
     return ModuleListResponse(modules=modules)
 
 
@@ -265,7 +303,8 @@ async def hide_module(
 
     overrides = await _get_tab_overrides(db, str(current_user.id))
     custom = await _get_custom_modules(db, str(current_user.id))
-    modules_payload = [m.model_dump() for m in _build_module_list(hidden, overrides, custom)]
+    pinned = await _get_pinned_modules(db, str(current_user.id))
+    modules_payload = [m.model_dump() for m in _build_module_list(hidden, overrides, pinned, custom)]
     await manager.send(str(current_user.id), {"type": "tabs_updated", "modules": modules_payload})
     return {"module_id": module_id, "hidden": True}
 
@@ -294,7 +333,8 @@ async def show_module(
 
     overrides = await _get_tab_overrides(db, str(current_user.id))
     custom = await _get_custom_modules(db, str(current_user.id))
-    modules_payload = [m.model_dump() for m in _build_module_list(hidden, overrides, custom)]
+    pinned = await _get_pinned_modules(db, str(current_user.id))
+    modules_payload = [m.model_dump() for m in _build_module_list(hidden, overrides, pinned, custom)]
     await manager.send(str(current_user.id), {"type": "tabs_updated", "modules": modules_payload})
     return {"module_id": module_id, "hidden": False}
 
@@ -331,11 +371,117 @@ async def configure_module(
     await _save_tabs_config(db, str(current_user.id), config)
 
     custom = await _get_custom_modules(db, str(current_user.id))
-    modules_payload = [m.model_dump() for m in _build_module_list(config["hidden_tabs"], config["tab_overrides"], custom)]
+    modules_payload = [m.model_dump() for m in _build_module_list(config["hidden_tabs"], config["tab_overrides"], config["pinned_modules"], custom)]
     await manager.send(str(current_user.id), {"type": "tabs_updated", "modules": modules_payload})
 
     updated = next(m for m in modules_payload if m["id"] == module_id)
     return updated
+
+
+@router.patch("/modules/{module_id}/pin", status_code=200)
+async def pin_module(
+    module_id: str,
+    body: PinModuleRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Pin a module to the tab bar.
+
+    If tab_order is provided, insert at that position. Otherwise, append to the end.
+    Pushes a 'tabs_updated' WebSocket event so the frontend updates immediately.
+    """
+    from app.services.websocket_manager import manager
+
+    valid_ids = await _get_all_valid_ids(db, str(current_user.id))
+    if module_id not in valid_ids:
+        raise HTTPException(status_code=404, detail=f"Unknown module: {module_id}")
+
+    config = await _get_tabs_config(db, str(current_user.id))
+    pinned = config["pinned_modules"]
+
+    if module_id not in pinned:
+        if body.tab_order is not None and 0 <= body.tab_order <= len(pinned):
+            pinned.insert(body.tab_order, module_id)
+        else:
+            pinned.append(module_id)
+        config["pinned_modules"] = pinned
+        await _save_tabs_config(db, str(current_user.id), config)
+
+    custom = await _get_custom_modules(db, str(current_user.id))
+    modules_payload = [m.model_dump() for m in _build_module_list(config["hidden_tabs"], config["tab_overrides"], config["pinned_modules"], custom)]
+    await manager.send(str(current_user.id), {"type": "tabs_updated", "modules": modules_payload})
+
+    return {"module_id": module_id, "pinned": True, "tab_order": pinned.index(module_id)}
+
+
+@router.delete("/modules/{module_id}/pin", status_code=200)
+async def unpin_module(
+    module_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Unpin a module from the tab bar.
+
+    The module moves to the Module Store but remains accessible.
+    Pushes a 'tabs_updated' WebSocket event so the frontend updates immediately.
+    """
+    from app.services.websocket_manager import manager
+
+    valid_ids = await _get_all_valid_ids(db, str(current_user.id))
+    if module_id not in valid_ids:
+        raise HTTPException(status_code=404, detail=f"Unknown module: {module_id}")
+
+    config = await _get_tabs_config(db, str(current_user.id))
+    pinned = config["pinned_modules"]
+
+    if module_id in pinned:
+        pinned = [m for m in pinned if m != module_id]
+        config["pinned_modules"] = pinned
+        await _save_tabs_config(db, str(current_user.id), config)
+
+    custom = await _get_custom_modules(db, str(current_user.id))
+    modules_payload = [m.model_dump() for m in _build_module_list(config["hidden_tabs"], config["tab_overrides"], config["pinned_modules"], custom)]
+    await manager.send(str(current_user.id), {"type": "tabs_updated", "modules": modules_payload})
+
+    return {"module_id": module_id, "pinned": False}
+
+
+@router.post("/modules/reorder", status_code=200)
+async def reorder_modules(
+    body: ReorderModulesRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reorder pinned modules in the tab bar.
+
+    The module_ids list should contain all currently pinned modules in the desired order.
+    Pushes a 'tabs_updated' WebSocket event so the frontend updates immediately.
+    """
+    from app.services.websocket_manager import manager
+
+    valid_ids = await _get_all_valid_ids(db, str(current_user.id))
+    config = await _get_tabs_config(db, str(current_user.id))
+    current_pinned = set(config["pinned_modules"])
+
+    # Validate all IDs exist and are currently pinned
+    for mid in body.module_ids:
+        if mid not in valid_ids:
+            raise HTTPException(status_code=404, detail=f"Unknown module: {mid}")
+        if mid not in current_pinned:
+            raise HTTPException(status_code=400, detail=f"Module not pinned: {mid}")
+
+    # Ensure all pinned modules are in the new order
+    if set(body.module_ids) != current_pinned:
+        raise HTTPException(status_code=400, detail="module_ids must contain all currently pinned modules")
+
+    config["pinned_modules"] = body.module_ids
+    await _save_tabs_config(db, str(current_user.id), config)
+
+    custom = await _get_custom_modules(db, str(current_user.id))
+    modules_payload = [m.model_dump() for m in _build_module_list(config["hidden_tabs"], config["tab_overrides"], config["pinned_modules"], custom)]
+    await manager.send(str(current_user.id), {"type": "tabs_updated", "modules": modules_payload})
+
+    return {"pinned_modules": body.module_ids}
 
 
 @router.get("/modules/{module_id}/state", response_model=ModuleStateResponse)
@@ -732,7 +878,7 @@ async def create_custom_module(
     await _save_custom_modules(db, user_id, custom)
 
     config = await _get_tabs_config(db, user_id)
-    modules_payload = [m.model_dump() for m in _build_module_list(config["hidden_tabs"], config["tab_overrides"], custom)]
+    modules_payload = [m.model_dump() for m in _build_module_list(config["hidden_tabs"], config["tab_overrides"], config["pinned_modules"], custom)]
     await manager.send(user_id, {"type": "tabs_updated", "modules": modules_payload})
 
     return {"module_id": module_id, "name": name, "icon": body.icon}
@@ -767,6 +913,9 @@ async def delete_custom_module(
     if module_id in config["tab_overrides"]:
         config["tab_overrides"].pop(module_id, None)
         config_changed = True
+    if module_id in config["pinned_modules"]:
+        config["pinned_modules"] = [m for m in config["pinned_modules"] if m != module_id]
+        config_changed = True
     if config_changed:
         await _save_tabs_config(db, user_id, config)
 
@@ -777,7 +926,7 @@ async def delete_custom_module(
     await send_draft_cleared(user_id, module_id)
     await send_live_screen_update(user_id, module_id, None, 0)
 
-    modules_payload = [m.model_dump() for m in _build_module_list(config["hidden_tabs"], config["tab_overrides"], custom)]
+    modules_payload = [m.model_dump() for m in _build_module_list(config["hidden_tabs"], config["tab_overrides"], config["pinned_modules"], custom)]
     await manager.send(user_id, {"type": "tabs_updated", "modules": modules_payload})
 
     return {"module_id": module_id, "deleted": True}

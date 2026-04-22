@@ -419,3 +419,340 @@ async def test_import_n8n_workflow_unsupported_nodes(auth_client):
     helm_wf = data["workflow"]
     assert len(helm_wf["nodes"]) == 2
     assert all(node["type"] == "action" for node in helm_wf["nodes"])
+
+
+# ── Workflow Runtime V1 Capabilities Tests ────────────────────────────────
+
+
+async def test_workflow_parallel_execution(auth_client):
+    """Test parallel node execution."""
+    resp = await auth_client.post(
+        WORKFLOWS,
+        json={
+            "name": "Parallel execution",
+            "trigger_type": "manual",
+            "trigger_config": {},
+            "graph": {
+                "nodes": [
+                    {"id": "1", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Start"}}},
+                    {"id": "2", "type": "parallel", "data": {}},
+                    {"id": "3", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Branch A"}}},
+                    {"id": "4", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Branch B"}}},
+                    {"id": "5", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Branch C"}}},
+                ],
+                "edges": [
+                    {"id": "e1-2", "source": "1", "target": "2"},
+                    {"id": "e2-3", "source": "2", "target": "3"},
+                    {"id": "e2-4", "source": "2", "target": "4"},
+                    {"id": "e2-5", "source": "2", "target": "5"},
+                ],
+            },
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["graph"]["nodes"][1]["type"] == "parallel"
+    assert len([e for e in data["graph"]["edges"] if e["source"] == "2"]) == 3
+
+
+async def test_workflow_loop_with_collection(auth_client):
+    """Test loop node iterating over a collection."""
+    resp = await auth_client.post(
+        WORKFLOWS,
+        json={
+            "name": "Loop over items",
+            "trigger_type": "manual",
+            "trigger_config": {},
+            "graph": {
+                "nodes": [
+                    {"id": "1", "type": "action", "data": {"tool": "read_all_calendar", "args": {}}},
+                    {"id": "2", "type": "loop", "data": {"items": "{{results.1}}", "variable": "event", "index_variable": "i"}},
+                    {"id": "3", "type": "action", "data": {"tool": "send_notification", "args": {"title": "{{event.title}}"}}},
+                ],
+                "edges": [
+                    {"id": "e1-2", "source": "1", "target": "2"},
+                    {"id": "e2-3", "source": "2", "target": "3", "sourceHandle": "body"},
+                ],
+            },
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["graph"]["nodes"][1]["type"] == "loop"
+    assert data["graph"]["nodes"][1]["data"]["items"] == "{{results.1}}"
+
+
+async def test_workflow_loop_fixed_iterations(auth_client):
+    """Test loop node with fixed iteration count."""
+    resp = await auth_client.post(
+        WORKFLOWS,
+        json={
+            "name": "Loop 5 times",
+            "trigger_type": "manual",
+            "trigger_config": {},
+            "graph": {
+                "nodes": [
+                    {"id": "1", "type": "loop", "data": {"iterations": 5, "variable": "counter"}},
+                    {"id": "2", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Iteration {{counter}}"}}},
+                ],
+                "edges": [
+                    {"id": "e1-2", "source": "1", "target": "2", "sourceHandle": "body"},
+                ],
+            },
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["graph"]["nodes"][0]["data"]["iterations"] == 5
+
+
+async def test_workflow_delay_node(auth_client):
+    """Test delay/sleep node."""
+    resp = await auth_client.post(
+        WORKFLOWS,
+        json={
+            "name": "Delayed workflow",
+            "trigger_type": "manual",
+            "trigger_config": {},
+            "graph": {
+                "nodes": [
+                    {"id": "1", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Before delay"}}},
+                    {"id": "2", "type": "delay", "data": {"duration": 2, "unit": "seconds"}},
+                    {"id": "3", "type": "action", "data": {"tool": "send_notification", "args": {"title": "After delay"}}},
+                ],
+                "edges": [
+                    {"id": "e1-2", "source": "1", "target": "2"},
+                    {"id": "e2-3", "source": "2", "target": "3"},
+                ],
+            },
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["graph"]["nodes"][1]["type"] == "delay"
+    assert data["graph"]["nodes"][1]["data"]["duration"] == 2
+    assert data["graph"]["nodes"][1]["data"]["unit"] == "seconds"
+
+
+async def test_workflow_delay_minutes(auth_client):
+    """Test delay node with minutes unit."""
+    resp = await auth_client.post(
+        WORKFLOWS,
+        json={
+            "name": "Delay in minutes",
+            "trigger_type": "manual",
+            "trigger_config": {},
+            "graph": {
+                "nodes": [
+                    {"id": "1", "type": "delay", "data": {"duration": 5, "unit": "minutes"}},
+                    {"id": "2", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Done"}}},
+                ],
+                "edges": [
+                    {"id": "e1-2", "source": "1", "target": "2"},
+                ],
+            },
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["graph"]["nodes"][0]["data"]["unit"] == "minutes"
+
+
+async def test_workflow_try_catch(auth_client):
+    """Test try/catch error handling node."""
+    resp = await auth_client.post(
+        WORKFLOWS,
+        json={
+            "name": "Error handling",
+            "trigger_type": "manual",
+            "trigger_config": {},
+            "graph": {
+                "nodes": [
+                    {"id": "1", "type": "try_catch", "data": {}},
+                    {"id": "2", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Try branch"}}},
+                    {"id": "3", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Catch branch"}}},
+                ],
+                "edges": [
+                    {"id": "e1-2", "source": "1", "target": "2", "sourceHandle": "try"},
+                    {"id": "e1-3", "source": "1", "target": "3", "sourceHandle": "catch"},
+                ],
+            },
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["graph"]["nodes"][0]["type"] == "try_catch"
+    try_edges = [e for e in data["graph"]["edges"] if e["sourceHandle"] == "try"]
+    catch_edges = [e for e in data["graph"]["edges"] if e["sourceHandle"] == "catch"]
+    assert len(try_edges) == 1
+    assert len(catch_edges) == 1
+
+
+async def test_workflow_trigger_node_schedule(auth_client):
+    """Test onSchedule trigger node."""
+    resp = await auth_client.post(
+        WORKFLOWS,
+        json={
+            "name": "Scheduled trigger node",
+            "trigger_type": "onSchedule",
+            "trigger_config": {"cron": "0 9 * * *"},
+            "graph": {
+                "nodes": [
+                    {"id": "1", "type": "trigger", "data": {"trigger_type": "onSchedule", "trigger_config": {"cron": "0 9 * * *"}}},
+                    {"id": "2", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Daily reminder"}}},
+                ],
+                "edges": [
+                    {"id": "e1-2", "source": "1", "target": "2"},
+                ],
+            },
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["trigger_type"] == "onSchedule"
+    assert data["graph"]["nodes"][0]["type"] == "trigger"
+    assert data["graph"]["nodes"][0]["data"]["trigger_type"] == "onSchedule"
+
+
+async def test_workflow_trigger_node_data_change(auth_client):
+    """Test onDataChange trigger node."""
+    resp = await auth_client.post(
+        WORKFLOWS,
+        json={
+            "name": "Data change trigger node",
+            "trigger_type": "onDataChange",
+            "trigger_config": {"source_type": "calendar"},
+            "graph": {
+                "nodes": [
+                    {"id": "1", "type": "trigger", "data": {"trigger_type": "onDataChange", "trigger_config": {"source_type": "calendar"}}},
+                    {"id": "2", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Calendar updated"}}},
+                ],
+                "edges": [
+                    {"id": "e1-2", "source": "1", "target": "2"},
+                ],
+            },
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["trigger_type"] == "onDataChange"
+    assert data["graph"]["nodes"][0]["type"] == "trigger"
+
+
+async def test_workflow_trigger_node_server_event(auth_client):
+    """Test onServerEvent trigger node."""
+    resp = await auth_client.post(
+        WORKFLOWS,
+        json={
+            "name": "Server event trigger node",
+            "trigger_type": "onServerEvent",
+            "trigger_config": {"event_name": "user_login"},
+            "graph": {
+                "nodes": [
+                    {"id": "1", "type": "trigger", "data": {"trigger_type": "onServerEvent", "trigger_config": {"event_name": "user_login"}}},
+                    {"id": "2", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Welcome!"}}},
+                ],
+                "edges": [
+                    {"id": "e1-2", "source": "1", "target": "2"},
+                ],
+            },
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["trigger_type"] == "onServerEvent"
+    assert data["graph"]["nodes"][0]["type"] == "trigger"
+
+
+async def test_workflow_complex_branching(auth_client):
+    """Test complex workflow with multiple branching types."""
+    resp = await auth_client.post(
+        WORKFLOWS,
+        json={
+            "name": "Complex branching",
+            "trigger_type": "manual",
+            "trigger_config": {},
+            "graph": {
+                "nodes": [
+                    {"id": "1", "type": "action", "data": {"tool": "get_chat_history", "args": {"limit": 10}}},
+                    {"id": "2", "type": "condition", "data": {"condition": "{{results.1.length}} > 0"}},
+                    {"id": "3", "type": "switch", "data": {"value": "{{results.1.length}}"}},
+                    {"id": "4", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Few messages"}}},
+                    {"id": "5", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Many messages"}}},
+                    {"id": "6", "type": "action", "data": {"tool": "send_notification", "args": {"title": "No messages"}}},
+                ],
+                "edges": [
+                    {"id": "e1-2", "source": "1", "target": "2"},
+                    {"id": "e2-3", "source": "2", "target": "3", "sourceHandle": "true"},
+                    {"id": "e2-6", "source": "2", "target": "6", "sourceHandle": "false"},
+                    {"id": "e3-4", "source": "3", "target": "4", "label": "1"},
+                    {"id": "e3-4b", "source": "3", "target": "4", "label": "2"},
+                    {"id": "e3-5", "source": "3", "target": "5", "label": "default"},
+                ],
+            },
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert len(data["graph"]["nodes"]) == 6
+    assert data["graph"]["nodes"][1]["type"] == "condition"
+    assert data["graph"]["nodes"][2]["type"] == "switch"
+
+
+async def test_workflow_nested_loops(auth_client):
+    """Test workflow with nested loop structure."""
+    resp = await auth_client.post(
+        WORKFLOWS,
+        json={
+            "name": "Nested loops",
+            "trigger_type": "manual",
+            "trigger_config": {},
+            "graph": {
+                "nodes": [
+                    {"id": "1", "type": "loop", "data": {"iterations": 3, "variable": "outer"}},
+                    {"id": "2", "type": "loop", "data": {"iterations": 2, "variable": "inner"}},
+                    {"id": "3", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Outer {{outer}} Inner {{inner}}"}}},
+                ],
+                "edges": [
+                    {"id": "e1-2", "source": "1", "target": "2", "sourceHandle": "body"},
+                    {"id": "e2-3", "source": "2", "target": "3", "sourceHandle": "body"},
+                ],
+            },
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["graph"]["nodes"][0]["type"] == "loop"
+    assert data["graph"]["nodes"][1]["type"] == "loop"
+
+
+async def test_workflow_parallel_with_delay(auth_client):
+    """Test parallel branches with delays."""
+    resp = await auth_client.post(
+        WORKFLOWS,
+        json={
+            "name": "Parallel with delays",
+            "trigger_type": "manual",
+            "trigger_config": {},
+            "graph": {
+                "nodes": [
+                    {"id": "1", "type": "parallel", "data": {}},
+                    {"id": "2", "type": "delay", "data": {"duration": 1, "unit": "seconds"}},
+                    {"id": "3", "type": "delay", "data": {"duration": 2, "unit": "seconds"}},
+                    {"id": "4", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Fast branch"}}},
+                    {"id": "5", "type": "action", "data": {"tool": "send_notification", "args": {"title": "Slow branch"}}},
+                ],
+                "edges": [
+                    {"id": "e1-2", "source": "1", "target": "2"},
+                    {"id": "e1-3", "source": "1", "target": "3"},
+                    {"id": "e2-4", "source": "2", "target": "4"},
+                    {"id": "e3-5", "source": "3", "target": "5"},
+                ],
+            },
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["graph"]["nodes"][0]["type"] == "parallel"
+    parallel_branches = [e for e in data["graph"]["edges"] if e["source"] == "1"]
+    assert len(parallel_branches) == 2

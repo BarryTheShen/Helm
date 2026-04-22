@@ -1,24 +1,25 @@
 /**
  * RichTextRendererComponent — SDUI component for rendering markdown content.
  *
- * Renders markdown with support for:
- * - Headings (h1, h2, h3)
+ * Uses react-native-markdown-display for full markdown support including:
+ * - Headings (h1-h3)
  * - Bold, italic, strikethrough
  * - Lists (ordered and unordered)
- * - Links (displayed as underlined text)
+ * - Links (clickable)
  * - Code blocks and inline code
  * - Blockquotes
+ * - Tables
+ * - Inline images
+ * - Video embeds (YouTube, Vimeo, iframe)
  *
  * Props:
  * - content: string (markdown content)
  * - theme: "light" | "dark" (optional, default "light")
- *
- * Note: react-native-markdown-display is NOT in dependencies.
- * This component uses a custom regex-based parser similar to SDUIMarkdown.
  */
-import React from 'react';
-import { View, Text, StyleSheet, Linking } from 'react-native';
-import { resolveColor, themeColors } from '@/theme/tokens';
+import React, { useMemo } from 'react';
+import { View, Text, StyleSheet, Platform, Linking, TouchableOpacity, Image } from 'react-native';
+import Markdown, { MarkdownIt, RenderRules } from 'react-native-markdown-display';
+import { themeColors } from '@/theme/tokens';
 import type { ActionDispatcher } from '@/components/sdui/SDUIRenderer';
 
 interface RichTextRendererComponentProps {
@@ -39,172 +40,230 @@ export function RichTextRendererComponent({
     );
   }
 
-  const themeStyle = theme === 'dark' ? darkTheme : lightTheme;
-  const lines = content.split('\n');
-  const elements: React.ReactNode[] = [];
+  const isDark = theme === 'dark';
+  const themeStyle = useMemo(() => (isDark ? darkTheme : lightTheme), [isDark]);
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  // Custom markdown-it instance with table support
+  const markdownItInstance = useMemo(() => {
+    const md = MarkdownIt({ typographer: true, linkify: true });
 
-    // Headings
-    if (line.startsWith('### ')) {
-      elements.push(
-        <Text key={i} style={[styles.h3, { color: themeStyle.text }]}>
-          {renderInline(line.slice(4), themeStyle)}
-        </Text>
-      );
-    } else if (line.startsWith('## ')) {
-      elements.push(
-        <Text key={i} style={[styles.h2, { color: themeStyle.text }]}>
-          {renderInline(line.slice(3), themeStyle)}
-        </Text>
-      );
-    } else if (line.startsWith('# ')) {
-      elements.push(
-        <Text key={i} style={[styles.h1, { color: themeStyle.text }]}>
-          {renderInline(line.slice(2), themeStyle)}
-        </Text>
-      );
-    }
-    // List items
-    else if (line.startsWith('- ') || line.startsWith('* ')) {
-      elements.push(
-        <View key={i} style={styles.listItem}>
-          <Text style={[styles.bullet, { color: themeStyle.text }]}>{'•  '}</Text>
-          <Text style={[styles.body, { color: themeStyle.text }]}>
-            {renderInline(line.slice(2), themeStyle)}
-          </Text>
-        </View>
-      );
-    }
-    // Numbered list
-    else if (/^\d+\.\s/.test(line)) {
-      const match = line.match(/^(\d+\.)\s(.*)$/);
-      if (match) {
-        elements.push(
-          <View key={i} style={styles.listItem}>
-            <Text style={[styles.bullet, { color: themeStyle.text }]}>{match[1] + ' '}</Text>
-            <Text style={[styles.body, { color: themeStyle.text }]}>
-              {renderInline(match[2], themeStyle)}
-            </Text>
-          </View>
+    // Add video embed rule for YouTube/Vimeo/iframe
+    md.inline.ruler.before('link', 'video', (state, silent) => {
+      const pos = state.pos;
+      const max = state.posMax;
+
+      // Match ![video](url) or <iframe...>
+      if (state.src.charCodeAt(pos) === 0x21 /* ! */ &&
+          state.src.charCodeAt(pos + 1) === 0x5B /* [ */ &&
+          state.src.slice(pos, pos + 8) === '![video]') {
+        const match = state.src.slice(pos).match(/^!\[video\]\(([^)]+)\)/);
+        if (match) {
+          if (!silent) {
+            const token = state.push('video', '', 0);
+            token.content = match[1];
+          }
+          state.pos += match[0].length;
+          return true;
+        }
+      }
+
+      // Match <iframe src="...">
+      if (state.src.charCodeAt(pos) === 0x3C /* < */ &&
+          state.src.slice(pos, pos + 7) === '<iframe') {
+        const match = state.src.slice(pos).match(/<iframe[^>]+src=["']([^"']+)["'][^>]*>/);
+        if (match) {
+          if (!silent) {
+            const token = state.push('video', '', 0);
+            token.content = match[1];
+          }
+          state.pos += match[0].length;
+          return true;
+        }
+      }
+
+      return false;
+    });
+
+    return md;
+  }, []);
+
+  // Custom render rules
+  const rules: RenderRules = useMemo(() => ({
+    // Video embed renderer
+    video: (node, children, parent, styles) => {
+      const url = node.content || '';
+      const videoId = extractVideoId(url);
+
+      if (!videoId) {
+        return (
+          <TouchableOpacity
+            key={node.key}
+            style={styles.videoPlaceholder}
+            onPress={() => Linking.openURL(url)}
+          >
+            <Text style={styles.videoText}>🎥 Open Video</Text>
+          </TouchableOpacity>
         );
       }
-    }
-    // Blockquote
-    else if (line.startsWith('> ')) {
-      elements.push(
-        <View key={i} style={[styles.blockquote, { borderLeftColor: themeStyle.border }]}>
-          <Text style={[styles.blockquoteText, { color: themeStyle.textSecondary }]}>
-            {renderInline(line.slice(2), themeStyle)}
-          </Text>
-        </View>
-      );
-    }
-    // Code block (```...```)
-    else if (line.startsWith('```')) {
-      const codeLines: string[] = [];
-      i++;
-      while (i < lines.length && !lines[i].startsWith('```')) {
-        codeLines.push(lines[i]);
-        i++;
-      }
-      elements.push(
-        <View key={`code-${i}`} style={[styles.codeBlock, { backgroundColor: themeStyle.codeBg }]}>
-          <Text style={[styles.codeText, { color: themeStyle.codeText }]}>
-            {codeLines.join('\n')}
-          </Text>
-        </View>
-      );
-    }
-    // Empty line = spacing
-    else if (line.trim() === '') {
-      elements.push(<View key={i} style={styles.spacer} />);
-    }
-    // Regular paragraph
-    else {
-      elements.push(
-        <Text key={i} style={[styles.body, { color: themeStyle.text }]}>
-          {renderInline(line, themeStyle)}
-        </Text>
-      );
-    }
-  }
 
-  return <View style={styles.container}>{elements}</View>;
-}
-
-/** Parse inline markdown: **bold**, *italic*, `code`, ~~strike~~, [link](url) */
-function renderInline(text: string, themeStyle: ThemeStyle): React.ReactNode {
-  const parts: React.ReactNode[] = [];
-  // Match bold, italic, code, strikethrough, links
-  const regex = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|~~(.+?)~~|\[(.+?)\]\((.+?)\))/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  let keyCounter = 0;
-
-  while ((match = regex.exec(text)) !== null) {
-    // Add text before match
-    if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index));
-    }
-
-    if (match[2]) {
-      // **bold**
-      parts.push(
-        <Text key={`bold-${keyCounter++}`} style={{ fontWeight: '700' }}>
-          {match[2]}
-        </Text>
-      );
-    } else if (match[3]) {
-      // *italic*
-      parts.push(
-        <Text key={`italic-${keyCounter++}`} style={{ fontStyle: 'italic' }}>
-          {match[3]}
-        </Text>
-      );
-    } else if (match[4]) {
-      // `code`
-      parts.push(
-        <Text
-          key={`code-${keyCounter++}`}
-          style={[styles.inlineCode, { backgroundColor: themeStyle.codeBg, color: themeStyle.codeText }]}
+      return (
+        <TouchableOpacity
+          key={node.key}
+          style={styles.videoPlaceholder}
+          onPress={() => Linking.openURL(url)}
         >
-          {match[4]}
-        </Text>
+          <Text style={styles.videoText}>▶️ {videoId.platform} Video</Text>
+        </TouchableOpacity>
       );
-    } else if (match[5]) {
-      // ~~strikethrough~~
-      parts.push(
-        <Text key={`strike-${keyCounter++}`} style={{ textDecorationLine: 'line-through' }}>
-          {match[5]}
-        </Text>
+    },
+
+    // Image renderer with error handling
+    image: (node, children, parent, styles) => {
+      const { src, alt } = node.attributes;
+      return (
+        <Image
+          key={node.key}
+          source={{ uri: src }}
+          style={styles.image}
+          resizeMode="contain"
+          accessibilityLabel={alt}
+        />
       );
-    } else if (match[6] && match[7]) {
-      // [link text](url)
-      const linkText = match[6];
-      const url = match[7];
-      parts.push(
+    },
+
+    // Link renderer with tap handling
+    link: (node, children, parent, styles) => {
+      const { href } = node.attributes;
+      return (
         <Text
-          key={`link-${keyCounter++}`}
-          style={[styles.link, { color: themeStyle.link }]}
+          key={node.key}
+          style={styles.link}
           onPress={() => {
-            Linking.openURL(url).catch(err => console.error('Failed to open URL:', err));
+            if (href) {
+              Linking.openURL(href).catch(err => console.error('Failed to open URL:', err));
+            }
           }}
         >
-          {linkText}
+          {children}
         </Text>
       );
-    }
+    },
 
-    lastIndex = match.index + match[0].length;
+    // Table support
+    table: (node, children, parent, styles) => (
+      <View key={node.key} style={styles.table}>
+        {children}
+      </View>
+    ),
+    table_row: (node, children, parent, styles) => (
+      <View key={node.key} style={styles.tableRow}>
+        {children}
+      </View>
+    ),
+    table_cell: (node, children, parent, styles) => (
+      <View key={node.key} style={styles.tableCell}>
+        <Text style={styles.tableCellText}>{children}</Text>
+      </View>
+    ),
+    th: (node, children, parent, styles) => (
+      <View key={node.key} style={styles.tableHeader}>
+        <Text style={styles.tableHeaderText}>{children}</Text>
+      </View>
+    ),
+  }), []);
+
+  const markdownStyles = useMemo(() => ({
+    body: { fontSize: 16, lineHeight: 22, color: themeStyle.text },
+    heading1: { fontSize: 24, fontWeight: '700' as const, lineHeight: 30, color: themeStyle.text, marginTop: 8, marginBottom: 4 },
+    heading2: { fontSize: 20, fontWeight: '700' as const, lineHeight: 26, color: themeStyle.text, marginTop: 6, marginBottom: 3 },
+    heading3: { fontSize: 17, fontWeight: '600' as const, lineHeight: 22, color: themeStyle.text, marginTop: 4, marginBottom: 2 },
+    bullet_list: { marginVertical: 2 },
+    ordered_list: { marginVertical: 2 },
+    list_item: { flexDirection: 'row' as const, marginVertical: 1 },
+    blockquote: {
+      borderLeftWidth: 3,
+      borderLeftColor: themeStyle.border,
+      paddingLeft: 12,
+      paddingVertical: 4,
+      marginVertical: 4,
+      backgroundColor: 'transparent',
+    },
+    fence: { backgroundColor: themeStyle.codeBg, borderRadius: 8, padding: 12, marginVertical: 4 },
+    code_block: { backgroundColor: themeStyle.codeBg, borderRadius: 8, padding: 12, marginVertical: 4 },
+    code_inline: {
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      fontSize: 14,
+      backgroundColor: themeStyle.codeBg,
+      paddingHorizontal: 4,
+      borderRadius: 3,
+      color: themeStyle.codeText,
+    },
+    fence_text: {
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      fontSize: 14,
+      lineHeight: 20,
+      color: themeStyle.codeText,
+    },
+    code_text: {
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      fontSize: 14,
+      lineHeight: 20,
+      color: themeStyle.codeText,
+    },
+    strong: { fontWeight: '700' as const, color: themeStyle.text },
+    em: { fontStyle: 'italic' as const, color: themeStyle.text },
+    s: { textDecorationLine: 'line-through' as const, color: themeStyle.text },
+    paragraph: { marginVertical: 2, color: themeStyle.text },
+    link: { color: themeStyle.link, textDecorationLine: 'underline' as const },
+    image: { width: '100%', height: 200, borderRadius: 8, marginVertical: 8 },
+    table: { borderWidth: 1, borderColor: themeStyle.border, borderRadius: 8, marginVertical: 8, overflow: 'hidden' },
+    tableRow: { flexDirection: 'row' as const, borderBottomWidth: 1, borderBottomColor: themeStyle.border },
+    tableCell: { flex: 1, padding: 8, borderRightWidth: 1, borderRightColor: themeStyle.border },
+    tableCellText: { fontSize: 14, color: themeStyle.text },
+    tableHeader: { flex: 1, padding: 8, backgroundColor: themeStyle.tableHeaderBg, borderRightWidth: 1, borderRightColor: themeStyle.border },
+    tableHeaderText: { fontSize: 14, fontWeight: '600' as const, color: themeStyle.text },
+    videoPlaceholder: {
+      backgroundColor: themeStyle.videoBg,
+      padding: 16,
+      borderRadius: 8,
+      alignItems: 'center' as const,
+      marginVertical: 8,
+      borderWidth: 1,
+      borderColor: themeStyle.border,
+    },
+    videoText: { fontSize: 16, color: themeStyle.link, fontWeight: '600' as const },
+  }), [themeStyle]);
+
+  return (
+    <Markdown
+      style={markdownStyles}
+      rules={rules}
+      markdownit={markdownItInstance}
+    >
+      {content}
+    </Markdown>
+  );
+}
+
+/** Extract video ID and platform from URL */
+function extractVideoId(url: string): { platform: string; id: string } | null {
+  // YouTube patterns
+  const youtubePatterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+  ];
+
+  for (const pattern of youtubePatterns) {
+    const match = url.match(pattern);
+    if (match) return { platform: 'YouTube', id: match[1] };
   }
 
-  if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
-  }
+  // Vimeo patterns
+  const vimeoPattern = /vimeo\.com\/(\d+)/;
+  const vimeoMatch = url.match(vimeoPattern);
+  if (vimeoMatch) return { platform: 'Vimeo', id: vimeoMatch[1] };
 
-  return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : parts;
+  return null;
 }
 
 // Theme definitions
@@ -215,6 +274,8 @@ interface ThemeStyle {
   codeText: string;
   border: string;
   link: string;
+  tableHeaderBg: string;
+  videoBg: string;
 }
 
 const lightTheme: ThemeStyle = {
@@ -224,6 +285,8 @@ const lightTheme: ThemeStyle = {
   codeText: themeColors.text,
   border: themeColors.border,
   link: themeColors.primary,
+  tableHeaderBg: themeColors.surface,
+  videoBg: themeColors.surface,
 };
 
 const darkTheme: ThemeStyle = {
@@ -233,39 +296,11 @@ const darkTheme: ThemeStyle = {
   codeText: '#FFFFFF',
   border: '#48484A',
   link: '#0A84FF',
+  tableHeaderBg: '#1C1C1E',
+  videoBg: '#1C1C1E',
 };
 
 const styles = StyleSheet.create({
-  container: { gap: 2 },
-  h1: { fontSize: 24, fontWeight: '700', lineHeight: 30, marginTop: 8, marginBottom: 4 },
-  h2: { fontSize: 20, fontWeight: '700', lineHeight: 26, marginTop: 6, marginBottom: 3 },
-  h3: { fontSize: 17, fontWeight: '600', lineHeight: 22, marginTop: 4, marginBottom: 2 },
-  body: { fontSize: 16, lineHeight: 22, flexShrink: 1 },
-  listItem: { flexDirection: 'row', paddingLeft: 8, marginVertical: 1 },
-  bullet: { fontSize: 16, lineHeight: 22, width: 20 },
-  blockquote: {
-    borderLeftWidth: 3,
-    paddingLeft: 12,
-    paddingVertical: 4,
-    marginVertical: 4,
-  },
-  blockquoteText: { fontSize: 16, lineHeight: 22, fontStyle: 'italic' },
-  codeBlock: {
-    borderRadius: 8,
-    padding: 12,
-    marginVertical: 4,
-  },
-  codeText: { fontFamily: 'monospace', fontSize: 14, lineHeight: 20 },
-  inlineCode: {
-    fontFamily: 'monospace',
-    fontSize: 14,
-    paddingHorizontal: 4,
-    borderRadius: 3,
-  },
-  link: {
-    textDecorationLine: 'underline',
-  },
-  spacer: { height: 8 },
   errorContainer: {
     padding: 12,
     backgroundColor: '#FF3B3020',

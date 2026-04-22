@@ -1,97 +1,96 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { SDUIPreview } from './SDUIPreview';
-import { Home, MessageCircle, Calendar, Newspaper, Settings } from 'lucide-react';
+import { Home, MessageCircle, Grid3x3, Calendar, FileText, Bell, Settings } from 'lucide-react';
 
-interface Template {
-  id: string;
+interface ModuleInfo {
+  module_id: string;
   name: string;
-  description: string | null;
-  category: string;
-  screen_json: any;
+  icon: string;
+  has_screen: boolean;
+  is_custom?: boolean;
 }
 
-interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
+interface ModuleScreen {
+  screen?: any;
+  state_json?: any;
 }
-
-interface TabConfig {
-  id: string;
-  label: string;
-  icon: typeof Home;
-  category: string;
-}
-
-const TABS: TabConfig[] = [
-  { id: 'home', label: 'Home', icon: Home, category: 'dashboard' },
-  { id: 'chat', label: 'Chat', icon: MessageCircle, category: 'custom' },
-  { id: 'planner', label: 'Planner', icon: Calendar, category: 'planner' },
-  { id: 'feed', label: 'Feed', icon: Newspaper, category: 'custom' },
-  { id: 'settings', label: 'Settings', icon: Settings, category: 'custom' },
-];
 
 interface AppPreviewProps {
   onClose: () => void;
 }
 
 export function AppPreview({ onClose }: AppPreviewProps) {
-  const [templates, setTemplates] = useState<Record<string, Template>>({});
+  const [modules, setModules] = useState<ModuleInfo[]>([]);
+  const [screens, setScreens] = useState<Record<string, any>>({});
   const [activeTab, setActiveTab] = useState('home');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchTemplates = async () => {
+    const fetchModules = async () => {
       setLoading(true);
       setError(null);
 
       try {
-        // Fetch templates for each category
-        const categories = ['dashboard', 'custom', 'planner'];
-        const templateMap: Record<string, Template> = {};
+        // Fetch all modules
+        const modulesData = await api.get<{ items: ModuleInfo[] }>('/api/sdui/modules');
+        const allModules = modulesData.items || [];
 
-        for (const category of categories) {
-          try {
-            const data = await api.get<PaginatedResponse<Template>>(
-              `/api/templates?category=${category}&limit=1`
-            );
+        // Filter to only show the main 7 tabs (exclude custom modules for now)
+        const mainTabs = allModules.filter(m => !m.is_custom);
+        setModules(mainTabs);
 
-            if (data.items && data.items.length > 0) {
-              const templateListItem = data.items[0];
-              // Fetch full template details to get screen_json
-              const template = await api.get<Template>(`/api/templates/${templateListItem.id}`);
+        // Fetch screens for all modules that have them
+        const screenMap: Record<string, any> = {};
 
-              // Map first template of each category to tabs
-              if (category === 'dashboard') {
-                templateMap['home'] = template;
-              } else if (category === 'planner') {
-                templateMap['planner'] = template;
-              } else if (category === 'custom') {
-                // Assign to remaining tabs
-                if (!templateMap['chat']) templateMap['chat'] = template;
-                else if (!templateMap['feed']) templateMap['feed'] = template;
-                else if (!templateMap['settings']) templateMap['settings'] = template;
-              }
+        for (const module of mainTabs) {
+          if (module.has_screen) {
+            try {
+              const screenData = await api.get<ModuleScreen>(`/api/sdui/${module.module_id}`);
+              screenMap[module.module_id] = screenData.screen || screenData.state_json || null;
+            } catch (err) {
+              console.error(`Failed to fetch screen for ${module.module_id}:`, err);
             }
-          } catch (err) {
-            console.error(`Failed to fetch ${category} templates:`, err);
           }
         }
 
-        setTemplates(templateMap);
+        setScreens(screenMap);
+
+        // Set active tab to first module with a screen, or first module
+        const firstWithScreen = mainTabs.find(m => m.has_screen);
+        if (firstWithScreen) {
+          setActiveTab(firstWithScreen.module_id);
+        } else if (mainTabs.length > 0) {
+          setActiveTab(mainTabs[0].module_id);
+        }
       } catch (err) {
-        setError('Failed to load templates');
+        setError('Failed to load modules');
         console.error(err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchTemplates();
+    fetchModules();
   }, []);
 
-  const activeTemplate = templates[activeTab];
+  const activeScreen = screens[activeTab];
+  const activeModule = modules.find(m => m.module_id === activeTab);
+
+  // Map module IDs to icons
+  const getIconComponent = (moduleId: string) => {
+    switch (moduleId) {
+      case 'home': return Home;
+      case 'chat': return MessageCircle;
+      case 'modules': return Grid3x3;
+      case 'calendar': return Calendar;
+      case 'forms': return FileText;
+      case 'alerts': return Bell;
+      case 'settings': return Settings;
+      default: return Grid3x3;
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -124,19 +123,19 @@ export function AppPreview({ onClose }: AppPreviewProps) {
             <div className="bg-white border-l border-r border-gray-300" style={{ height: 600, overflow: 'hidden' }}>
               {loading ? (
                 <div className="flex items-center justify-center h-full text-gray-400">
-                  Loading templates...
+                  Loading modules...
                 </div>
               ) : error ? (
                 <div className="flex items-center justify-center h-full text-red-500 text-sm px-4 text-center">
                   {error}
                 </div>
-              ) : activeTemplate ? (
+              ) : activeScreen ? (
                 <div className="h-full overflow-auto">
-                  <SDUIPreview json={activeTemplate.screen_json} />
+                  <SDUIPreview json={activeScreen} />
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-400 text-sm px-4 text-center">
-                  No template available for {TABS.find(t => t.id === activeTab)?.label}
+                  No screen available for {activeModule?.name || activeTab}
                 </div>
               )}
             </div>
@@ -144,26 +143,26 @@ export function AppPreview({ onClose }: AppPreviewProps) {
             {/* Tab bar */}
             <div className="bg-white rounded-b-3xl border border-t-0 border-gray-300 px-2 py-2">
               <div className="flex items-center justify-around">
-                {TABS.map(tab => {
-                  const Icon = tab.icon;
-                  const isActive = activeTab === tab.id;
-                  const hasTemplate = !!templates[tab.id];
+                {modules.map(module => {
+                  const Icon = getIconComponent(module.module_id);
+                  const isActive = activeTab === module.module_id;
+                  const hasScreen = !!screens[module.module_id];
 
                   return (
                     <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      disabled={!hasTemplate && !loading}
-                      className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors ${
+                      key={module.module_id}
+                      onClick={() => setActiveTab(module.module_id)}
+                      disabled={!hasScreen && !loading}
+                      className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg transition-colors ${
                         isActive
                           ? 'text-blue-600'
-                          : hasTemplate
+                          : hasScreen
                           ? 'text-gray-600 hover:text-gray-900'
                           : 'text-gray-300 cursor-not-allowed'
                       }`}
                     >
-                      <Icon size={20} />
-                      <span className="text-xs">{tab.label}</span>
+                      <Icon size={18} />
+                      <span className="text-[10px]">{module.name}</span>
                     </button>
                   );
                 })}

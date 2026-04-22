@@ -13,6 +13,7 @@ import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
+  horizontalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useEditorStore } from './useEditorStore';
@@ -20,16 +21,17 @@ import { getComponentDefinition } from './types';
 import type { EditorCell, EditorComponent, EditorRow, EditorRowHeight } from './types';
 
 import { ComponentPicker } from './ComponentPicker';
-import { Plus, GripVertical, X, Edit2, Eye, Copy, Trash2 } from 'lucide-react';
+import { Plus, GripVertical, X, Edit2, Eye, Copy, Trash2, GripHorizontal } from 'lucide-react';
 
 const MIN_ROW_HEIGHT = 48;
 const ROW_DRAG_HANDLE_WIDTH = 24;
-const ROW_DRAG_HANDLE_MARGIN = 32; // Left margin space for drag handle
+const ROW_DRAG_HANDLE_OFFSET = -32; // Position drag handle outside the screen (negative = left of screen)
 const DEFAULT_ROW_RIGHT_PADDING = 4;
 const SCROLLABLE_CELL_WIDTH = 160;
 const SCROLLABLE_CELL_MIN_WIDTH = 120;
 const MAX_PREVIEW_WIDTH = 960;
 const MAX_PREVIEW_HEIGHT = 1200;
+const MIN_CELL_WIDTH_PERCENT = 5; // Minimum 5% width per cell
 
 // ── Component Preview Renderers ──────────────────────────────────────────────
 
@@ -693,6 +695,7 @@ function getRowContainerStyle(row: EditorRow, previewHeight?: number): CSSProper
   const resolvedHeight = resolveRowHeight(row.height, previewHeight);
   const style: CSSProperties = {
     minHeight: typeof resolvedHeight === 'number' ? resolvedHeight : MIN_ROW_HEIGHT,
+    overflow: 'hidden', // Contain cell content within row boundaries
   };
 
   if (typeof resolvedHeight === 'number') {
@@ -750,6 +753,7 @@ function getCellStyle(row: EditorRow, cellWidth: EditorCell['width'], totalWidth
       flex: '0 0 auto',
       width: `${Math.max(getNumericCellWidth(cellWidth) * SCROLLABLE_CELL_WIDTH, SCROLLABLE_CELL_MIN_WIDTH)}px`,
       minWidth: SCROLLABLE_CELL_MIN_WIDTH,
+      height: '100%', // Scale vertically with row height
     };
   }
 
@@ -757,15 +761,19 @@ function getCellStyle(row: EditorRow, cellWidth: EditorCell['width'], totalWidth
     return {
       flex: '1 1 0%',
       minWidth: 40,
+      height: '100%', // Scale vertically with row height
     };
   }
 
   // Handle percentage widths
   if (typeof cellWidth === 'string' && cellWidth.endsWith('%')) {
+    const percent = parseFloat(cellWidth);
+    const clampedPercent = Math.max(MIN_CELL_WIDTH_PERCENT, Math.min(100, percent));
     return {
-      flex: `0 0 ${cellWidth}`,
-      width: cellWidth,
+      flex: `0 0 ${clampedPercent}%`,
+      width: `${clampedPercent}%`,
       minWidth: 40,
+      height: '100%', // Scale vertically with row height
     };
   }
 
@@ -775,6 +783,7 @@ function getCellStyle(row: EditorRow, cellWidth: EditorCell['width'], totalWidth
   return {
     flex: `${cellPercent} 0 0%`,
     minWidth: 40,
+    height: '100%', // Scale vertically with row height
   };
 }
 
@@ -825,9 +834,7 @@ function CellResizeHandle({
       );
       const nextRight = Math.round((totalWidthRef.current - nextLeft) * 100) / 100;
 
-      if (Math.abs(ev.clientX - startXRef.current) > 0) {
-        hasMovedRef.current = true;
-      }
+      hasMovedRef.current = true; // Mark as moved immediately for smoother feedback
 
       nextWidthsRef.current = { left: nextLeft, right: nextRight };
       onPreview(rowId, cellIndex, nextLeft, nextRight);
@@ -880,7 +887,7 @@ function RowDragHandle({
           : 'opacity-0 cursor-grab group-hover:opacity-100'
       }`}
       style={{
-        left: 4,
+        left: ROW_DRAG_HANDLE_OFFSET,
         top: 0,
         bottom: 0,
         width: ROW_DRAG_HANDLE_WIDTH
@@ -923,9 +930,7 @@ function RowHeightResizeHandle({
       const delta = event.clientY - startYRef.current;
       const nextHeight = Math.max(MIN_ROW_HEIGHT, Math.round(startHeightRef.current + delta));
 
-      if (Math.abs(delta) > 0) {
-        hasMovedRef.current = true;
-      }
+      hasMovedRef.current = true; // Mark as moved immediately for smoother feedback
 
       nextHeightRef.current = nextHeight;
       onPreview(rowId, nextHeight);
@@ -1324,7 +1329,7 @@ export function EditorCanvas() {
           </div>
 
           {/* Canvas content */}
-          <div className="flex-1 overflow-y-auto p-2" style={{ paddingLeft: ROW_DRAG_HANDLE_MARGIN + 8 }} onClick={() => setSelection(null)}>
+          <div className="flex-1 overflow-y-auto p-2" onClick={() => setSelection(null)}>
             {rows.length === 0 && (
               <RowInsertionControl onAdd={(n) => addRow(n)} />
             )}

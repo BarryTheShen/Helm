@@ -140,7 +140,8 @@ async def health():
 
 
 # Register routers
-from app.routers import auth, modules, chat, calendar, notifications, agent_config, websocket, workflows, actions, users, sessions, audit, components, templates, admin, variables, data_sources, triggers, connections  # noqa: E402
+from app.routers import auth, modules, chat, calendar, notifications, agent_config, websocket, workflows, actions, users, sessions, audit, components, templates, admin, variables, data_sources, triggers, connections, articles, todos  # noqa: E402
+from app.routers import settings as settings_router  # noqa: E402
 
 app.include_router(auth.router)
 app.include_router(modules.router)
@@ -148,6 +149,7 @@ app.include_router(templates.router)
 app.include_router(chat.router)
 app.include_router(calendar.router)
 app.include_router(notifications.router)
+app.include_router(todos.router)
 app.include_router(agent_config.router)
 app.include_router(workflows.router)
 app.include_router(actions.router)
@@ -160,6 +162,8 @@ app.include_router(variables.router)
 app.include_router(data_sources.router)
 app.include_router(triggers.router)
 app.include_router(connections.router)
+app.include_router(settings_router.router)
+app.include_router(articles.router)
 app.include_router(websocket.router)
 
 # Mount MCP server
@@ -180,7 +184,7 @@ try:
         User, Session, AuditLog, ChatMessage, CalendarEvent,
         ComponentRegistry, Connection, CustomVariable, DataSource,
         Notification, AgentConfig, ModuleState, SDUITemplate,
-        TriggerDefinition, Workflow,
+        TriggerDefinition, Workflow, Settings, Article, Todo,
     )
     from app.database import engine
 
@@ -276,6 +280,21 @@ try:
         name = "Workflow"
         name_plural = "Workflows"
 
+    class SettingsAdmin(ModelView, model=Settings):
+        column_list = ["id", "user_id", "display_name", "email", "dark_mode"]
+        name = "Settings"
+        name_plural = "Settings"
+
+    class TodoAdmin(ModelView, model=Todo):
+        column_list = ["id", "user_id", "text", "completed", "created_at"]
+        name = "Todo"
+        name_plural = "Todos"
+
+    class ArticleAdmin(ModelView, model=Article):
+        column_list = ["id", "user_id", "title", "source", "published_at", "created_at"]
+        name = "Article"
+        name_plural = "Articles"
+
     _sqladmin_auth = HelmAdminAuth(secret_key=settings.secret_key)
     sqladmin = Admin(app, engine, base_url="/admin/db", authentication_backend=_sqladmin_auth)
     sqladmin.add_view(UserAdmin)
@@ -293,6 +312,9 @@ try:
     sqladmin.add_view(TemplateAdmin)
     sqladmin.add_view(TriggerAdmin)
     sqladmin.add_view(WorkflowAdmin)
+    sqladmin.add_view(SettingsAdmin)
+    sqladmin.add_view(TodoAdmin)
+    sqladmin.add_view(ArticleAdmin)
     logger.info("SQLAdmin mounted at /admin/db")
 except Exception as exc:
     logger.warning(f"SQLAdmin not mounted: {exc}")

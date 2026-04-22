@@ -353,9 +353,13 @@ export type SDUIComponentTypeV2 =
   | 'ChatModule'
   | 'NotesModule'
   | 'InputBar'
-  // SDUI components
+  // SDUI components (PascalCase)
   | 'Todo'
-  | 'ArticleCard';
+  | 'ArticleCard'
+  | 'RichText'
+  // SDUI components (snake_case for backend compatibility)
+  | 'article_card'
+  | 'rich_text_renderer';
 
 /** Data binding configuration for connecting a component to a data source */
 export interface SDUIDataBinding {

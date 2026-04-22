@@ -8,6 +8,8 @@ class ModuleInfo(BaseModel):
     name: str
     icon: str
     enabled: bool
+    pinned: bool = False
+    tab_order: int = 0
 
 
 class ModuleListResponse(BaseModel):
@@ -47,4 +49,14 @@ class TabConfigRequest(BaseModel):
     """Body for PATCH /api/modules/{module_id}/config — rename a tab and/or change its icon."""
     name: str | None = None
     icon: str | None = None
+
+
+class PinModuleRequest(BaseModel):
+    """Body for PATCH /api/modules/{module_id}/pin — pin a module to the tab bar."""
+    tab_order: int | None = None
+
+
+class ReorderModulesRequest(BaseModel):
+    """Body for POST /api/modules/reorder — reorder pinned modules in the tab bar."""
+    module_ids: list[str]
 

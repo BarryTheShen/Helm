@@ -47,7 +47,7 @@ type EditorStoreState = {
   setDevice: (width: number, height: number) => void;
   toggleLandscape: () => void;
   setSelection: (selection: EditorSelection | null) => void;
-  addRow: (cellCount?: number, index?: number) => void;
+  addRow: (cellCount?: number, index?: number, props?: Partial<EditorRow>) => void;
   deleteRow: (rowId: string) => void;
   duplicateRow: (rowId: string) => void;
   moveRow: (fromIndex: number, toIndex: number) => void;
@@ -58,6 +58,7 @@ type EditorStoreState = {
   updateRowHeight: (rowId: string, height: EditorRowHeight) => void;
   updateRowProps: (rowId: string, patch: Partial<EditorRow>) => void;
   setCellCount: (rowId: string, count: number) => void;
+  moveCellInRow: (rowId: string, fromIndex: number, toIndex: number) => void;
   updateCellWidth: (rowId: string, cellIndex: number, width: EditorCell['width']) => void;
   updateComponentProps: (rowId: string, cellIndex: number, props: Record<string, unknown>) => void;
   updateCellRules: (rowId: string, cellIndex: number, rules: ActionRule[]) => void;
@@ -434,14 +435,19 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
     set(() => ({ selection }));
   },
 
-  addRow: (cellCount = 1, index) => {
+  addRow: (cellCount = 1, index, props) => {
     set((state) => {
       const nextRows = [...state.rows];
       const insertIndex = typeof index === 'number'
         ? Math.max(0, Math.min(index, nextRows.length))
         : nextRows.length;
 
-      nextRows.splice(insertIndex, 0, createEmptyRow(cellCount));
+      const newRow = createEmptyRow(cellCount);
+      if (props) {
+        Object.assign(newRow, props);
+      }
+
+      nextRows.splice(insertIndex, 0, newRow);
 
       return commitRows(state, nextRows);
     });
@@ -691,6 +697,36 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
           : state.selection;
 
       return commitRows(state, nextRows, { selection: nextSelection });
+    });
+  },
+
+  moveCellInRow: (rowId, fromIndex, toIndex) => {
+    set((state) => {
+      const rowIndex = findRowIndex(state.rows, rowId);
+      if (rowIndex === -1) {
+        return state;
+      }
+
+      const row = state.rows[rowIndex];
+      if (
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= row.cells.length ||
+        toIndex >= row.cells.length ||
+        fromIndex === toIndex
+      ) {
+        return state;
+      }
+
+      const nextCells = [...row.cells];
+      const [movedCell] = nextCells.splice(fromIndex, 1);
+      nextCells.splice(toIndex, 0, movedCell);
+
+      const nextRows = state.rows.map((entry, index) =>
+        index === rowIndex ? { ...entry, cells: nextCells } : entry
+      );
+
+      return commitRows(state, nextRows);
     });
   },
 

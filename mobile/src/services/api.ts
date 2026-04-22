@@ -9,6 +9,8 @@ import type {
   ChatMessage,
   Template,
   TemplateDetail,
+  Settings,
+  SettingsUpdate,
 } from '@/types/api';
 import type { SDUIDraftResponse, SDUIScreenResponse } from '@/types/sdui';
 
@@ -224,6 +226,18 @@ export class ApiClient {
     return this.request<void>(`/api/templates/${templateId}/apply`, {
       method: 'POST',
       body: JSON.stringify({ module_id: moduleId }),
+    });
+  }
+
+  // Settings
+  async getSettings(): Promise<Settings> {
+    return this.request<Settings>('/api/settings');
+  }
+
+  async updateSettings(settings: SettingsUpdate): Promise<Settings> {
+    return this.request<Settings>('/api/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(settings),
     });
   }
 }

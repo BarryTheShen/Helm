@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_run_code",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_network_requests",
+      "mcp__playwright__browser_fill_form",
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_press_key",
+      "mcp__playwright__browser_handle_dialog",
+      "mcp__playwright__browser_resize",
+      "mcp__playwright__browser_close",
+      "mcp__plugin_mem0_mem0__add_memory",
+      "mcp__plugin_mem0_mem0__search_memories",
+      "mcp__plugin_mem0_mem0__get_memories",
+      "mcp__plugin_mem0_mem0__update_memory",
+      "mcp__plugin_mem0_mem0__delete_memory",
+      "Bash(sqlite3 *)",
+      "Bash(npx tsc *)",
+      "Bash(curl *)",
+      "Bash(npm run build *)",
+      "Bash(npm run typecheck *)",
+      "Bash(npm run lint *)",
+      "Bash(cd backend && .venv/bin/python -m pytest *)",
+      "Bash(python manage.py *)",
+      "Bash(alembic *)",
+      "Bash(TOKEN=*)",
+      "Bash(echo *)"
+    ]
+  }
+}

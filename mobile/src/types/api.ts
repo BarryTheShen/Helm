@@ -97,6 +97,8 @@ export interface Module {
   name: string;
   icon: string;
   enabled: boolean;
+  pinned: boolean;
+  tab_order: number;
 }
 
 export interface Template {
@@ -120,4 +122,23 @@ export interface Device {
   device_name: string;
   device_type: string;
   last_seen: string;
+}
+
+export interface Settings {
+  id: string;
+  user_id: string;
+  display_name?: string;
+  email?: string;
+  endpoint_url?: string;
+  dark_mode: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SettingsUpdate {
+  display_name?: string;
+  email?: string;
+  endpoint_url?: string;
+  dark_mode?: boolean;
+  password?: string;
 }

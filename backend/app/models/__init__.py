@@ -1,4 +1,5 @@
 from app.models.agent_config import AgentConfig
+from app.models.article import Article
 from app.models.audit_log import AuditLog
 from app.models.base import Base
 from app.models.calendar_event import CalendarEvent
@@ -13,13 +14,16 @@ from app.models.notification import Notification
 from app.models.sandbox_action import SandboxAction
 from app.models.screen_history import ScreenHistory
 from app.models.session import Session
+from app.models.settings import Settings
 from app.models.template import SDUITemplate
+from app.models.todo import Todo
 from app.models.trigger import TriggerDefinition
 from app.models.user import User
 from app.models.workflow import Workflow
 
 __all__ = [
     "Base",
+    "Article",
     "AuditLog",
     "User",
     "Device",
@@ -35,7 +39,9 @@ __all__ = [
     "ModuleState",
     "SandboxAction",
     "ScreenHistory",
+    "Settings",
     "SDUITemplate",
+    "Todo",
     "TriggerDefinition",
     "Workflow",
 ]

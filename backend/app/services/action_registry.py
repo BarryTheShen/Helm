@@ -481,6 +481,58 @@ async def _fetch_weather(user_id: str, params: dict[str, Any], db: AsyncSession)
         return {"status": "error", "detail": str(e)}
 
 
+async def _save_settings(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    """Save user settings (display_name, email, endpoint_url, dark_mode, password)."""
+    from app.models.settings import Settings
+    from app.utils.security import hash_password
+    from sqlalchemy import select
+    from uuid import uuid4
+
+    # Query existing settings
+    result = await db.execute(
+        select(Settings).where(Settings.user_id == user_id)
+    )
+    settings_obj = result.scalars().first()
+
+    # Create settings if none exist
+    if settings_obj is None:
+        settings_obj = Settings(
+            id=str(uuid4()),
+            user_id=user_id,
+            dark_mode=False,
+        )
+        db.add(settings_obj)
+
+    # Update fields from params
+    if "display_name" in params:
+        settings_obj.display_name = params["display_name"]
+
+    if "email" in params:
+        settings_obj.email = params["email"]
+
+    if "endpoint_url" in params:
+        settings_obj.endpoint_url = params["endpoint_url"]
+
+    if "dark_mode" in params:
+        settings_obj.dark_mode = bool(params["dark_mode"])
+
+    if "password" in params and params["password"]:
+        settings_obj.password_hash = hash_password(params["password"])
+
+    await db.commit()
+    await db.refresh(settings_obj)
+
+    return {
+        "status": "ok",
+        "settings": {
+            "display_name": settings_obj.display_name,
+            "email": settings_obj.email,
+            "endpoint_url": settings_obj.endpoint_url,
+            "dark_mode": settings_obj.dark_mode,
+        }
+    }
+
+
 # ── Singleton Registry ─────────────────────────────────────────────────────
 
 registry = ActionRegistry()
@@ -528,6 +580,9 @@ registry.register("fetch_rss", _fetch_rss)
 # Session 9 additions — weather fetching
 registry.register("fetch_weather", _fetch_weather)
 
+# Settings save action
+registry.register("settings.save", _save_settings)
+
 
 async def _run_workflow(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
     """Execute a workflow by ID."""
@@ -562,12 +617,9 @@ async def _run_workflow(user_id: str, params: dict[str, Any], db: AsyncSession) 
         await _execute_workflow(workflow_id, event_data)
 
         return {
-            "status": "ok",
-            "result": {
-                "workflow_id": workflow_id,
-                "workflow_name": workflow.name,
-                "executed": True,
-            }
+            "workflow_id": workflow_id,
+            "workflow_name": workflow.name,
+            "executed": True,
         }
     except Exception as e:
         logger.error(f"Failed to execute workflow {workflow_id}: {e}")
@@ -576,3 +628,133 @@ async def _run_workflow(user_id: str, params: dict[str, Any], db: AsyncSession) 
 
 # Session 9 additions — workflow execution
 registry.register("run_workflow", _run_workflow)
+
+
+# Template action handlers
+async def _todos_create(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    """Create a new todo item."""
+    from app.models.todo import Todo
+    from uuid import uuid4
+
+    text = params.get("title", "New task")
+    todo = Todo(
+        id=str(uuid4()),
+        user_id=user_id,
+        text=text,
+        completed=False,
+    )
+    db.add(todo)
+    await db.commit()
+    await db.refresh(todo)
+
+    return {
+        "status": "ok",
+        "todo": {
+            "id": str(todo.id),
+            "text": todo.text,
+            "completed": todo.completed,
+        }
+    }
+
+
+async def _notes_create(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    """Create a new note (placeholder - notes model doesn't exist yet)."""
+    # TODO: Implement when notes model is added
+    return {
+        "status": "ok",
+        "message": "Notes feature coming soon"
+    }
+
+
+async def _chat_send(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    """Send a chat message to the AI agent."""
+    message = params.get("message", "")
+    if not message:
+        return {"status": "error", "detail": "Message is required"}
+
+    # Store user message
+    from app.models.chat_message import ChatMessage
+    from uuid import uuid4
+
+    user_msg = ChatMessage(
+        id=str(uuid4()),
+        user_id=user_id,
+        role="user",
+        content=message,
+    )
+    db.add(user_msg)
+    await db.commit()
+
+    # Send to agent via agent_proxy
+    from app.services.agent_proxy import send_to_agent
+    response = await send_to_agent(user_id, message, db)
+
+    # Store assistant response
+    assistant_msg = ChatMessage(
+        id=str(uuid4()),
+        user_id=user_id,
+        role="assistant",
+        content=response.get("response", ""),
+    )
+    db.add(assistant_msg)
+    await db.commit()
+
+    return {
+        "status": "ok",
+        "response": response.get("response", "")
+    }
+
+
+async def _auth_logout(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    """Logout the current user (invalidate session)."""
+    from app.models.session import Session
+    from sqlalchemy import delete
+
+    # Delete all sessions for this user
+    await db.execute(
+        delete(Session).where(Session.user_id == user_id)
+    )
+    await db.commit()
+
+    return {
+        "status": "ok",
+        "message": "Logged out successfully"
+    }
+
+
+async def _settings_toggle_dark_mode(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    """Toggle dark mode setting."""
+    from app.models.settings import Settings
+    from sqlalchemy import select
+    from uuid import uuid4
+
+    result = await db.execute(
+        select(Settings).where(Settings.user_id == user_id)
+    )
+    settings_obj = result.scalars().first()
+
+    if settings_obj is None:
+        settings_obj = Settings(
+            id=str(uuid4()),
+            user_id=user_id,
+            dark_mode=True,
+        )
+        db.add(settings_obj)
+    else:
+        settings_obj.dark_mode = not settings_obj.dark_mode
+
+    await db.commit()
+    await db.refresh(settings_obj)
+
+    return {
+        "status": "ok",
+        "dark_mode": settings_obj.dark_mode
+    }
+
+
+registry.register("todos.create", _todos_create)
+registry.register("notes.create", _notes_create)
+registry.register("chat.send", _chat_send)
+registry.register("auth.logout", _auth_logout)
+registry.register("settings.toggle_dark_mode", _settings_toggle_dark_mode)
+

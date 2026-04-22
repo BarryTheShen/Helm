@@ -7,8 +7,10 @@ import type { ActionRule, EditorComponent, EditorRowPaddingKey } from './types';
 import { Settings, Rows3, Box, Minus, Plus } from 'lucide-react';
 import { RuleBuilder } from './RuleBuilder';
 import { api } from '../lib/api';
-import type { DataSource } from '../lib/api';
+import type { DataSource, Workflow } from '../lib/api';
 import { VariableInput } from './VariableInput';
+import { IconPicker } from './IconPicker';
+import { ActionParamsEditor } from './ActionParamsEditor';
 
 const INTERACTIVE_COMPONENTS = new Set(['Button', 'TextInput', 'InputBar']);
 
@@ -739,13 +741,13 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
           </button>
           <span className="text-sm font-medium w-8 text-center">{row.cells.length}</span>
           <button
-            onClick={() => row.cells.length < 6 && setCellCount(rowId, row.cells.length + 1)}
-            disabled={row.cells.length >= 6}
-            className="p-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+            onClick={() => setCellCount(rowId, row.cells.length + 1)}
+            className="p-1 rounded border border-gray-200 hover:bg-gray-50"
           >
             <Plus size={12} />
           </button>
         </div>
+        <div className="text-[10px] text-gray-300 mt-1">No maximum limit. Minimum width enforced per cell.</div>
       </div>
 
       {/* Row height */}
@@ -902,6 +904,17 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
         <label className="text-xs font-medium text-gray-500">Scrollable (H)</label>
         <button onClick={() => updateRowProps(rowId, { scrollable: !isScrollable })} className={`relative w-9 h-5 rounded-full transition-colors ${isScrollable ? 'bg-blue-600' : 'bg-gray-300'}`}>
           <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isScrollable ? 'left-[18px]' : 'left-0.5'}`} />
+        </button>
+      </div>
+
+      {/* Bottom Divider */}
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-medium text-gray-500">Bottom Divider</label>
+        <button
+          onClick={() => updateRowProps(rowId, { show_bottom_divider: !(row.show_bottom_divider ?? false) })}
+          className={`relative w-9 h-5 rounded-full transition-colors ${row.show_bottom_divider ? 'bg-blue-600' : 'bg-gray-300'}`}
+        >
+          <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${row.show_bottom_divider ? 'left-[18px]' : 'left-0.5'}`} />
         </button>
       </div>
 
@@ -1134,6 +1147,7 @@ function RulesPanel({ rowId, cellIndex }: { rowId: string; cellIndex: number }) 
 
   const row = rows.find(r => r.id === rowId);
   const cell = row?.cells[cellIndex];
+  const componentType = cell?.content?.type;
   const rules: ActionRule[] = Array.isArray(cell?.rules) ? cell.rules as ActionRule[] : [];
 
   return (
@@ -1141,6 +1155,7 @@ function RulesPanel({ rowId, cellIndex }: { rowId: string; cellIndex: number }) 
       <RuleBuilder
         rules={rules}
         onChange={(nextRules) => updateCellRules(rowId, cellIndex, nextRules)}
+        componentType={componentType}
       />
     </div>
   );

@@ -4,7 +4,6 @@ import { Toaster } from 'sonner';
 import { useAuthStore } from './stores/authStore';
 import { AdminLayout } from './components/AdminLayout';
 import { LoginPage } from './pages/LoginPage';
-import { UsersPage } from './pages/UsersPage';
 import { WorkflowsPage } from './pages/WorkflowsPage';
 import { TemplatesPage } from './pages/TemplatesPage';
 import { EditorPage } from './pages/EditorPage';
@@ -32,10 +31,9 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
           <Route path="/" element={<Navigate to="/editor" replace />} />
-          <Route path="/users" element={<UsersPage />} />
-          <Route path="/workflows" element={<WorkflowsPage />} />
-          <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/editor" element={<EditorPage />} />
+          <Route path="/templates" element={<TemplatesPage />} />
+          <Route path="/workflows" element={<WorkflowsPage />} />
           <Route path="/variables" element={<VariablesPage />} />
           <Route path="/connections" element={<ConnectionsPage />} />
           <Route path="/logs" element={<LogsPage />} />
