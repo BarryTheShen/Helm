@@ -58,7 +58,9 @@ export function useActionDispatcher(): ActionDispatcher {
     (action: SDUIAction) => {
       switch (action.type) {
         case 'navigate': {
-          const target = action.screen;
+          // Accept both canonical `screen` and the common LLM mis-spelling `target`.
+          // Without this, buttons emitted by weaker models silently no-op when tapped.
+          const target = action.screen ?? (action as { target?: string }).target;
           if (!target) {
             Alert.alert('Navigation Error', 'Missing navigation target');
             break;

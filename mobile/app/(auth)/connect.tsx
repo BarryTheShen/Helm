@@ -8,7 +8,7 @@ import { colors, spacing, typography } from '@/theme/colors';
 export default function ConnectScreen() {
   const router = useRouter();
   const { setServerUrl, setToken, setUser } = useAuthStore();
-  const [url, setUrl] = useState('http://localhost:8000');
+  const [url, setUrl] = useState('http://localhost:9100');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -76,7 +76,7 @@ export default function ConnectScreen() {
             style={styles.input}
             value={url}
             onChangeText={setUrl}
-            placeholder="http://localhost:8000"
+            placeholder="http://localhost:9100"
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"

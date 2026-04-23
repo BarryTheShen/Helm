@@ -24,7 +24,7 @@ Usage
 Required environment variables (in Helm/.env or exported):
     HELM_SESSION_TOKEN   — get one by calling POST /auth/login
     OPENROUTER_API_KEY   — get one at https://openrouter.ai/keys
-    HELM_MCP_URL         — defaults to http://localhost:8000/mcp/
+    HELM_MCP_URL         — defaults to http://localhost:9100/mcp/
     OPENROUTER_MODEL     — defaults to stepfun/step-3.5-flash:free
     AGENT_WEB_PORT       — web server port (defaults to 7860)
 
@@ -68,7 +68,7 @@ load_dotenv(_REPO_ROOT / ".env")
 
 # ── Config from environment ───────────────────────────────────────────────────
 HELM_SESSION_TOKEN: str = os.environ.get("HELM_SESSION_TOKEN", "")
-HELM_MCP_URL: str = os.environ.get("HELM_MCP_URL", "http://localhost:8000/mcp/")
+HELM_MCP_URL: str = os.environ.get("HELM_MCP_URL", "http://localhost:9100/mcp/")
 OPENROUTER_API_KEY: str = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 # Override with OPENROUTER_MODEL in Helm/.env to use a different model:

@@ -1,5 +1,6 @@
 """Regression tests for SDUI REST and MCP parity around draft and delete flows."""
 
+import json
 from typing import Any
 from uuid import uuid4
 
@@ -488,7 +489,11 @@ async def test_process_chat_reuses_one_assistant_message_id(
 
     user_id = await _get_test_user_id(db_session)
     monkeypatch.setattr(agent_proxy, "AsyncSessionLocal", _make_session_factory(db_engine))
-    monkeypatch.setattr(agent_proxy, "_resolve_api_key", lambda _agent_config: "test-key")
+    monkeypatch.setattr(
+        agent_proxy,
+        "_resolve_provider",
+        lambda _agent_config: ("test-key", "https://example.test/v1", "test-model"),
+    )
 
     async def fake_stream_one_turn(*, user_id: str, assistant_msg_id: str, **_: Any) -> tuple[str, list[dict[str, Any]], str]:
         await manager.send(user_id, {
@@ -944,3 +949,231 @@ async def test_mcp_set_screen_rejects_unsupported_nested_container_grandchild(
         match="Unknown child component type 'UnsupportedWidget' inside Container 'inner-container'",
     ):
         await set_screen(module_id="home", screen=invalid_screen, user_id=user_id)
+
+
+async def test_mcp_set_screen_rejects_cell_content_without_type(
+    auth_client,
+    db_session,
+):
+    """Cell content missing 'type' must be rejected, not silently stored.
+
+    Without rejection, the mobile renderer receives a typeless component and
+    shows a red 'Invalid component' box — the exact symptom we're guarding against.
+    """
+    user_id = await _get_test_user_id(db_session)
+    invalid_screen = {
+        "rows": [
+            {
+                "id": "row-1",
+                "cells": [
+                    {
+                        "id": "cell-1",
+                        # content object has props-like keys but no 'type' field
+                        "content": {"label": "Settings", "color": "blue"},
+                    }
+                ],
+            }
+        ],
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="Cell 'cell-1' content is missing required 'type' field",
+    ):
+        await set_screen(module_id="home", screen=invalid_screen, user_id=user_id)
+
+
+async def test_mcp_set_screen_rejects_container_child_without_type(
+    auth_client,
+    db_session,
+):
+    """Container children missing 'type' must also be rejected.
+
+    Previously the normalizer silently dropped typeless children, so the
+    validator never saw them and the user lost content with no feedback.
+    """
+    user_id = await _get_test_user_id(db_session)
+    invalid_screen = {
+        "rows": [
+            {
+                "id": "row-1",
+                "cells": [
+                    {
+                        "id": "cell-1",
+                        "content": {
+                            "type": "Container",
+                            "id": "outer",
+                            "props": {"direction": "column"},
+                            "children": [
+                                {"id": "typeless-child", "label": "oops"},
+                            ],
+                        },
+                    }
+                ],
+            }
+        ],
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="Container 'outer' child 'typeless-child' is missing required 'type' field",
+    ):
+        await set_screen(module_id="home", screen=invalid_screen, user_id=user_id)
+
+
+@pytest.mark.parametrize("component_type", ["Todo", "RichText", "ArticleCard"])
+async def test_mcp_set_screen_accepts_widget_types_registered_in_mobile(
+    auth_client,
+    db_session,
+    captured_ws_messages: list[dict[str, Any]],
+    component_type: str,
+):
+    """Todo / RichText / ArticleCard are registered in the mobile componentRegistry,
+    so the backend must treat them as valid V2 types — not reject them.
+    """
+    user_id = await _get_test_user_id(db_session)
+    screen = {
+        "rows": [
+            {
+                "id": "row-1",
+                "cells": [
+                    {
+                        "id": "cell-1",
+                        "content": {"type": component_type, "id": "w1", "props": {}},
+                    }
+                ],
+            }
+        ],
+    }
+
+    result = await set_screen(module_id="home", screen=screen, user_id=user_id)
+    assert result["draft"] is True
+
+
+def test_default_system_prompt_describes_sdui_schema() -> None:
+    """The default chat system prompt must teach the LLM the SDUI schema.
+
+    Without concrete schema guidance, the LLM emits typeless or malformed
+    components when asked to build a screen — the root cause of the red
+    'Invalid component' box on the phone.
+    """
+    prompt = agent_proxy.DEFAULT_SYSTEM_PROMPT
+    assert "set_screen" in prompt
+    assert "rows" in prompt
+    assert "cells" in prompt
+    # The critical lesson: every component needs a 'type'
+    assert "type" in prompt
+    # At least the core valid component types should be listed
+    for required_type in ("Text", "Button", "Container"):
+        assert required_type in prompt
+
+
+async def test_rescue_sdui_json_from_prose_handles_deepseek_shapes(monkeypatch) -> None:
+    """The prose-rescue fallback must catch the 3 JSON shapes weaker models emit.
+
+    Without this, chats from models like DeepSeek-V3 produce a wall of JSON in the
+    reply and the phone screen never updates.
+    """
+    from app.services import agent_proxy
+
+    set_calls: list[tuple[str, dict]] = []
+    delete_calls: list[str] = []
+
+    async def fake_set(module_id: str, screen: dict, user_id: str):
+        set_calls.append((module_id, screen))
+        return {"ok": True}
+
+    async def fake_delete(module_id: str, user_id: str):
+        delete_calls.append(module_id)
+        return {"ok": True}
+
+    monkeypatch.setattr("app.mcp.tools.set_screen", fake_set)
+    monkeypatch.setattr("app.mcp.tools.delete_screen", fake_delete)
+
+    payload_inner = {
+        "rows": [{"id": "r1", "cells": [{"id": "c1", "content": {
+            "type": "Text", "id": "t1", "props": {"content": "Hi"}
+        }}]}]
+    }
+
+    fake_fn_reply = (
+        "Here's your home:\n"
+        "<function>set_screen\n"
+        "```json\n"
+        + json.dumps({"module_id": "home", "screen": payload_inner})
+        + "\n```"
+    )
+    wrapped_reply = (
+        "```json\n"
+        + json.dumps({"module_id": "home", "screen": payload_inner})
+        + "\n```"
+    )
+    bare_reply = "```json\n" + json.dumps(payload_inner) + "\n```"
+    delete_reply = (
+        "<function>delete_screen\n"
+        "```json\n"
+        + json.dumps({"module_id": "home"})
+        + "\n```"
+    )
+    empty_rows_reply = '```json\n{"rows": []}\n```'
+    plain_reply = "I will help you with that."
+
+    # Each call resets the captured lists so we can assert per-call behavior
+    async def run(label: str, reply: str) -> str:
+        set_calls.clear()
+        delete_calls.clear()
+        return await agent_proxy._rescue_sdui_json_from_prose("u1", "setup home", reply)
+
+    # Shape 1: DeepSeek's fake <function>set_screen tag
+    cleaned1 = await run("fake-fn", fake_fn_reply)
+    assert len(set_calls) == 1 and set_calls[0][0] == "home"
+    assert set_calls[0][1] == payload_inner
+    assert "<function>" not in cleaned1
+    assert "saved a draft" in cleaned1.lower()
+
+    # Shape 2: plain code block containing {module_id, screen}
+    cleaned2 = await run("wrapped-block", wrapped_reply)
+    assert len(set_calls) == 1 and set_calls[0][1] == payload_inner
+
+    # Shape 3: bare {"rows": [...]} code block
+    cleaned3 = await run("bare-rows", bare_reply)
+    assert len(set_calls) == 1 and set_calls[0][1] == payload_inner
+
+    # Shape 4: delete_screen fake tool call
+    cleaned4 = await run("delete", delete_reply)
+    assert delete_calls == ["home"]
+    assert "cleared" in cleaned4.lower()
+
+    # Shape 5: empty rows — must NOT be rescued (placeholder illustrations)
+    await run("empty", empty_rows_reply)
+    assert set_calls == []
+
+    # Shape 6: plain prose — untouched
+    cleaned6 = await run("plain", plain_reply)
+    assert set_calls == [] and cleaned6 == plain_reply
+
+
+def test_set_screen_tool_schema_requires_component_type() -> None:
+    """The set_screen tool JSON schema must require 'type' on cell.content.
+
+    Function-calling models honor the JSON schema strictly, so declaring 'type'
+    as required prevents the LLM from emitting typeless components.
+    """
+    tool_defs = {t["function"]["name"]: t["function"] for t in _get_tool_definitions()}
+    set_screen_schema = tool_defs["set_screen"]["parameters"]["properties"]["screen"]
+
+    # Find the row-first branch in the oneOf
+    row_branch = next(
+        branch for branch in set_screen_schema["oneOf"] if "rows" in branch.get("required", [])
+    )
+    cell_schema = row_branch["properties"]["rows"]["items"]["properties"]["cells"]["items"]
+    content_schema = cell_schema["properties"]["content"]
+
+    assert "type" in content_schema.get("required", []), (
+        "set_screen tool schema must require 'type' on cell.content so function-calling "
+        "models never emit typeless components."
+    )
+    type_enum = content_schema["properties"]["type"]["enum"]
+    # Must at least include the core + widget types registered in mobile/src/renderer/componentRegistry.ts
+    for required_type in ("Text", "Button", "Container", "Todo", "RichText", "ArticleCard"):
+        assert required_type in type_enum

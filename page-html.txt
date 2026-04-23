@@ -1,1 +1,0 @@
-"\n    <div id=\"root\"></div>\n    <script type=\"module\" src=\"/src/main.tsx?t=1776402356209\"></script>\n  \n\n"

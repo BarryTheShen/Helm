@@ -369,13 +369,15 @@ _SDUI_PROPS_FIELDS: dict[str, set[str]] = {
 
 _SDUI_STRUCTURAL_KEYS = {'type', 'id', 'children', 'props'}
 
-# V2 component types registered in the frontend componentRegistry.ts
-# Any type not in this set will render as a blank fallback on the frontend.
+# V2 component types registered in the frontend componentRegistry.ts.
+# MUST stay in sync with mobile/src/renderer/componentRegistry.ts — a drift
+# causes valid LLM output to be rejected here (or invalid output to pass).
 _VALID_V2_COMPONENT_TYPES: frozenset[str] = frozenset({
     "Text", "Markdown", "Button", "Image", "TextInput",
     "Icon", "Divider", "Container",
     "CalendarModule", "ChatModule", "NotesModule", "InputBar",
     "Badge", "Stat", "List", "Alert",
+    "Todo", "RichText", "ArticleCard",
 })
 
 _LEGACY_V2_TYPE_MAP: dict[str, str] = {
@@ -419,12 +421,23 @@ def _validate_sdui_v2_container_children(
     if not isinstance(children, list):
         return
 
-    for child in children:
+    for child_idx, child in enumerate(children):
         if not isinstance(child, dict):
             continue
 
         child_type = child.get("type", "")
-        if child_type and child_type not in _VALID_V2_COMPONENT_TYPES:
+        if not child_type:
+            # A typeless child reaches the mobile renderer as the red 'Invalid
+            # component' box. Reject at the storage boundary so the LLM can self-correct.
+            child_id = child.get("id", f"index {child_idx}")
+            errors.append(
+                f"Container '{container_id}' child '{child_id}' is missing required "
+                f"'type' field. Every component must have a 'type' such as Text, Button, "
+                f"Container. Valid types: {', '.join(sorted(_VALID_V2_COMPONENT_TYPES))}"
+            )
+            continue
+
+        if child_type not in _VALID_V2_COMPONENT_TYPES:
             errors.append(
                 f"Unknown child component type '{child_type}' inside Container "
                 f"'{container_id}'. "
@@ -469,7 +482,17 @@ def _validate_sdui_v2(screen: dict[str, Any]) -> list[str]:
                 errors.append(f"Cell '{cell.get('id', cell_idx)}' missing 'content' object")
                 continue
             comp_type = content.get("type", "")
-            if comp_type and comp_type not in _VALID_V2_COMPONENT_TYPES:
+            if not comp_type:
+                # A typeless content object reaches the mobile renderer as the red
+                # 'Invalid component' box. Reject at the storage boundary so the LLM
+                # can self-correct rather than silently shipping broken UI.
+                errors.append(
+                    f"Cell '{cell.get('id', cell_idx)}' content is missing required "
+                    f"'type' field. Every component must have a 'type' such as Text, Button, "
+                    f"Container. Valid types: {', '.join(sorted(_VALID_V2_COMPONENT_TYPES))}"
+                )
+                continue
+            if comp_type not in _VALID_V2_COMPONENT_TYPES:
                 errors.append(
                     f"Unknown component type '{comp_type}' in cell '{cell.get('id', cell_idx)}'. "
                     f"Valid types: {', '.join(sorted(_VALID_V2_COMPONENT_TYPES))}"
@@ -494,11 +517,13 @@ def _normalize_sdui_component(comp: dict[str, Any]) -> dict[str, Any]:
     comp_id = comp.get('id') or str(uuid4())
     comp_type = _normalize_sdui_type(comp.get('type', ''))
 
-    # Already has props — ensure id and recurse into children
+    # Already has props — ensure id and recurse into children.
+    # Preserve typeless children (don't filter them out) so validation can surface
+    # an actionable error instead of silently dropping the LLM's intended content.
     if 'props' in comp:
         result = {**comp, 'type': comp_type, 'id': comp_id}
         if 'children' in result:
-            result['children'] = [_normalize_sdui_component(c) for c in result['children'] if isinstance(c, dict) and 'type' in c]
+            result['children'] = [_normalize_sdui_component(c) for c in result['children'] if isinstance(c, dict)]
         return result
 
     # Flat format — split fields into props vs structural
@@ -524,7 +549,9 @@ def _normalize_sdui_component(comp: dict[str, Any]) -> dict[str, Any]:
     result = {'type': comp_type, 'id': comp_id, 'props': props, **rest}
 
     if 'children' in comp:
-        result['children'] = [_normalize_sdui_component(c) for c in comp['children'] if isinstance(c, dict) and 'type' in c]
+        # Preserve typeless children so validation can surface an actionable error
+        # instead of silently dropping the LLM's intended content.
+        result['children'] = [_normalize_sdui_component(c) for c in comp['children'] if isinstance(c, dict)]
 
     return result
 

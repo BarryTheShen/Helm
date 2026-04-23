@@ -34,15 +34,43 @@ class Settings(BaseSettings):
     server_port: int = 8000
 
     # AI Agent — env-level defaults (overridden per-user via DB agent_config)
+    # If default_provider is empty, the backend auto-picks the first provider
+    # in priority order whose API key is populated:
+    #   openrouter → siliconflow → openai → deepseek → groq → together → ollama
+    default_provider: str = ""
+
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-4o"
+
     # OpenRouter (recommended — works in all regions, has free models)
-    # Both standard chat models and reasoning/thinking models are supported.
-    # Override per-user via DB agent_config, or set OPENROUTER_MODEL in .env.
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_model: str = "stepfun/step-3.5-flash:free"
+
+    # SiliconFlow (Chinese cloud, fast + cheap)
+    siliconflow_api_key: str = ""
+    siliconflow_base_url: str = "https://api.siliconflow.cn/v1"
+    siliconflow_model: str = "deepseek-ai/DeepSeek-V3"
+
+    # DeepSeek (official API)
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com/v1"
+    deepseek_model: str = "deepseek-chat"
+
+    # Groq (ultra-fast inference)
+    groq_api_key: str = ""
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_model: str = "llama-3.3-70b-versatile"
+
+    # Together AI (open-source models)
+    together_api_key: str = ""
+    together_base_url: str = "https://api.together.xyz/v1"
+    together_model: str = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+
+    # Ollama (local models, no API key needed)
+    ollama_base_url: str = "http://localhost:11434/v1"
+    ollama_model: str = "llama3.2"
 
     # MCP
     mcp_path: str = "/mcp"

@@ -35,9 +35,40 @@ from app.services.websocket_manager import manager
 from app.services.workflow_engine import fire_trigger
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are Helm, a helpful AI assistant integrated into a personal super app. "
-    "You have access to tools for calendar management, notifications, and forms. "
-    "Be concise, helpful, and proactive."
+    "You are Helm, a personal AI assistant that lives inside a mobile super-app. "
+    "The user sees a chat message from you AND a set of native UI screens on their phone. "
+    "You change screens either by calling TOOLS or by emitting the tool args as a "
+    "JSON code block that the system auto-routes for you.\n\n"
+    "## Hard rules (non-negotiable)\n"
+    "1. For ANY request to set, build, add, change, replace, update, or remove "
+    "anything on a screen (home/chat/calendar/forms/alerts/modules/settings), you "
+    "MUST do ONE of the following:\n"
+    "   (a) Call the set_screen / delete_screen tool via the function-call API, OR\n"
+    "   (b) Emit a fenced ```json``` code block with the full set_screen arguments in "
+    "the shape {\"module_id\": \"<tab>\", \"screen\": {\"rows\": [...]}}. The server "
+    "detects and applies it automatically.\n"
+    "2. NEVER claim you 'saved a draft' or 'updated the screen' without doing (a) or "
+    "(b). That is a lie — the user sees no change. If you don't emit a JSON block and "
+    "don't call a tool, DON'T say you changed anything.\n"
+    "3. After (a) or (b), finish with ONE short sentence of confirmation — no further "
+    "JSON, no schema teaching.\n"
+    "4. Available tools:\n"
+    "   - set_screen(module_id, screen)   — set or modify a screen\n"
+    "   - delete_screen(module_id)        — clear a tab entirely\n"
+    "   - get_screen(module_id)           — read the current layout before modifying\n\n"
+    "## Screen shape (for the set_screen tool argument)\n"
+    "Row-first V2: { rows: [ { id, cells: [ { id, content: <Component> } ] } ] }\n"
+    "Every Component has: type (required), id, props.\n\n"
+    "Valid component types (PascalCase only):\n"
+    "  Atomic:     Text, Markdown, Button, Image, TextInput, Icon, Divider\n"
+    "  Structural: Container (only type that may nest via 'children')\n"
+    "  Composite:  CalendarModule, ChatModule, NotesModule, InputBar\n"
+    "  Widgets:    Badge, Stat, List, Alert, Todo, RichText, ArticleCard\n\n"
+    "Actions (inside component props): use {type:'navigate', screen:'forms'} — the key "
+    "must be 'screen', never 'target' or 'route'. Other action types: server_action, "
+    "open_url, copy_text, dismiss.\n\n"
+    "When the user asks for a todo list, use the Todo component directly on the screen — "
+    "don't just put a button pointing at the Forms tab."
 )
 
 _MAX_TOOL_TURNS = 5  # safety cap on agentic loop iterations
@@ -167,9 +198,7 @@ async def _process_chat(
         )
         agent_config = result.scalar_one_or_none()
 
-        api_key = _resolve_api_key(agent_config)
-        model = (agent_config.model if agent_config else None) or settings.openrouter_model or settings.openai_model
-        base_url = (agent_config.base_url if agent_config else None) or settings.openrouter_base_url or settings.openai_base_url
+        api_key, base_url, model = _resolve_provider(agent_config)
         system_prompt = (agent_config.system_prompt if agent_config else None) or DEFAULT_SYSTEM_PROMPT
         temperature = agent_config.temperature if agent_config else 0.7
         max_tokens = agent_config.max_tokens if agent_config else 4096
@@ -195,7 +224,7 @@ async def _process_chat(
         await manager.send(user_id, {
             "type": "chat_error",
             "code": "no_api_key",
-            "message": "No AI provider configured. Please set OPENROUTER_API_KEY or OPENAI_API_KEY in your backend .env file.",
+            "message": "No AI provider configured. Set one of OPENROUTER_API_KEY, SILICONFLOW_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, GROQ_API_KEY, or TOGETHER_API_KEY in backend/.env.",
         })
         return
 
@@ -259,13 +288,26 @@ async def _process_chat(
         })
         return
 
-    # ── Persist assistant message ─────────────────────────────────────────────
+    # ── Safety net: if the model emitted SDUI JSON in prose, route it to set_screen.
+    # Weaker tool-use models sometimes reproduce a worked example from the system
+    # prompt instead of calling the tool. Without this fallback their chat reply
+    # is a wall of JSON and the phone screen never updates.
+    #
+    # IMPORTANT: we persist the RAW output (with any JSON blocks intact) so that
+    # conversation history fed back to the LLM shows its own tool-using pattern.
+    # The user only sees the cleaned + decorated version in their chat UI.
+    # If we stored the cleaned version the LLM would pattern-match on its own
+    # post-rescue confirmations and stop emitting JSON after a few turns.
+    raw_response = full_response
+    displayed_response = await _rescue_sdui_json_from_prose(user_id, content, full_response)
+
+    # ── Persist assistant message (RAW for LLM history fidelity) ──────────────
     async with AsyncSessionLocal() as db:
         assistant_msg = ChatMessage(
             id=assistant_msg_id,
             user_id=user_id,
             role="assistant",
-            content=full_response,
+            content=raw_response,
         )
         db.add(assistant_msg)
         await db.commit()
@@ -273,8 +315,135 @@ async def _process_chat(
     await manager.send(user_id, {
         "type": "chat_complete",
         "message_id": assistant_msg_id,
-        "content": full_response,
+        "content": displayed_response,
     })
+
+
+# ── SDUI prose-rescue helpers ────────────────────────────────────────────────
+# Module ids the agent can target. Duplicated from tool definitions on purpose —
+# this helper runs before the tool layer, so we can't import a single source.
+_KNOWN_MODULE_IDS = ("home", "chat", "calendar", "forms", "alerts", "modules", "settings")
+
+_SDUI_JSON_BLOCK_RE = re.compile(
+    r"```(?:json|JSON)?\s*(\{[\s\S]*?\})\s*```",
+    re.MULTILINE,
+)
+
+# DeepSeek and a few other models emit a fake OpenAI-style tool call inline:
+#   <function>set_screen
+#   ```json { "module_id": "home", "screen": {...} } ```
+# We also accept delete_screen in the same shape.
+_FAKE_FUNCTION_TAG_RE = re.compile(
+    r"<function>\s*(set_screen|delete_screen)\s*(?:```(?:json|JSON)?\s*(\{[\s\S]*?\})\s*```)?",
+    re.MULTILINE,
+)
+
+
+def _infer_module_id(user_message: str, rescued_payload: dict) -> str:
+    """Best-effort module_id from the payload or the user's request."""
+    explicit = rescued_payload.get("module_id")
+    if isinstance(explicit, str) and explicit in _KNOWN_MODULE_IDS:
+        return explicit
+    lowered = user_message.lower()
+    for mid in _KNOWN_MODULE_IDS:
+        if mid in lowered:
+            return mid
+    return "home"
+
+
+def _unwrap_tool_args(obj: object) -> tuple[object, str | None]:
+    """If the JSON looks like set_screen tool args ({module_id, screen}),
+    return (inner_screen, module_id). Otherwise return (obj, None).
+    """
+    if not isinstance(obj, dict):
+        return obj, None
+    inner = obj.get("screen")
+    module_id = obj.get("module_id")
+    if isinstance(inner, dict) and isinstance(module_id, str):
+        return inner, module_id
+    return obj, None
+
+
+def _looks_like_sdui_payload(obj: object) -> bool:
+    if not isinstance(obj, dict):
+        return False
+    rows = obj.get("rows")
+    if isinstance(rows, list) and len(rows) > 0:
+        return True
+    sections = obj.get("sections")
+    if isinstance(sections, list) and len(sections) > 0:
+        return True
+    return False
+
+
+async def _rescue_sdui_json_from_prose(user_id: str, user_message: str, reply: str) -> str:
+    """If the assistant reply contains an SDUI JSON block (either raw or wrapped
+    in DeepSeek's fake `<function>set_screen` tag), fire set_screen server-side
+    and strip the block from the visible reply. Returns the cleaned reply.
+    """
+    if "```" not in reply and "<function>" not in reply and '"rows"' not in reply:
+        return reply
+
+    from app.mcp.tools import set_screen as set_screen_tool, delete_screen as delete_screen_tool
+
+    cleaned = reply
+    rescued: list[str] = []
+    deleted: list[str] = []
+
+    # 1) Handle DeepSeek's fake <function>tool_name\n```json {args}```
+    for match in _FAKE_FUNCTION_TAG_RE.finditer(reply):
+        func_name = match.group(1)
+        raw = match.group(2)
+        args: dict = {}
+        if raw:
+            try:
+                args = json.loads(raw)
+            except Exception:
+                args = {}
+        module_id = args.get("module_id") if isinstance(args, dict) else None
+        if not (isinstance(module_id, str) and module_id in _KNOWN_MODULE_IDS):
+            module_id = _infer_module_id(user_message, args if isinstance(args, dict) else {})
+        try:
+            if func_name == "delete_screen":
+                await delete_screen_tool(module_id=module_id, user_id=user_id)
+                deleted.append(module_id)
+                cleaned = cleaned.replace(match.group(0), "").strip()
+            else:
+                screen = args.get("screen") if isinstance(args, dict) else None
+                if isinstance(screen, dict) and _looks_like_sdui_payload(screen):
+                    await set_screen_tool(module_id=module_id, screen=screen, user_id=user_id)
+                    rescued.append(module_id)
+                    cleaned = cleaned.replace(match.group(0), "").strip()
+        except Exception as exc:
+            logger.warning(f"SDUI fake-fn rescue failed for module={module_id}: {exc}")
+
+    # 2) Handle raw code blocks (bare {"rows":…} or {"module_id":…,"screen":…})
+    for match in _SDUI_JSON_BLOCK_RE.finditer(cleaned):
+        raw = match.group(1)
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            continue
+        payload, explicit_module = _unwrap_tool_args(parsed)
+        if not _looks_like_sdui_payload(payload):
+            continue
+        module_id = explicit_module or _infer_module_id(user_message, parsed if isinstance(parsed, dict) else {})
+        try:
+            await set_screen_tool(module_id=module_id, screen=payload, user_id=user_id)
+            rescued.append(module_id)
+            cleaned = cleaned.replace(match.group(0), "").strip()
+        except Exception as exc:
+            logger.warning(f"SDUI prose rescue failed for module={module_id}: {exc}")
+
+    if rescued or deleted:
+        parts = []
+        if rescued:
+            parts.append(f"saved a draft for **{', '.join(sorted(set(rescued)))}**")
+        if deleted:
+            parts.append(f"cleared **{', '.join(sorted(set(deleted)))}**")
+        summary = f"\n\n_{' and '.join(parts)} — review on your phone._"
+        cleaned = (cleaned + summary).strip()
+    return cleaned
 
 
 async def _stream_one_turn(
@@ -444,22 +613,70 @@ async def _execute_tool_safe(user_id: str, name: str, arguments_str: str) -> dic
         return {"error": str(exc)}
 
 
-def _resolve_api_key(agent_config: AgentConfig | None) -> str | None:
-    """Resolve the API key: per-user DB config → OpenRouter env → OpenAI env."""
-    raw = agent_config.api_key_encrypted if agent_config else None
-    if raw:
+_PROVIDER_PRIORITY = ["openrouter", "siliconflow", "openai", "deepseek", "groq", "together", "ollama"]
+
+
+def _provider_env(name: str) -> tuple[str, str, str] | None:
+    """Return (api_key, base_url, model) for a provider, or None if the key is missing.
+
+    Ollama is special: no key required, always available when the URL is set.
+    """
+    name = (name or "").lower()
+    if name == "openrouter":
+        k = settings.openrouter_api_key
+        return (k, settings.openrouter_base_url, settings.openrouter_model) if k else None
+    if name == "openai":
+        k = settings.openai_api_key
+        return (k, settings.openai_base_url, settings.openai_model) if k else None
+    if name == "siliconflow":
+        k = settings.siliconflow_api_key
+        return (k, settings.siliconflow_base_url, settings.siliconflow_model) if k else None
+    if name == "deepseek":
+        k = settings.deepseek_api_key
+        return (k, settings.deepseek_base_url, settings.deepseek_model) if k else None
+    if name == "groq":
+        k = settings.groq_api_key
+        return (k, settings.groq_base_url, settings.groq_model) if k else None
+    if name == "together":
+        k = settings.together_api_key
+        return (k, settings.together_base_url, settings.together_model) if k else None
+    if name == "ollama":
+        return ("ollama", settings.ollama_base_url, settings.ollama_model)
+    return None
+
+
+def _auto_detect_provider() -> tuple[str, str, str] | None:
+    """Pick the first provider in priority order whose key is set."""
+    preferred = (settings.default_provider or "").strip().lower()
+    if preferred:
+        cfg = _provider_env(preferred)
+        if cfg:
+            return cfg
+    for name in _PROVIDER_PRIORITY:
+        cfg = _provider_env(name)
+        if cfg:
+            return cfg
+    return None
+
+
+def _resolve_provider(agent_config: AgentConfig | None) -> tuple[str | None, str, str]:
+    """Resolve (api_key, base_url, model) with per-user overrides winning over env."""
+    env_cfg = _auto_detect_provider()
+    env_key, env_base, env_model = env_cfg if env_cfg else (None, settings.openai_base_url, settings.openai_model)
+
+    api_key = env_key
+    if agent_config and agent_config.api_key_encrypted:
         try:
             from app.routers.agent_config import _decrypt_api_key
-            decrypted = _decrypt_api_key(raw)
+            decrypted = _decrypt_api_key(agent_config.api_key_encrypted)
             if decrypted and decrypted not in ("test_key", "placeholder", ""):
-                return decrypted
+                api_key = decrypted
         except Exception:
             pass
-    if settings.openrouter_api_key:
-        return settings.openrouter_api_key
-    if settings.openai_api_key:
-        return settings.openai_api_key
-    return None
+
+    base_url = (agent_config.base_url if agent_config else None) or env_base
+    model = (agent_config.model if agent_config else None) or env_model
+    return api_key, base_url, model
 
 
 def _get_tool_definitions() -> list[dict]:
@@ -550,8 +767,10 @@ def _get_tool_definitions() -> list[dict]:
                 "description": (
                     "Set the Server-Driven UI screen for any app tab. "
                     "The frontend re-renders instantly via WebSocket. "
-                    "Prefer the current row-first contract: screen.rows[] -> row.cells[] -> cell.content. "
-                    "Cell content should use PascalCase V2 component types such as Text, Markdown, Button, Image, TextInput, Icon, Divider, Container, CalendarModule, ChatModule, NotesModule, and InputBar. "
+                    "Use the row-first contract: screen.rows[] -> row.cells[] -> cell.content. "
+                    "Every cell.content MUST include a 'type' field — typeless content renders as a red 'Invalid component' box on the phone. "
+                    "Valid V2 component types (PascalCase): Text, Markdown, Button, Image, TextInput, Icon, Divider, Container, "
+                    "CalendarModule, ChatModule, NotesModule, InputBar, Badge, Stat, List, Alert, Todo, RichText, ArticleCard. "
                     "Stored payloads may omit metadata like schema_version, module_id, and title. "
                     "Legacy sections payloads are still accepted for backward compatibility, but new tool calls should send row-first screens. "
                     "Available module_ids: home | chat | calendar | forms | alerts | modules | settings"
@@ -582,7 +801,25 @@ def _get_tool_definitions() -> list[dict]:
                                                             "type": "object",
                                                             "properties": {
                                                                 "id": {"type": "string"},
-                                                                "content": {"type": "object"},
+                                                                "content": {
+                                                                    "type": "object",
+                                                                    "description": "Component object. Must include 'type'.",
+                                                                    "properties": {
+                                                                        "type": {
+                                                                            "type": "string",
+                                                                            "enum": [
+                                                                                "Text", "Markdown", "Button", "Image",
+                                                                                "TextInput", "Icon", "Divider", "Container",
+                                                                                "CalendarModule", "ChatModule", "NotesModule", "InputBar",
+                                                                                "Badge", "Stat", "List", "Alert",
+                                                                                "Todo", "RichText", "ArticleCard",
+                                                                            ],
+                                                                        },
+                                                                        "id": {"type": "string"},
+                                                                        "props": {"type": "object"},
+                                                                    },
+                                                                    "required": ["type"],
+                                                                },
                                                             },
                                                             "required": ["id", "content"],
                                                         },
