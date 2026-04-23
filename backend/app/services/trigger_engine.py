@@ -1,10 +1,10 @@
 """
 Trigger Engine — executes action chains defined in TriggerDefinition records.
 
-V1 keeps it simple:
-  - fire_trigger() parses action_chain_json and runs each action via action_registry
-  - register_scheduled_triggers() hooks into APScheduler for cron-based triggers
-  - data_change triggers are fired manually when data updates occur
+Handles two trigger types: data_change and server_event.
+Cron/schedule triggers are handled exclusively by workflow_engine (Workflow.trigger_type
+== "onSchedule" via APScheduler CronTrigger). TriggerDefinition no longer supports
+trigger_type="schedule" — see schemas/trigger.py and routers/triggers.py.
 """
 from __future__ import annotations
 
@@ -19,11 +19,14 @@ from app.models.trigger import TriggerDefinition
 logger = logging.getLogger(__name__)
 
 
-async def fire_trigger(trigger: TriggerDefinition, db: AsyncSession) -> list[dict[str, Any]]:
+async def fire_event_trigger(trigger: TriggerDefinition, db: AsyncSession) -> list[dict[str, Any]]:
     """Execute a trigger's action chain.
 
     Parses action_chain_json and runs each action through the action registry.
     Returns a list of results, one per action in the chain.
+
+    Named fire_event_trigger (not fire_trigger) to avoid collision with
+    workflow_engine.fire_trigger(trigger_type, user_id, event_data).
     """
     from app.services.action_registry import registry
 
@@ -51,12 +54,3 @@ async def fire_trigger(trigger: TriggerDefinition, db: AsyncSession) -> list[dic
             results.append({"status": "error", "action": action_type, "detail": str(exc)})
 
     return results
-
-
-def register_scheduled_triggers(scheduler: Any) -> None:
-    """Register APScheduler jobs for all schedule-type triggers.
-
-    V1: placeholder that logs a message. Full cron scheduling to be wired
-    in a future session when the scheduler integration is solidified.
-    """
-    logger.info("register_scheduled_triggers called — V1 placeholder")

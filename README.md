@@ -36,7 +36,7 @@ The app is a **Server-Driven UI (SDUI) renderer** — the AI sends JSON componen
 └───────────────────┬─────────────────────────────────────────┘
                     │  WebSocket (real-time events) + REST API
 ┌───────────────────▼──────────────────┐  ┌────────────────────┐
-│  Python FastAPI Backend   port 8000  │  │  Web Admin Panel   │
+│  Python FastAPI Backend   port 9100  │  │  Web Admin Panel   │
 │  Auth · Calendar · Chat · Workflows  │  │  (Vite + React)    │
 │  Agent Proxy (OpenRouter streaming)  │  │  port 5173         │
 │  MCP Server (22 tools)               │  │  SDUI Editor       │
@@ -122,91 +122,117 @@ A React + Vite web dashboard for administrators at `http://localhost:5173`:
 
 ## Getting Started
 
+### Option A — Docker (fastest)
+
+```bash
+cp .env.example .env
+# Edit .env and set SECRET_KEY, ENCRYPTION_KEY, and one provider key
+docker compose up -d
+
+# Create your first admin account
+docker compose exec backend python /app/../manage.py create_user \
+  --username admin --password yourpassword
+```
+
+Web admin: <http://localhost:8080> — API: <http://localhost:9100>
+
+### Option B — Local Dev
+
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.11+ (if your `python` is aliased to the system Python like 3.13, that's fine — we'll call the venv's python directly)
 - Node.js 18+ and npm
-- An [OpenRouter](https://openrouter.ai/) API key (free tier available)
+- An AI provider API key — free options: [OpenRouter](https://openrouter.ai/keys), [SiliconFlow](https://siliconflow.cn), or [Groq](https://console.groq.com/)
 
-### 1. Backend
+### 1. Environment variables (do this FIRST)
 
-```bash
-cd backend
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -e ".[dev]"
-
-# Run migrations and start
-alembic upgrade head
-uvicorn app.main:app --reload   # http://localhost:8000
-```
-
-### 2. Environment Variables
-
-Create `Helm/.env` (at the repo root):
+Create `backend/.env`:
 
 ```env
-# Required
-OPENROUTER_API_KEY=sk-or-...       # https://openrouter.ai/keys
-SECRET_KEY=your-secret-key-here    # any random string for JWT signing
+# Required — generate both:
+#   python -c "import secrets; print(secrets.token_hex(32))"
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+SECRET_KEY=<paste token_hex output>
+ENCRYPTION_KEY=<paste Fernet.generate_key output>
 
-# Optional — defaults shown
-OPENROUTER_MODEL=stepfun/step-3.5-flash:free
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+# Pick ONE provider and set its key
+DEFAULT_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-...
+
 DATABASE_URL=sqlite+aiosqlite:///./helm.db
-HELM_MCP_URL=http://localhost:8000/mcp/
-EXTERNAL_AGENT_URL=                # set to http://localhost:7860 to use api_server.py
-AGENT_WEB_PORT=7860
+SERVER_PORT=9100
 ```
 
-Create your first admin account (backend must be running):
+The backend will refuse to start if `ENCRYPTION_KEY` is missing — this is intentional; it encrypts stored API keys.
 
-```bash
-# First-time setup — creates the admin user (locked after first use)
-curl -X POST http://localhost:8000/auth/setup \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "yourpassword"}'
-
-# Login — copy session_token from response
-curl -X POST http://localhost:8000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "yourpassword", "device_id": "cli", "device_name": "CLI"}'
-```
-
-Add `HELM_SESSION_TOKEN=<your token>` to `.env` if using the standalone agent.
-
-Alternatively, use the management CLI:
+### 2. Backend
 
 ```bash
 cd backend
+python3 -m venv .venv
 source .venv/bin/activate
-python manage.py create_user --username admin --password yourpassword
+pip install -e ".[dev]"
+
+.venv/bin/python -m alembic upgrade head
+.venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 9100
 ```
 
-### 3. Mobile App
+> If your shell aliases `python` globally (e.g. `/Library/Frameworks/Python.framework/...`), always call `.venv/bin/python` explicitly so you don't accidentally use the system Python.
+
+Verify it's up: `curl http://localhost:9100/health`.
+
+### 3. Create your admin account
+
+In another terminal:
 
 ```bash
-cd mobile
-npm install
-npx expo start          # Scan QR with Expo Go on your phone
-npx expo start --web    # Or run in browser
+cd backend
+.venv/bin/python manage.py create_user --username admin --password yourpassword
+# Forgot the password later? Reset it:
+.venv/bin/python manage.py reset_password --username admin --password newpassword
 ```
 
-At first launch, enter your server URL (`http://localhost:8000`) on the Connect screen, then log in.
-
-### 4. Web Admin Panel (Optional)
+### 4. Web Admin Panel
 
 ```bash
 cd web
 npm install
-npm run dev             # http://localhost:5173
+npm run dev             # http://localhost:5174
 ```
 
-Log in with the same admin credentials you created above.
+Log in with the admin credentials you just created. The web admin lets you build SDUI screens, edit workflows, manage connections, and view logs.
+
+### 5. Mobile App
+
+```bash
+cd mobile
+npm install
+npx expo install --fix   # aligns package versions with Expo 55 Go
+npx expo start           # then press `i` for iOS sim, `a` for Android sim, or scan the QR with Expo Go
+```
+
+On the **Connect** screen, enter the server URL for your target:
+
+| Target | Server URL |
+|---|---|
+| iOS simulator on Mac | `http://localhost:9100` |
+| Android emulator | `http://10.0.2.2:9100` |
+| Physical phone on same Wi-Fi | `http://<mac-lan-ip>:9100` (find with `ipconfig getifaddr en0`) |
+
+Then log in with the same admin credentials.
+
+### 6. Try the AI
+
+The AI lives behind the **Chat** tab. Open it and type:
+
+> "Build me a home screen with a greeting card and 3 news article cards about AI."
+
+The agent will call `helm_set_screen` + `helm_approve_draft`, and the **Home** tab will re-render live with the JSON the agent just authored — zero app rebuild. That's the whole pitch of Helm.
+
+Other things to try:
+- *"Add a calendar event tomorrow at 3pm called Review Helm"* → check the Calendar tab
+- *"Send me a warning notification saying tests pass"* → check the Alerts tab
+- *"Rename the Chat tab to Assistant"* → tab bar updates live
 
 ### 5. Standalone Agent (Optional)
 
@@ -349,7 +375,7 @@ Helm/
 
 ## MCP Tools Reference
 
-Any MCP-compatible agent can connect to `http://localhost:8000/mcp/` with a valid Bearer token:
+Any MCP-compatible agent can connect to `http://localhost:9100/mcp/` with a valid Bearer token:
 
 ### Calendar
 
@@ -425,14 +451,39 @@ All living technical docs are in [`docs/codebase-explanation/`](docs/codebase-ex
 
 ---
 
+## Troubleshooting
+
+**Backend refuses to start with `RuntimeError: ENCRYPTION_KEY is required`**
+Generate and set one in `backend/.env`:
+```bash
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+**`manage.py` can't find `sqlalchemy` / uses system Python 3.13**
+Your shell aliases `python` globally. Call the venv's python directly: `.venv/bin/python manage.py ...`.
+
+**Mobile app shows "Native module is null, cannot access legacy storage"**
+Package versions drifted from what Expo 55 Go bundles. Fix: `cd mobile && npx expo install --fix && npx expo start --clear`.
+
+**Android emulator can't reach the backend**
+Android uses `10.0.2.2` (not `localhost`) to reach the host Mac. Also start uvicorn with `--host 0.0.0.0`, not the default `127.0.0.1`.
+
+**Port 9100 conflicts with something else**
+Change `SERVER_PORT` in `backend/.env`, the `--port` flag on uvicorn, the proxy targets in `web/vite.config.ts`, the server URL on the mobile Connect screen, and the `ports:` / `CORS_ALLOW_ORIGINS` in `docker-compose.yml`.
+
+**Chat replies nothing, WebSocket disconnects immediately**
+Provider key is missing or invalid. Check `backend/.env`: `DEFAULT_PROVIDER` + the matching `*_API_KEY`. Check backend logs for 401s from the provider.
+
+**"admin already exists" when creating user**
+The user already exists. Reset the password: `.venv/bin/python manage.py reset_password --username admin --password newpassword`.
+
+---
+
 ## Contributing
 
-See [CLAUDE.md](CLAUDE.md) for full contribution rules. Key points:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, testing expectations, commit style, and how to add MCP tools or SDUI components. [CLAUDE.md](CLAUDE.md) has the deeper coding-convention rules.
 
-- Never commit directly to `main` — branch + PR always
-- Fix root causes, not symptoms
-- Write a failing test before changing production code
-- Verify with live testing (Playwright) before merging
+Roadmap: [ROADMAP.md](ROADMAP.md).
 
 ---
 

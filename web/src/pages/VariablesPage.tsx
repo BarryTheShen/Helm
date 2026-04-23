@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { api, type Variable, type VariableCreate, type DataSource, type DataSourceCreate, type DataSourceSchema } from '../lib/api';
+import { api, type Variable, type VariableCreate, type VariableUpdate, type DataSource, type DataSourceCreate, type DataSourceSchema } from '../lib/api';
 import { Plus, Trash2, Pencil, X, Eye } from 'lucide-react';
 
 type Tab = 'variables' | 'data-sources';

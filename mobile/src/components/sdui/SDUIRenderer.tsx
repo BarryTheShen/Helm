@@ -335,6 +335,9 @@ function V2ComponentRenderer({
       const unwrapped = { ...inner, id: inner.id ?? (component as any).id };
       return <V2ComponentRenderer component={unwrapped} dispatch={dispatch} />;
     }
+    // Log the offending payload so field bugs are traceable from device logs.
+    // Without this, the red box gives us nothing to debug from production reports.
+    console.warn('[SDUI] Invalid component — missing type', JSON.stringify(component));
     return (
       <View style={styles.unknownComponent}>
         <Text style={styles.unknownText}>Invalid component</Text>
@@ -458,6 +461,7 @@ export function SDUIRenderer({ component, onAction }: SDUIRendererProps) {
 function renderComponent(comp: SDUIComponent, dispatch: ActionDispatcher): React.ReactNode {
   // Guard against malformed AI-generated JSON (missing required fields)
   if (!comp || !comp.type) {
+    console.warn('[SDUI] Invalid V1 component — missing type', JSON.stringify(comp));
     return <View key={(comp as any)?.id} style={styles.unknownComponent}><Text style={styles.unknownText}>Invalid component</Text></View>;
   }
 

@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -15,6 +16,12 @@ class Session(Base, TimestampMixin):
     token: Mapped[str] = mapped_column(String(1024), unique=True, nullable=False, index=True)
     expires_at: Mapped[str] = mapped_column(DateTime(timezone=True), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Tracks the last time this session was used; used for idle-timeout enforcement.
+    last_active: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
 
     user: Mapped["User"] = relationship(back_populates="sessions")  # type: ignore[name-defined]  # noqa: F821
     device: Mapped["Device"] = relationship(back_populates="sessions")  # type: ignore[name-defined]  # noqa: F821

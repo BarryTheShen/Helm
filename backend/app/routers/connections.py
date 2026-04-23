@@ -3,38 +3,30 @@ import hashlib
 import json
 from uuid import uuid4
 
-from cryptography.fernet import Fernet
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.database import get_db
 from app.dependencies import PaginationParams, get_current_user_id
 from app.models.connection import Connection
 from app.schemas.common import PaginatedResponse
 from app.schemas.connection import ConnectionCreate, ConnectionDetail, ConnectionOut, ConnectionUpdate
 from app.services.audit import log_audit
+from app.utils.crypto import get_fernet
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
 
 
-def _get_fernet() -> Fernet:
-    """Get Fernet cipher using the encryption key from settings."""
-    if not settings.encryption_key:
-        raise ValueError("ENCRYPTION_KEY must be set in environment variables")
-    return Fernet(settings.encryption_key.encode())
-
-
 def _encrypt_credentials(credentials: dict) -> str:
-    """Encrypt credentials dict, return base64-encoded ciphertext."""
+    """Encrypt credentials dict, return Fernet ciphertext."""
     json_str = json.dumps(credentials)
-    return _get_fernet().encrypt(json_str.encode()).decode()
+    return get_fernet().encrypt(json_str.encode()).decode()
 
 
 def _decrypt_credentials(encrypted: str) -> dict:
-    """Decrypt encrypted credentials string, return dict."""
-    json_str = _get_fernet().decrypt(encrypted.encode()).decode()
+    """Decrypt Fernet ciphertext, return credentials dict."""
+    json_str = get_fernet().decrypt(encrypted.encode()).decode()
     return json.loads(json_str)
 
 

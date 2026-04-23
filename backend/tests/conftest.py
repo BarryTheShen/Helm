@@ -1,13 +1,28 @@
 """Shared pytest fixtures for Helm backend tests."""
 
+import os
+
+from cryptography.fernet import Fernet
+
+# Inject a valid Fernet key BEFORE app modules import settings.
+# Several tests touch encrypted columns (connections, agent_config); without
+# a key, pytest collection aborts mid-file and cascades failures.
+os.environ.setdefault("ENCRYPTION_KEY", Fernet.generate_key().decode())
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from app.config import settings
 from app.database import get_db, is_sandbox_mode
 from app.main import app
 from app.models.base import Base
+
+# Belt-and-suspenders: ensure the Settings instance sees the key even if it
+# was instantiated before the env var was set.
+if not settings.encryption_key:
+    settings.encryption_key = os.environ["ENCRYPTION_KEY"]
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 

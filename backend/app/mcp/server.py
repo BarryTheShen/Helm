@@ -36,12 +36,22 @@ from app.mcp.tools import (
     update_module_state,
 )
 
-# MCP context var for user_id (set per-request by auth middleware)
+# MCP context vars — set per-request by auth middleware.
+# module_instance_id is None for legacy/direct agent calls; Phase 4c will set it
+# when a request arrives from a specific installed module.
 _current_user_id: contextvars.ContextVar[str] = contextvars.ContextVar("_current_user_id", default="")
+_current_module_instance_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "_current_module_instance_id", default=None
+)
 
 
 def get_current_user_id() -> str:
     return _current_user_id.get()
+
+
+def get_current_module_instance_id() -> str | None:
+    """Return the module_instance_id from the current MCP request context, or None."""
+    return _current_module_instance_id.get()
 
 
 class _MCPAuthMiddleware:
@@ -72,8 +82,13 @@ class _MCPAuthMiddleware:
             await self._send_401(scope, receive, send)
             return
 
-        # Stamp context var so tool handlers can call get_current_user_id()
+        # Stamp context vars so tool handlers can call get_current_user_id()
+        # and get_current_module_instance_id() without extra DB round-trips.
         _current_user_id.set(user_id)
+        # Optional: caller can pass X-Module-Instance-Id to scope the call to a
+        # specific installed module. Phase 4c will set this on install-flow calls.
+        module_instance_id = headers.get(b"x-module-instance-id", b"").decode() or None
+        _current_module_instance_id.set(module_instance_id)
         await self._app(scope, receive, send)
 
     @staticmethod

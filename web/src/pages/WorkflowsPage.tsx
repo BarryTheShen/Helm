@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import ReactFlow, {
   Controls,
@@ -12,14 +12,47 @@ import ReactFlow, {
 import type { Node, Connection, NodeTypes } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { api, type Workflow, type WorkflowCreate, type WorkflowUpdate } from '../lib/api';
-import { Plus, Save, Play, Upload, Trash2 } from 'lucide-react';
+import { Plus, Save, Play, Upload, Trash2, X } from 'lucide-react';
 import { useResource } from '../hooks/useResource';
 import { TriggerNode } from '../components/workflow/TriggerNode';
-import { ActionNode } from '../components/workflow/ActionNode';
-import { ConditionNode } from '../components/workflow/ConditionNode';
-import { SwitchNode } from '../components/workflow/SwitchNode';
-import { LoopNode } from '../components/workflow/LoopNode';
 import { NodeInspector } from '../components/workflow/NodeInspector';
+
+// Custom node components
+function ActionNode({ data }: { data: any }) {
+  return (
+    <div className="px-4 py-3 bg-blue-50 border-2 border-blue-500 rounded-lg shadow-sm min-w-[180px]">
+      <div className="font-semibold text-sm text-blue-900">{data.label || 'Action'}</div>
+      {data.action && <div className="text-xs text-blue-600 mt-1">{data.action}</div>}
+    </div>
+  );
+}
+
+function ConditionNode({ data }: { data: any }) {
+  return (
+    <div className="px-4 py-3 bg-yellow-50 border-2 border-yellow-500 rounded-lg shadow-sm min-w-[180px]">
+      <div className="font-semibold text-sm text-yellow-900">{data.label || 'Condition'}</div>
+      {data.condition && <div className="text-xs text-yellow-600 mt-1">{data.condition}</div>}
+    </div>
+  );
+}
+
+function SwitchNode({ data }: { data: any }) {
+  return (
+    <div className="px-4 py-3 bg-purple-50 border-2 border-purple-500 rounded-lg shadow-sm min-w-[180px]">
+      <div className="font-semibold text-sm text-purple-900">{data.label || 'Switch'}</div>
+      {data.cases && <div className="text-xs text-purple-600 mt-1">{data.cases} cases</div>}
+    </div>
+  );
+}
+
+function LoopNode({ data }: { data: any }) {
+  return (
+    <div className="px-4 py-3 bg-green-50 border-2 border-green-500 rounded-lg shadow-sm min-w-[180px]">
+      <div className="font-semibold text-sm text-green-900">{data.label || 'Loop'}</div>
+      {data.iterator && <div className="text-xs text-green-600 mt-1">{data.iterator}</div>}
+    </div>
+  );
+}
 
 const nodeTypes: NodeTypes = {
   trigger: TriggerNode,

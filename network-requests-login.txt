@@ -1,2 +1,0 @@
-[POST] http://localhost:5174/auth/login => [401] Unauthorized
-  Request body: {"username":"admin","password":"admin","device_name":"Admin Panel","device_id":"09185f52-0bfb-48d5-a2ca-71f1f230b14a"}

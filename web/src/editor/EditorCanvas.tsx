@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { CSSProperties, JSX } from 'react';
 import {
@@ -962,6 +962,10 @@ function RowHeightResizeHandle({
 }
 
 // ── Row Insertion Control ───────────────────────────────────────────────────
+// Clicking "Add Row" immediately commits a 1-cell row. The cell count can be
+// adjusted afterwards via the Property Inspector (setCellCount). This avoids
+// the picker → cancel flow that previously left no committed row but confused
+// users who expected the row to persist after the popover closed.
 
 function RowInsertionControl({
   onAdd,
@@ -970,31 +974,6 @@ function RowInsertionControl({
   onAdd: (cellCount: number) => void;
   between?: boolean;
 }) {
-  const [showPicker, setShowPicker] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const pickerRef = useRef<HTMLDivElement>(null);
-  const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
-
-  useEffect(() => {
-    if (!showPicker) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node) &&
-          buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
-        setShowPicker(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showPicker]);
-
-  const handleToggle = () => {
-    if (!showPicker && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setPickerPos({ top: rect.bottom + 4, left: rect.left + rect.width / 2 - 80 });
-    }
-    setShowPicker(!showPicker);
-  };
-
   return (
     <div
       className={`relative z-10 flex items-center justify-center pointer-events-none ${between ? 'h-10 py-1' : 'py-3'}`}
@@ -1003,8 +982,7 @@ function RowInsertionControl({
         <div className="absolute left-0 right-0 top-1/2 border-t border-dashed border-gray-200" />
       )}
       <button
-        ref={buttonRef}
-        onClick={handleToggle}
+        onClick={(e) => { e.stopPropagation(); onAdd(1); }}
         className={`pointer-events-auto relative z-10 flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
           between
             ? 'border shadow-sm bg-white border-gray-200 text-gray-400 hover:text-blue-600 hover:border-blue-300'
@@ -1014,24 +992,6 @@ function RowInsertionControl({
         <Plus size={12} />
         Add Row
       </button>
-      {showPicker && createPortal(
-        <div
-          ref={pickerRef}
-          className="fixed bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-[9999]"
-          style={{ top: pickerPos.top, left: Math.max(8, pickerPos.left) }}
-        >
-          <div className="text-xs font-medium text-gray-500 px-2 py-1">Cells per row</div>
-          <div className="flex gap-1 px-1">
-            {[1, 2, 3, 4].map(n => (
-              <button key={n} onClick={() => { onAdd(n); setShowPicker(false); }}
-                className="w-10 py-2 text-sm font-medium bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded border border-gray-200 hover:border-blue-300 transition-colors">
-                {n}
-              </button>
-            ))}
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   );
 }

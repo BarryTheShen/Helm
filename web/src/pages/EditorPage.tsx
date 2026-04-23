@@ -267,7 +267,6 @@ export function EditorPage() {
   const history = useEditorStore(s => s.history);
   const setDevice = useEditorStore(s => s.setDevice);
   const toggleLandscape = useEditorStore(s => s.toggleLandscape);
-  const isLandscape = useEditorStore(s => s.isLandscape);
   const deviceWidth = useEditorStore(s => s.deviceWidth);
   const deviceHeight = useEditorStore(s => s.deviceHeight);
   const rows = useEditorStore(s => s.rows);

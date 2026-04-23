@@ -163,7 +163,8 @@ async def resolve_expression(expr: str, context: dict[str, Any]) -> str:
     Args:
         expr: A string potentially containing {{...}} expressions.
         context: Dict with keys: user, component_state, self_id,
-                 custom_variables, data_cache, connections_cache, db, secret_key.
+                 custom_variables, data_cache, connections_cache,
+                 db, user_id, encryption_key.
 
     Returns:
         The string with all resolvable expressions replaced.

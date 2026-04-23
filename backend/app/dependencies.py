@@ -1,7 +1,10 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.models.user import User
 from app.services.auth import get_session_by_token
@@ -26,6 +29,27 @@ async def get_current_user(
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Enforce idle timeout: reject sessions that have not been used recently.
+    now = datetime.now(timezone.utc)
+    idle_cutoff = now - timedelta(hours=settings.session_idle_timeout_hours)
+    last_active = session.last_active
+    # Normalise naive datetimes from SQLite (which strips tzinfo) to UTC.
+    if last_active.tzinfo is None:
+        last_active = last_active.replace(tzinfo=timezone.utc)
+    if last_active < idle_cutoff:
+        session.is_active = False
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired due to inactivity",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Bump last_active so the idle clock resets on every successful request.
+    session.last_active = now
+    await db.commit()
+
     user = await db.get(User, session.user_id)
     if user is None:
         raise HTTPException(

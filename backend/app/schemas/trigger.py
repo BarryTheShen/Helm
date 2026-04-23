@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 class TriggerCreate(BaseModel):
     name: str
-    trigger_type: Literal["schedule", "data_change", "server_event"]
+    trigger_type: Literal["data_change", "server_event"]
     config_json: str = "{}"
     action_chain_json: str = "[]"
     enabled: bool = True
@@ -14,7 +14,7 @@ class TriggerCreate(BaseModel):
 
 class TriggerUpdate(BaseModel):
     name: str | None = None
-    trigger_type: Literal["schedule", "data_change", "server_event"] | None = None
+    trigger_type: Literal["data_change", "server_event"] | None = None
     config_json: str | None = None
     action_chain_json: str | None = None
     enabled: bool | None = None

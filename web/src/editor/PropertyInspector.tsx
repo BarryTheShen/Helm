@@ -553,15 +553,6 @@ function ReadOnlyComponentSummary({ component }: { component: EditorComponent })
   );
 }
 
-// ── Variable Groups ────────────────────────────────────────────────────────
-
-const VARIABLE_GROUPS = [
-  { label: 'User', vars: ['{{user.name}}', '{{user.username}}', '{{user.email}}'] },
-  { label: 'Self', vars: ['{{self.value}}'] },
-  { label: 'Custom', vars: ['{{custom.appName}}'] },
-  { label: 'Environment', vars: ['{{env.serverUrl}}'] },
-];
-
 const DATA_BINDING_COMPONENT_TYPES = new Set(['CalendarModule', 'ChatModule', 'NotesModule']);
 
 const DATA_BINDING_SOURCE_TYPE: Record<string, string> = {

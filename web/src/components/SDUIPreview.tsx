@@ -233,7 +233,7 @@ function ContainerPreview({ children }: any) {
   );
 }
 
-const PREVIEW_RENDERERS: Record<string, (props: any) => JSX.Element> = {
+const PREVIEW_RENDERERS: Record<string, (props: any) => React.JSX.Element> = {
   Text: TextPreview,
   text: TextPreview,
   Markdown: MarkdownPreview,
