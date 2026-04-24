@@ -174,11 +174,58 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
       { label: 'Space Around', value: 'space-around' },
     ] },
   ],
-  CalendarModule: [],
-  Calendar: [],
+  CalendarModule: [
+    {
+      key: 'variant',
+      label: 'View Type',
+      type: 'select',
+      options: [
+        { value: 'month', label: 'Month (implemented)' },
+        { value: 'week', label: 'Week (planned)' },
+        { value: 'day', label: 'Day (planned)' },
+        { value: 'agenda', label: 'Agenda (planned)' }
+      ],
+      defaultValue: 'month'
+    },
+    {
+      key: 'dataBinding',
+      label: 'Data Binding (JSON)',
+      type: 'textarea',
+      placeholder: '{"dataSourceId":"calendar_events","refreshInterval":60000}',
+      defaultValue: ''
+    },
+  ],
+  Calendar: [
+    {
+      key: 'variant',
+      label: 'View Type',
+      type: 'select',
+      options: [
+        { value: 'month', label: 'Month (implemented)' },
+        { value: 'week', label: 'Week (planned)' },
+        { value: 'day', label: 'Day (planned)' },
+        { value: 'agenda', label: 'Agenda (planned)' }
+      ],
+      defaultValue: 'month'
+    },
+    {
+      key: 'dataBinding',
+      label: 'Data Binding (JSON)',
+      type: 'textarea',
+      placeholder: '{"dataSourceId":"calendar_events","refreshInterval":60000}',
+      defaultValue: ''
+    },
+  ],
   Todo: [
     { key: 'items', label: 'Items (JSON)', type: 'textarea', placeholder: '[{"id":"1","text":"Task 1","completed":false}]', defaultValue: '[]' },
     { key: 'placeholder', label: 'Placeholder', type: 'text', defaultValue: 'Add a new task...' },
+    {
+      key: 'dataBinding',
+      label: 'Data Binding (JSON)',
+      type: 'textarea',
+      placeholder: '{"dataSourceId":"todos","refreshInterval":60000}',
+      defaultValue: ''
+    },
   ],
   RichTextRenderer: [
     { key: 'content', label: 'Content (Markdown)', type: 'textarea', placeholder: '# Heading\n\nParagraph with **bold** and *italic*.', defaultValue: '# Hello\n\nThis is **markdown**.' },
@@ -204,7 +251,22 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
   ChatModule: [
     { key: 'threadId', label: 'Thread ID', type: 'text', placeholder: 'Optional conversation thread ID' },
   ],
-  NotesModule: [],
+  NotesModule: [
+    {
+      key: 'filterDate',
+      label: 'Filter Date',
+      type: 'text',
+      placeholder: '{{date.today}}',
+      defaultValue: ''
+    },
+    {
+      key: 'dataBinding',
+      label: 'Data Binding (JSON)',
+      type: 'textarea',
+      placeholder: '{"dataSourceId":"notes","refreshInterval":60000}',
+      defaultValue: ''
+    },
+  ],
   InputBar: [
     { key: 'value', label: 'Default Value', type: 'text', defaultValue: '' },
     { key: 'placeholder', label: 'Placeholder', type: 'text', defaultValue: 'Type a message...' },

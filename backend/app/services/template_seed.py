@@ -56,14 +56,30 @@ SEED_TEMPLATES = [
                         "width": "50%",
                         "content": {
                             "type": "CalendarModule",
-                            "props": {"variant": "agenda"}
+                            "props": {
+                                "variant": "agenda",
+                                "dataBinding": {
+                                    "dataSourceId": "calendar_events",
+                                    "refreshInterval": 60000
+                                }
+                            }
                         }
                     }
                 ]),
                 # Row 3: Todo Component
-                _row([_cell("Todo", {})]),
+                _row([_cell("Todo", {
+                    "dataBinding": {
+                        "dataSourceId": "todos",
+                        "refreshInterval": 60000
+                    }
+                })]),
                 # Row 4: Notes Component
-                _row([_cell("NotesModule", {})]),
+                _row([_cell("NotesModule", {
+                    "dataBinding": {
+                        "dataSourceId": "notes",
+                        "refreshInterval": 60000
+                    }
+                })]),
                 # Row 5: Two action buttons
                 _row([
                     _cell("Button", {
@@ -115,7 +131,10 @@ SEED_TEMPLATES = [
                         "width": "80%",
                         "content": {
                             "type": "InputBar",
-                            "props": {"placeholder": "Type a message..."}
+                            "props": {
+                                "id": "chat_input",
+                                "placeholder": "Type a message..."
+                            }
                         }
                     },
                     {
@@ -130,7 +149,7 @@ SEED_TEMPLATES = [
                                 "action": {
                                     "type": "server_action",
                                     "function": "chat.send",
-                                    "params": {"message": "{{component.chat_input_bar_1.value}}"}
+                                    "params": {"message": "{{component.chat_input.value}}"}
                                 }
                             }
                         }
@@ -159,19 +178,36 @@ SEED_TEMPLATES = [
                         {
                             "type": "CalendarModule",
                             "id": str(uuid.uuid4()),
-                            "props": {"variant": "week"}
+                            "props": {
+                                "variant": "week",
+                                "dataBinding": {
+                                    "dataSourceId": "calendar_events",
+                                    "refreshInterval": 60000
+                                }
+                            }
                         },
                         # Sub-cell 2: Todo Component
                         {
                             "type": "Todo",
                             "id": str(uuid.uuid4()),
-                            "props": {}
+                            "props": {
+                                "dataBinding": {
+                                    "dataSourceId": "todos",
+                                    "refreshInterval": 60000
+                                }
+                            }
                         },
                         # Sub-cell 3: Notes Component filtered to today
                         {
                             "type": "NotesModule",
                             "id": str(uuid.uuid4()),
-                            "props": {"filterDate": "{{date.today}}"}
+                            "props": {
+                                "filterDate": "{{date.today}}",
+                                "dataBinding": {
+                                    "dataSourceId": "notes",
+                                    "refreshInterval": 60000
+                                }
+                            }
                         }
                     ]
                 })]),
@@ -199,6 +235,8 @@ SEED_TEMPLATES = [
                     })
                 ]),
                 # Row 2: Article card example
+                # TODO: Wrap in List component with dataBinding when List supports itemTemplate
+                # For now, this is a static example card
                 _row([_cell("ArticleCard", {
                     "title": "Welcome to Your Feed",
                     "description": "Tap 'Refresh Feed' to load the latest articles from Hacker News.",
@@ -226,19 +264,19 @@ SEED_TEMPLATES = [
                 # Row 3: Display name field
                 _row([
                     _cell("Text", {"content": "Display name", "fontSize": 14, "fontWeight": "semibold"}),
-                    _cell("TextInput", {"placeholder": "{{user.name}}", "label": ""})
+                    _cell("TextInput", {"id": "display_name_input", "placeholder": "{{user.name}}", "label": ""})
                 ]),
                 # Row 4: Email field
                 _row([
                     _cell("Text", {"content": "Email", "fontSize": 14, "fontWeight": "semibold"}),
-                    _cell("TextInput", {"placeholder": "{{user.email}}", "label": ""})
+                    _cell("TextInput", {"id": "email_input", "placeholder": "{{user.email}}", "label": ""})
                 ]),
                 # Row 5: Connection section header
                 _row([_cell("Markdown", {"content": "## 🌐 Connection"})]),
                 # Row 6: Endpoint URL field
                 _row([
                     _cell("Text", {"content": "Endpoint URL", "fontSize": 14, "fontWeight": "semibold"}),
-                    _cell("TextInput", {"placeholder": "https://...", "label": ""})
+                    _cell("TextInput", {"id": "endpoint_url_input", "placeholder": "https://...", "label": ""})
                 ]),
                 # Row 7: Appearance section header
                 _row([_cell("Markdown", {"content": "## 🎨 Appearance"})]),

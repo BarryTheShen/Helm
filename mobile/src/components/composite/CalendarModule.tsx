@@ -1,7 +1,19 @@
 /**
- * CalendarModule — Tier 3 composite module.
- * Month view powered by react-native-calendars; threeDay is a placeholder stub.
- * Supports pull-to-refresh when connected to a data source.
+ * CalendarModule — Calendar display component with multiple view types
+ *
+ * @prop variant - View type: 'month' | 'week' | 'day' | 'agenda'
+ *   - 'month': Fully implemented (default)
+ *   - 'week': Planned (falls back to month)
+ *   - 'day': Planned (falls back to month)
+ *   - 'agenda': Planned (falls back to month)
+ *
+ * @prop events - Array of calendar events to display
+ * @prop dataBinding - Optional data source configuration for live event loading
+ * @prop onDataRefresh - Callback when data refresh is triggered
+ * @prop onEventPress - Callback when an event is tapped
+ *
+ * Note: View switcher UI only shows implemented views (Month, 3 Day).
+ * Future work: Implement week, day, and agenda views.
  */
 import React, { useState, useMemo, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, RefreshControl, ScrollView } from 'react-native';
@@ -21,22 +33,30 @@ interface CalendarEvent {
 }
 
 interface CalendarModuleProps {
-  defaultView?: 'month' | 'threeDay';
+  variant?: 'month' | 'week' | 'day' | 'agenda';
   events?: CalendarEvent[];
   dataBinding?: SDUIDataBinding;
   onDataRefresh?: () => void;
   onEventPress?: (event: CalendarEvent) => void;
-  variant?: 'month' | 'week' | 'day' | 'agenda';
 }
 
 export function CalendarModule({
-  defaultView = 'month',
+  variant = 'month',
   events: eventsProp = [],
   dataBinding,
   onDataRefresh,
   onEventPress,
 }: CalendarModuleProps) {
-  const [view, setView] = useState(defaultView);
+  // Map variant to implemented view types
+  const supportedViews = ['month', 'threeDay'] as const;
+  const initialView = supportedViews.includes(variant as any) ? variant : 'month';
+
+  // Warn if unsupported variant is used
+  if (variant && !supportedViews.includes(variant as any)) {
+    console.warn(`CalendarModule: variant "${variant}" not implemented, falling back to "month". Supported: ${supportedViews.join(', ')}`);
+  }
+
+  const [view, setView] = useState<'month' | 'threeDay'>(initialView as 'month' | 'threeDay');
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [refreshing, setRefreshing] = useState(false);
 

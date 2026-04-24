@@ -291,8 +291,8 @@ export function WorkflowsPage() {
     setNodes((nds) =>
       nds.map((node) => (node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node))
     );
-    // Update selected node if it's the one being edited
-    setSelectedNode((current) => current?.id === nodeId ? { ...current, data: { ...current.data, ...data } } : current);
+    // selectedNode stays stable — no update needed here
+    // Inspector reads from stable selectedNode reference set on initial click
   }, [setNodes]);
 
   const deleteNode = useCallback(() => {
