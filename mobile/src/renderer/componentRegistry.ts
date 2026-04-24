@@ -58,6 +58,7 @@ const registry: Record<string, ComponentType<any>> = {
   Alert: AlertComponent,
   Todo: TodoComponent,
   RichText: RichTextRendererComponent,
+  RichTextRenderer: RichTextRendererComponent,
   ArticleCard: ArticleCardComponent,
   // Backend snake_case aliases
   article_card: ArticleCardComponent,

@@ -1,7 +1,9 @@
 /**
  * Variable resolver for web admin preview.
- * Resolves {{namespace.key}} expressions with mock data for preview purposes.
+ * Uses mustache for {{namespace.key}} resolution with mock data.
  */
+
+import Mustache from 'mustache';
 
 interface MockVariableContext {
   user: Record<string, unknown>;
@@ -33,46 +35,24 @@ const MOCK_CONTEXT: MockVariableContext = {
   connection: {},
 };
 
-/**
- * Resolve a single {{namespace.key}} expression.
- */
-function resolveExpression(expr: string, context: MockVariableContext): string {
-  const parts = expr.trim().split('.');
-  if (parts.length < 2) return `{{${expr}}}`;
-
-  const [namespace, ...keyParts] = parts;
-  const key = keyParts.join('.');
-
-  // Navigate the context
-  let value: any = context[namespace as keyof MockVariableContext];
-
-  if (!value) return `{{${expr}}}`;
-
-  // Walk the key path
-  const keys = key.split('.');
-  for (const k of keys) {
-    if (value && typeof value === 'object' && k in value) {
-      value = value[k];
-    } else {
-      return `{{${expr}}}`;
-    }
-  }
-
-  return value !== null && value !== undefined ? String(value) : `{{${expr}}}`;
-}
+// Disable HTML escaping for mustache
+Mustache.escape = (text) => text;
 
 /**
- * Resolve all {{...}} expressions in a string.
+ * Resolve all {{...}} expressions in a string using mustache.
  */
 export function resolveVariables(text: string, customContext?: Partial<MockVariableContext>): string {
-  if (!text || !text.includes('{{')) return text;
+  if (!text || typeof text !== 'string') return text;
+  if (!text.includes('{{')) return text;
 
   const context = customContext ? { ...MOCK_CONTEXT, ...customContext } : MOCK_CONTEXT;
-  const regex = /\{\{([^}]+)\}\}/g;
 
-  return text.replace(regex, (match, expr) => {
-    return resolveExpression(expr, context);
-  });
+  try {
+    return Mustache.render(text, context);
+  } catch (error) {
+    console.error('Variable resolution error:', error);
+    return text;
+  }
 }
 
 /**

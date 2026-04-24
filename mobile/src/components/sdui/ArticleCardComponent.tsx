@@ -4,21 +4,21 @@ import { colors, spacing, typography, borderRadius } from '@/theme/colors';
 import type { SDUIAction } from '@/types/sdui';
 
 interface ArticleCardComponentProps {
-  title: string;
-  description: string;
+  title?: string;
+  description?: string;
   imageUrl?: string;
-  publishedAt: string;
-  source: string;
+  publishedAt?: string;
+  source?: string;
   onPress?: SDUIAction;
   dispatch?: (action: SDUIAction) => void;
 }
 
 export function ArticleCardComponent({
-  title,
-  description,
+  title = 'Article Title',
+  description = 'Article description...',
   imageUrl,
-  publishedAt,
-  source,
+  publishedAt = '2026-04-17T00:00:00Z',
+  source = 'Source',
   onPress,
   dispatch,
 }: ArticleCardComponentProps) {

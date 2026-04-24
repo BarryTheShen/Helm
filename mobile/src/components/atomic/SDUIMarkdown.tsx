@@ -6,6 +6,8 @@
 import React from 'react';
 import { Platform } from 'react-native';
 import Markdown from 'react-native-markdown-display';
+import { useVariableContext } from '@/hooks/useVariableContext';
+import { resolveExpression } from '@/utils/variableResolver';
 
 interface SDUIMarkdownProps {
   content: string;
@@ -56,9 +58,12 @@ const markdownStyles = {
 };
 
 export function SDUIMarkdown({ content }: SDUIMarkdownProps) {
+  const variableContext = useVariableContext();
+  const resolvedContent = resolveExpression(content || '', variableContext);
+
   return (
     <Markdown style={markdownStyles}>
-      {content}
+      {resolvedContent}
     </Markdown>
   );
 }

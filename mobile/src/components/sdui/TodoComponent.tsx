@@ -15,7 +15,7 @@ interface TodoItem {
 }
 
 interface TodoComponentProps {
-  items: TodoItem[];
+  items?: TodoItem[];
   placeholder?: string;
   onToggle?: SDUIAction;
   onAdd?: SDUIAction;

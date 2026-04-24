@@ -7,6 +7,8 @@ import React from 'react';
 import { TouchableOpacity, Text, View, ActivityIndicator, StyleSheet } from 'react-native';
 import { resolveColor, themeColors } from '@/theme/tokens';
 import { resolveIconName } from '@/components/atomic/SDUIIcon';
+import { useVariableContext } from '@/hooks/useVariableContext';
+import { resolveExpression } from '@/utils/variableResolver';
 import type { SDUIAction } from '@/types/sdui';
 
 interface SDUIButtonProps {
@@ -39,6 +41,9 @@ export function SDUIButton({
   size = 'md',
   dispatch,
 }: SDUIButtonProps) {
+  const variableContext = useVariableContext();
+  const resolvedLabel = label ? resolveExpression(label, variableContext) : undefined;
+
   const height = sizeHeights[size] ?? 44;
   const fontSize = sizeFontSizes[size] ?? 16;
   const px = sizePadding[size] ?? 12;
@@ -63,7 +68,7 @@ export function SDUIButton({
         disabled={disabled || loading}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel={label ?? icon}
+        accessibilityLabel={resolvedLabel ?? icon}
       >
         {loading ? (
           <ActivityIndicator size="small" color={themeColors.primary} />
@@ -94,7 +99,7 @@ export function SDUIButton({
       disabled={disabled || loading}
       activeOpacity={0.75}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={resolvedLabel}
     >
       {loading ? (
         <ActivityIndicator size="small" color={resolveColor(variantStyle.text)} />
@@ -103,8 +108,8 @@ export function SDUIButton({
           {!!icon && iconPosition === 'left' && (
             <Text style={[styles.btnIcon, { fontSize, color: resolveColor(variantStyle.text) }]}>{resolveIconName(icon)}</Text>
           )}
-          {label && (
-            <Text style={[styles.label, { fontSize, color: resolveColor(variantStyle.text) }]}>{label}</Text>
+          {resolvedLabel && (
+            <Text style={[styles.label, { fontSize, color: resolveColor(variantStyle.text) }]}>{resolvedLabel}</Text>
           )}
           {!!icon && iconPosition === 'right' && (
             <Text style={[styles.btnIcon, { fontSize, color: resolveColor(variantStyle.text) }]}>{resolveIconName(icon)}</Text>

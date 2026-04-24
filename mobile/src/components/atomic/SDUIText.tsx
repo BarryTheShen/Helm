@@ -5,6 +5,8 @@
 import React from 'react';
 import { Text, StyleSheet } from 'react-native';
 import { resolveColor } from '@/theme/tokens';
+import { useVariableContext } from '@/hooks/useVariableContext';
+import { resolveExpression } from '@/utils/variableResolver';
 
 interface SDUITextProps {
   content: string;
@@ -41,6 +43,9 @@ export function SDUIText({
   numberOfLines,
   selectable,
 }: SDUITextProps) {
+  const variableContext = useVariableContext();
+  const resolvedContent = resolveExpression(content || '', variableContext);
+
   const base = variantStyles[variant] ?? variantStyles.body;
   const textDecorations: string[] = [];
   if (underline) textDecorations.push('underline');
@@ -61,7 +66,7 @@ export function SDUIText({
       numberOfLines={numberOfLines}
       selectable={selectable}
     >
-      {content}
+      {resolvedContent}
     </Text>
   );
 }

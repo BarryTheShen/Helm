@@ -21,6 +21,7 @@ import type {
 } from './types';
 
 const HISTORY_LIMIT = 50;
+const MIN_CELL_WIDTH_PERCENT = 5; // Minimum 5% width per cell
 const DEFAULT_DEVICE = DEVICE_PRESETS[1] ?? {
   name: 'Default',
   width: 390,
@@ -146,6 +147,39 @@ function createEmptyCell(): EditorCell {
     width: 'auto',
     content: null,
   };
+}
+
+function validateCellWidths(cells: EditorCell[]): boolean {
+  let totalSetWidth = 0;
+  let autoCount = 0;
+
+  for (const cell of cells) {
+    if (typeof cell.width === 'string' && cell.width.endsWith('%')) {
+      const percent = parseFloat(cell.width);
+      if (isNaN(percent) || percent < MIN_CELL_WIDTH_PERCENT) {
+        return false;
+      }
+      totalSetWidth += percent;
+    } else if (cell.width === 'auto') {
+      autoCount++;
+    }
+  }
+
+  // Rule 1: Total set widths must be < 100%
+  if (totalSetWidth >= 100) {
+    return false;
+  }
+
+  // Rule 2: Auto cells must have enough space (at least MIN_CELL_WIDTH_PERCENT each)
+  if (autoCount > 0) {
+    const availableWidth = 100 - totalSetWidth;
+    const autoWidth = availableWidth / autoCount;
+    if (autoWidth < MIN_CELL_WIDTH_PERCENT) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function createEmptyRow(cellCount = 1): EditorRow {
@@ -621,26 +655,26 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
         return state;
       }
 
-      const nextRows = state.rows.map((entry, index) => {
-        if (index !== rowIndex) {
-          return entry;
+      // Create updated cells array for validation
+      const updatedCells = row.cells.map((cell, currentCellIndex) => {
+        if (currentCellIndex === cellIndex) {
+          return { ...cell, width: nextLeftWidth };
         }
-
-        return {
-          ...entry,
-          cells: entry.cells.map((cell, currentCellIndex) => {
-            if (currentCellIndex === cellIndex) {
-              return { ...cell, width: nextLeftWidth };
-            }
-
-            if (currentCellIndex === cellIndex + 1) {
-              return { ...cell, width: nextRightWidth };
-            }
-
-            return cell;
-          }),
-        };
+        if (currentCellIndex === cellIndex + 1) {
+          return { ...cell, width: nextRightWidth };
+        }
+        return cell;
       });
+
+      // Validate before applying
+      if (!validateCellWidths(updatedCells)) {
+        console.warn('Adjacent width update rejected: violates minimum width constraints');
+        return state;
+      }
+
+      const nextRows = state.rows.map((entry, index) =>
+        index === rowIndex ? { ...entry, cells: updatedCells } : entry
+      );
 
       return commitRows(state, nextRows);
     });
@@ -697,6 +731,12 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
             ...Array.from({ length: nextCount - row.cells.length }, () => createEmptyCell()),
           ];
 
+      // Validate before applying
+      if (!validateCellWidths(nextCells)) {
+        console.warn('Cell count update rejected: would violate minimum width constraints');
+        return state;
+      }
+
       const nextRows = state.rows.map((entry, index) => index === rowIndex ? { ...entry, cells: nextCells } : entry);
 
       const nextSelection =
@@ -752,16 +792,21 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
         return state;
       }
 
-      const nextRows = state.rows.map((row, index) => {
-        if (index !== rowIndex) {
-          return row;
-        }
+      // Create updated cells array for validation
+      const row = state.rows[rowIndex];
+      const updatedCells = row.cells.map((cell, currentCellIndex) =>
+        currentCellIndex === cellIndex ? { ...cell, width: nextWidth } : cell
+      );
 
-        return {
-          ...row,
-          cells: row.cells.map((cell, currentCellIndex) => currentCellIndex === cellIndex ? { ...cell, width: nextWidth } : cell),
-        };
-      });
+      // Validate before applying
+      if (!validateCellWidths(updatedCells)) {
+        console.warn('Width update rejected: violates minimum width constraints');
+        return state;
+      }
+
+      const nextRows = state.rows.map((entry, index) =>
+        index === rowIndex ? { ...entry, cells: updatedCells } : entry
+      );
 
       return commitRows(state, nextRows);
     });

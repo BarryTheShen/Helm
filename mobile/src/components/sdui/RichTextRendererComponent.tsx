@@ -23,13 +23,13 @@ import { themeColors } from '@/theme/tokens';
 import type { ActionDispatcher } from '@/components/sdui/SDUIRenderer';
 
 interface RichTextRendererComponentProps {
-  content: string;
+  content?: string;
   theme?: 'light' | 'dark';
   dispatch?: ActionDispatcher;
 }
 
 export function RichTextRendererComponent({
-  content,
+  content = '# Hello\n\nThis is **markdown**.',
   theme = 'light',
 }: RichTextRendererComponentProps) {
   if (!content || typeof content !== 'string') {

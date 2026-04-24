@@ -25,7 +25,7 @@ SEED_TEMPLATES = [
         "screen_json": {
             "rows": [
                 # Row 1: Greeting with user name variable
-                _row([_cell("Text", {"content": "Good morning, @user.name 👋", "fontSize": 24, "fontWeight": "bold"})]),
+                _row([_cell("Text", {"content": "Good morning, {{user.name}} 👋", "fontSize": 24, "fontWeight": "bold"})]),
                 # Row 2: Weather (50%) + Calendar Compact (50%)
                 _row([
                     {
@@ -130,7 +130,7 @@ SEED_TEMPLATES = [
                                 "action": {
                                     "type": "server_action",
                                     "function": "chat.send",
-                                    "params": {"message": "@component.chat_input_bar_1.value"}
+                                    "params": {"message": "{{component.chat_input_bar_1.value}}"}
                                 }
                             }
                         }
@@ -147,7 +147,7 @@ SEED_TEMPLATES = [
             "rows": [
                 # Row 1: Header with dynamic date
                 _row([_cell("Markdown", {
-                    "content": "# 📋 Today — @date.today",
+                    "content": "# 📋 Today — {{date.today}}",
                     "textAlign": "center"
                 })]),
                 # Row 2: Container with 3 vertical sub-cells
@@ -171,7 +171,7 @@ SEED_TEMPLATES = [
                         {
                             "type": "NotesModule",
                             "id": str(uuid.uuid4()),
-                            "props": {"filterDate": "@date.today"}
+                            "props": {"filterDate": "{{date.today}}"}
                         }
                     ]
                 })]),
@@ -226,12 +226,12 @@ SEED_TEMPLATES = [
                 # Row 3: Display name field
                 _row([
                     _cell("Text", {"content": "Display name", "fontSize": 14, "fontWeight": "semibold"}),
-                    _cell("TextInput", {"placeholder": "@user.name", "label": ""})
+                    _cell("TextInput", {"placeholder": "{{user.name}}", "label": ""})
                 ]),
                 # Row 4: Email field
                 _row([
                     _cell("Text", {"content": "Email", "fontSize": 14, "fontWeight": "semibold"}),
-                    _cell("TextInput", {"placeholder": "@user.email", "label": ""})
+                    _cell("TextInput", {"placeholder": "{{user.email}}", "label": ""})
                 ]),
                 # Row 5: Connection section header
                 _row([_cell("Markdown", {"content": "## 🌐 Connection"})]),
@@ -265,9 +265,9 @@ SEED_TEMPLATES = [
                         "type": "server_action",
                         "function": "settings.save",
                         "params": {
-                            "display_name": "@component.display_name_input.value",
-                            "email": "@component.email_input.value",
-                            "endpoint_url": "@component.endpoint_url_input.value"
+                            "display_name": "{{component.display_name_input.value}}",
+                            "email": "{{component.email_input.value}}",
+                            "endpoint_url": "{{component.endpoint_url_input.value}}"
                         }
                     }
                 })]),

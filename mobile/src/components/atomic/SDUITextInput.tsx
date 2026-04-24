@@ -6,6 +6,8 @@ import React, { useState, useEffect } from 'react';
 import { TextInput, StyleSheet } from 'react-native';
 import { themeColors } from '@/theme/tokens';
 import { useComponentStateStore } from '@/stores/componentStateStore';
+import { useVariableContext } from '@/hooks/useVariableContext';
+import { resolveExpression } from '@/utils/variableResolver';
 import type { SDUIAction } from '@/types/sdui';
 
 const INPUT_TEMPLATE_TOKEN = '{{input}}';
@@ -106,6 +108,9 @@ export function SDUITextInput({
   onSubmit,
   dispatch,
 }: SDUITextInputProps) {
+  const variableContext = useVariableContext();
+  const resolvedPlaceholder = placeholder ? resolveExpression(placeholder, variableContext) : undefined;
+
   const [localValue, setLocalValue] = useState(value ?? '');
   const { registerComponent, unregisterComponent, setComponentState } = useComponentStateStore();
 
@@ -142,7 +147,7 @@ export function SDUITextInput({
       ]}
       value={localValue}
       onChangeText={handleChangeText}
-      placeholder={placeholder}
+      placeholder={resolvedPlaceholder}
       placeholderTextColor={themeColors.textTertiary}
       multiline={multiline}
       numberOfLines={maxLines}

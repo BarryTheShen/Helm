@@ -706,7 +706,8 @@ function getRowContainerStyle(row: EditorRow, previewHeight?: number): CSSProper
   const resolvedHeight = resolveRowHeight(row.height, previewHeight);
   const style: CSSProperties = {
     minHeight: typeof resolvedHeight === 'number' ? Math.max(MIN_ROW_HEIGHT, resolvedHeight) : MIN_ROW_HEIGHT,
-    overflow: 'hidden', // Contain cell content within row boundaries
+    display: 'flex',
+    flexDirection: 'column',
   };
 
   if (typeof resolvedHeight === 'number') {
@@ -740,6 +741,9 @@ function getRowContentStyle(row: EditorRow): CSSProperties {
   const uniformPadding = resolveSpacingValue(row.padding);
 
   return {
+    display: 'flex',
+    flex: '1 1 auto',
+    minHeight: 0,
     gap: row.gap ?? 4,
     paddingTop: resolveSpacingValue(row.paddingTop) ?? uniformPadding ?? 0,
     paddingBottom: resolveSpacingValue(row.paddingBottom) ?? uniformPadding ?? 0,
@@ -760,24 +764,27 @@ function getNumericCellWidth(width: EditorCell['width']): number {
 }
 
 function getCellStyle(row: EditorRow, cellWidth: EditorCell['width'], totalWidth: number): CSSProperties {
+  const baseStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0,
+    alignSelf: 'stretch', // Ensure cell stretches to row height
+  };
+
   if (row.scrollable === true) {
     return {
+      ...baseStyle,
       flex: '0 0 auto',
       width: `${Math.max(getNumericCellWidth(cellWidth) * SCROLLABLE_CELL_WIDTH, SCROLLABLE_CELL_MIN_WIDTH)}px`,
       minWidth: SCROLLABLE_CELL_MIN_WIDTH,
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
     };
   }
 
   if (cellWidth === 'auto') {
     return {
+      ...baseStyle,
       flex: '1 1 0%',
       minWidth: MIN_CELL_WIDTH_PX,
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
     };
   }
 
@@ -786,12 +793,10 @@ function getCellStyle(row: EditorRow, cellWidth: EditorCell['width'], totalWidth
     const percent = parseFloat(cellWidth);
     const clampedPercent = Math.max(MIN_CELL_WIDTH_PERCENT, Math.min(100, percent));
     return {
+      ...baseStyle,
       flex: `0 0 ${clampedPercent}%`,
       width: `${clampedPercent}%`,
       minWidth: MIN_CELL_WIDTH_PX,
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
     };
   }
 
@@ -800,12 +805,10 @@ function getCellStyle(row: EditorRow, cellWidth: EditorCell['width'], totalWidth
   const clampedPercent = Math.max(MIN_CELL_WIDTH_PERCENT, Math.min(100, cellPercent));
 
   return {
+    ...baseStyle,
     flex: `0 0 ${clampedPercent}%`,
     width: `${clampedPercent}%`,
     minWidth: MIN_CELL_WIDTH_PX,
-    height: '100%',
-    display: 'flex',
-    flexDirection: 'column',
   };
 }
 
@@ -831,6 +834,7 @@ function CellResizeHandle({
   const totalWidthRef = useRef(2);
   const hasMovedRef = useRef(false);
   const nextWidthsRef = useRef({ left: 1, right: 1 });
+  const rafIdRef = useRef<number>();
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -848,7 +852,7 @@ function CellResizeHandle({
 
     const handleMouseMove = (ev: MouseEvent) => {
       const delta = (ev.clientX - startXRef.current) / 100;
-      const minWidth = 0.25;
+      const minWidth = MIN_CELL_WIDTH_PERCENT / 100; // Convert to decimal (0.05 for 5%)
       const maxLeft = Math.max(minWidth, totalWidthRef.current - minWidth);
       const nextLeft = Math.min(
         maxLeft,
@@ -859,8 +863,12 @@ function CellResizeHandle({
       hasMovedRef.current = true;
 
       nextWidthsRef.current = { left: nextLeft, right: nextRight };
-      // Immediately update preview for smooth tracking
-      requestAnimationFrame(() => {
+
+      // Use RAF to throttle updates and prevent cursor lag
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+      rafIdRef.current = requestAnimationFrame(() => {
         onPreview(rowId, cellIndex, nextLeft, nextRight);
       });
     };
@@ -869,6 +877,11 @@ function CellResizeHandle({
       document.body.style.removeProperty('cursor');
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = undefined;
+      }
 
       if (hasMovedRef.current) {
         onCommit(rowId, cellIndex, nextWidthsRef.current.left, nextWidthsRef.current.right);
@@ -937,6 +950,7 @@ function RowHeightResizeHandle({
   const startHeightRef = useRef(MIN_ROW_HEIGHT);
   const nextHeightRef = useRef(MIN_ROW_HEIGHT);
   const hasMovedRef = useRef(false);
+  const rafIdRef = useRef<number>();
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -958,8 +972,12 @@ function RowHeightResizeHandle({
       hasMovedRef.current = true;
 
       nextHeightRef.current = nextHeight;
-      // Immediately update preview for smooth tracking
-      requestAnimationFrame(() => {
+
+      // Use RAF to throttle updates and prevent cursor lag
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+      rafIdRef.current = requestAnimationFrame(() => {
         onPreview(rowId, nextHeight);
       });
     };
@@ -968,6 +986,11 @@ function RowHeightResizeHandle({
       document.body.style.removeProperty('cursor');
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = undefined;
+      }
 
       if (hasMovedRef.current) {
         onCommit(rowId, nextHeightRef.current);
@@ -1094,7 +1117,7 @@ function SortableRow({
         </button>
 
         {/* Cells container */}
-        <div className="flex min-h-[48px] h-full items-stretch gap-1" style={getRowContentStyle(row)}>
+        <div className="flex min-h-[48px] flex-1 items-stretch" style={getRowContentStyle(row)}>
           {row.cells.map((cell, cellIdx) => {
             const displayedCellWidths = row.cells.map((entry, index) => getDisplayedCellWidth(row.id, index, entry.width));
             const totalWidth = displayedCellWidths.reduce<number>((sum, width) => sum + getNumericCellWidth(width), 0);
@@ -1106,7 +1129,7 @@ function SortableRow({
             return (
               <div
                 key={cell.id}
-                className={`relative rounded transition-all p-2 ${
+                className={`relative rounded transition-all p-2 flex flex-col ${
                   isCellSelected(row.id, cellIdx)
                     ? 'ring-2 ring-blue-400 bg-blue-50/50'
                     : cell.content ? 'bg-white shadow-sm' : 'bg-gray-50 border border-dashed border-gray-300'
@@ -1115,7 +1138,7 @@ function SortableRow({
               >
                 {cell.content ? (
                   <div
-                    className="cursor-pointer relative group/cell h-full flex flex-col"
+                    className="cursor-pointer relative group/cell flex-1 flex flex-col min-h-0"
                     onClick={(e) => handleComponentClick(row.id, cellIdx, e)}
                   >
                     {/* Delete cell button - top-right corner */}
@@ -1154,13 +1177,13 @@ function SortableRow({
                     </div>
 
                     {/* Component preview */}
-                    <div className="pointer-events-none overflow-hidden flex-1">
+                    <div className="pointer-events-none overflow-hidden flex-1 min-h-0">
                       <ComponentPreview component={cell.content} />
                     </div>
                   </div>
                 ) : (
                   <div
-                    className="flex items-center justify-center h-full min-h-[40px] cursor-pointer hover:bg-blue-50 hover:border-blue-300 rounded transition-colors"
+                    className="flex items-center justify-center flex-1 min-h-[40px] cursor-pointer hover:bg-blue-50 hover:border-blue-300 rounded transition-colors"
                     onClick={(e) => handleEmptyCellClick(row.id, cellIdx, e)}
                   >
                     <Plus size={16} className="text-gray-300" />

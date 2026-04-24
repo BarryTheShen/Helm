@@ -71,18 +71,24 @@ export const VariablePill = Node.create({
     return {
       insertVariablePill:
         (attributes: VariablePillAttributes) =>
-        ({ commands, state, tr }) => {
-          // Insert the pill with a trailing space
-          return commands.insertContent([
-            {
-              type: this.name,
-              attrs: attributes,
-            },
-            {
-              type: 'text',
-              text: ' ',
-            },
-          ]);
+        ({ commands, state, chain }) => {
+          const { from } = state.selection;
+
+          // Insert the pill with a trailing space and position cursor after
+          return chain()
+            .focus()
+            .insertContent([
+              {
+                type: this.name,
+                attrs: attributes,
+              },
+              {
+                type: 'text',
+                text: ' ',
+              },
+            ])
+            .setTextSelection(from + 2) // Position after pill (1) + space (1)
+            .run();
         },
     };
   },

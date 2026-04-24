@@ -38,7 +38,7 @@ INITIAL_COMPONENTS = [
         "icon": "📄",
         "description": "Renders markdown/rich text content",
         "props_schema": {
-            "content": {"type": "string", "required": True, "default": "# Hello\n\nThis is **markdown**."},
+            "content": {"type": "string", "default": "# Hello\n\nThis is **markdown**."},
             "theme": {"type": "enum", "options": ["light", "dark"], "default": "light"},
         },
         "default_props": {"content": "# Hello\n\nThis is **markdown**.", "theme": "light"},
@@ -165,7 +165,13 @@ INITIAL_COMPONENTS = [
         "name": "Notes Module",
         "icon": "📓",
         "description": "Rich text note editor. Self-contained.",
-        "props_schema": {},
+        "props_schema": {
+            "dataBinding": {"type": "object", "default": None},
+            "onAdd": {"type": "object", "default": None},
+            "onEdit": {"type": "object", "default": None},
+            "onDelete": {"type": "object", "default": None},
+            "onToggle": {"type": "object", "default": None},
+        },
         "default_props": {},
     },
     {
@@ -174,7 +180,13 @@ INITIAL_COMPONENTS = [
         "name": "Notes Module",
         "icon": "📓",
         "description": "Rich text note editor. Self-contained.",
-        "props_schema": {},
+        "props_schema": {
+            "dataBinding": {"type": "object", "default": None},
+            "onAdd": {"type": "object", "default": None},
+            "onEdit": {"type": "object", "default": None},
+            "onDelete": {"type": "object", "default": None},
+            "onToggle": {"type": "object", "default": None},
+        },
         "default_props": {},
     },
     {
@@ -208,6 +220,9 @@ INITIAL_COMPONENTS = [
         "props_schema": {
             "items": {"type": "array", "default": []},
             "placeholder": {"type": "string", "default": "Add a task..."},
+            "onToggle": {"type": "object", "default": None},
+            "onAdd": {"type": "object", "default": None},
+            "onDelete": {"type": "object", "default": None},
         },
         "default_props": {"items": [], "placeholder": "Add a task..."},
     },
@@ -218,11 +233,12 @@ INITIAL_COMPONENTS = [
         "icon": "📰",
         "description": "Card displaying article preview with image, title, description, source",
         "props_schema": {
-            "title": {"type": "string", "required": True, "default": "Article Title"},
-            "description": {"type": "string", "required": True, "default": "Article description..."},
+            "title": {"type": "string", "default": "Article Title"},
+            "description": {"type": "string", "default": "Article description..."},
             "imageUrl": {"type": "string", "default": ""},
             "publishedAt": {"type": "string", "default": "2026-04-17T00:00:00Z"},
-            "source": {"type": "string", "required": True, "default": "Source"},
+            "source": {"type": "string", "default": "Source"},
+            "onPress": {"type": "object", "default": None},
         },
         "default_props": {
             "title": "Article Title",
