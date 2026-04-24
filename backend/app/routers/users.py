@@ -30,7 +30,9 @@ async def list_users(
 ):
     base_where = []
     if search:
-        base_where.append(User.username.ilike(f"%{search}%"))
+        # Escape SQL wildcards to prevent pattern matching abuse
+        escaped_search = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        base_where.append(User.username.ilike(f"%{escaped_search}%"))
 
     count_q = select(func.count()).select_from(User)
     if base_where:

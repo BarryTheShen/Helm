@@ -115,12 +115,16 @@ async def revoke_session(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    session = await db.get(Session, session_id)
+    # Fetch session with authorization filter to prevent enumeration
+    result = await db.execute(
+        select(Session).where(
+            Session.id == session_id,
+            (Session.user_id == str(current_user.id)) | (current_user.role == "admin")
+        )
+    )
+    session = result.scalar_one_or_none()
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-
-    if current_user.role != "admin" and str(session.user_id) != str(current_user.id):
-        raise HTTPException(status_code=403, detail="Cannot revoke another user's session")
 
     session.is_active = False
     await log_audit(db, str(current_user.id), "SESSION_REVOKED", "session", session_id, ip=request.client.host if request.client else None)

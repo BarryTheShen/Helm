@@ -8,6 +8,8 @@ import ReactFlow, {
   addEdge,
   MarkerType,
   Panel,
+  Handle,
+  Position,
 } from 'reactflow';
 import type { Node, Connection, NodeTypes } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -21,8 +23,10 @@ import { NodeInspector } from '../components/workflow/NodeInspector';
 function ActionNode({ data }: { data: any }) {
   return (
     <div className="px-4 py-3 bg-blue-50 border-2 border-blue-500 rounded-lg shadow-sm min-w-[180px]">
+      <Handle type="target" position={Position.Top} className="!bg-blue-500" />
       <div className="font-semibold text-sm text-blue-900">{data.label || 'Action'}</div>
       {data.action && <div className="text-xs text-blue-600 mt-1">{data.action}</div>}
+      <Handle type="source" position={Position.Bottom} className="!bg-blue-500" />
     </div>
   );
 }
@@ -30,26 +34,61 @@ function ActionNode({ data }: { data: any }) {
 function ConditionNode({ data }: { data: any }) {
   return (
     <div className="px-4 py-3 bg-yellow-50 border-2 border-yellow-500 rounded-lg shadow-sm min-w-[180px]">
+      <Handle type="target" position={Position.Top} className="!bg-yellow-500" />
       <div className="font-semibold text-sm text-yellow-900">{data.label || 'Condition'}</div>
-      {data.condition && <div className="text-xs text-yellow-600 mt-1">{data.condition}</div>}
+      {data.condition && <div className="text-xs text-yellow-600 mt-1 truncate">{data.condition}</div>}
+      <Handle type="source" position={Position.Bottom} id="true" className="!bg-green-500 !left-[30%]" />
+      <Handle type="source" position={Position.Bottom} id="false" className="!bg-red-500 !left-[70%]" />
     </div>
   );
 }
 
 function SwitchNode({ data }: { data: any }) {
+  const cases = data.cases || [];
+  const totalHandles = cases.length + 1; // cases + default
+
   return (
     <div className="px-4 py-3 bg-purple-50 border-2 border-purple-500 rounded-lg shadow-sm min-w-[180px]">
+      <Handle type="target" position={Position.Top} className="!bg-purple-500" />
       <div className="font-semibold text-sm text-purple-900">{data.label || 'Switch'}</div>
-      {data.cases && <div className="text-xs text-purple-600 mt-1">{data.cases} cases</div>}
+      {cases.length > 0 && <div className="text-xs text-purple-600 mt-1">{cases.length} cases</div>}
+
+      {/* Generate handles for each case */}
+      {cases.map((caseValue: string, index: number) => {
+        const leftPercent = ((index + 1) / (totalHandles + 1)) * 100;
+        return (
+          <Handle
+            key={caseValue}
+            type="source"
+            position={Position.Bottom}
+            id={caseValue}
+            style={{ left: `${leftPercent}%` }}
+            className="!bg-purple-400"
+          />
+        );
+      })}
+
+      {/* Default handle */}
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="default"
+        style={{ left: `${((totalHandles) / (totalHandles + 1)) * 100}%` }}
+        className="!bg-purple-500"
+      />
     </div>
   );
 }
 
 function LoopNode({ data }: { data: any }) {
   return (
-    <div className="px-4 py-3 bg-green-50 border-2 border-green-500 rounded-lg shadow-sm min-w-[180px]">
-      <div className="font-semibold text-sm text-green-900">{data.label || 'Loop'}</div>
-      {data.iterator && <div className="text-xs text-green-600 mt-1">{data.iterator}</div>}
+    <div className="px-4 py-3 bg-green-50 border-2 border-green-500 rounded-xl shadow-sm min-w-[180px]">
+      <Handle type="target" position={Position.Top} className="!bg-green-500" />
+      <div className="font-semibold text-sm text-green-900 text-center">{data.label || 'Loop'}</div>
+      {data.items && <div className="text-xs text-green-600 mt-1 text-center truncate">{data.items}</div>}
+      {!data.items && data.iterations && <div className="text-xs text-green-600 mt-1 text-center">{data.iterations}x</div>}
+      <Handle type="source" position={Position.Bottom} id="body" className="!bg-green-500 !left-[30%]" />
+      <Handle type="source" position={Position.Bottom} id="next" className="!bg-blue-500 !left-[70%]" />
     </div>
   );
 }
@@ -252,6 +291,8 @@ export function WorkflowsPage() {
     setNodes((nds) =>
       nds.map((node) => (node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node))
     );
+    // Update selected node if it's the one being edited
+    setSelectedNode((current) => current?.id === nodeId ? { ...current, data: { ...current.data, ...data } } : current);
   }, [setNodes]);
 
   const deleteNode = useCallback(() => {

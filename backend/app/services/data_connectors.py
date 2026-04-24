@@ -28,6 +28,15 @@ CANONICAL_SCHEMAS: dict[str, dict[str, Any]] = {
             {"name": "description", "type": "string", "nullable": True},
         ],
     },
+    "todos": {
+        "type": "todos",
+        "fields": [
+            {"name": "id", "type": "string"},
+            {"name": "text", "type": "string"},
+            {"name": "completed", "type": "boolean"},
+            {"name": "created_at", "type": "datetime"},
+        ],
+    },
     "notes": {
         "type": "notes",
         "fields": [
@@ -65,6 +74,8 @@ async def query_data_source(
 
     if source_type == "calendar":
         return await _query_calendar(user_id, db, filters, limit, offset)
+    elif source_type == "todos":
+        return await _query_todos(user_id, db, filters, limit, offset)
     elif source_type == "notes":
         return await _query_notes(user_id, db, filters, limit, offset)
     elif source_type == "chat":
@@ -102,6 +113,36 @@ async def _query_calendar(
             "description": e.description,
         }
         for e in events
+    ]
+
+
+async def _query_todos(
+    user_id: str,
+    db: AsyncSession,
+    filters: dict[str, Any] | None,
+    limit: int,
+    offset: int,
+) -> list[dict[str, Any]]:
+    from app.models.todo import Todo
+
+    query = (
+        select(Todo)
+        .where(Todo.user_id == user_id)
+        .order_by(Todo.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    result = await db.execute(query)
+    todos = result.scalars().all()
+
+    return [
+        {
+            "id": str(t.id),
+            "text": t.text,
+            "completed": t.completed,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        }
+        for t in todos
     ]
 
 

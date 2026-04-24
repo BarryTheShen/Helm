@@ -16,14 +16,32 @@ interface Connection {
 }
 
 const providerOptions = [
-  { value: 'openweathermap', label: 'OpenWeatherMap' },
-  { value: 'newsapi', label: 'NewsAPI' },
-  { value: 'custom', label: 'Custom' },
+  { value: 'openweathermap', label: 'OpenWeatherMap', category: 'Weather' },
+  { value: 'newsapi', label: 'NewsAPI', category: 'News' },
+  { value: 'openai', label: 'OpenAI', category: 'AI' },
+  { value: 'anthropic', label: 'Anthropic', category: 'AI' },
+  { value: 'google_calendar', label: 'Google Calendar', category: 'Calendar' },
+  { value: 'github', label: 'GitHub', category: 'Development' },
+  { value: 'stripe', label: 'Stripe', category: 'Payments' },
+  { value: 'sendgrid', label: 'SendGrid', category: 'Email' },
+  { value: 'twilio', label: 'Twilio', category: 'SMS' },
+  { value: 'slack', label: 'Slack', category: 'Communication' },
+  { value: 'discord', label: 'Discord', category: 'Communication' },
+  { value: 'custom', label: 'Custom API', category: 'Other' },
 ];
 
 const providerBadge: Record<string, string> = {
   openweathermap: 'bg-blue-100 text-blue-700',
   newsapi: 'bg-green-100 text-green-700',
+  openai: 'bg-purple-100 text-purple-700',
+  anthropic: 'bg-orange-100 text-orange-700',
+  google_calendar: 'bg-red-100 text-red-700',
+  github: 'bg-gray-800 text-white',
+  stripe: 'bg-indigo-100 text-indigo-700',
+  sendgrid: 'bg-blue-100 text-blue-700',
+  twilio: 'bg-red-100 text-red-700',
+  slack: 'bg-purple-100 text-purple-700',
+  discord: 'bg-indigo-100 text-indigo-700',
   custom: 'bg-gray-100 text-gray-700',
 };
 
@@ -172,7 +190,17 @@ export function ConnectionsPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Provider</label>
                 <select {...createForm.register('provider')} className={inputClass}>
-                  {providerOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  {Object.entries(
+                    providerOptions.reduce((acc, opt) => {
+                      if (!acc[opt.category]) acc[opt.category] = [];
+                      acc[opt.category].push(opt);
+                      return acc;
+                    }, {} as Record<string, typeof providerOptions>)
+                  ).map(([category, options]) => (
+                    <optgroup key={category} label={category}>
+                      {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </optgroup>
+                  ))}
                 </select>
               </div>
               <div>
@@ -205,7 +233,17 @@ export function ConnectionsPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Provider</label>
                 <select {...editForm.register('provider')} className={inputClass}>
-                  {providerOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  {Object.entries(
+                    providerOptions.reduce((acc, opt) => {
+                      if (!acc[opt.category]) acc[opt.category] = [];
+                      acc[opt.category].push(opt);
+                      return acc;
+                    }, {} as Record<string, typeof providerOptions>)
+                  ).map(([category, options]) => (
+                    <optgroup key={category} label={category}>
+                      {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </optgroup>
+                  ))}
                 </select>
               </div>
               <div>

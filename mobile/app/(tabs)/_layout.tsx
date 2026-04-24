@@ -5,7 +5,9 @@ import { colors } from '@/theme/colors';
 import { useWebSocket } from '@/contexts/WebSocketContext';
 import { useAuthStore } from '@/stores/authStore';
 import { useTabsStore } from '@/stores/tabsStore';
+import { useAppConfigStore } from '@/stores/appConfigStore';
 import { ApiClient } from '@/services/api';
+import { MODULE_TYPE_TO_ROUTE } from '@/constants/moduleRoutes';
 
 /**
  * Loads tab visibility and module configs from the server and keeps them in
@@ -17,11 +19,24 @@ function TabsConfigSync() {
   const setHiddenTabs = useTabsStore((s) => s.setHiddenTabs);
   const setModuleConfigs = useTabsStore((s) => s.setModuleConfigs);
   const loadEnabledTabIds = useTabsStore((s) => s.loadEnabledTabIds);
+  const loadAppConfig = useAppConfigStore((s) => s.loadAppConfig);
 
   // Load user's enabled tab IDs from AsyncStorage on mount
   useEffect(() => {
     loadEnabledTabIds();
   }, []);
+
+  // Load app config (bottom bar + launchpad)
+  // Note: We need device_id from authStore, but it may not be implemented yet
+  // For now, we'll skip this until Phase 4 (Device Registration) is complete
+  useEffect(() => {
+    if (!token || !serverUrl) return;
+    // TODO: Uncomment when device_id is available in authStore (Phase 4)
+    // const deviceId = useAuthStore.getState().device_id;
+    // if (deviceId) {
+    //   loadAppConfig(serverUrl, token, deviceId);
+    // }
+  }, [token, serverUrl]);
 
   // Initial load: fetch module list (name, icon, enabled) from REST.
   useEffect(() => {
@@ -58,6 +73,12 @@ function TabsConfigSync() {
         msg.modules.forEach((m: any) => { configs[m.id] = { name: m.name, icon: m.icon }; });
         setModuleConfigs(configs);
       }
+
+      // New system: app config updates (bottom bar + launchpad changes)
+      if (msg.type === 'app_config_update' && msg.config) {
+        const updateFromWebSocket = useAppConfigStore.getState().updateFromWebSocket;
+        updateFromWebSocket(msg.config);
+      }
     });
   }, [ws]);
 
@@ -84,6 +105,7 @@ export default function TabsLayout() {
   const hiddenTabs = useTabsStore((s) => s.hiddenTabs);
   const moduleConfigs = useTabsStore((s) => s.moduleConfigs);
   const enabledTabIds = useTabsStore((s) => s.enabledTabIds);
+  const appConfig = useAppConfigStore((s) => s.appConfig);
 
   // Defensive auth guard: if token was cleared (e.g. 401 → logout), redirect
   // to the login screen immediately. This catches cases where the root layout's
@@ -92,19 +114,40 @@ export default function TabsLayout() {
     return <Redirect href={serverUrl ? '/(auth)/login' : '/(auth)/connect'} />;
   }
 
+  // Build a map of module_type → slot_position from bottom_bar_config
+  const bottomBarMap = new Map<string, number>();
+  if (appConfig?.bottom_bar_config) {
+    appConfig.bottom_bar_config.forEach((module) => {
+      bottomBarMap.set(module.module_type, module.slot_position);
+    });
+  }
+
   // href: null hides the tab from the nav bar while keeping the route accessible.
-  // A tab is shown if: (1) it's in enabledTabIds AND (2) it's not in hiddenTabs (server-side)
-  const tabHref = (name: string) => {
-    if (hiddenTabs.includes(name)) return null;
-    if (!enabledTabIds.includes(name)) return null;
-    return undefined;
+  // Priority order:
+  // 1. If appConfig exists, use bottom_bar_config (new system)
+  // 2. Otherwise fall back to legacy hiddenTabs + enabledTabIds (old system)
+  const tabHref = (moduleType: string) => {
+    if (appConfig) {
+      // New system: tab is visible only if it's in bottom_bar_config
+      return bottomBarMap.has(moduleType) ? undefined : null;
+    } else {
+      // Legacy system: tab is shown if (1) it's in enabledTabIds AND (2) it's not in hiddenTabs
+      if (hiddenTabs.includes(moduleType)) return null;
+      if (!enabledTabIds.includes(moduleType)) return null;
+      return undefined;
+    }
   };
 
-  // Resolve tab label and icon from server-provided config, falling back to defaults.
-  // Strip leading icon from name to prevent double-icon display when the server
-  // (or AI agent rename_tab) stores the emoji as part of the name.
-  const tabLabel = (id: string, fallback: string) => {
-    const cfg = moduleConfigs[id];
+  // Resolve tab label and icon from app config or legacy module configs
+  const tabLabel = (moduleType: string, fallback: string) => {
+    // Try app config first (new system)
+    if (appConfig?.bottom_bar_config) {
+      const module = appConfig.bottom_bar_config.find((m) => m.module_type === moduleType);
+      if (module) return module.name;
+    }
+
+    // Fall back to legacy module configs
+    const cfg = moduleConfigs[moduleType];
     if (!cfg) return fallback;
     const { name, icon } = cfg;
     if (icon && name.startsWith(icon)) {
@@ -112,7 +155,17 @@ export default function TabsLayout() {
     }
     return name;
   };
-  const tabIcon = (id: string, fallback: string) => moduleConfigs[id]?.icon ?? fallback;
+
+  const tabIcon = (moduleType: string, fallback: string) => {
+    // Try app config first (new system)
+    if (appConfig?.bottom_bar_config) {
+      const module = appConfig.bottom_bar_config.find((m) => m.module_type === moduleType);
+      if (module) return module.icon;
+    }
+
+    // Fall back to legacy module configs
+    return moduleConfigs[moduleType]?.icon ?? fallback;
+  };
 
   const headerRight = () => <SettingsHeaderButton />;
 

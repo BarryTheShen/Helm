@@ -106,6 +106,7 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
       { label: 'Destructive', value: 'destructive' },
       { label: 'Icon Only', value: 'icon' },
     ] },
+    { key: 'fullWidth', label: 'Fill Cell', type: 'toggle', defaultValue: true },
   ],
   Image: [
     { key: 'src', label: 'Image URL', type: 'text', defaultValue: 'https://via.placeholder.com/300x200' },
@@ -173,31 +174,21 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
       { label: 'Space Around', value: 'space-around' },
     ] },
   ],
-  CalendarModule: [
-    { key: 'defaultView', label: 'Variant', type: 'select', defaultValue: 'month', options: [
-      { label: 'Month', value: 'month' },
-      { label: 'Week', value: 'week' },
-      { label: 'Day', value: 'day' },
-      { label: 'Event List', value: 'agenda' },
-      { label: 'Compact', value: 'compact' },
-    ] },
-  ],
-  Calendar: [
-    { key: 'variant', label: 'Variant', type: 'select', defaultValue: 'month', options: [
-      { label: 'Month', value: 'month' },
-      { label: 'Week', value: 'week' },
-      { label: 'Day', value: 'day' },
-      { label: 'Event List', value: 'agenda' },
-      { label: 'Compact', value: 'compact' },
-    ] },
-    { key: 'events', label: 'Events (JSON)', type: 'textarea', placeholder: '[{"id":"1","title":"Event","start":"2026-04-17T10:00:00Z","end":"2026-04-17T11:00:00Z"}]' },
-  ],
+  CalendarModule: [],
+  Calendar: [],
   Todo: [
-    { key: 'items', label: 'Items (JSON)', type: 'textarea', placeholder: '[{"id":"1","text":"Task 1","completed":false}]' },
+    { key: 'items', label: 'Items (JSON)', type: 'textarea', placeholder: '[{"id":"1","text":"Task 1","completed":false}]', defaultValue: '[]' },
     { key: 'placeholder', label: 'Placeholder', type: 'text', defaultValue: 'Add a new task...' },
   ],
   RichTextRenderer: [
-    { key: 'content', label: 'Content (Markdown)', type: 'textarea', placeholder: '# Heading\n\nParagraph with **bold** and *italic*.' },
+    { key: 'content', label: 'Content (Markdown)', type: 'textarea', placeholder: '# Heading\n\nParagraph with **bold** and *italic*.', defaultValue: '# Hello\n\nThis is **markdown**.' },
+    { key: 'theme', label: 'Theme', type: 'select', defaultValue: 'light', options: [
+      { label: 'Light', value: 'light' },
+      { label: 'Dark', value: 'dark' },
+    ] },
+  ],
+  RichText: [
+    { key: 'content', label: 'Content (Markdown)', type: 'textarea', placeholder: '# Heading\n\nParagraph with **bold** and *italic*.', defaultValue: '# Hello\n\nThis is **markdown**.' },
     { key: 'theme', label: 'Theme', type: 'select', defaultValue: 'light', options: [
       { label: 'Light', value: 'light' },
       { label: 'Dark', value: 'dark' },
@@ -205,10 +196,10 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
   ],
   ArticleCard: [
     { key: 'title', label: 'Title', type: 'text', defaultValue: 'Article Title' },
-    { key: 'description', label: 'Description', type: 'textarea', placeholder: 'Brief article description...' },
-    { key: 'imageUrl', label: 'Image URL', type: 'text', placeholder: 'https://example.com/image.jpg' },
-    { key: 'publishedAt', label: 'Published At', type: 'text', placeholder: '2026-04-17T10:00:00Z' },
-    { key: 'source', label: 'Source', type: 'text', placeholder: 'Source name' },
+    { key: 'description', label: 'Description', type: 'textarea', placeholder: 'Brief article description...', defaultValue: 'Article description...' },
+    { key: 'imageUrl', label: 'Image URL', type: 'text', placeholder: 'https://example.com/image.jpg', defaultValue: '' },
+    { key: 'publishedAt', label: 'Published At', type: 'text', placeholder: '2026-04-17T10:00:00Z', defaultValue: '2026-04-17T00:00:00Z' },
+    { key: 'source', label: 'Source', type: 'text', placeholder: 'Source name', defaultValue: 'Source' },
   ],
   ChatModule: [
     { key: 'threadId', label: 'Thread ID', type: 'text', placeholder: 'Optional conversation thread ID' },

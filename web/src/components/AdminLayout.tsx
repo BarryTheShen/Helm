@@ -1,9 +1,10 @@
+import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { Users, Workflow, FileText, Paintbrush, Braces, Plug, ScrollText, LogOut } from 'lucide-react';
+import { Users, Workflow, FileText, Paintbrush, Braces, Plug, ScrollText, LogOut, ChevronDown, ChevronRight, Smartphone } from 'lucide-react';
+import { ModulesTree } from '../editor/ModulesTree';
 
 const navItems = [
-  { to: '/editor', label: 'Visual Editor', icon: Paintbrush },
   { to: '/templates', label: 'Templates', icon: FileText },
   { to: '/workflows', label: 'Workflows', icon: Workflow },
   { to: '/variables', label: 'Variables', icon: Braces },
@@ -19,8 +20,11 @@ export function AdminLayout() {
   const logout = useAuthStore(s => s.logout);
   const user = useAuthStore(s => s.user);
   const location = useLocation();
+  const [editorExpanded, setEditorExpanded] = useState(true);
 
   const requiresWideViewport = WIDE_VIEWPORT_PAGES.some(p => location.pathname.startsWith(p));
+  const isEditorActive = location.pathname.startsWith('/editor');
+  const isAppEditorActive = location.pathname.startsWith('/app-editor');
 
   return (
     <div className="flex h-screen">
@@ -29,6 +33,44 @@ export function AdminLayout() {
           <h1 className="text-lg font-bold">⛵ Helm Admin</h1>
         </div>
         <nav className="flex-1 py-2">
+          {/* App Editor */}
+          <NavLink
+            to="/app-editor"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-5 py-2.5 text-sm transition-colors ${
+                isActive
+                  ? 'text-blue-400 bg-blue-950 border-l-2 border-blue-400'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-800 border-l-2 border-transparent'
+              }`
+            }
+          >
+            <Smartphone size={18} />
+            App Editor
+          </NavLink>
+
+          {/* Visual Editor with expandable tree */}
+          <div>
+            <button
+              onClick={() => setEditorExpanded(!editorExpanded)}
+              className={`w-full flex items-center justify-between px-5 py-2.5 text-sm transition-colors ${
+                isEditorActive
+                  ? 'text-blue-400 bg-blue-950 border-l-2 border-blue-400'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-800 border-l-2 border-transparent'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Paintbrush size={18} />
+                Visual Editor
+              </div>
+              {editorExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+            {editorExpanded && (
+              <div className="bg-gray-800/50">
+                <ModulesTree />
+              </div>
+            )}
+          </div>
+
           {navItems.map(item => (
             <NavLink key={item.to} to={item.to} end={item.to === '/'} className={({ isActive }) =>
               `flex items-center gap-3 px-5 py-2.5 text-sm transition-colors ${isActive ? 'text-blue-400 bg-blue-950 border-l-2 border-blue-400' : 'text-gray-400 hover:text-white hover:bg-gray-800 border-l-2 border-transparent'}`

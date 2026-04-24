@@ -4,10 +4,11 @@ import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { AuthService } from '@/services/auth';
 import { colors, spacing, typography } from '@/theme/colors';
+import * as Crypto from 'expo-crypto';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { serverUrl, setToken, setUser } = useAuthStore();
+  const { serverUrl, setToken, setUser, setDeviceId, deviceId } = useAuthStore();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -38,12 +39,45 @@ export default function LoginScreen() {
       const response = await authService.login({
         username,
         password,
-        device_id: 'web',
-        device_name: 'Web Browser',
+        device_id: 'mobile',
+        device_name: 'Mobile App',
       });
 
       await setToken(response.session_token);
       await setUser({ id: response.user_id, username: response.username, email: '', created_at: '' });
+
+      // Register device after successful authentication
+      const generatedDeviceId = deviceId || Crypto.randomUUID();
+      try {
+        const deviceResponse = await fetch(`${serverUrl}/api/devices`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${response.session_token}`,
+          },
+          body: JSON.stringify({
+            device_id: generatedDeviceId,
+            device_name: 'Mobile App',
+          }),
+        });
+
+        if (!deviceResponse.ok) {
+          throw new Error('Device registration failed');
+        }
+
+        const deviceData = await deviceResponse.json();
+        await setDeviceId(generatedDeviceId);
+
+        // Check if device has an assigned app
+        if (!deviceData.assigned_app_id) {
+          router.replace('/unassigned');
+          return;
+        }
+      } catch (deviceErr) {
+        console.error('Device registration error:', deviceErr);
+        // Continue to app even if device registration fails
+      }
+
       router.replace('/(tabs)/chat');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed';

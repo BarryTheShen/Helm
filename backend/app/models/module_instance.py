@@ -53,6 +53,9 @@ class ModuleInstance(Base, TimestampMixin):
 
     # Reverse relationships — cascade="all, delete-orphan" ensures that
     # deleting a ModuleInstance removes all scoped data atomically.
+    app_refs: Mapped[list["AppModuleRef"]] = relationship(  # type: ignore[name-defined]  # noqa: F821
+        back_populates="module_instance", cascade="all, delete-orphan"
+    )
     workflows: Mapped[list["Workflow"]] = relationship(  # type: ignore[name-defined]  # noqa: F821
         back_populates="module_instance", cascade="all, delete-orphan"
     )

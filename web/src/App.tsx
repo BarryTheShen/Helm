@@ -7,6 +7,7 @@ import { LoginPage } from './pages/LoginPage';
 import { WorkflowsPage } from './pages/WorkflowsPage';
 import { TemplatesPage } from './pages/TemplatesPage';
 import { EditorPage } from './pages/EditorPage';
+import { AppEditorPage } from './pages/AppEditorPage';
 import { VariablesPage } from './pages/VariablesPage';
 import { ConnectionsPage } from './pages/ConnectionsPage';
 import { LogsPage } from './pages/LogsPage';
@@ -32,6 +33,7 @@ export default function App() {
         <Route element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
           <Route path="/" element={<Navigate to="/editor" replace />} />
           <Route path="/editor" element={<EditorPage />} />
+          <Route path="/app-editor" element={<AppEditorPage />} />
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/workflows" element={<WorkflowsPage />} />
           <Route path="/variables" element={<VariablesPage />} />

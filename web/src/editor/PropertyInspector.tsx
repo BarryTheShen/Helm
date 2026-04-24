@@ -758,18 +758,27 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
             value={typeof row.height === 'number' ? row.height : ''}
             onChange={e => {
               const val = e.target.value;
-              updateRowHeight(rowId, val ? Number(val) : 'auto');
+              if (val) {
+                const numVal = Number(val);
+                // Enforce minimum of 48px
+                updateRowHeight(rowId, Math.max(48, numVal));
+              } else {
+                updateRowHeight(rowId, 'auto');
+              }
             }}
+            min={48}
+            step={1}
             placeholder="px"
             className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none w-20"
           />
         </div>
+        <div className="text-[10px] text-gray-400 mt-1">Minimum 48px enforced. Auto adjusts to content.</div>
       </div>
 
       {/* Cell widths */}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Cell Widths</label>
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           {row.cells.map((cell, cellIdx) => {
             const isPercentage = typeof cell.width === 'string' && cell.width.endsWith('%');
             const isAuto = cell.width === 'auto';
@@ -796,9 +805,10 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
                   value={numericValue}
                   onChange={e => handleCellWidthChange(cellIdx, e.target.value, unit)}
                   step={unit === '%' ? 1 : 0.25}
-                  min={unit === '%' ? 1 : 0.25}
+                  min={unit === '%' ? 5 : 0.25}
                   placeholder={unit === '%' ? '%' : 'flex'}
-                  className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none"
+                  disabled={isAuto}
+                  className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
                 />
                 <div className="flex border border-gray-200 rounded overflow-hidden">
                   <button
@@ -818,8 +828,8 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
                   <button
                     type="button"
                     onClick={() => {
-                      const currentValue = isAuto ? 50 : (typeof cell.width === 'number' ? cell.width : parseFloat(String(cell.width)) || 50);
-                      updateCellWidth(rowId, cellIdx, `${currentValue}%`);
+                      const currentValue = isAuto ? 50 : (typeof cell.width === 'number' ? cell.width * 10 : parseFloat(String(cell.width)) || 50);
+                      updateCellWidth(rowId, cellIdx, `${Math.max(5, Math.min(100, currentValue))}%`);
                     }}
                     className={`px-1.5 py-1 text-[10px] font-medium transition-colors ${
                       isPercentage
@@ -834,7 +844,9 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
             );
           })}
         </div>
-        <div className="text-[10px] text-gray-300 mt-1">Relative flex weights (e.g., 1:2:1) or percentage</div>
+        <div className="text-[10px] text-gray-400 mt-1">
+          <strong>Auto:</strong> Equal distribution. <strong>Flex:</strong> Relative weights. <strong>%:</strong> Fixed percentage (5-100%, min 60px enforced).
+        </div>
       </div>
 
       {/* Background color */}
@@ -887,26 +899,46 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
             ))}
           </div>
         </div>
-        <div className="text-[10px] text-gray-300 mt-1">Leave side values blank to use uniform padding.</div>
+        <div className="text-[10px] text-gray-400 mt-1">Padding creates inner spacing. Leave side values blank to use uniform padding.</div>
+      </div>
+
+      {/* Gap */}
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Gap (px)</label>
+        <input
+          type="number"
+          value={getOptionalNumberInputValue(row.gap)}
+          min={0}
+          onChange={e => updateRowProps(rowId, { gap: parseOptionalNumberInput(e.target.value, 0) })}
+          placeholder="4"
+          className="w-full px-2 py-1 text-xs border border-gray-200 rounded-md outline-none"
+        />
+        <div className="text-[10px] text-gray-400 mt-1">Space between cells. Default is 4px.</div>
       </div>
 
       {/* Scrollable */}
-      <div className="flex items-center justify-between">
-        <label className="text-xs font-medium text-gray-500">Scrollable (H)</label>
-        <button onClick={() => updateRowProps(rowId, { scrollable: !isScrollable })} className={`relative w-9 h-5 rounded-full transition-colors ${isScrollable ? 'bg-blue-600' : 'bg-gray-300'}`}>
-          <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isScrollable ? 'left-[18px]' : 'left-0.5'}`} />
-        </button>
+      <div>
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-gray-500">Scrollable (H)</label>
+          <button onClick={() => updateRowProps(rowId, { scrollable: !isScrollable })} className={`relative w-9 h-5 rounded-full transition-colors ${isScrollable ? 'bg-blue-600' : 'bg-gray-300'}`}>
+            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isScrollable ? 'left-[18px]' : 'left-0.5'}`} />
+          </button>
+        </div>
+        <div className="text-[10px] text-gray-400 mt-1">Enable horizontal scrolling for cells. When off, cells wrap within row width.</div>
       </div>
 
       {/* Bottom Divider */}
-      <div className="flex items-center justify-between">
-        <label className="text-xs font-medium text-gray-500">Bottom Divider</label>
-        <button
-          onClick={() => updateRowProps(rowId, { show_bottom_divider: !(row.show_bottom_divider ?? false) })}
-          className={`relative w-9 h-5 rounded-full transition-colors ${row.show_bottom_divider ? 'bg-blue-600' : 'bg-gray-300'}`}
-        >
-          <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${row.show_bottom_divider ? 'left-[18px]' : 'left-0.5'}`} />
-        </button>
+      <div>
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-gray-500">Bottom Divider</label>
+          <button
+            onClick={() => updateRowProps(rowId, { show_bottom_divider: !(row.show_bottom_divider ?? false) })}
+            className={`relative w-9 h-5 rounded-full transition-colors ${row.show_bottom_divider ? 'bg-blue-600' : 'bg-gray-300'}`}
+          >
+            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${row.show_bottom_divider ? 'left-[18px]' : 'left-0.5'}`} />
+          </button>
+        </div>
+        <div className="text-[10px] text-gray-400 mt-1">Show a divider line below this row on mobile.</div>
       </div>
 
       {/* Row ID */}

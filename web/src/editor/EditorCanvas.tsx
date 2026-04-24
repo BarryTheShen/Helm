@@ -22,6 +22,8 @@ import type { EditorCell, EditorComponent, EditorRow, EditorRowHeight } from './
 
 import { ComponentPicker } from './ComponentPicker';
 import { Plus, GripVertical, X, Edit2, Eye, Copy, Trash2, GripHorizontal } from 'lucide-react';
+import { resolveVariables } from './variableResolver';
+import ReactMarkdown from 'react-markdown';
 
 const MIN_ROW_HEIGHT = 48;
 const ROW_DRAG_HANDLE_WIDTH = 24;
@@ -32,6 +34,7 @@ const SCROLLABLE_CELL_MIN_WIDTH = 120;
 const MAX_PREVIEW_WIDTH = 960;
 const MAX_PREVIEW_HEIGHT = 1200;
 const MIN_CELL_WIDTH_PERCENT = 5; // Minimum 5% width per cell
+const MIN_CELL_WIDTH_PX = 60; // Minimum cell width in pixels (increased from 40 for better enforcement)
 
 // ── Component Preview Renderers ──────────────────────────────────────────────
 
@@ -49,9 +52,11 @@ function TextPreview({ content, variant, fontSize, fontWeight, color, align, bol
       ? '700'
       : semanticStyle.fontWeight;
 
+  const resolvedContent = resolveVariables(content || 'Text');
+
   return (
     <div style={{ fontSize: resolvedFontSize, fontWeight: resolvedFontWeight, fontStyle: italic ? 'italic' : 'normal', lineHeight: semanticStyle.lineHeight, color: color || '#000', textAlign: align || 'left', padding: '4px 0' }}>
-      {content || 'Text'}
+      {resolvedContent}
     </div>
   );
 }
@@ -94,7 +99,13 @@ function ImagePreview({ src, height, aspectRatio, borderRadius }: any) {
 }
 
 function MarkdownPreview({ content }: any) {
-  return <div className="prose prose-sm max-w-none" style={{ whiteSpace: 'pre-wrap' }}>{content || '# Heading\n\nParagraph'}</div>;
+  const resolvedContent = resolveVariables(content || '# Heading\n\nParagraph');
+
+  return (
+    <div className="prose prose-sm max-w-none">
+      <ReactMarkdown>{resolvedContent}</ReactMarkdown>
+    </div>
+  );
 }
 
 function DividerPreview({ color, thickness, margin }: any) {
@@ -694,12 +705,12 @@ function resolveRowHeight(rowHeight: EditorRowHeight, previewHeight?: number): E
 function getRowContainerStyle(row: EditorRow, previewHeight?: number): CSSProperties {
   const resolvedHeight = resolveRowHeight(row.height, previewHeight);
   const style: CSSProperties = {
-    minHeight: typeof resolvedHeight === 'number' ? resolvedHeight : MIN_ROW_HEIGHT,
+    minHeight: typeof resolvedHeight === 'number' ? Math.max(MIN_ROW_HEIGHT, resolvedHeight) : MIN_ROW_HEIGHT,
     overflow: 'hidden', // Contain cell content within row boundaries
   };
 
   if (typeof resolvedHeight === 'number') {
-    style.height = resolvedHeight;
+    style.height = Math.max(MIN_ROW_HEIGHT, resolvedHeight);
   }
 
   const backgroundColor = row.backgroundColor ?? row.bgColor;
@@ -734,7 +745,8 @@ function getRowContentStyle(row: EditorRow): CSSProperties {
     paddingBottom: resolveSpacingValue(row.paddingBottom) ?? uniformPadding ?? 0,
     paddingRight: resolveSpacingValue(row.paddingRight) ?? uniformPadding ?? DEFAULT_ROW_RIGHT_PADDING,
     paddingLeft: resolveSpacingValue(row.paddingLeft) ?? uniformPadding ?? 0,
-    overflowX: row.scrollable ? 'auto' : 'visible',
+    // Only enable scrolling if explicitly set to true
+    overflowX: row.scrollable === true ? 'auto' : 'hidden',
     overflowY: 'hidden',
   };
 }
@@ -748,20 +760,24 @@ function getNumericCellWidth(width: EditorCell['width']): number {
 }
 
 function getCellStyle(row: EditorRow, cellWidth: EditorCell['width'], totalWidth: number): CSSProperties {
-  if (row.scrollable) {
+  if (row.scrollable === true) {
     return {
       flex: '0 0 auto',
       width: `${Math.max(getNumericCellWidth(cellWidth) * SCROLLABLE_CELL_WIDTH, SCROLLABLE_CELL_MIN_WIDTH)}px`,
       minWidth: SCROLLABLE_CELL_MIN_WIDTH,
-      height: '100%', // Scale vertically with row height
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
     };
   }
 
   if (cellWidth === 'auto') {
     return {
       flex: '1 1 0%',
-      minWidth: 40,
-      height: '100%', // Scale vertically with row height
+      minWidth: MIN_CELL_WIDTH_PX,
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
     };
   }
 
@@ -772,18 +788,24 @@ function getCellStyle(row: EditorRow, cellWidth: EditorCell['width'], totalWidth
     return {
       flex: `0 0 ${clampedPercent}%`,
       width: `${clampedPercent}%`,
-      minWidth: 40,
-      height: '100%', // Scale vertically with row height
+      minWidth: MIN_CELL_WIDTH_PX,
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
     };
   }
 
   // Handle numeric flex weights
   const cellPercent = (getNumericCellWidth(cellWidth) / totalWidth) * 100;
+  const clampedPercent = Math.max(MIN_CELL_WIDTH_PERCENT, Math.min(100, cellPercent));
 
   return {
-    flex: `${cellPercent} 0 0%`,
-    minWidth: 40,
-    height: '100%', // Scale vertically with row height
+    flex: `0 0 ${clampedPercent}%`,
+    width: `${clampedPercent}%`,
+    minWidth: MIN_CELL_WIDTH_PX,
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
   };
 }
 
@@ -834,10 +856,13 @@ function CellResizeHandle({
       );
       const nextRight = Math.round((totalWidthRef.current - nextLeft) * 100) / 100;
 
-      hasMovedRef.current = true; // Mark as moved immediately for smoother feedback
+      hasMovedRef.current = true;
 
       nextWidthsRef.current = { left: nextLeft, right: nextRight };
-      onPreview(rowId, cellIndex, nextLeft, nextRight);
+      // Immediately update preview for smooth tracking
+      requestAnimationFrame(() => {
+        onPreview(rowId, cellIndex, nextLeft, nextRight);
+      });
     };
 
     const handleMouseUp = () => {
@@ -930,10 +955,13 @@ function RowHeightResizeHandle({
       const delta = event.clientY - startYRef.current;
       const nextHeight = Math.max(MIN_ROW_HEIGHT, Math.round(startHeightRef.current + delta));
 
-      hasMovedRef.current = true; // Mark as moved immediately for smoother feedback
+      hasMovedRef.current = true;
 
       nextHeightRef.current = nextHeight;
-      onPreview(rowId, nextHeight);
+      // Immediately update preview for smooth tracking
+      requestAnimationFrame(() => {
+        onPreview(rowId, nextHeight);
+      });
     };
 
     const handleMouseUp = () => {
@@ -952,11 +980,11 @@ function RowHeightResizeHandle({
 
   return (
     <div
-      className="absolute inset-x-8 bottom-0 z-10 flex h-3 cursor-row-resize items-end justify-center"
+      className="absolute inset-x-0 bottom-0 z-20 flex h-4 cursor-row-resize items-end justify-center hover:bg-blue-50/30 transition-colors"
       onMouseDown={handleMouseDown}
       title="Resize row height"
     >
-      <div className="mb-0.5 h-1 w-14 rounded-full bg-gray-200 transition-colors group-hover:bg-blue-300" />
+      <div className="mb-1 h-1 w-16 rounded-full bg-gray-300 transition-colors group-hover:bg-blue-400" />
     </div>
   );
 }
@@ -1040,14 +1068,12 @@ function SortableRow({
 
       {/* Row */}
       <div
-        className={`relative z-0 group rounded-lg transition-all mb-1 border border-dashed ${
+        className={`relative z-0 group rounded-lg transition-all mb-1 border ${
           isDragging ? 'opacity-60 ring-1 ring-blue-200 border-blue-200' : ''
         } ${
           isRowSelected
-            ? 'ring-2 ring-blue-500 border-blue-300'
-            : `border-gray-200 hover:border-gray-400 hover:ring-1 hover:ring-gray-300 ${
-                rowIdx % 2 === 0 ? 'bg-white/60' : 'bg-gray-50/40'
-              }`
+            ? 'ring-2 ring-blue-500 border-blue-300 bg-white'
+            : `border-gray-300 hover:border-gray-400 hover:ring-1 hover:ring-gray-300 bg-white`
         }`}
         style={getRowContainerStyle(
           row,
@@ -1058,17 +1084,17 @@ function SortableRow({
         {/* Drag handle */}
         <RowDragHandle isDragging={isDragging} attributes={attributes} listeners={listeners} />
 
-        {/* Delete row button */}
+        {/* Delete row button - moved to top-left outside row */}
         <button
-          className="absolute -right-1 -top-1 p-0.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:bg-red-600"
+          className="absolute -left-2.5 -top-2.5 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-red-600 shadow-md"
           onClick={(e) => { e.stopPropagation(); deleteRow(row.id); }}
           title="Delete row"
         >
-          <X size={10} />
+          <X size={12} />
         </button>
 
         {/* Cells container */}
-        <div className="flex min-h-[48px] items-stretch gap-1" style={getRowContentStyle(row)}>
+        <div className="flex min-h-[48px] h-full items-stretch gap-1" style={getRowContentStyle(row)}>
           {row.cells.map((cell, cellIdx) => {
             const displayedCellWidths = row.cells.map((entry, index) => getDisplayedCellWidth(row.id, index, entry.width));
             const totalWidth = displayedCellWidths.reduce<number>((sum, width) => sum + getNumericCellWidth(width), 0);
@@ -1080,22 +1106,31 @@ function SortableRow({
             return (
               <div
                 key={cell.id}
-                className={`relative rounded transition-all p-1 ${
+                className={`relative rounded transition-all p-2 ${
                   isCellSelected(row.id, cellIdx)
                     ? 'ring-2 ring-blue-400 bg-blue-50/50'
-                    : cell.content ? 'bg-white' : 'bg-gray-50 border border-dashed border-gray-200'
+                    : cell.content ? 'bg-white shadow-sm' : 'bg-gray-50 border border-dashed border-gray-300'
                 }`}
                 style={getCellStyle(row, displayedWidth, totalWidth)}
               >
                 {cell.content ? (
                   <div
-                    className="cursor-pointer relative group/cell"
+                    className="cursor-pointer relative group/cell h-full flex flex-col"
                     onClick={(e) => handleComponentClick(row.id, cellIdx, e)}
                   >
+                    {/* Delete cell button - top-right corner */}
+                    <button
+                      className="absolute -right-1.5 -top-1.5 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover/cell:opacity-100 transition-opacity z-30 hover:bg-red-600 shadow-md"
+                      onClick={(e) => { e.stopPropagation(); removeComponent(row.id, cellIdx); }}
+                      title="Delete component"
+                    >
+                      <X size={10} />
+                    </button>
+
                     {/* Floating toolbar */}
-                    <div className="absolute -top-5 left-0 right-0 flex items-center gap-0.5 justify-center opacity-0 group-hover/cell:opacity-100 transition-opacity z-20">
+                    <div className="absolute -top-6 left-0 right-0 flex items-center gap-0.5 justify-center opacity-0 group-hover/cell:opacity-100 transition-opacity z-20">
                       <button
-                        className={`p-0.5 bg-white border border-gray-200 rounded text-[9px] ${
+                        className={`p-1 bg-white border border-gray-200 rounded shadow-sm text-[9px] ${
                           isReadOnlyRuntimeComponent
                             ? 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
                             : 'text-gray-500 hover:text-blue-600 hover:border-blue-300'
@@ -1106,7 +1141,7 @@ function SortableRow({
                         {isReadOnlyRuntimeComponent ? <Eye size={9} /> : <Edit2 size={9} />}
                       </button>
                       <button
-                        className="p-0.5 bg-white border border-gray-200 rounded text-gray-500 hover:text-blue-600 hover:border-blue-300 text-[9px]"
+                        className="p-1 bg-white border border-gray-200 rounded shadow-sm text-gray-500 hover:text-blue-600 hover:border-blue-300 text-[9px]"
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelection({ type: 'component', rowId: row.id, cellIndex: cellIdx });
@@ -1116,17 +1151,10 @@ function SortableRow({
                       >
                         <Copy size={9} />
                       </button>
-                      <button
-                        className="p-0.5 bg-white border border-gray-200 rounded text-gray-500 hover:text-red-500 hover:border-red-300 text-[9px]"
-                        onClick={(e) => { e.stopPropagation(); removeComponent(row.id, cellIdx); }}
-                        title="Delete"
-                      >
-                        <Trash2 size={9} />
-                      </button>
                     </div>
 
                     {/* Component preview */}
-                    <div className="pointer-events-none overflow-hidden">
+                    <div className="pointer-events-none overflow-hidden flex-1">
                       <ComponentPreview component={cell.content} />
                     </div>
                   </div>

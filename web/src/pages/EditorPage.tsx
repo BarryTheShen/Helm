@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useEditorStore } from '../editor/useEditorStore';
 import { StructureTree } from '../editor/StructureTree';
@@ -15,7 +16,7 @@ import {
 import type { LocalTemplateDefinition } from '../editor/templateLibrary';
 import {
   Save, Rocket, Undo2, Redo2, CheckCircle, XCircle, FileText,
-  RefreshCw, Monitor, RotateCw, ChevronDown, Code, Plus, Trash2, Smartphone
+  RefreshCw, Monitor, RotateCw, ChevronDown, Code, Trash2, Smartphone
 } from 'lucide-react';
 
 interface ModuleInfo {
@@ -211,9 +212,12 @@ function formatLastSaved(date: Date | null): string {
 }
 
 export function EditorPage() {
+  // URL params for module selection
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedModule = searchParams.get('module_instance_id') || '';
+
   // Module state
   const [modules, setModules] = useState<ModuleInfo[]>([]);
-  const [selectedModule, setSelectedModule] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pushing, setPushing] = useState(false);
@@ -222,10 +226,7 @@ export function EditorPage() {
   const [screenLoadError, setScreenLoadError] = useState<string | null>(null);
   const [hasPersistedScreen, setHasPersistedScreen] = useState(false);
 
-  // Create module state
-  const [showCreateModule, setShowCreateModule] = useState(false);
-  const [newModuleName, setNewModuleName] = useState('');
-  const [newModuleIcon, setNewModuleIcon] = useState('📦');
+  // Create module state - removed (now handled by ModulesTree)
 
   // Draft state
   const [draftInfo, setDraftInfo] = useState<DraftInfo>({ has_draft: false });
@@ -341,8 +342,8 @@ export function EditorPage() {
     setScreenLoadError(null);
     setDraftInfo({ has_draft: false });
     setHasPersistedScreen(false);
-    setSelectedModule(nextModule);
-  }, []);
+    setSearchParams(nextModule ? { module_instance_id: nextModule } : {});
+  }, [setSearchParams]);
 
   useEffect(() => {
     selectedModuleRef.current = selectedModule;
@@ -356,58 +357,7 @@ export function EditorPage() {
     )));
   }, []);
 
-  const handleCreateModule = useCallback(() => {
-    const name = newModuleName.trim();
-    if (!name) return;
-
-    api.post<{ module_id: string; name: string; icon: string }>('/api/sdui/modules', { name, icon: newModuleIcon })
-      .then(data => {
-        const newModule: ModuleInfo = {
-          module_id: data.module_id,
-          name: data.name,
-          icon: data.icon,
-          has_screen: false,
-          is_custom: true,
-        };
-        setModules(prev => [...prev, newModule]);
-        beginModuleTransition(data.module_id);
-        setShowCreateModule(false);
-        setNewModuleName('');
-        setNewModuleIcon('📦');
-        showMsg('success', `Module created: ${data.name}`);
-      })
-      .catch(err => {
-        showMsg('error', err?.message || 'Failed to create module');
-      });
-  }, [beginModuleTransition, newModuleName, newModuleIcon, showMsg]);
-
-  const handleDeleteModule = useCallback(() => {
-    const mod = modules.find(m => m.module_id === selectedModule);
-    if (!mod?.is_custom) return;
-    if (!confirmDestructiveEditorAction('Deleting this custom module will discard the current canvas.')) return;
-    if (!window.confirm(`Delete module "${mod.name}"? This will permanently delete the module and its screen data.`)) return;
-
-    api.del(`/api/sdui/modules/${selectedModule}`)
-      .then(() => {
-        const remaining = modules.filter(m => m.module_id !== selectedModule);
-        setModules(remaining);
-        const nextModule = remaining[0]?.module_id || '';
-        if (nextModule) {
-          beginModuleTransition(nextModule);
-        } else {
-          selectedModuleRef.current = '';
-          setSelectedModule('');
-          setDraftInfo({ has_draft: false });
-          setHasPersistedScreen(false);
-          setScreenLoadError(null);
-          setLoading(false);
-        }
-        showMsg('success', `Module deleted: ${mod.name}`);
-      })
-      .catch(err => {
-        showMsg('error', err?.message || 'Failed to delete module');
-      });
-  }, [beginModuleTransition, confirmDestructiveEditorAction, modules, selectedModule, showMsg]);
+  // Removed handleCreateModule and handleDeleteModule - now handled by ModulesTree
 
   const handleDeleteScreen = useCallback(async () => {
     const currentModule = selectedModule;
@@ -921,50 +871,19 @@ export function EditorPage() {
     <div className="flex h-full flex-col">
       {/* ── Top Toolbar ─────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-white border-b border-gray-200 shrink-0">
-        {/* Left: Module selector + Draft */}
+        {/* Left: Module info + Draft */}
         <div className="flex items-center gap-2">
-          <select
-            value={selectedModule}
-            onChange={(e) => {
-              const nextModule = e.target.value;
-              if (nextModule === selectedModule) {
-                return;
-              }
-
-              if (!confirmDestructiveEditorAction('Switching modules will replace the current canvas with that module\'s screen.')) {
-                return;
-              }
-
-              beginModuleTransition(nextModule);
-            }}
-            className="px-2 py-1 border border-gray-200 rounded-md text-sm bg-white focus:ring-1 focus:ring-blue-500 outline-none"
-          >
-            {modules.map(m => (
-              <option key={m.module_id} value={m.module_id}>
-                {m.icon} {m.name}{m.has_screen ? ' ●' : ''}{m.is_custom ? ' ✦' : ''}
-              </option>
-            ))}
-          </select>
-
-          {/* Create module button */}
-          <button
-            onClick={() => setShowCreateModule(true)}
-            className="p-1 rounded hover:bg-gray-100 transition-colors text-gray-500 hover:text-blue-600"
-            title="Create new module"
-          >
-            <Plus size={14} />
-          </button>
-
-          {/* Delete custom module button */}
-          {modules.find(m => m.module_id === selectedModule)?.is_custom && !loading && (
-            <button
-              onClick={handleDeleteModule}
-              className="p-1 rounded hover:bg-gray-100 transition-colors text-gray-400 hover:text-red-500"
-              title="Delete this custom module"
-            >
-              <Trash2 size={14} />
-            </button>
-          )}
+          <div className="px-3 py-1 text-sm font-medium text-gray-700">
+            {selectedModuleInfo ? (
+              <>
+                {selectedModuleInfo.name}
+                {selectedModuleInfo.has_screen && <span className="ml-1 text-gray-400">●</span>}
+                {selectedModuleInfo.is_custom && <span className="ml-1 text-gray-400">✦</span>}
+              </>
+            ) : (
+              <span className="text-gray-400">No module selected</span>
+            )}
+          </div>
 
           {draftInfo.has_draft && (
             <div className="flex items-center gap-1.5">
@@ -1448,47 +1367,6 @@ export function EditorPage() {
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Create Module Dialog */}
-      {showCreateModule && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={() => setShowCreateModule(false)}>
-          <div className="bg-white rounded-lg shadow-xl p-4 w-80 space-y-3" onClick={e => e.stopPropagation()}>
-            <h3 className="text-sm font-semibold text-gray-700">Create New Module</h3>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Module Name</label>
-              <input
-                type="text"
-                value={newModuleName}
-                onChange={e => setNewModuleName(e.target.value)}
-                placeholder="e.g. My Dashboard"
-                maxLength={50}
-                className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none"
-                autoFocus
-                onKeyDown={e => { if (e.key === 'Enter') handleCreateModule(); }}
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Icon</label>
-              <input
-                type="text"
-                value={newModuleIcon}
-                onChange={e => setNewModuleIcon(e.target.value)}
-                className="w-20 px-2 py-1.5 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none text-center"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-1">
-              <button onClick={() => setShowCreateModule(false)}
-                className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors">
-                Cancel
-              </button>
-              <button onClick={handleCreateModule} disabled={!newModuleName.trim()}
-                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                Create
-              </button>
             </div>
           </div>
         </div>

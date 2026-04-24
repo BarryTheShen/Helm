@@ -15,7 +15,12 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.helm.app",
-      "minimumOsVersion": "16.0"
+      "minimumOsVersion": "16.0",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {

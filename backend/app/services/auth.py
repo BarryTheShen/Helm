@@ -73,15 +73,17 @@ async def upsert_device(
 async def create_session(
     db: AsyncSession, user_id: str, device_id: str
 ) -> Session:
-    # Invalidate existing active sessions for this device
-    result = await db.execute(
-        select(Session).where(
+    # Invalidate existing active sessions for this device atomically
+    from sqlalchemy import update
+    await db.execute(
+        update(Session)
+        .where(
             Session.device_id == device_id,
             Session.is_active == True,  # noqa: E712
         )
+        .values(is_active=False)
     )
-    for old_session in result.scalars().all():
-        old_session.is_active = False
+    await db.flush()
 
     expires_at = datetime.now(timezone.utc) + timedelta(
         hours=settings.access_token_expire_hours
@@ -116,9 +118,13 @@ async def get_session_by_token(
 
 
 async def invalidate_session(db: AsyncSession, token: str) -> None:
+    from loguru import logger
     result = await db.execute(
         select(Session).where(Session.token == token)
     )
     session = result.scalar_one_or_none()
     if session:
         session.is_active = False
+        logger.info(f"Session invalidated: user_id={session.user_id}, device_id={session.device_id}")
+    else:
+        logger.warning(f"Attempted to invalidate non-existent session")

@@ -15,6 +15,10 @@ class Device(Base, TimestampMixin):
     device_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     config_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     last_seen: Mapped[str | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    assigned_app_id: Mapped[str | None] = mapped_column(
+        ForeignKey("apps.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     user: Mapped["User"] = relationship(back_populates="devices")  # type: ignore[name-defined]  # noqa: F821
+    app: Mapped["App | None"] = relationship(back_populates="devices")  # type: ignore[name-defined]  # noqa: F821
     sessions: Mapped[list["Session"]] = relationship(back_populates="device", cascade="all, delete-orphan")  # type: ignore[name-defined]  # noqa: F821

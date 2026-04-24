@@ -71,17 +71,52 @@ export const VariablePill = Node.create({
     return {
       insertVariablePill:
         (attributes: VariablePillAttributes) =>
-        ({ commands }) => {
-          return commands.insertContent({
-            type: this.name,
-            attrs: attributes,
-          });
+        ({ commands, state, tr }) => {
+          // Insert the pill with a trailing space
+          return commands.insertContent([
+            {
+              type: this.name,
+              attrs: attributes,
+            },
+            {
+              type: 'text',
+              text: ' ',
+            },
+          ]);
         },
     };
   },
 
   addKeyboardShortcuts() {
     return {
+      ArrowLeft: () => {
+        const { state } = this.editor;
+        const { selection } = state;
+        const { $from } = selection;
+
+        // Check if cursor is right after a variable pill
+        const nodeBefore = $from.nodeBefore;
+        if (nodeBefore && nodeBefore.type.name === this.name) {
+          // Jump to before the pill
+          return this.editor.commands.setTextSelection($from.pos - nodeBefore.nodeSize);
+        }
+
+        return false;
+      },
+      ArrowRight: () => {
+        const { state } = this.editor;
+        const { selection } = state;
+        const { $from } = selection;
+
+        // Check if cursor is right before a variable pill
+        const nodeAfter = $from.nodeAfter;
+        if (nodeAfter && nodeAfter.type.name === this.name) {
+          // Jump to after the pill
+          return this.editor.commands.setTextSelection($from.pos + nodeAfter.nodeSize);
+        }
+
+        return false;
+      },
       Backspace: () => {
         const { state } = this.editor;
         const { selection } = state;

@@ -628,7 +628,7 @@ async def _todos_create(user_id: str, params: dict[str, Any], db: AsyncSession) 
     from app.models.todo import Todo
     from uuid import uuid4
 
-    text = params.get("title", "New task")
+    text = params.get("text", params.get("title", "New task"))
     todo = Todo(
         id=str(uuid4()),
         user_id=user_id,
@@ -639,6 +639,19 @@ async def _todos_create(user_id: str, params: dict[str, Any], db: AsyncSession) 
     await db.commit()
     await db.refresh(todo)
 
+    # Broadcast update via WebSocket
+    from app.services.websocket_manager import manager
+    await manager.send(user_id, {
+        "type": "data_update",
+        "dataSourceId": "todos",
+        "action": "create",
+        "item": {
+            "id": str(todo.id),
+            "text": todo.text,
+            "completed": todo.completed,
+        }
+    })
+
     return {
         "status": "ok",
         "todo": {
@@ -646,6 +659,90 @@ async def _todos_create(user_id: str, params: dict[str, Any], db: AsyncSession) 
             "text": todo.text,
             "completed": todo.completed,
         }
+    }
+
+
+async def _todos_toggle(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    """Toggle a todo item's completed status."""
+    from app.models.todo import Todo
+    from sqlalchemy import select
+
+    item_id = params.get("itemId")
+    if not item_id:
+        return {"status": "error", "detail": "itemId required"}
+
+    result = await db.execute(
+        select(Todo).where(
+            Todo.id == item_id,
+            Todo.user_id == user_id,
+        )
+    )
+    todo = result.scalars().first()
+    if not todo:
+        return {"status": "error", "detail": "Todo not found"}
+
+    todo.completed = not todo.completed
+    await db.commit()
+    await db.refresh(todo)
+
+    # Broadcast update via WebSocket
+    from app.services.websocket_manager import manager
+    await manager.send(user_id, {
+        "type": "data_update",
+        "dataSourceId": "todos",
+        "action": "update",
+        "item": {
+            "id": str(todo.id),
+            "text": todo.text,
+            "completed": todo.completed,
+        }
+    })
+
+    return {
+        "status": "ok",
+        "todo": {
+            "id": str(todo.id),
+            "text": todo.text,
+            "completed": todo.completed,
+        }
+    }
+
+
+async def _todos_delete(user_id: str, params: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    """Delete a todo item."""
+    from app.models.todo import Todo
+    from sqlalchemy import select
+
+    item_id = params.get("itemId")
+    if not item_id:
+        return {"status": "error", "detail": "itemId required"}
+
+    result = await db.execute(
+        select(Todo).where(
+            Todo.id == item_id,
+            Todo.user_id == user_id,
+        )
+    )
+    todo = result.scalars().first()
+    if not todo:
+        return {"status": "error", "detail": "Todo not found"}
+
+    await db.delete(todo)
+    await db.commit()
+
+    # Broadcast update via WebSocket
+    from app.services.websocket_manager import manager
+    await manager.send(user_id, {
+        "type": "data_update",
+        "dataSourceId": "todos",
+        "action": "delete",
+        "itemId": item_id,
+    })
+
+    return {
+        "status": "ok",
+        "deleted": True,
+        "itemId": item_id,
     }
 
 
@@ -745,6 +842,8 @@ async def _settings_toggle_dark_mode(user_id: str, params: dict[str, Any], db: A
 
 
 registry.register("todos.create", _todos_create)
+registry.register("todos.toggle", _todos_toggle)
+registry.register("todos.delete", _todos_delete)
 registry.register("notes.create", _notes_create)
 registry.register("chat.send", _chat_send)
 registry.register("auth.logout", _auth_logout)

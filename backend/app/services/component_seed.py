@@ -32,8 +32,8 @@ INITIAL_COMPONENTS = [
         "default_props": {"content": "# Heading\n\nParagraph text"},
     },
     {
-        "type": "rich_text_renderer",
-        "tier": "atomic",
+        "type": "RichTextRenderer",
+        "tier": "composite",
         "name": "Rich Text Renderer",
         "icon": "📄",
         "description": "Renders markdown/rich text content",
@@ -53,9 +53,10 @@ INITIAL_COMPONENTS = [
             "label": {"type": "string", "required": True, "default": "Button"},
             "variant": {"type": "enum", "options": ["primary", "secondary", "outline", "ghost", "danger"], "default": "primary"},
             "size": {"type": "enum", "options": ["small", "medium", "large"], "default": "medium"},
+            "fullWidth": {"type": "boolean", "default": True},
             "action": {"type": "action", "default": None},
         },
-        "default_props": {"label": "Button", "variant": "primary", "size": "medium", "action": None},
+        "default_props": {"label": "Button", "variant": "primary", "size": "medium", "fullWidth": True, "action": None},
     },
     {
         "type": "image",
@@ -113,6 +114,18 @@ INITIAL_COMPONENTS = [
         "default_props": {"color": "#E0E0E0", "thickness": 1, "margin": 8},
     },
     {
+        "type": "CalendarModule",
+        "tier": "hardcoded",
+        "name": "Calendar Module",
+        "icon": "📅",
+        "description": "Month grid + 3-day time-block view. Self-contained — fetches its own data.",
+        "props_schema": {
+            "showTimeBlock": {"type": "boolean", "default": True},
+            "variant": {"type": "enum", "options": ["month", "week", "day", "agenda", "compact"], "default": "month"},
+        },
+        "default_props": {"showTimeBlock": True, "variant": "month"},
+    },
+    {
         "type": "calendar",
         "tier": "hardcoded",
         "name": "Calendar Module",
@@ -120,10 +133,20 @@ INITIAL_COMPONENTS = [
         "description": "Month grid + 3-day time-block view. Self-contained — fetches its own data.",
         "props_schema": {
             "showTimeBlock": {"type": "boolean", "default": True},
-            "defaultView": {"type": "enum", "options": ["month", "week", "day"], "default": "month"},
-            "variant": {"type": "enum", "options": ["month", "week", "day", "agenda"], "default": "month"},
+            "variant": {"type": "enum", "options": ["month", "week", "day", "agenda", "compact"], "default": "month"},
         },
-        "default_props": {"showTimeBlock": True, "defaultView": "month", "variant": "month"},
+        "default_props": {"showTimeBlock": True, "variant": "month"},
+    },
+    {
+        "type": "ChatModule",
+        "tier": "hardcoded",
+        "name": "Chat Module",
+        "icon": "💬",
+        "description": "Real-time chat interface with AI assistant. Self-contained.",
+        "props_schema": {
+            "showHistory": {"type": "boolean", "default": True},
+        },
+        "default_props": {"showHistory": True},
     },
     {
         "type": "chat",
@@ -137,6 +160,15 @@ INITIAL_COMPONENTS = [
         "default_props": {"showHistory": True},
     },
     {
+        "type": "NotesModule",
+        "tier": "hardcoded",
+        "name": "Notes Module",
+        "icon": "📓",
+        "description": "Rich text note editor. Self-contained.",
+        "props_schema": {},
+        "default_props": {},
+    },
+    {
         "type": "notes",
         "tier": "hardcoded",
         "name": "Notes Module",
@@ -144,6 +176,17 @@ INITIAL_COMPONENTS = [
         "description": "Rich text note editor. Self-contained.",
         "props_schema": {},
         "default_props": {},
+    },
+    {
+        "type": "InputBar",
+        "tier": "hardcoded",
+        "name": "Input Bar",
+        "icon": "⌨️",
+        "description": "Bottom input bar for message/command entry. Self-contained.",
+        "props_schema": {
+            "placeholder": {"type": "string", "default": "Type a message..."},
+        },
+        "default_props": {"placeholder": "Type a message..."},
     },
     {
         "type": "inputbar",
@@ -157,7 +200,7 @@ INITIAL_COMPONENTS = [
         "default_props": {"placeholder": "Type a message..."},
     },
     {
-        "type": "todo",
+        "type": "Todo",
         "tier": "composite",
         "name": "Todo List",
         "icon": "✓",
@@ -165,14 +208,11 @@ INITIAL_COMPONENTS = [
         "props_schema": {
             "items": {"type": "array", "default": []},
             "placeholder": {"type": "string", "default": "Add a task..."},
-            "onToggle": {"type": "action", "default": None},
-            "onAdd": {"type": "action", "default": None},
-            "onDelete": {"type": "action", "default": None},
         },
         "default_props": {"items": [], "placeholder": "Add a task..."},
     },
     {
-        "type": "article_card",
+        "type": "ArticleCard",
         "tier": "composite",
         "name": "Article Card",
         "icon": "📰",
@@ -180,16 +220,16 @@ INITIAL_COMPONENTS = [
         "props_schema": {
             "title": {"type": "string", "required": True, "default": "Article Title"},
             "description": {"type": "string", "required": True, "default": "Article description..."},
-            "imageUrl": {"type": "string", "default": None},
+            "imageUrl": {"type": "string", "default": ""},
             "publishedAt": {"type": "string", "default": "2026-04-17T00:00:00Z"},
             "source": {"type": "string", "required": True, "default": "Source"},
-            "onPress": {"type": "action", "default": None},
         },
         "default_props": {
             "title": "Article Title",
             "description": "Article description...",
             "source": "Source",
             "publishedAt": "2026-04-17T00:00:00Z",
+            "imageUrl": "",
         },
     },
 ]

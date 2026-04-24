@@ -147,11 +147,7 @@ export function PillEditor({
 
         editor.commands.setContent({
           type: 'doc',
-          content: multiline
-            ? [{ type: 'paragraph', content }]
-            : content.length > 0
-            ? content
-            : [{ type: 'paragraph' }],
+          content: [{ type: 'paragraph', content: content.length > 0 ? content : [] }],
         });
       }
     },
@@ -301,14 +297,10 @@ export function PillEditor({
 
       editor.commands.setContent({
         type: 'doc',
-        content: multiline
-          ? [{ type: 'paragraph', content }]
-          : content.length > 0
-          ? content
-          : [{ type: 'paragraph' }],
+        content: [{ type: 'paragraph', content: content.length > 0 ? content : [] }],
       });
     }
-  }, [value, editor, multiline]);
+  }, [value, editor]);
 
   if (!editor) {
     return null;

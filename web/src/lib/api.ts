@@ -83,6 +83,26 @@ export interface N8nImportResponse {
   warnings: string[];
 }
 
+// --- Module Instances ---
+export interface ModuleInstance {
+  id: string;
+  user_id: string;
+  template_id: string | null;
+  module_type: string;
+  name: string;
+  version: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+export interface ModuleInstanceUpdate {
+  name?: string;
+  status?: string;
+}
+export interface ModuleInstanceUsage {
+  apps: Array<{ id: string; name: string }>;
+}
+
 // --- Connections ---
 export interface Connection {
   id: string;
@@ -322,6 +342,43 @@ class ApiClient {
   }
   importN8nWorkflow(n8nJson: Record<string, any>) {
     return this.post<N8nImportResponse>('/api/workflows/import/n8n', n8nJson);
+  }
+
+  // --- Module Instances ---
+  getModuleInstances(params?: PaginationParams) {
+    return this.get<PaginatedResponse<ModuleInstance>>(`/api/module-instances${this.buildQuery(params)}`);
+  }
+  getModuleInstance(id: string) {
+    return this.get<ModuleInstance>(`/api/module-instances/${id}`);
+  }
+  updateModuleInstance(id: string, data: ModuleInstanceUpdate) {
+    return this.put<ModuleInstance>(`/api/module-instances/${id}`, data);
+  }
+  deleteModuleInstance(id: string) {
+    return this.del<void>(`/api/module-instances/${id}`);
+  }
+  getModuleInstanceUsage(id: string) {
+    return this.get<ModuleInstanceUsage>(`/api/module-instances/${id}/usage`);
+  }
+
+  // --- Apps ---
+  getApps(params?: PaginationParams) {
+    return this.get<PaginatedResponse<any>>(`/api/apps${this.buildQuery(params)}`);
+  }
+  getApp(id: string) {
+    return this.get<any>(`/api/apps/${id}`);
+  }
+  createApp(data: any) {
+    return this.post<any>('/api/apps', data);
+  }
+  updateApp(id: string, data: any) {
+    return this.put<any>(`/api/apps/${id}`, data);
+  }
+  deleteApp(id: string) {
+    return this.del<void>(`/api/apps/${id}`);
+  }
+  updateAppBottomBar(id: string, bottomBarConfig: any[]) {
+    return this.put<any>(`/api/apps/${id}/bottom-bar`, { bottom_bar_config: bottomBarConfig });
   }
 }
 

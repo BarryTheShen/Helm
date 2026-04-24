@@ -389,35 +389,67 @@ function DataSourcesTab() {
 
       {showCreate && (
         <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg mb-4 flex flex-col gap-3">
+          <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-700 mb-2">
+            <p className="font-semibold mb-2">Data Source Configuration Guide:</p>
+            <div className="space-y-1">
+              <p><span className="font-semibold">Type:</span> The kind of data this source provides (calendar events, notes, chat messages, REST API responses, etc.)</p>
+              <p><span className="font-semibold">Connector:</span> The backend service identifier that fetches the data. Examples:</p>
+              <ul className="ml-4 mt-1 space-y-0.5">
+                <li>• <code className="bg-white px-1 rounded">local_db</code> - Local SQLite database</li>
+                <li>• <code className="bg-white px-1 rounded">http_json</code> - Generic HTTP JSON API</li>
+                <li>• <code className="bg-white px-1 rounded">google_calendar</code> - Google Calendar API</li>
+                <li>• <code className="bg-white px-1 rounded">rss_feed</code> - RSS/Atom feed parser</li>
+              </ul>
+              <p className="mt-2"><span className="font-semibold">Config JSON:</span> Connection settings specific to the connector. Examples:</p>
+              <ul className="ml-4 mt-1 space-y-0.5">
+                <li>• HTTP: <code className="bg-white px-1 rounded">{`{"url": "https://api.example.com/data", "method": "GET"}`}</code></li>
+                <li>• RSS: <code className="bg-white px-1 rounded">{`{"feed_url": "https://example.com/feed.xml"}`}</code></li>
+                <li>• Local DB: <code className="bg-white px-1 rounded">{`{"table": "calendar_events", "query": "SELECT * FROM events"}`}</code></li>
+              </ul>
+            </div>
+          </div>
           <div className="flex flex-wrap items-end gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
-              <input placeholder="Name" value={newSource.name} onChange={e => setNewSource(s => ({ ...s, name: e.target.value }))}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input placeholder="My Data Source" value={newSource.name} onChange={e => setNewSource(s => ({ ...s, name: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-48" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
               <select value={newSource.type} onChange={e => setNewSource(s => ({ ...s, type: e.target.value }))}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-40">
                 <option value="">Select type...</option>
                 <option value="calendar">Calendar</option>
                 <option value="notes">Notes</option>
                 <option value="chat">Chat</option>
+                <option value="tasks">Tasks</option>
+                <option value="contacts">Contacts</option>
                 <option value="custom">Custom</option>
-                <option value="rest">REST / HTTP</option>
+                <option value="rest">REST API</option>
                 <option value="http_json">HTTP JSON</option>
+                <option value="rss">RSS Feed</option>
+                <option value="database">Database</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Connector</label>
-              <input placeholder="Connector" value={newSource.connector} onChange={e => setNewSource(s => ({ ...s, connector: e.target.value }))}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Connector
+                <span className="ml-1 text-gray-400 cursor-help" title="Backend service identifier (e.g., local_db, http_json, google_calendar)">ⓘ</span>
+              </label>
+              <input placeholder="e.g., local_db, http_json, rss_feed" value={newSource.connector} onChange={e => setNewSource(s => ({ ...s, connector: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64" />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Config JSON</label>
-            <textarea rows={3} placeholder='{"host": "localhost", "port": 5432}' value={newSource.config_json ?? '{}'} onChange={e => setNewSource(s => ({ ...s, config_json: e.target.value }))}
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Config JSON
+              <span className="ml-1 text-gray-400 cursor-help" title="Connection settings as JSON (URLs, endpoints, query parameters, etc.)">ⓘ</span>
+            </label>
+            <textarea rows={4} placeholder='{"url": "https://api.example.com/data", "method": "GET", "headers": {"Authorization": "Bearer {{connection.my_api.api_key}}"}}' value={newSource.config_json ?? '{}'} onChange={e => setNewSource(s => ({ ...s, config_json: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <p className="text-xs text-gray-500 mt-1">
+              Tip: Use <code className="bg-gray-200 px-1 rounded">{`{{connection.name.*}}`}</code> to reference API keys from Connections page
+            </p>
           </div>
           <div>
             <button onClick={createSource} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors">Save</button>
@@ -463,9 +495,13 @@ function DataSourcesTab() {
                   <option value="calendar">Calendar</option>
                   <option value="notes">Notes</option>
                   <option value="chat">Chat</option>
+                  <option value="tasks">Tasks</option>
+                  <option value="contacts">Contacts</option>
                   <option value="custom">Custom</option>
-                  <option value="rest">REST / HTTP</option>
+                  <option value="rest">REST API</option>
                   <option value="http_json">HTTP JSON</option>
+                  <option value="rss">RSS Feed</option>
+                  <option value="database">Database</option>
                 </select>
               </div>
               <div>
@@ -525,6 +561,32 @@ function DataSourcesTab() {
           </table>
         </div>
       )}
+
+      {/* Data Sources Help Section */}
+      <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 className="text-sm font-semibold text-blue-900 mb-2">How Data Sources Work</h3>
+        <div className="text-xs text-blue-700 space-y-2">
+          <p>
+            <span className="font-semibold">Data sources</span> connect your SDUI components to external data. Components can bind to data sources using the <code className="bg-white px-1 rounded">data.*</code> variable namespace.
+          </p>
+          <p>
+            <span className="font-semibold">Example:</span> Create a data source named "my_calendar" with type "calendar" and connector "google_calendar". Then in your component, reference <code className="bg-white px-1 rounded">{`{{data.my_calendar.events}}`}</code> to display calendar events.
+          </p>
+          <p>
+            <span className="font-semibold">Connectors</span> are backend services that fetch data. The connector determines what config fields are needed. Common connectors:
+          </p>
+          <ul className="ml-4 space-y-1">
+            <li>• <code className="bg-white px-1 rounded">http_json</code> - Fetch JSON from any HTTP endpoint</li>
+            <li>• <code className="bg-white px-1 rounded">local_db</code> - Query local SQLite database</li>
+            <li>• <code className="bg-white px-1 rounded">rss_feed</code> - Parse RSS/Atom feeds</li>
+            <li>• <code className="bg-white px-1 rounded">google_calendar</code> - Google Calendar API (requires OAuth)</li>
+          </ul>
+          <p className="mt-2">
+            <span className="font-semibold">Tip:</span> Use the Connections page to store API keys, then reference them in config JSON with <code className="bg-white px-1 rounded">{`{{connection.name.api_key}}`}</code>
+          </p>
+        </div>
+      </div>
+
       {confirmDel && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-96 p-6">

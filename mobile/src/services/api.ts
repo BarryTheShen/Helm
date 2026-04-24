@@ -240,4 +240,23 @@ export class ApiClient {
       body: JSON.stringify(settings),
     });
   }
+
+  // Devices
+  async registerDevice(deviceId: string, deviceName: string): Promise<any> {
+    return this.request<any>('/api/devices', {
+      method: 'POST',
+      body: JSON.stringify({
+        device_id: deviceId,
+        device_name: deviceName,
+      }),
+    });
+  }
+
+  async getDevice(deviceId: string): Promise<any> {
+    return this.request<any>(`/api/devices/${deviceId}`);
+  }
+
+  async getDeviceConfig(deviceId: string): Promise<any> {
+    return this.request<any>(`/api/devices/${deviceId}/config`);
+  }
 }

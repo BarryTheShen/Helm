@@ -12,15 +12,19 @@
  */
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { useRouter } from 'expo-router';
 import { WebSocketService } from '@/services/websocket';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useAppConfigStore } from '@/stores/appConfigStore';
 
 const WebSocketContext = createContext<WebSocketService | null>(null);
 
 export function WebSocketProvider({ children }: { children: ReactNode }) {
-  const { token, serverUrl } = useAuthStore();
+  const router = useRouter();
+  const { token, serverUrl, deviceId } = useAuthStore();
   const { setConnected, showError, hideError } = useUIStore();
+  const { loadAppConfig, updateFromWebSocket } = useAppConfigStore();
   const [ws, setWs] = useState<WebSocketService | null>(null);
 
   useEffect(() => {
@@ -59,7 +63,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       if (disconnectCount >= MAX_SOFT_RETRIES) {
         // Retries exhausted — escalate to hard error with manual retry
         clearTimers();
-        showError('Connection lost', () => {
+        showError('Connection lost. Please check your connection or try logging in again.', () => {
           disconnectCount = 0;
           hideError();
           service.connect();
@@ -73,6 +77,23 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       }
     });
 
+    // Handle app config WebSocket events
+    service.onMessage((message: any) => {
+      if (message.type === 'device_app_assigned' && message.device_id === deviceId) {
+        // App has been assigned to this device
+        if (serverUrl && token && deviceId) {
+          loadAppConfig(serverUrl, token, deviceId).then(() => {
+            router.replace('/(tabs)/home');
+          }).catch((error) => {
+            console.error('Failed to load app config after assignment:', error);
+          });
+        }
+      } else if (message.type === 'app_config_update' && message.config) {
+        // App config has been updated
+        updateFromWebSocket(message.config);
+      }
+    });
+
     service.connect();
     setWs(service);
 
@@ -81,7 +102,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       service.disconnect();
       setWs(null);
     };
-  }, [token, serverUrl]);
+  }, [token, serverUrl, deviceId]);
 
   return (
     <WebSocketContext.Provider value={ws}>

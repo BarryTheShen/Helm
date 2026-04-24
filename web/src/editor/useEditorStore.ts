@@ -112,29 +112,38 @@ function normalizeCellWidth(value: unknown): EditorCell['width'] {
     return 'auto';
   }
 
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    return value;
-  }
-
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (trimmed === 'auto') {
       return 'auto';
     }
 
+    // Handle percentage strings like "50%"
+    if (trimmed.endsWith('%')) {
+      const parsed = parseFloat(trimmed);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return trimmed; // Return the percentage string as-is
+      }
+    }
+
+    // Handle numeric strings
     const parsed = Number(trimmed);
     if (Number.isFinite(parsed) && parsed > 0) {
       return parsed;
     }
   }
 
-  return 1;
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+
+  return 'auto'; // Default to 'auto' instead of 1
 }
 
 function createEmptyCell(): EditorCell {
   return {
     id: createEditorId('cell'),
-    width: 1,
+    width: 'auto',
     content: null,
   };
 }

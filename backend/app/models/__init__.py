@@ -1,4 +1,6 @@
 from app.models.agent_config import AgentConfig
+from app.models.app import App
+from app.models.app_module_ref import AppModuleRef
 from app.models.article import Article
 from app.models.audit_log import AuditLog
 from app.models.base import Base
@@ -24,6 +26,8 @@ from app.models.workflow import Workflow
 
 __all__ = [
     "Base",
+    "App",
+    "AppModuleRef",
     "Article",
     "AuditLog",
     "User",

@@ -4,11 +4,12 @@ import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { AuthService } from '@/services/auth';
 import { colors, spacing, typography } from '@/theme/colors';
+import * as Crypto from 'expo-crypto';
 
 export default function ConnectScreen() {
   const router = useRouter();
-  const { setServerUrl, setToken, setUser } = useAuthStore();
-  const [url, setUrl] = useState('http://localhost:9100');
+  const { setServerUrl, setToken, setUser, setDeviceId, deviceId } = useAuthStore();
+  const [url, setUrl] = useState('http://100.108.91.116:8000');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -45,6 +46,39 @@ export default function ConnectScreen() {
         email: '',
         created_at: '',
       });
+
+      // Register device after successful authentication
+      const generatedDeviceId = deviceId || Crypto.randomUUID();
+      try {
+        const deviceResponse = await fetch(`${url}/api/devices`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${response.session_token}`,
+          },
+          body: JSON.stringify({
+            device_id: generatedDeviceId,
+            device_name: 'Mobile App',
+          }),
+        });
+
+        if (!deviceResponse.ok) {
+          throw new Error('Device registration failed');
+        }
+
+        const deviceData = await deviceResponse.json();
+        await setDeviceId(generatedDeviceId);
+
+        // Check if device has an assigned app
+        if (!deviceData.assigned_app_id) {
+          router.replace('/unassigned');
+          return;
+        }
+      } catch (deviceErr) {
+        console.error('Device registration error:', deviceErr);
+        // Continue to app even if device registration fails
+      }
+
       router.replace('/(tabs)/chat');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed';
@@ -76,7 +110,7 @@ export default function ConnectScreen() {
             style={styles.input}
             value={url}
             onChangeText={setUrl}
-            placeholder="http://localhost:9100"
+            placeholder="http://100.108.91.116:8000"
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"

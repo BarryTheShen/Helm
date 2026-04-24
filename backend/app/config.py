@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     # In production set to the actual frontend URL(s), e.g.:
     #   CORS_ALLOW_ORIGINS=https://app.example.com,https://admin.example.com
     # The default keeps the Vite dev server and web admin working out of the box.
-    cors_allow_origins: list[str] = ["http://localhost:5173", "http://localhost:5174"]
+    cors_allow_origins: list[str] = ["*"]
 
     # Demo features
     # Set to false to disable the 2-minute "Time Check" notification broadcast.

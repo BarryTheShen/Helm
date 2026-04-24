@@ -17,6 +17,7 @@ class User(Base, TimestampMixin):
         Enum("admin", "user", name="user_role"), nullable=False, default="admin"
     )
 
+    apps: Mapped[list["App"]] = relationship(back_populates="user", cascade="all, delete-orphan")  # type: ignore[name-defined]  # noqa: F821
     devices: Mapped[list["Device"]] = relationship(back_populates="user", cascade="all, delete-orphan")  # type: ignore[name-defined]  # noqa: F821
     sessions: Mapped[list["Session"]] = relationship(back_populates="user", cascade="all, delete-orphan")  # type: ignore[name-defined]  # noqa: F821
     chat_messages: Mapped[list["ChatMessage"]] = relationship(back_populates="user", cascade="all, delete-orphan")  # type: ignore[name-defined]  # noqa: F821

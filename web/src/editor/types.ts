@@ -222,6 +222,7 @@ export const COMPONENT_REGISTRY: ComponentDefinition[] = [
   { type: 'Todo', displayName: 'Todo', icon: '✅', category: 'composite', description: 'Todo list with checkboxes' },
   { type: 'ArticleCard', displayName: 'Article Card', icon: '📰', category: 'composite', description: 'Article preview card' },
   { type: 'RichTextRenderer', displayName: 'Rich Text Renderer', icon: '📝', category: 'composite', description: 'Rich text markdown renderer' },
+  { type: 'RichText', displayName: 'Rich Text', icon: '📝', category: 'composite', description: 'Rich text markdown renderer (alias)' },
   ...READ_ONLY_RUNTIME_COMPONENTS,
 ];
 
@@ -277,7 +278,6 @@ export type ActionPropName = 'onPress' | 'onSubmit' | 'onSend';
 const ACTION_PROP_MAP = {
   Button: 'onPress',
   Image: 'onPress',
-  Icon: 'onPress',
   TextInput: 'onSubmit',
   InputBar: 'onSend',
 } as const satisfies Partial<Record<string, ActionPropName>>;
@@ -527,9 +527,12 @@ function normalizeButtonSize(value: unknown): unknown {
   return value;
 }
 
-function normalizeCalendarView(value: unknown): 'month' | 'threeDay' | undefined {
-  if (value === 'month' || value === 'threeDay') return value;
-  if (value === 'day' || value === 'week') return 'threeDay';
+function normalizeCalendarView(value: unknown): 'month' | 'week' | 'day' | 'agenda' | 'compact' | undefined {
+  if (value === 'month' || value === 'week' || value === 'day' || value === 'agenda' || value === 'compact') {
+    return value;
+  }
+  // Legacy threeDay mapping
+  if (value === 'threeDay') return 'week';
   return undefined;
 }
 
@@ -907,16 +910,12 @@ export function normalizeComponentPropsForEditor(
       break;
     }
 
-    case 'Icon': {
-      normalizeActionProp(normalized, 'onPress', ['action']);
-      break;
-    }
-
     case 'CalendarModule': {
-      const nextView = normalizeCalendarView(normalized.defaultView);
+      const nextView = normalizeCalendarView(normalized.variant ?? normalized.defaultView);
       if (nextView) {
-        normalized.defaultView = nextView;
+        normalized.variant = nextView;
       }
+      delete normalized.defaultView;
       break;
     }
 
@@ -995,13 +994,9 @@ export function serializeComponentPropsForRuntime(
       break;
     }
 
-    case 'Icon': {
-      serializeActionProp(serialized, 'onPress', ['action']);
-      break;
-    }
-
     case 'CalendarModule': {
-      serialized.defaultView = normalizeCalendarView(serialized.defaultView) ?? 'month';
+      serialized.variant = normalizeCalendarView(serialized.variant ?? serialized.defaultView) ?? 'month';
+      delete serialized.defaultView;
       break;
     }
 

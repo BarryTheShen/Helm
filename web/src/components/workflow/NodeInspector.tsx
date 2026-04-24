@@ -1,5 +1,6 @@
 import { X, Trash2 } from 'lucide-react';
 import type { Node } from 'reactflow';
+import { useState, useEffect } from 'react';
 
 interface NodeInspectorProps {
   node: Node;
@@ -48,18 +49,39 @@ const TRIGGER_TYPES = [
 ];
 
 export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspectorProps) {
+  // Local state to prevent input resets
+  const [localData, setLocalData] = useState(node.data);
+
+  // Sync local state when node changes (but not on every render)
+  useEffect(() => {
+    setLocalData(node.data);
+  }, [node.id]); // Only reset when switching to a different node
+
   const updateData = (updates: any) => {
-    onUpdate(node.id, { ...node.data, ...updates });
+    setLocalData((prev) => {
+      const newData = { ...prev, ...updates };
+      // Defer parent update to avoid re-render during typing
+      setTimeout(() => onUpdate(node.id, newData), 0);
+      return newData;
+    });
   };
 
   const updateParams = (key: string, value: any) => {
-    const params = node.data.params || {};
-    onUpdate(node.id, { ...node.data, params: { ...params, [key]: value } });
+    setLocalData((prev) => {
+      const params = prev.params || {};
+      const newData = { ...prev, params: { ...params, [key]: value } };
+      setTimeout(() => onUpdate(node.id, newData), 0);
+      return newData;
+    });
   };
 
   const updateConfig = (key: string, value: any) => {
-    const config = node.data.config || {};
-    onUpdate(node.id, { ...node.data, config: { ...config, [key]: value } });
+    setLocalData((prev) => {
+      const config = prev.config || {};
+      const newData = { ...prev, config: { ...config, [key]: value } };
+      setTimeout(() => onUpdate(node.id, newData), 0);
+      return newData;
+    });
   };
 
   const renderTriggerForm = () => (
@@ -67,7 +89,7 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Trigger Type</label>
         <select
-          value={node.data.triggerType || 'manual'}
+          value={localData.triggerType || 'manual'}
           onChange={(e) => updateData({ triggerType: e.target.value })}
           className="w-full px-3 py-2 border rounded-md text-sm"
         >
@@ -79,12 +101,12 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
         </select>
       </div>
 
-      {node.data.triggerType === 'onSchedule' && (
+      {localData.triggerType === 'onSchedule' && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Cron Expression</label>
           <input
             type="text"
-            value={node.data.config?.cron || ''}
+            value={localData.config?.cron || ''}
             onChange={(e) => updateConfig('cron', e.target.value)}
             placeholder="0 9 * * *"
             className="w-full px-3 py-2 border rounded-md text-sm font-mono"
@@ -93,12 +115,12 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
         </div>
       )}
 
-      {node.data.triggerType === 'onDataChange' && (
+      {localData.triggerType === 'onDataChange' && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Data Source</label>
           <input
             type="text"
-            value={node.data.config?.dataSource || ''}
+            value={localData.config?.dataSource || ''}
             onChange={(e) => updateConfig('dataSource', e.target.value)}
             placeholder="module_id or data_source_id"
             className="w-full px-3 py-2 border rounded-md text-sm"
@@ -106,12 +128,12 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
         </div>
       )}
 
-      {node.data.triggerType === 'onServerEvent' && (
+      {localData.triggerType === 'onServerEvent' && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Event Type</label>
           <input
             type="text"
-            value={node.data.config?.eventType || ''}
+            value={localData.config?.eventType || ''}
             onChange={(e) => updateConfig('eventType', e.target.value)}
             placeholder="form_submitted, notification_received, etc."
             className="w-full px-3 py-2 border rounded-md text-sm"
@@ -126,7 +148,7 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Action</label>
         <select
-          value={node.data.action || ''}
+          value={localData.action || ''}
           onChange={(e) => updateData({ action: e.target.value })}
           className="w-full px-3 py-2 border rounded-md text-sm"
         >
@@ -154,13 +176,14 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
           Parameters (JSON)
         </label>
         <textarea
-          value={JSON.stringify(node.data.params || {}, null, 2)}
+          value={JSON.stringify(localData.params || {}, null, 2)}
           onChange={(e) => {
             try {
               const params = JSON.parse(e.target.value);
               updateData({ params });
             } catch {
-              // Invalid JSON, don't update
+              // Invalid JSON, update local state anyway to allow typing
+              setLocalData({ ...localData, params: e.target.value });
             }
           }}
           className="w-full px-3 py-2 border rounded-md text-sm font-mono h-40"
@@ -178,13 +201,16 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
       <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
       <input
         type="text"
-        value={node.data.condition || ''}
+        value={localData.condition || ''}
         onChange={(e) => updateData({ condition: e.target.value })}
         placeholder="step_1.output.temperature > 20"
         className="w-full px-3 py-2 border rounded-md text-sm font-mono"
       />
       <p className="text-xs text-gray-500 mt-1">
         Reference previous step outputs: step_N.output.field
+      </p>
+      <p className="text-xs text-gray-400 mt-2">
+        Outputs: <span className="font-semibold">true</span> (left/green handle) or <span className="font-semibold">false</span> (right/red handle)
       </p>
     </div>
   );
@@ -195,22 +221,28 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
         <label className="block text-sm font-medium text-gray-700 mb-1">Switch Value</label>
         <input
           type="text"
-          value={node.data.value || ''}
+          value={localData.value || ''}
           onChange={(e) => updateData({ value: e.target.value })}
           placeholder="step_1.output.status"
           className="w-full px-3 py-2 border rounded-md text-sm font-mono"
         />
+        <p className="text-xs text-gray-500 mt-1">
+          Variable reference to switch on
+        </p>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Cases (comma-separated)</label>
         <input
           type="text"
-          value={(node.data.cases || []).join(', ')}
+          value={(localData.cases || []).join(', ')}
           onChange={(e) => updateData({ cases: e.target.value.split(',').map((c) => c.trim()).filter(Boolean) })}
           placeholder="success, error, pending"
           className="w-full px-3 py-2 border rounded-md text-sm"
         />
+        <p className="text-xs text-gray-500 mt-1">
+          Create edges with matching labels for each case
+        </p>
       </div>
     </>
   );
@@ -221,32 +253,47 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
         <label className="block text-sm font-medium text-gray-700 mb-1">Items (array reference)</label>
         <input
           type="text"
-          value={node.data.items || ''}
+          value={localData.items || ''}
           onChange={(e) => updateData({ items: e.target.value })}
           placeholder="step_1.output.articles"
           className="w-full px-3 py-2 border rounded-md text-sm font-mono"
         />
+        <p className="text-xs text-gray-500 mt-1">
+          Reference to an array from previous step
+        </p>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Or Fixed Iterations</label>
         <input
           type="number"
-          value={node.data.iterations || 1}
+          value={localData.iterations || 1}
           onChange={(e) => updateData({ iterations: parseInt(e.target.value) || 1 })}
           className="w-full px-3 py-2 border rounded-md text-sm"
         />
+        <p className="text-xs text-gray-500 mt-1">
+          Used if items is not provided
+        </p>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Loop Variable Name</label>
         <input
           type="text"
-          value={node.data.variable || 'item'}
+          value={localData.variable || 'item'}
           onChange={(e) => updateData({ variable: e.target.value })}
           placeholder="item"
           className="w-full px-3 py-2 border rounded-md text-sm font-mono"
         />
+        <p className="text-xs text-gray-500 mt-1">
+          Access current item as {`{{${localData.variable || 'item'}}}`}
+        </p>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-700">
+        <p className="font-semibold mb-1">Loop Handles:</p>
+        <p><span className="font-mono bg-white px-1 rounded">body</span> (left/green): Loop body - executes for each iteration</p>
+        <p className="mt-1"><span className="font-mono bg-white px-1 rounded">next</span> (right/blue): After loop completes</p>
       </div>
     </>
   );
@@ -265,7 +312,7 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
           <label className="block text-sm font-medium text-gray-700 mb-1">Label</label>
           <input
             type="text"
-            value={node.data.label || ''}
+            value={localData.label || ''}
             onChange={(e) => updateData({ label: e.target.value })}
             className="w-full px-3 py-2 border rounded-md text-sm"
             placeholder="Node label"
