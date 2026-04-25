@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Smartphone, Plus, Save, Trash2, ChevronDown, Eye } from 'lucide-react';
+import { api } from '../lib/api';
 import { useAppEditorStore } from '../stores/useAppEditorStore';
 import { usePreviewStore } from '../stores/usePreviewStore';
 import { BottomBarConfig } from '../components/AppEditor/BottomBarConfig';

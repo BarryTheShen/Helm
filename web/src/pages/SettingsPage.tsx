@@ -30,14 +30,17 @@ export function SettingsPage() {
   const loadDevices = () => {
     setLoading(true);
     api.get<Device[]>('/api/devices')
-      .then(setDevices)
-      .catch(e => toast.error(e.message))
+      .then(d => setDevices(Array.isArray(d) ? d : d.items || []))
+      .catch(e => {
+        toast.error(e.message);
+        setDevices([]);
+      })
       .finally(() => setLoading(false));
   };
 
   const loadApps = () => {
     api.get<{ items: App[] }>('/api/apps?limit=100')
-      .then(d => setApps(d.items))
+      .then(d => setApps(d.items || []))
       .catch(() => setApps([]));
   };
 
@@ -137,7 +140,7 @@ export function SettingsPage() {
                         className="text-sm border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                       >
                         <option value="">— None —</option>
-                        {apps.map(app => (
+                        {(apps || []).map(app => (
                           <option key={app.id} value={app.id}>{app.name}</option>
                         ))}
                       </select>

@@ -346,19 +346,19 @@ class ApiClient {
 
   // --- Module Instances ---
   getModuleInstances(params?: PaginationParams) {
-    return this.get<PaginatedResponse<ModuleInstance>>(`/api/module-instances${this.buildQuery(params)}`);
+    return this.get<PaginatedResponse<ModuleInstance>>(`/api/modules/instances${this.buildQuery(params)}`);
   }
   getModuleInstance(id: string) {
-    return this.get<ModuleInstance>(`/api/module-instances/${id}`);
+    return this.get<ModuleInstance>(`/api/modules/instances/${id}`);
   }
   updateModuleInstance(id: string, data: ModuleInstanceUpdate) {
-    return this.put<ModuleInstance>(`/api/module-instances/${id}`, data);
+    return this.put<ModuleInstance>(`/api/modules/instances/${id}`, data);
   }
   deleteModuleInstance(id: string) {
-    return this.del<void>(`/api/module-instances/${id}`);
+    return this.del<void>(`/api/modules/instances/${id}`);
   }
   getModuleInstanceUsage(id: string) {
-    return this.get<ModuleInstanceUsage>(`/api/module-instances/${id}/usage`);
+    return this.get<ModuleInstanceUsage>(`/api/modules/instances/${id}/usage`);
   }
 
   // --- Apps ---

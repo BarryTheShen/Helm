@@ -1,7 +1,7 @@
 ---
 name: plan-critic
 description: "Challenges implementation plans by exploring the actual codebase to find wrong assumptions, missing dependencies, conflicting patterns, and unconsidered edge cases. Returns specific objections with code evidence, or approves."
-model: opus
+model: sonnet
 tools: "Read, Grep, Glob, WebFetch, LSP"
 ---
 # Plan Critic — Implementation Plan Challenger

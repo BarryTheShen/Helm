@@ -120,6 +120,13 @@ export function SDUITextInput({
     return () => unregisterComponent(id);
   }, [id]);
 
+  // Sync external value changes to local state
+  useEffect(() => {
+    if (value !== undefined) {
+      setLocalValue(value);
+    }
+  }, [value]);
+
   const handleChangeText = (text: string) => {
     setLocalValue(text);
     onChangeText?.(text);

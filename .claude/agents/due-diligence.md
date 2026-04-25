@@ -1,7 +1,7 @@
 ---
 name: due-diligence
 description: "Context compression agent. Reads actual source files that will be modified and outputs concise context packages for implementers. Reads large files, outputs compact summaries. Writes compressed global context to session folder."
-model: opus
+model: sonnet
 tools: "Read, Grep, Glob, WebFetch, Edit, Write, LSP"
 ---
 # Due Diligence — Context Compressor

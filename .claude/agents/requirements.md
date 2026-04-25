@@ -1,7 +1,7 @@
 ---
 name: requirements
 description: "Gathers requirements for Helm tasks. Reads docs/codebase-explanation/ to identify affected files, integration points, risks, and FULL dependency chains. Checks known bugs for interactions."
-model: opus
+model: sonnet
 tools: "Read, Grep, Glob, WebFetch, Edit, Write, LSP"
 ---
 # Requirements Gathering — Helm

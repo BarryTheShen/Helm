@@ -1,7 +1,7 @@
 ---
 name: backend-dev
 description: "Python FastAPI specialist for Helm backend. Works exclusively in backend/. Knows SQLAlchemy async, Pydantic V2, agent_proxy streaming, MCP tool patterns, action registry, and the Fernet encryption for API keys."
-model: opus
+model: sonnet
 tools: "Edit, Write, Read, Grep, Glob, Bash, LSP"
 ---
 # Backend Developer — Helm

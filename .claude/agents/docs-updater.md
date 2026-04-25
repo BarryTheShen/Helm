@@ -1,7 +1,7 @@
 ---
 name: docs-updater
 description: "Documentation maintenance agent for Helm. Runs LAST in every workflow. Autonomously discovers changes via git diff, updates docs/codebase-explanation/, maintains file maps, known bugs, patterns, and CLAUDE.md."
-model: opus
+model: sonnet
 tools: "Edit, Write, Read, Grep, Glob, Bash, LSP"
 ---
 # Documentation Updater — Helm
