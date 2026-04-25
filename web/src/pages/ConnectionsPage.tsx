@@ -4,7 +4,32 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api } from '../lib/api';
-import { Plus, Trash2, Pencil, X, Eye, EyeOff } from 'lucide-react';
+import { Plus, Trash2, Pencil, X, Eye, EyeOff, Tag } from 'lucide-react';
+
+interface CustomProvider {
+  value: string;
+  label: string;
+  category: string;
+  isCustom?: boolean;
+}
+
+const STORAGE_KEY = 'helm_custom_providers';
+
+const loadCustomProviders = (): CustomProvider[] => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return [];
+};
+
+const saveCustomProviders = (providers: CustomProvider[]) => {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(providers));
+};
 
 interface Connection {
   id: string;
@@ -15,7 +40,7 @@ interface Connection {
   updated_at: string;
 }
 
-const providerOptions = [
+const builtInProviders: CustomProvider[] = [
   { value: 'openweathermap', label: 'OpenWeatherMap', category: 'Weather' },
   { value: 'newsapi', label: 'NewsAPI', category: 'News' },
   { value: 'openai', label: 'OpenAI', category: 'AI' },
@@ -45,6 +70,8 @@ const providerBadge: Record<string, string> = {
   custom: 'bg-gray-100 text-gray-700',
 };
 
+const getCustomBadgeClass = (value: string) => `bg-teal-100 text-teal-700`;
+
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   provider: z.string().min(1, 'Provider is required'),
@@ -60,6 +87,17 @@ const editSchema = z.object({
 type CreateFormValues = z.infer<typeof createSchema>;
 type EditFormValues = z.infer<typeof editSchema>;
 
+const customTypeSchema = z.object({
+  label: z.string().min(1, 'Name is required').max(50, 'Name too long'),
+  value: z.string()
+    .min(1, 'Type ID is required')
+    .max(30, 'Type ID too long')
+    .regex(/^[a-z0-9_]+$/, 'Only lowercase letters, numbers, and underscores'),
+  category: z.string().min(1, 'Category is required').max(30, 'Category too long'),
+});
+
+type CustomTypeFormValues = z.infer<typeof customTypeSchema>;
+
 const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500';
 const errorClass = 'text-xs text-red-600 mt-1';
 
@@ -71,6 +109,13 @@ export function ConnectionsPage() {
   const [editingConn, setEditingConn] = useState<Connection | null>(null);
   const [confirmDel, setConfirmDel] = useState<{id: string; name: string; onConfirm: () => void} | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
+  const [customProviders, setCustomProviders] = useState<CustomProvider[]>(loadCustomProviders);
+  const [showCustomTypeModal, setShowCustomTypeModal] = useState(false);
+
+  const customTypeForm = useForm<CustomTypeFormValues>({
+    resolver: zodResolver(customTypeSchema),
+    defaultValues: { label: '', value: '', category: 'Custom' },
+  });
 
   const createForm = useForm<CreateFormValues>({
     resolver: zodResolver(createSchema),
@@ -93,6 +138,43 @@ export function ConnectionsPage() {
   };
 
   useEffect(() => { loadConnections(); }, []);
+
+  // Combine built-in and custom providers
+  const providerOptions: CustomProvider[] = [
+    ...builtInProviders,
+    ...customProviders,
+  ];
+
+  const handleCreateCustomType = customTypeForm.handleSubmit((values) => {
+    // Check for duplicate value
+    if (providerOptions.some(p => p.value === values.value)) {
+      toast.error('A provider with this ID already exists');
+      return;
+    }
+
+    const newProvider: CustomProvider = {
+      ...values,
+      isCustom: true,
+    };
+
+    const updated = [...customProviders, newProvider];
+    setCustomProviders(updated);
+    saveCustomProviders(updated);
+    setShowCustomTypeModal(false);
+    customTypeForm.reset();
+    toast.success(`Provider "${values.label}" added`);
+  });
+
+  const deleteCustomType = (provider: CustomProvider) => {
+    const updated = customProviders.filter(p => p.value !== provider.value);
+    setCustomProviders(updated);
+    saveCustomProviders(updated);
+    toast.success(`Provider "${provider.label}" removed`);
+  };
+
+  const getBadgeClass = (providerValue: string): string => {
+    return providerBadge[providerValue] || getCustomBadgeClass(providerValue);
+  };
 
   const handleCreate = createForm.handleSubmit(async (values) => {
     try {
@@ -168,10 +250,20 @@ export function ConnectionsPage() {
           <h1 className="text-2xl font-bold text-gray-900">API Connections</h1>
           <p className="text-sm text-gray-500 mt-1">Manage API keys for external services</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors">
-          <Plus size={16} />
-          Add Connection
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowCustomTypeModal(true)}
+            className="flex items-center gap-2 px-3 py-2 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-md transition-colors"
+            title="Add custom provider type"
+          >
+            <Tag size={16} />
+            Add Type
+          </button>
+          <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors">
+            <Plus size={16} />
+            Add Connection
+          </button>
+        </div>
       </div>
 
       {showCreate && (
@@ -211,6 +303,64 @@ export function ConnectionsPage() {
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => { setShowCreate(false); createForm.reset(); }} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md">Cancel</button>
                 <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md">Create</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showCustomTypeModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-[500px] p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Add Connection Type</h3>
+              <button onClick={() => { setShowCustomTypeModal(false); customTypeForm.reset(); }} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+            </div>
+            <form onSubmit={handleCreateCustomType} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type Name</label>
+                <input {...customTypeForm.register('label')} className={inputClass} placeholder="e.g., OpenWeatherMap" />
+                {customTypeForm.formState.errors.label && <p className={errorClass}>{customTypeForm.formState.errors.label.message}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type ID</label>
+                <input {...customTypeForm.register('value')} className={inputClass} placeholder="e.g., openweather" />
+                <p className="text-xs text-gray-500 mt-1">Lowercase letters, numbers, and underscores only</p>
+                {customTypeForm.formState.errors.value && <p className={errorClass}>{customTypeForm.formState.errors.value.message}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <input {...customTypeForm.register('category')} className={inputClass} placeholder="e.g., Weather" />
+                {customTypeForm.formState.errors.category && <p className={errorClass}>{customTypeForm.formState.errors.category.message}</p>}
+              </div>
+
+              {customProviders.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Custom Types ({customProviders.length})</label>
+                  <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-md">
+                    {customProviders.map(cp => (
+                      <div key={cp.value} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
+                        <div>
+                          <span className="text-sm font-medium text-gray-900">{cp.label}</span>
+                          <span className="ml-2 text-xs text-gray-500">({cp.value})</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => deleteCustomType(cp)}
+                          className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                          title="Remove this type"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => { setShowCustomTypeModal(false); customTypeForm.reset(); }} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-md">Add Type</button>
               </div>
             </form>
           </div>
@@ -283,7 +433,7 @@ export function ConnectionsPage() {
                 <tr key={c.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">{c.name}</td>
                   <td className="px-6 py-4 text-sm">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${providerBadge[c.provider] || providerBadge.custom}`}>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getBadgeClass(c.provider)}`}>
                       {providerOptions.find(p => p.value === c.provider)?.label || c.provider}
                     </span>
                   </td>
