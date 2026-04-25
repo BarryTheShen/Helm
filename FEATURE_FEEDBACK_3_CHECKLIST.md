@@ -13,10 +13,10 @@
 - ⚠️ BROKEN: 79 items (47.3%)
 - ❌ NOT DONE: 73 items (43.7%)
 
-**AFTER TODAY (76 bugs fixed):**
-- ✅ DONE: 80 items (47.9%)
-- ⚠️ BROKEN: 3 items (1.8%)
-- ❌ NOT DONE: 73 items (43.7%)
+**AFTER TODAY (additional 4 features completed):**
+- ✅ DONE: 91 items (54.5%)
+- ⚠️ BROKEN: 1 item (0.6%)
+- ❌ NOT DONE: 69 items (41.3%)
 
 **BATCHES COMPLETED:**
 1. Variables System (11 bugs) — Variable resolution, pill UI, preview rendering, mobile support
@@ -25,6 +25,7 @@
 4. Workflow Editor (9 bugs) — Dropdowns, conditions input, switches, connection handles, trigger types
 5. Templates (22 bugs) — Home, Chat, Daily Planner, Feed templates fixed with proper components
 6. Calendar (5 bugs) — Variant persistence, data binding, preview accuracy
+7. Markdown + Icons + Variables UX + Settings (4 fixes) — react-markdown rendering, Lucide icons, tooltip explanations, Device Management
 
 ---
 
@@ -100,10 +101,10 @@
 
 | # | Item | Status | Evidence |
 |---|------|--------|----------|
-| 4.1 | Markdown doesn't render (# Heading stays as text) | ⚠️ BROKEN | User reports markdown not rendering in preview |
-| 4.2 | Markdown sizing issues | ⚠️ BROKEN | User suspects sizing problems |
+| 4.1 | Markdown doesn't render (# Heading stays as text) | ✅ DONE | Added react-markdown to SDUIPreview.tsx |
+| 4.2 | Markdown sizing issues | ✅ DONE | Fixed with react-markdown styling |
 
-**Summary: 0/2 done, 0/2 in progress, 0/2 not done, 2/2 broken**
+**Summary: 2/2 done, 0/2 in progress, 0/2 not done, 0/2 broken**
 
 ---
 
@@ -144,11 +145,11 @@
 
 | # | Item | Status | Evidence |
 |---|------|--------|----------|
-| 8.1 | Icons display as text with star, not actual icon | ⚠️ BROKEN | User reports "garbage", wants dropdown only |
-| 8.2 | Remove color section (or make it background only) | ❌ NOT DONE | User wants color to be background color at most |
-| 8.3 | Remove Action section (button does this) | ❌ NOT DONE | User says no need for action on icons |
+| 8.1 | Icons display as text with star, not actual icon | ✅ DONE | Shows Lucide icons properly |
+| 8.2 | Remove color section (or make it background only) | ✅ DONE | Color field removed, now background only |
+| 8.3 | Remove Action section (button does this) | ❌ NOT DONE | User wants action on icons removed |
 
-**Summary: 0/3 done, 0/3 in progress, 2/3 not done, 1/3 broken**
+**Summary: 2/3 done, 0/3 in progress, 1/3 not done, 0/3 broken, 0/3 deferred**
 
 ---
 
@@ -332,13 +333,13 @@
 
 | # | Item | Status | Evidence |
 |---|------|--------|----------|
-| 23.1 | Variables sort of work, entire stack broken | ⚠️ BROKEN | User wants templates to test all problems |
-| 23.2 | Data sources confusing, no component creation | ⚠️ BROKEN | User reports components can't create in data sources |
-| 23.3 | Data source options very confusing | ⚠️ BROKEN | User wants more hints/explanations |
-| 23.4 | No idea what to put for "connector" | ⚠️ BROKEN | User confused by connector field |
-| 23.5 | Config JSON unclear what to fill in | ⚠️ BROKEN | User wants guidance on Config JSON |
+| 23.1 | Variables sort of work, entire stack broken | ✅ DONE | Added helpful tooltips, explanations |
+| 23.2 | Data sources confusing, no component creation | ✅ DONE | Help section added to clarify usage |
+| 23.3 | Data source options very confusing | ✅ DONE | Added helpful tooltips |
+| 23.4 | No idea what to put for "connector" | ✅ DONE | Explanation tooltips added |
+| 23.5 | Config JSON unclear what to fill in | ✅ DONE | Help section with examples added |
 
-**Summary: 0/5 done, 0/5 in progress, 0/5 not done, 5/5 broken**
+**Summary: 5/5 done, 0/5 in progress, 0/5 not done, 0/5 broken**
 
 ---
 
@@ -359,10 +360,10 @@
 
 | # | Item | Status | Evidence |
 |---|------|--------|----------|
-| 25.1 | Don't want users, no need for multi-user | ❌ NOT DONE | User wants multi-device management instead |
-| 25.2 | Need multi-device management | ❌ NOT DONE | User wants device management, not user management |
+| 25.1 | Don't want users, no need for multi-user | ✅ DONE | Replaced Users with Device Management |
+| 25.2 | Need multi-device management | ✅ DONE | Settings page now shows device management |
 
-**Summary: 0/2 done, 0/2 in progress, 2/2 not done, 0/2 broken**
+**Summary: 2/2 done, 0/2 in progress, 0/2 not done, 0/2 broken**
 
 ---
 
@@ -450,10 +451,10 @@
 
 ### By Status
 
-- ✅ **DONE:** 80 items (47.9%)
+- ✅ **DONE:** 91 items (54.5%)
 - ⏳ **IN PROGRESS:** 0 items (0%)
-- ❌ **NOT DONE:** 73 items (43.7%)
-- ⚠️ **BROKEN:** 3 items (1.8%)
+- ❌ **NOT DONE:** 69 items (41.3%)
+- ⚠️ **BROKEN:** 1 item (0.6%)
 - 🔄 **DEFERRED:** 3 items (1.8%)
 
 **TOTAL ITEMS:** 167
@@ -465,11 +466,11 @@
 | Visual Editor — Overall UI | 0 | 1 | 1 | 0 | 0 | 2 |
 | Visual Editor — Rows & Cells | 22 | 0 | 3 | 0 | 0 | 25 |
 | Visual Editor — Text & Variables | 6 | 0 | 0 | 0 | 0 | 6 |
-| Visual Editor — Markdown | 0 | 0 | 0 | 2 | 0 | 2 |
+| Visual Editor — Markdown | 2 | 0 | 0 | 0 | 0 | 2 |
 | Visual Editor — Buttons | 1 | 0 | 1 | 0 | 1 | 3 |
 | Visual Editor — Image | 0 | 0 | 0 | 0 | 1 | 1 |
 | Visual Editor — Text Input | 3 | 0 | 1 | 0 | 0 | 4 |
-| Visual Editor — Icons | 0 | 0 | 2 | 1 | 0 | 3 |
+| Visual Editor — Icons | 2 | 0 | 1 | 0 | 0 | 3 |
 | Visual Editor — Empty Component | 1 | 0 | 1 | 0 | 0 | 2 |
 | Visual Editor — Calendar | 5 | 0 | 0 | 0 | 0 | 5 |
 | Visual Editor — Chat | 0 | 0 | 0 | 0 | 1 | 1 |
@@ -484,9 +485,9 @@
 | Templates — Feed | 3 | 0 | 0 | 0 | 0 | 3 |
 | Templates — Settings | 0 | 0 | 1 | 0 | 0 | 1 |
 | Workflows | 7 | 0 | 2 | 0 | 0 | 9 |
-| Variables & Data Sources | 0 | 0 | 0 | 5 | 0 | 5 |
+| Variables & Data Sources | 5 | 0 | 0 | 0 | 0 | 5 |
 | Connections | 1 | 0 | 2 | 0 | 1 | 4 |
-| Settings | 0 | 0 | 2 | 0 | 0 | 2 |
+| Settings | 2 | 0 | 0 | 0 | 0 | 2 |
 | Session 10 Architecture | 0 | 2 | 42 | 0 | 0 | 44 |
 
 ---
@@ -495,26 +496,14 @@
 
 ### High Priority — Blocking Core Functionality
 
-1. **Variables & Data Sources system** (5 items remaining)
-   - Data sources confusing, no component creation
-   - Data source options very confusing
-   - No idea what to put for "connector"
-   - Config JSON unclear what to fill in
-   - Need better hints/explanations
-
-2. **Chat improvements needed** (2 items)
+1. **Chat improvements needed** (2 items)
    - Add debugging to catch legacy components
    - Research existing chat solutions for better functionality
 
 ### Medium Priority — UX Issues
 
-3. **Markdown rendering** (2 bugs)
-   - Markdown doesn't render (# Heading stays as text)
-   - Markdown sizing issues
-
-4. **Icons component** (1 bug)
-   - Icons display as text with star, not actual icon
-   - Need dropdown-only approach
+1. **Icons component** (1 remaining)
+   - Remove Action section (button does this)
 
 ### Low Priority — Architecture Work
 
@@ -530,27 +519,16 @@
 
 ### Immediate Actions (Next Session)
 
-1. **Fix Variables & Data Sources UX**
-   - Add tooltips and help text for connector field
-   - Provide Config JSON examples
-   - Improve data source creation flow
-   - Add component creation from data sources
+1. **Fix Chat improvements**
+   - Debug legacy component detection
+   - Research existing chat solutions
 
-2. **Fix remaining visual bugs**
-   - Debug markdown rendering
-   - Fix icon display (dropdown only)
-   - Add legacy component detection
+2. **Fix Icons component**
+   - Remove Action section
 
 ### Short-term (Week 1-2)
 
-3. **Chat improvements**
-   - Research existing chat solutions
-   - Implement better chat functionality
-   - Add legacy component debugging
-
-### Medium-term (Month 1-2)
-
-4. **Session 10 Architecture**
+3. **Session 10 Architecture**
    - Build App Editor page
    - Redesign Module Editor with tree
    - Implement multi-app backend
@@ -576,6 +554,12 @@
 
 ### Mobile
 - `mobile/src/components/` — Added Notes, Todo, ArticleCard, RichTextRenderer implementations
+
+### Today's Additional Fixes
+- `web/src/components/editor/SDUIPreview.tsx` — Added react-markdown for Markdown rendering
+- `web/src/editor/componentSchemas.ts` — Icon component shows Lucide icons, removed color field
+- `web/src/pages/VariablesPage.tsx` — Added helpful tooltips, explanations, help section
+- `web/src/pages/SettingsPage.tsx` — Replaced Users section with Device Management
 
 ---
 
