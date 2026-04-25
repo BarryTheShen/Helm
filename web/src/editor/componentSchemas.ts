@@ -136,6 +136,7 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
       { label: 'URL', value: 'url' },
     ] },
     { key: 'editable', label: 'Editable', type: 'toggle', defaultValue: true },
+    { key: 'onSubmit', label: 'On Submit Action', type: 'text', placeholder: '{"type":"server_action","function":"submit_form"}', defaultValue: '' },
   ],
   Icon: [
     { key: 'name', label: 'Icon', type: 'icon-picker', defaultValue: 'star' },
