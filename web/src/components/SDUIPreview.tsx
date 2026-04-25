@@ -1,4 +1,6 @@
 import { type CSSProperties } from 'react';
+import ReactMarkdown from 'react-markdown';
+import * as LucideIcons from 'lucide-react';
 
 interface SDUIComponent {
   id: string;
@@ -106,15 +108,37 @@ function ImagePreview({ src, height, aspectRatio, borderRadius }: any) {
 }
 
 function MarkdownPreview({ content }: any) {
-  return <div className="prose prose-sm max-w-none" style={{ whiteSpace: 'pre-wrap' }}>{content || '# Heading\n\nParagraph'}</div>;
+  return (
+    <div className="prose prose-sm max-w-none text-gray-800" style={{ lineHeight: 1.6 }}>
+      <ReactMarkdown>{content || '# Heading\n\nParagraph text'}</ReactMarkdown>
+    </div>
+  );
 }
 
 function DividerPreview({ color, thickness, margin }: any) {
   return <hr style={{ borderColor: color || '#E0E0E0', borderWidth: thickness ?? 1, margin: `${margin ?? 8}px 0` }} />;
 }
 
+// Convert kebab-case to PascalCase for Lucide icon lookup
+function getLucideIcon(iconName: string) {
+  const pascalCase = iconName
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join('');
+  return (LucideIcons as any)[pascalCase] || null;
+}
+
 function IconPreview({ name, size, color }: any) {
-  return <span style={{ fontSize: size || 24, color: color || '#000' }}>⭐ {name || 'star'}</span>;
+  const IconComponent = name ? getLucideIcon(name) : null;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+      {IconComponent ? (
+        <IconComponent size={size || 24} color={color || '#000'} />
+      ) : (
+        <span style={{ fontSize: size || 24, color: color || '#000' }}>⭐</span>
+      )}
+    </span>
+  );
 }
 
 function TextInputPreview({ placeholder, multiline, value, secureTextEntry }: any) {

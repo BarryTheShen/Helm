@@ -140,7 +140,6 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
   Icon: [
     { key: 'name', label: 'Icon', type: 'icon-picker', defaultValue: 'star' },
     { key: 'size', label: 'Size', type: 'number', defaultValue: 24, placeholder: '24' },
-    { key: 'color', label: 'Color', type: 'color', defaultValue: '#000000' },
   ],
   Container: [
     { key: 'direction', label: 'Direction', type: 'select', defaultValue: 'column', options: [
