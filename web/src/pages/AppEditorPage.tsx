@@ -157,6 +157,27 @@ export function AppEditorPage() {
     // TODO: Implement device preview
   };
 
+  const handleCreateApp = async () => {
+    try {
+      const newApp = await api.createApp({
+        name: 'New App',
+        icon: '📱',
+        theme: 'light',
+        design_tokens: {},
+        dark_mode: false,
+        default_launch_module_id: null,
+        bottom_bar_config: [],
+        launchpad_config: [],
+      });
+      setApps([...apps, newApp]);
+      setCurrentApp(newApp.id);
+      setShowAppSwitcher(false);
+      showMsg('success', 'App created successfully');
+    } catch (err) {
+      showMsg('error', err instanceof Error ? err.message : 'Failed to create app');
+    }
+  };
+
   const launchpadModules = availableModules.filter(
     module => !currentApp?.bottom_bar_config.some(s => s.module_instance_id === module.module_instance_id)
   );
@@ -174,7 +195,7 @@ export function AppEditorPage() {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <p className="text-gray-500 mb-4">No apps found</p>
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <button onClick={handleCreateApp} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
             Create New App
           </button>
         </div>
@@ -216,7 +237,7 @@ export function AppEditorPage() {
                   </button>
                 ))}
                 <div className="border-t border-gray-100 my-1" />
-                <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 transition-colors">
+                <button onClick={handleCreateApp} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 transition-colors">
                   <Plus size={14} />
                   <span>New App</span>
                 </button>
