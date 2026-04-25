@@ -268,9 +268,6 @@ export const ROW_PRESETS: RowPreset[] = [
   { name: 'Two Columns', cellCount: 2, height: 'auto', icon: '▭▭' },
   { name: 'Three Columns', cellCount: 3, height: 'auto', icon: '▭▭▭' },
   { name: 'Four Columns', cellCount: 4, height: 'auto', icon: '▭▭▭▭' },
-  { name: 'Header Row', cellCount: 1, height: 80, props: { backgroundColor: '#f8f9fa', padding: 16 }, icon: '📋' },
-  { name: 'Content Row', cellCount: 1, height: 'auto', props: { padding: 16 }, icon: '📄' },
-  { name: 'Footer Row', cellCount: 1, height: 60, props: { backgroundColor: '#f8f9fa', padding: 12 }, icon: '🔻' },
 ];
 
 export type ActionPropName = 'onPress' | 'onSubmit' | 'onSend';

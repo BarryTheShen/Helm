@@ -76,7 +76,7 @@ function ButtonPreview({ label, variant, size, icon }: any) {
   }
 
   return (
-    <button className={`rounded-md font-medium ${variants[variant] || variants.primary} ${sizes[size] || sizes.md}`}>
+    <button className={`w-full rounded-md font-medium ${variants[variant] || variants.primary} ${sizes[size] || sizes.md}`}>
       {label || 'Button'}
     </button>
   );
