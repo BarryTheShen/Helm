@@ -18,6 +18,11 @@
 - ⚠️ BROKEN: 1 item (0.6%)
 - ❌ NOT DONE: 69 items (41.3%)
 
+**BATCH 8 COMPLETED (additional 5 fixes):**
+- ✅ DONE: 96 items (57.5%)
+- ⚠️ BROKEN: 1 item (0.6%)
+- ❌ NOT DONE: 65 items (38.9%)
+
 **BATCHES COMPLETED:**
 1. Variables System (11 bugs) — Variable resolution, pill UI, preview rendering, mobile support
 2. Row/Cell Validation (20 bugs) — Width calculations, padding, scrolling, drag handles, validation
@@ -71,14 +76,14 @@
 | 2.17 | Row height minimum inconsistent (cursor vs config) | ✅ DONE | MIN_ROW_HEIGHT = 48 enforced consistently |
 | 2.18 | Padding doesn't respect min width/height | ✅ DONE | Fixed padding calculations |
 | 2.19 | Bottom divider doesn't work | ✅ DONE | Fixed show_bottom_divider implementation |
-| 2.20 | Header/Footer/Content row types not configurable | ❌ NOT DONE | User wants these deleted |
+| 2.20 | Header/Footer/Content row types not configurable | ✅ DONE | Header/Footer/Content row types removed |
 | 2.21 | Row remove button hard to click | ✅ DONE | Moved button outside top-left |
 | 2.22 | Cell remove button painful (only in config panel) | ✅ DONE | Added delete button in upper-right corner |
 | 2.23 | Cell delete crosses overlap or impossible to click | ✅ DONE | Fixed with new button placement |
-| 2.24 | Presets in "Add Cell" are useless copies | ❌ NOT DONE | User wants only atomic + components, remove presets |
+| 2.24 | Presets in "Add Cell" are useless copies | ✅ DONE | Presets removed from Add Cell |
 | 2.25 | Row auto-resizing doesn't work | ✅ DONE | Fixed auto-resizing logic |
 
-**Summary: 22/25 done, 0/25 in progress, 3/25 not done, 0/25 broken**
+**Summary: 24/25 done, 0/25 in progress, 1/25 not done, 0/25 broken**
 
 ---
 
@@ -112,11 +117,11 @@
 
 | # | Item | Status | Evidence |
 |---|------|--------|----------|
-| 5.1 | Buttons should fill entire cell | ❌ NOT DONE | User wants buttons to always fill cell |
+| 5.1 | Buttons should fill entire cell | ✅ DONE | Buttons now fill entire cell |
 | 5.2 | Navigate action elevated to app-level (TBD) | 🔄 DEFERRED | User says "don't touch yet" |
 | 5.3 | Rules don't work | ✅ DONE | Fixed rule execution in RuleBuilder |
 
-**Summary: 1/3 done, 0/3 in progress, 1/3 not done, 0/3 broken, 1/3 deferred**
+**Summary: 2/3 done, 0/3 in progress, 0/3 not done, 0/3 broken, 1/3 deferred**
 
 ---
 
@@ -305,9 +310,9 @@
 
 | # | Item | Status | Evidence |
 |---|------|--------|----------|
-| 21.1 | No need for template, should be preset/unchangeable | ❌ NOT DONE | User wants this removed |
+| 21.1 | No need for template, should be preset/unchangeable | ✅ DONE | Settings template removed |
 
-**Summary: 0/1 done, 0/1 in progress, 1/1 not done, 0/1 broken**
+**Summary: 1/1 done, 0/1 in progress, 0/1 not done, 0/1 broken**
 
 ---
 
@@ -348,11 +353,11 @@
 | # | Item | Status | Evidence |
 |---|------|--------|----------|
 | 24.1 | Basically good, not using yet | ✅ DONE | User says it's good |
-| 24.2 | Add connection: only 2 types + custom hardcoded | ❌ NOT DONE | User wants "Add another type" instead of hardcoding |
-| 24.3 | Make it easy to add own types (API keys) | ❌ NOT DONE | User wants dynamic type addition |
+| 24.2 | Add connection: only 2 types + custom hardcoded | ✅ DONE | Connections page now has "Add Type" button |
+| 24.3 | Make it easy to add own types (API keys) | ✅ DONE | Dynamic type addition implemented |
 | 24.4 | OAuth deferred | 🔄 DEFERRED | User says tackle OAuth later |
 
-**Summary: 1/4 done, 0/4 in progress, 2/4 not done, 0/4 broken, 1/4 deferred**
+**Summary: 3/4 done, 0/4 in progress, 0/4 not done, 0/4 broken, 1/4 deferred**
 
 ---
 
@@ -451,9 +456,9 @@
 
 ### By Status
 
-- ✅ **DONE:** 91 items (54.5%)
+- ✅ **DONE:** 96 items (57.5%)
 - ⏳ **IN PROGRESS:** 0 items (0%)
-- ❌ **NOT DONE:** 69 items (41.3%)
+- ❌ **NOT DONE:** 65 items (38.9%)
 - ⚠️ **BROKEN:** 1 item (0.6%)
 - 🔄 **DEFERRED:** 3 items (1.8%)
 
@@ -464,10 +469,10 @@
 | Category | Done | In Progress | Not Done | Broken | Deferred | Total |
 |----------|------|-------------|----------|--------|----------|-------|
 | Visual Editor — Overall UI | 0 | 1 | 1 | 0 | 0 | 2 |
-| Visual Editor — Rows & Cells | 22 | 0 | 3 | 0 | 0 | 25 |
+| Visual Editor — Rows & Cells | 24 | 0 | 1 | 0 | 0 | 25 |
 | Visual Editor — Text & Variables | 6 | 0 | 0 | 0 | 0 | 6 |
 | Visual Editor — Markdown | 2 | 0 | 0 | 0 | 0 | 2 |
-| Visual Editor — Buttons | 1 | 0 | 1 | 0 | 1 | 3 |
+| Visual Editor — Buttons | 2 | 0 | 0 | 0 | 1 | 3 |
 | Visual Editor — Image | 0 | 0 | 0 | 0 | 1 | 1 |
 | Visual Editor — Text Input | 3 | 0 | 1 | 0 | 0 | 4 |
 | Visual Editor — Icons | 2 | 0 | 1 | 0 | 0 | 3 |
@@ -483,10 +488,10 @@
 | Templates — Chat | 6 | 0 | 0 | 2 | 0 | 8 |
 | Templates — Daily Planner | 3 | 0 | 0 | 0 | 0 | 3 |
 | Templates — Feed | 3 | 0 | 0 | 0 | 0 | 3 |
-| Templates — Settings | 0 | 0 | 1 | 0 | 0 | 1 |
+| Templates — Settings | 1 | 0 | 0 | 0 | 0 | 1 |
 | Workflows | 7 | 0 | 2 | 0 | 0 | 9 |
 | Variables & Data Sources | 5 | 0 | 0 | 0 | 0 | 5 |
-| Connections | 1 | 0 | 2 | 0 | 1 | 4 |
+| Connections | 3 | 0 | 0 | 0 | 1 | 4 |
 | Settings | 2 | 0 | 0 | 0 | 0 | 2 |
 | Session 10 Architecture | 0 | 2 | 42 | 0 | 0 | 44 |
 
@@ -560,6 +565,13 @@
 - `web/src/editor/componentSchemas.ts` — Icon component shows Lucide icons, removed color field
 - `web/src/pages/VariablesPage.tsx` — Added helpful tooltips, explanations, help section
 - `web/src/pages/SettingsPage.tsx` — Replaced Users section with Device Management
+
+### Batch 8 Fixes (2026-04-25)
+- Buttons fill entire cell
+- Removed Header/Footer/Content row types
+- Removed presets from Add Cell
+- Removed Settings template
+- Dynamic connection types with "Add Type" button
 
 ---
 
