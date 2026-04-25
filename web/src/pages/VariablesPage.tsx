@@ -32,7 +32,7 @@ export function VariablesPage() {
 
   return (
     <div>
-      <div className="flex gap-1 mb-6 border-b border-gray-200">
+      <div className="flex gap-1 mb-6 border-b border-gray-200 items-center">
         <button
           onClick={() => setTab('variables')}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${tab === 'variables' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
@@ -45,6 +45,11 @@ export function VariablesPage() {
         >
           Data Sources
         </button>
+        {tab === 'variables' && (
+          <span className="ml-auto text-xs text-gray-400 italic">
+            Use <code className="bg-gray-100 px-1 rounded">[[variable.name]]</code> syntax in Text components, or <code className="bg-gray-100 px-1 rounded">{'{{'}custom.name{'}}'}</code> in dynamic fields
+          </span>
+        )}
       </div>
       {tab === 'variables' ? <VariablesTab /> : <DataSourcesTab />}
     </div>
@@ -132,29 +137,45 @@ function VariablesTab() {
       </div>
 
       {showCreate && (
-        <form onSubmit={handleCreate} className="bg-gray-50 border border-gray-200 p-4 rounded-lg mb-4 flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
-            <input {...createForm.register('name')} placeholder="Name" className={inputClass} />
-            {createForm.formState.errors.name && <p className={errorClass}>{createForm.formState.errors.name.message}</p>}
+        <form onSubmit={handleCreate} className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-4 flex flex-col gap-4">
+          <p className="text-xs text-blue-700">
+            <span className="font-semibold">Variables</span> are static values you can reference anywhere in your app using{' '}
+            <code className="bg-white px-1 rounded">{'{{'}custom.name{'}}'}</code> in dynamic fields or{' '}
+            <code className="bg-white px-1 rounded">[[variable.name]]</code> in Text components.
+          </p>
+          <div className="flex flex-wrap items-start gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Name <span className="text-red-500">*</span>
+                <span className="ml-1 text-gray-400 cursor-help" title="Unique name used in {{custom.name}} references. Use lowercase and underscores (e.g., app_name, api_url).">ⓘ</span>
+              </label>
+              <input {...createForm.register('name')} placeholder="e.g., app_name, welcome_message" className={inputClass} />
+              {createForm.formState.errors.name && <p className={errorClass}>{createForm.formState.errors.name.message}</p>}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Type
+                <span className="ml-1 text-gray-400 cursor-help" title="The data type of this variable. Text = string, Number = integer/float, Boolean = true/false.">ⓘ</span>
+              </label>
+              <select {...createForm.register('type')} className={inputClass}>
+                <option value="text">Text</option>
+                <option value="number">Number</option>
+                <option value="boolean">Boolean</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Value
+                <span className="ml-1 text-gray-400 cursor-help" title="The static value this variable holds. Can be any text, number, or true/false.">ⓘ</span>
+              </label>
+              <input {...createForm.register('value')} placeholder="e.g., My App, 42, true" className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Description <span className="text-gray-400 font-normal">(optional)</span></label>
+              <input {...createForm.register('description')} placeholder="What this variable is used for" className={inputClass} />
+            </div>
+            <button type="submit" className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors mt-5">Save</button>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
-            <select {...createForm.register('type')} className={inputClass}>
-              <option value="text">Text</option>
-              <option value="number">Number</option>
-              <option value="boolean">Boolean</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Value</label>
-            <input {...createForm.register('value')} placeholder="Value" className={inputClass} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Description</label>
-            <input {...createForm.register('description')} placeholder="Description (optional)" className={inputClass} />
-          </div>
-          <button type="submit" className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors">Save</button>
         </form>
       )}
 
@@ -167,12 +188,18 @@ function VariablesTab() {
             </div>
             <form onSubmit={handleEdit}>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Name <span className="text-red-500">*</span>
+                  <span className="ml-1 text-gray-400 cursor-help" title="Unique name for {{custom.name}} references. Lowercase with underscores.">ⓘ</span>
+                </label>
                 <input {...editForm.register('name')} className={inputClassFull} />
                 {editForm.formState.errors.name && <p className={errorClass}>{editForm.formState.errors.name.message}</p>}
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Type
+                  <span className="ml-1 text-gray-400 cursor-help" title="Text = string, Number = integer/float, Boolean = true/false.">ⓘ</span>
+                </label>
                 <select {...editForm.register('type')} className={inputClassFull}>
                   <option value="text">Text</option>
                   <option value="number">Number</option>
@@ -180,11 +207,14 @@ function VariablesTab() {
                 </select>
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Value</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Value
+                  <span className="ml-1 text-gray-400 cursor-help" title="The static value. Can be any text, number, or true/false.">ⓘ</span>
+                </label>
                 <input {...editForm.register('value')} className={inputClassFull} />
               </div>
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description <span className="text-gray-400 font-normal">(optional)</span></label>
                 <input {...editForm.register('description')} className={inputClassFull} />
               </div>
               <div className="flex justify-end gap-3">
@@ -238,26 +268,47 @@ function VariablesTab() {
 
       {/* Built-in Variable Reference */}
       <div className="mt-8">
-        <h3 className="text-base font-semibold text-gray-700 mb-3">Built-in Variable Reference</h3>
-        <p className="text-xs text-gray-400 mb-3">These variables are always available. Custom variables you create above use the <code className="bg-gray-100 px-1 rounded">custom.*</code> namespace.</p>
+        <h3 className="text-base font-semibold text-gray-700 mb-3">Variable Syntax Reference</h3>
+        <p className="text-xs text-gray-500 mb-3">Two syntaxes are available. Use <code className="bg-gray-100 px-1 rounded">[[variable.name]]</code> in <strong>Text components</strong> (SDUI), and <code className="bg-gray-100 px-1 rounded">{'{{'}namespace.name{'}}'}</code> in <strong>dynamic property fields</strong> (like labels, URLs, placeholders).</p>
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2.5">Scope</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2.5">Namespace</th>
                 <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2.5">Example</th>
                 <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2.5">Description</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2.5">Source</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 text-sm">
-              <tr className="hover:bg-gray-50"><td className="px-4 py-2 font-mono text-blue-600">user.*</td><td className="px-4 py-2 font-mono text-gray-600">user.name, user.id</td><td className="px-4 py-2 text-gray-500">Current logged-in user info</td></tr>
-              <tr className="hover:bg-gray-50"><td className="px-4 py-2 font-mono text-blue-600">component.&lt;id&gt;.value</td><td className="px-4 py-2 font-mono text-gray-600">component.search-box.value</td><td className="px-4 py-2 text-gray-500">Another component&rsquo;s current state</td></tr>
-              <tr className="hover:bg-gray-50"><td className="px-4 py-2 font-mono text-blue-600">self.value</td><td className="px-4 py-2 font-mono text-gray-600">self.value</td><td className="px-4 py-2 text-gray-500">This component&rsquo;s own value</td></tr>
-              <tr className="hover:bg-gray-50"><td className="px-4 py-2 font-mono text-blue-600">data.*</td><td className="px-4 py-2 font-mono text-gray-600">data.calendar.title</td><td className="px-4 py-2 text-gray-500">Value from a bound data source</td></tr>
-              <tr className="hover:bg-gray-50"><td className="px-4 py-2 font-mono text-blue-600">env.*</td><td className="px-4 py-2 font-mono text-gray-600">env.serverUrl</td><td className="px-4 py-2 text-gray-500">Environment/system settings</td></tr>
-              <tr className="hover:bg-gray-50"><td className="px-4 py-2 font-mono text-blue-600">custom.*</td><td className="px-4 py-2 font-mono text-gray-600">custom.appName</td><td className="px-4 py-2 text-gray-500">Your custom variables (defined above)</td></tr>
+              <tr className="hover:bg-gray-50"><td className="px-4 py-2 font-mono text-blue-600">user.*</td><td className="px-4 py-2 font-mono text-gray-600">{'{{'}user.name{'}}'}, [[user.id]]</td><td className="px-4 py-2 text-gray-500">Current logged-in user info</td><td className="px-4 py-2 text-xs text-gray-400">Built-in</td></tr>
+              <tr className="hover:bg-gray-50"><td className="px-4 py-2 font-mono text-blue-600">component.&lt;id&gt;.value</td><td className="px-4 py-2 font-mono text-gray-600">{'{{'}component.search.value{'}}'}</td><td className="px-4 py-2 text-gray-500">Another component&rsquo;s current state</td><td className="px-4 py-2 text-xs text-gray-400">Built-in</td></tr>
+              <tr className="hover:bg-gray-50"><td className="px-4 py-2 font-mono text-blue-600">self.value</td><td className="px-4 py-2 font-mono text-gray-600">[[self.value]]</td><td className="px-4 py-2 text-gray-500">This component&rsquo;s own value</td><td className="px-4 py-2 text-xs text-gray-400">Built-in</td></tr>
+              <tr className="hover:bg-gray-50"><td className="px-4 py-2 font-mono text-blue-600">data.*</td><td className="px-4 py-2 font-mono text-gray-600">{'{{'}data.calendar.events{'}}'}</td><td className="px-4 py-2 text-gray-500">Value from a data source</td><td className="px-4 py-2 text-xs text-blue-600 font-medium">Data Sources tab</td></tr>
+              <tr className="hover:bg-gray-50"><td className="px-4 py-2 font-mono text-blue-600">env.*</td><td className="px-4 py-2 font-mono text-gray-600">{'{{'}env.serverUrl{'}}'}</td><td className="px-4 py-2 text-gray-500">Environment/system settings</td><td className="px-4 py-2 text-xs text-gray-400">Built-in</td></tr>
+              <tr className="hover:bg-gray-50"><td className="px-4 py-2 font-mono text-blue-600">connection.*</td><td className="px-4 py-2 font-mono text-gray-600">{'{{'}connection.my_api.key{'}}'}</td><td className="px-4 py-2 text-gray-500">Secure API key from Connections</td><td className="px-4 py-2 text-xs text-purple-600 font-medium">Connections page</td></tr>
+              <tr className="hover:bg-gray-50"><td className="px-4 py-2 font-mono text-blue-600">custom.*</td><td className="px-4 py-2 font-mono text-gray-600">{'{{'}custom.appName{'}}'}, [[custom.appName]]</td><td className="px-4 py-2 text-gray-500">Your custom variables (defined above)</td><td className="px-4 py-2 text-xs text-green-600 font-medium">Variables tab above</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* How Variables Work Help */}
+      <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
+        <h3 className="text-sm font-semibold text-green-900 mb-2">How Variables Work</h3>
+        <div className="text-xs text-green-700 space-y-2">
+          <p>
+            <span className="font-semibold">Static variables</span> (defined in this tab) hold fixed values like app names, feature flags, or configuration strings. They are resolved at render time using the <code className="bg-white px-1 rounded">{'{{'}custom.name{'}}'}</code> syntax.
+          </p>
+          <p>
+            <span className="font-semibold">Data sources</span> (Data Sources tab) fetch live data from external APIs or databases. Reference them with <code className="bg-white px-1 rounded">{'{{'}data.source_name.field{'}}'}</code>.
+          </p>
+          <p>
+            <span className="font-semibold">Connections</span> (Connections page) store encrypted API keys and credentials. Reference them securely in config JSON using <code className="bg-white px-1 rounded">{'{{'}connection.name.api_key{'}}'}</code>.
+          </p>
+          <p className="font-medium">
+            Tip: Use the Variable Picker (<code className="bg-white px-1 rounded">@</code> trigger) in the Property Inspector to insert variable references without typing them manually.
+          </p>
         </div>
       </div>
       {confirmDel && (
@@ -505,13 +556,21 @@ function DataSourcesTab() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Connector</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Connector
+                  <span className="ml-1 text-gray-400 cursor-help" title="Backend service that fetches data. Examples: local_db (SQLite), http_json (HTTP API), google_calendar (OAuth), rss_feed (RSS parser).">ⓘ</span>
+                </label>
                 <input value={editForm.connector} onChange={e => setEditForm(f => ({ ...f, connector: e.target.value }))}
+                  placeholder="e.g., local_db, http_json, rss_feed"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Config JSON</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Config JSON
+                  <span className="ml-1 text-gray-400 cursor-help" title="Connection settings as JSON. Keys depend on the connector (e.g., url, feed_url, table, query). Use {{connection.name.*}} for API keys.">ⓘ</span>
+                </label>
                 <textarea value={editForm.config_json} onChange={e => setEditForm(f => ({ ...f, config_json: e.target.value }))}
+                  placeholder='{"url": "https://api.example.com/data", "method": "GET"}'
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 h-28 resize-y" />
               </div>
             </div>
