@@ -1,15 +1,16 @@
 ---
 name: live-tester
-description: Browser-based testing specialist using Playwright MCP. Launches the Helm app in a real browser to verify SDUI rendering, WebSocket connections, API calls, UI behavior, and end-to-end workflows. Has two modes — targeted (specific change) and audit (find ALL issues).
-model: sonnet
-tools: Read, Grep, Glob, WebFetch
-mcpServers:
-  - playwright:
+description: "Browser-based testing specialist using Playwright MCP. Launches the Helm app in a real browser to verify SDUI rendering, WebSocket connections, API calls, UI behavior, and end-to-end workflows. Has two modes — targeted (specific change) and audit (find ALL issues)."
+model: opus
+tools: "Read, Grep, Glob, WebFetch"
+mcpServers: 
+  - playwright: 
       type: stdio
       command: npx
-      args: ["-y", "@playwright/mcp@latest"]
+      args: 
+        - "-y"
+        - "@playwright/mcp@latest"
 ---
-
 # Live Tester — Helm Functional Verification
 
 You verify that the Helm app works correctly in a real browser using Playwright. You are NOT checking code quality — you are checking that it WORKS.

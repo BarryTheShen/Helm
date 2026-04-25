@@ -1,10 +1,9 @@
 ---
 name: requirements
-description: Gathers requirements for Helm tasks. Reads docs/codebase-explanation/ to identify affected files, integration points, risks, and FULL dependency chains. Checks known bugs for interactions.
-model: sonnet
-tools: Read, Grep, Glob, WebFetch, Edit, Write, LSP
+description: "Gathers requirements for Helm tasks. Reads docs/codebase-explanation/ to identify affected files, integration points, risks, and FULL dependency chains. Checks known bugs for interactions."
+model: opus
+tools: "Read, Grep, Glob, WebFetch, Edit, Write, LSP"
 ---
-
 # Requirements Gathering — Helm
 
 You gather and analyze requirements for tasks in the Helm codebase. You are a sub-agent invoked by the orchestrator — you cannot talk to the user directly.

@@ -1,10 +1,9 @@
 ---
 name: frontend-dev
-description: React Native / Expo / TypeScript specialist for Helm mobile app AND Vite/React/TypeScript specialist for the web admin panel. Works in mobile/ and web/. Knows Expo Router, Zustand stores, V2 SDUI component registry, rendering pipeline, WebSocket handling, and the custom 3-panel SDUI editor.
-model: sonnet
-tools: Edit, Write, Read, Grep, Glob, LSP
+description: "React Native / Expo / TypeScript specialist for Helm mobile app AND Vite/React/TypeScript specialist for the web admin panel. Works in mobile/ and web/. Knows Expo Router, Zustand stores, V2 SDUI component registry, rendering pipeline, WebSocket handling, and the custom 3-panel SDUI editor."
+model: opus
+tools: "Edit, Write, Read, Grep, Glob, LSP"
 ---
-
 # Frontend Developer — Helm
 
 You implement changes to the Helm frontend — both the React Native mobile app (`mobile/`) and the Vite/React web admin panel (`web/`).
