@@ -72,12 +72,12 @@ async def test_install_creates_module_instance(auth_client, db_session):
     assert data["template_id"] == template_id
     assert data["name"] == "My Test Module"
     assert data["status"] == "active"
-    assert "id" in data
+    assert "module_instance_id" in data
     assert "installed_at" in data
 
     # Verify the row actually exists in the DB
     result = await db_session.execute(
-        select(ModuleInstance).where(ModuleInstance.id == data["id"])
+        select(ModuleInstance).where(ModuleInstance.id == data["module_instance_id"])
     )
     instance = result.scalar_one_or_none()
     assert instance is not None
@@ -136,7 +136,7 @@ async def test_uninstall_own_instance_returns_204(auth_client, db_session):
         "/api/modules/install",
         json={"template_id": template_id},
     )
-    instance_id = install_resp.json()["id"]
+    instance_id = install_resp.json()["module_instance_id"]
 
     del_resp = await auth_client.delete(f"/api/modules/instances/{instance_id}")
     assert del_resp.status_code == 204
@@ -164,7 +164,7 @@ async def test_uninstall_someone_elses_instance_returns_403(auth_client, client)
         "/api/modules/install",
         json={"template_id": template_id},
     )
-    instance_id = install_resp.json()["id"]
+    instance_id = install_resp.json()["module_instance_id"]
 
     other = await _create_second_user_client(auth_client, client)
     try:
@@ -181,7 +181,7 @@ async def test_uninstall_broadcasts_ws_event(auth_client):
         "/api/modules/install",
         json={"template_id": template_id},
     )
-    instance_id = install_resp.json()["id"]
+    instance_id = install_resp.json()["module_instance_id"]
 
     with patch(
         "app.routers.module_instances.ws_manager.send", new_callable=AsyncMock
