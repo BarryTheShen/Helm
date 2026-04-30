@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import ReactFlow, {
   Controls,
@@ -11,7 +11,7 @@ import ReactFlow, {
   Handle,
   Position,
 } from 'reactflow';
-import type { Node, Connection, NodeTypes } from 'reactflow';
+import type { Node, Connection } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { api, type Workflow, type WorkflowCreate, type WorkflowUpdate } from '../lib/api';
 import { Plus, Save, Play, Upload, Trash2, X } from 'lucide-react';
@@ -93,14 +93,6 @@ function LoopNode({ data }: { data: any }) {
   );
 }
 
-const nodeTypes: NodeTypes = {
-  trigger: TriggerNode,
-  action: ActionNode,
-  condition: ConditionNode,
-  switch: SwitchNode,
-  loop: LoopNode,
-};
-
 interface WorkflowListItem {
   id: string;
   name: string;
@@ -142,6 +134,17 @@ export function WorkflowsPage() {
     setSelectedNode(node);
     setShowNodeInspector(true);
   }, []);
+
+  const nodeTypes = useMemo(
+    () => ({
+      trigger: TriggerNode,
+      action: ActionNode,
+      condition: ConditionNode,
+      switch: SwitchNode,
+      loop: LoopNode,
+    }),
+    [],
+  );
 
   const loadWorkflow = useCallback(async (id: string) => {
     setLoading(true);
