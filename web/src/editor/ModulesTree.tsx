@@ -6,7 +6,7 @@ import { RenameModuleModal } from './RenameModuleModal';
 import { DeleteModuleModal } from './DeleteModuleModal';
 
 interface ModuleInstance {
-  id: string;
+  module_instance_id: string;
   module_type: string;
   name: string;
   template_id: string | null;
@@ -131,7 +131,7 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
 
   const handleRename = (moduleInstance: ModuleInstance) => {
     setRenameModal({
-      moduleInstanceId: moduleInstance.id,
+      moduleInstanceId: moduleInstance.module_instance_id,
       currentName: moduleInstance.name,
     });
   };
@@ -143,14 +143,14 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
 
   const handleDelete = (moduleInstance: ModuleInstance) => {
     setDeleteModal({
-      moduleInstanceId: moduleInstance.id,
+      moduleInstanceId: moduleInstance.module_instance_id,
       moduleName: moduleInstance.name,
     });
   };
 
   const handleOpenInAppEditor = (moduleInstance: ModuleInstance) => {
     // TODO: Navigate to app editor with module highlighted
-    navigate(`/app-editor?module_instance=${moduleInstance.id}`);
+    navigate(`/app-editor?module_instance=${moduleInstance.module_instance_id}`);
   };
 
   const handleNewModule = () => {
@@ -208,13 +208,13 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
           ) : (
             modules.map((module) => (
               <div
-                key={module.id}
+                key={module.module_instance_id}
                 className={`mx-1 mb-0.5 flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group transition-colors ${
-                  selectedModuleId === module.id
+                  selectedModuleId === module.module_instance_id
                     ? 'bg-blue-50 text-blue-700'
                     : 'hover:bg-gray-50'
                 }`}
-                onClick={() => handleModuleClick(module.id)}
+                onClick={() => handleModuleClick(module.module_instance_id)}
                 onContextMenu={(e) => handleContextMenu(e, module)}
               >
                 <span className="text-xs flex-1 truncate font-medium" title={module.name}>

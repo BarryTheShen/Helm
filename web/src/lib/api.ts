@@ -85,7 +85,7 @@ export interface N8nImportResponse {
 
 // --- Module Instances ---
 export interface ModuleInstance {
-  id: string;
+  module_instance_id: string;
   user_id: string;
   template_id: string | null;
   module_type: string;
