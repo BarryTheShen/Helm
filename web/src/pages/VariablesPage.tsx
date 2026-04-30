@@ -15,7 +15,7 @@ const typeBadge: Record<string, string> = {
 };
 
 const variableSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
+  name: z.string().min(1, 'Name is required').max(255, 'Name too long'),
   type: z.enum(['text', 'number', 'boolean']),
   value: z.string(),
   description: z.string().optional(),
