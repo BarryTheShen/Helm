@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class AppCreate(BaseModel):
@@ -63,3 +63,15 @@ class AppResponse(BaseModel):
     launchpad_config: list
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("theme", mode="before")
+    @classmethod
+    def normalize_theme(cls, v):
+        """Normalize theme: coerce string values (e.g. 'light') to dict.
+
+        Some legacy apps store theme as a JSON string ('light') instead of
+        a JSON object ({}). Accept both forms and always return a dict.
+        """
+        if isinstance(v, str):
+            return {"preset": v}
+        return v
