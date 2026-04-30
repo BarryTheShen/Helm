@@ -154,8 +154,7 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
   };
 
   const handleNewModule = () => {
-    // TODO: Open template picker
-    console.log('New module');
+    navigate('/editor');
   };
 
   if (loading) {
@@ -192,10 +191,11 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
         </button>
         <button
           onClick={handleNewModule}
-          className="p-1 hover:bg-gray-100 rounded transition-colors"
-          title="New Module"
+          type="button"
+          className="inline-flex items-center gap-1 px-2 py-1 hover:bg-gray-100 rounded transition-colors text-xs text-gray-600"
         >
-          <Plus size={14} className="text-gray-600" />
+          <Plus size={14} />
+          New Module
         </button>
       </div>
 

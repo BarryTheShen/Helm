@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import PaginationParams, get_current_user_id
 from app.models.connection import Connection
+from app.models.workflow import Workflow
 from app.schemas.common import PaginatedResponse
 from app.schemas.connection import ConnectionCreate, ConnectionDetail, ConnectionOut, ConnectionUpdate
 from app.services.audit import log_audit
@@ -83,7 +84,7 @@ async def create_connection(
         user_id=user_id,
         name=body.name,
         provider=body.provider,
-        credentials_encrypted=_encrypt_credentials(body.credentials),
+        credentials_encrypted=_encrypt_credentials(body.credentials or {}),
     )
     db.add(connection)
     await db.commit()
@@ -164,6 +165,27 @@ async def update_connection(
     return ConnectionOut.model_validate(connection)
 
 
+def _find_referencing_workflows(
+    workflows, connection_name: str,
+) -> list[dict[str, str]]:
+    """Check workflow graphs for nodes referencing a connection by name.
+
+    Returns a list of dicts with 'id' and 'name' for workflows that reference
+    the given connection in their graph.nodes[].data.params.connection field.
+    """
+    referenced: list[dict[str, str]] = []
+    for wf in workflows:
+        graph = getattr(wf, "graph", None) or {}
+        nodes = graph.get("nodes", [])
+        for node in nodes:
+            data = node.get("data", {}) or {}
+            params = data.get("params", {}) or {}
+            if params.get("connection") == connection_name:
+                referenced.append({"id": wf.id, "name": wf.name})
+                break
+    return referenced
+
+
 @router.delete("/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_connection(
     connection_id: str,
@@ -180,6 +202,24 @@ async def delete_connection(
     connection = result.scalar_one_or_none()
     if connection is None:
         raise HTTPException(status_code=404, detail="Connection not found")
+
+    # Check for workflows referencing this connection
+    all_workflows = (await db.execute(
+        select(Workflow).where(Workflow.user_id == user_id)
+    )).scalars().all()
+
+    referencing = _find_referencing_workflows(all_workflows, connection.name)
+    if referencing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": (
+                    f"Cannot delete connection '{connection.name}': "
+                    f"{len(referencing)} workflow(s) reference this connection"
+                ),
+                "workflows": referencing,
+            },
+        )
 
     await db.delete(connection)
     await db.commit()

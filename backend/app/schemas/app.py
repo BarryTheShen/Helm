@@ -11,7 +11,7 @@ class AppCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     icon: str | None = None
     splash: str | None = None
-    theme: dict = Field(default_factory=dict)
+    theme: dict | str = Field(default_factory=dict)
     design_tokens: dict = Field(default_factory=dict)
     dark_mode: bool = False
     default_launch_module_id: str | None = None
@@ -25,7 +25,7 @@ class AppUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
     icon: str | None = None
     splash: str | None = None
-    theme: dict | None = None
+    theme: dict | str | None = None
     design_tokens: dict | None = None
     dark_mode: bool | None = None
     default_launch_module_id: str | None = None

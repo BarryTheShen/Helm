@@ -32,7 +32,7 @@ export function AppEditorPage() {
   const [showBrowserPreview, setShowBrowserPreview] = useState(false);
 
   const { startPreview } = usePreviewStore();
-  const currentApp = apps.find(app => app.id === currentAppId);
+  const currentApp = apps?.find(app => app.id === currentAppId);
 
   const showMsg = (type: 'success' | 'error' | 'info', text: string) => {
     setMessage({ type, text });
