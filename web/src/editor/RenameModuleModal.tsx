@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { api } from '../lib/api';
-import { AlertCircle } from 'lucide-react';
 
 interface RenameModuleModalProps {
-  moduleInstanceId: string;
+  moduleId: string;
   currentName: string;
   onClose: () => void;
   onSuccess: () => void;
@@ -14,29 +13,10 @@ interface AffectedApp {
   name: string;
 }
 
-export function RenameModuleModal({ moduleInstanceId, currentName, onClose, onSuccess }: RenameModuleModalProps) {
+export function RenameModuleModal({ moduleId, currentName, onClose, onSuccess }: RenameModuleModalProps) {
   const [newName, setNewName] = useState(currentName);
-  const [affectedApps, setAffectedApps] = useState<AffectedApp[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const loadAffectedApps = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await api.getModuleInstanceUsage(moduleInstanceId);
-        setAffectedApps(response.apps || []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load affected apps');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void loadAffectedApps();
-  }, [moduleInstanceId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +36,7 @@ export function RenameModuleModal({ moduleInstanceId, currentName, onClose, onSu
     setError(null);
 
     try {
-      await api.updateModuleInstance(moduleInstanceId, { name: trimmedName });
+      await api.put(`/api/modules/${moduleId}/config`, { name: trimmedName });
       onSuccess();
       onClose();
     } catch (err) {
@@ -86,30 +66,6 @@ export function RenameModuleModal({ moduleInstanceId, currentName, onClose, onSu
               disabled={saving}
             />
           </div>
-
-          {loading ? (
-            <div className="text-xs text-gray-400">Loading affected apps...</div>
-          ) : affectedApps.length > 0 ? (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-              <div className="flex items-start gap-2 mb-2">
-                <AlertCircle size={14} className="text-amber-600 mt-0.5 shrink-0" />
-                <div className="text-xs text-amber-800 font-medium">
-                  This will be renamed in the following apps:
-                </div>
-              </div>
-              <ul className="ml-6 space-y-1">
-                {affectedApps.map((app) => (
-                  <li key={app.id} className="text-xs text-amber-700">
-                    • {app.name}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <div className="text-xs text-gray-500">
-              This module is not currently used in any apps.
-            </div>
-          )}
 
           {error && (
             <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">

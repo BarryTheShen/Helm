@@ -1,42 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { api } from '../lib/api';
 import { AlertTriangle } from 'lucide-react';
 
 interface DeleteModuleModalProps {
-  moduleInstanceId: string;
+  moduleId: string;
   moduleName: string;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-interface AffectedApp {
-  id: string;
-  name: string;
-}
-
-export function DeleteModuleModal({ moduleInstanceId, moduleName, onClose, onSuccess }: DeleteModuleModalProps) {
-  const [affectedApps, setAffectedApps] = useState<AffectedApp[]>([]);
-  const [loading, setLoading] = useState(true);
+export function DeleteModuleModal({ moduleId, moduleName, onClose, onSuccess }: DeleteModuleModalProps) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmText, setConfirmText] = useState('');
-
-  useEffect(() => {
-    const loadAffectedApps = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await api.getModuleInstanceUsage(moduleInstanceId);
-        setAffectedApps(response.apps || []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load affected apps');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void loadAffectedApps();
-  }, [moduleInstanceId]);
 
   const handleDelete = async () => {
     if (confirmText !== moduleName) {
@@ -48,7 +24,7 @@ export function DeleteModuleModal({ moduleInstanceId, moduleName, onClose, onSuc
     setError(null);
 
     try {
-      await api.deleteModuleInstance(moduleInstanceId);
+      await api.del(`/api/sdui/modules/${moduleId}`);
       onSuccess();
       onClose();
     } catch (err) {
@@ -60,7 +36,7 @@ export function DeleteModuleModal({ moduleInstanceId, moduleName, onClose, onSuc
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl p-5 w-[520px]" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-lg shadow-xl p-5 w-[480px]" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start gap-3 mb-4">
           <div className="p-2 bg-red-100 rounded-lg">
             <AlertTriangle size={20} className="text-red-600" />
@@ -68,36 +44,12 @@ export function DeleteModuleModal({ moduleInstanceId, moduleName, onClose, onSuc
           <div className="flex-1">
             <h3 className="text-sm font-semibold text-gray-900 mb-1">Delete Module</h3>
             <p className="text-xs text-gray-600">
-              This action cannot be undone. This will permanently delete the module and all its associated data.
+              This action cannot be undone. This will permanently delete the custom module and all its associated data.
             </p>
           </div>
         </div>
 
         <div className="space-y-4">
-          {loading ? (
-            <div className="text-xs text-gray-400">Loading affected apps...</div>
-          ) : affectedApps.length > 0 ? (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <div className="text-xs text-red-800 font-medium mb-2">
-                This will affect the following apps:
-              </div>
-              <ul className="ml-4 space-y-1">
-                {affectedApps.map((app) => (
-                  <li key={app.id} className="text-xs text-red-700">
-                    • {app.name}
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-2 text-xs text-red-700">
-                The module will be removed from all these apps.
-              </div>
-            </div>
-          ) : (
-            <div className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-3">
-              This module is not currently used in any apps.
-            </div>
-          )}
-
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-2">
               Type <span className="font-mono font-semibold">{moduleName}</span> to confirm deletion:

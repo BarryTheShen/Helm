@@ -5,12 +5,12 @@ import { Plus, ChevronDown, ChevronRight, MoreVertical, Edit2, Copy, Trash2, Ext
 import { RenameModuleModal } from './RenameModuleModal';
 import { DeleteModuleModal } from './DeleteModuleModal';
 
-interface ModuleInstance {
-  module_instance_id: string;
-  module_type: string;
+interface SDUIModule {
+  module_id: string;
   name: string;
-  template_id: string | null;
-  status: string;
+  icon: string;
+  has_screen: boolean;
+  is_custom?: boolean;
 }
 
 interface ModulesTreeProps {
@@ -18,7 +18,7 @@ interface ModulesTreeProps {
 }
 
 interface ContextMenuProps {
-  moduleInstance: ModuleInstance;
+  moduleInstance: SDUIModule;
   onClose: () => void;
   onRename: () => void;
   onDuplicate: () => void;
@@ -29,7 +29,7 @@ interface ContextMenuProps {
 
 function ContextMenu({ moduleInstance, onClose, onRename, onDuplicate, onDelete, onOpenInAppEditor, position }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const isBuiltIn = moduleInstance.template_id === null;
+  const isBuiltIn = !moduleInstance.is_custom;
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -83,25 +83,29 @@ function ContextMenu({ moduleInstance, onClose, onRename, onDuplicate, onDelete,
 }
 
 export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
-  const [modules, setModules] = useState<ModuleInstance[]>([]);
+  const [modules, setModules] = useState<SDUIModule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true);
-  const [contextMenu, setContextMenu] = useState<{ moduleInstance: ModuleInstance; x: number; y: number } | null>(null);
-  const [renameModal, setRenameModal] = useState<{ moduleInstanceId: string; currentName: string } | null>(null);
-  const [deleteModal, setDeleteModal] = useState<{ moduleInstanceId: string; moduleName: string } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ moduleInstance: SDUIModule; x: number; y: number } | null>(null);
+  const [renameModal, setRenameModal] = useState<{ moduleId: string; currentName: string } | null>(null);
+  const [deleteModal, setDeleteModal] = useState<{ moduleId: string; moduleName: string } | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const selectedModuleId = searchParams.get('module_instance_id');
 
   const loadModules = async () => {
+    console.log('[ModulesTree] loadModules() — starting');
     setLoading(true);
     setError(null);
     try {
-      const response = await api.getModuleInstances();
+      const response = await api.get<{ items: SDUIModule[] }>('/api/sdui/modules');
+      const count = response.items?.length || 0;
+      console.log(`[ModulesTree] loadModules() — success: ${count} modules`);
       setModules(response.items || []);
     } catch (err) {
+      console.error('[ModulesTree] loadModules() — error:', err instanceof Error ? err.message : err);
       setError(err instanceof Error ? err.message : 'Failed to load modules');
     } finally {
       setLoading(false);
@@ -112,14 +116,15 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
     void loadModules();
   }, []);
 
-  const handleModuleClick = (moduleInstanceId: string) => {
+  const handleModuleClick = (moduleId: string) => {
+    console.log(`[ModulesTree] handleModuleClick() — selecting module: ${moduleId}`);
     if (onModuleSelect) {
-      onModuleSelect(moduleInstanceId);
+      onModuleSelect(moduleId);
     }
-    setSearchParams({ module_instance_id: moduleInstanceId });
+    setSearchParams({ module_instance_id: moduleId });
   };
 
-  const handleContextMenu = (e: React.MouseEvent, moduleInstance: ModuleInstance) => {
+  const handleContextMenu = (e: React.MouseEvent, moduleInstance: SDUIModule) => {
     e.preventDefault();
     e.stopPropagation();
     setContextMenu({
@@ -129,31 +134,35 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
     });
   };
 
-  const handleRename = (moduleInstance: ModuleInstance) => {
+  const handleRename = (moduleInstance: SDUIModule) => {
+    console.log(`[ModulesTree] context menu — rename: ${moduleInstance.name} (${moduleInstance.module_id})`);
     setRenameModal({
-      moduleInstanceId: moduleInstance.module_instance_id,
+      moduleId: moduleInstance.module_id,
       currentName: moduleInstance.name,
     });
   };
 
-  const handleDuplicate = (moduleInstance: ModuleInstance) => {
+  const handleDuplicate = (moduleInstance: SDUIModule) => {
     // TODO: Implement duplicate
-    console.log('Duplicate:', moduleInstance);
+    console.log(`[ModulesTree] context menu — duplicate: ${moduleInstance.name} (${moduleInstance.module_id})`);
   };
 
-  const handleDelete = (moduleInstance: ModuleInstance) => {
+  const handleDelete = (moduleInstance: SDUIModule) => {
+    console.log(`[ModulesTree] context menu — delete: ${moduleInstance.name} (${moduleInstance.module_id})`);
     setDeleteModal({
-      moduleInstanceId: moduleInstance.module_instance_id,
+      moduleId: moduleInstance.module_id,
       moduleName: moduleInstance.name,
     });
   };
 
-  const handleOpenInAppEditor = (moduleInstance: ModuleInstance) => {
+  const handleOpenInAppEditor = (moduleInstance: SDUIModule) => {
+    console.log(`[ModulesTree] context menu — open in app editor: ${moduleInstance.name} (${moduleInstance.module_id})`);
     // TODO: Navigate to app editor with module highlighted
-    navigate(`/app-editor?module_instance=${moduleInstance.module_instance_id}`);
+    navigate(`/app-editor?module_instance=${moduleInstance.module_id}`);
   };
 
   const handleNewModule = () => {
+    console.log('[ModulesTree] handleNewModule() — navigating to /editor');
     navigate('/editor');
   };
 
@@ -208,18 +217,18 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
           ) : (
             modules.map((module) => (
               <div
-                key={module.module_instance_id}
+                key={module.module_id}
                 className={`mx-1 mb-0.5 flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group transition-colors ${
-                  selectedModuleId === module.module_instance_id
+                  selectedModuleId === module.module_id
                     ? 'bg-blue-50 text-blue-700'
                     : 'hover:bg-gray-50'
                 }`}
-                onClick={() => handleModuleClick(module.module_instance_id)}
+                onClick={() => handleModuleClick(module.module_id)}
                 onContextMenu={(e) => handleContextMenu(e, module)}
               >
                 <span className="text-xs flex-1 truncate font-medium" title={module.name}>
                   {module.name}
-                  {module.template_id === null && (
+                  {!module.is_custom && (
                     <span className="ml-1 text-gray-400 text-[10px]">(built-in)</span>
                   )}
                 </span>
@@ -253,7 +262,7 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
 
       {renameModal && (
         <RenameModuleModal
-          moduleInstanceId={renameModal.moduleInstanceId}
+          moduleId={renameModal.moduleId}
           currentName={renameModal.currentName}
           onClose={() => setRenameModal(null)}
           onSuccess={() => void loadModules()}
@@ -262,13 +271,13 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
 
       {deleteModal && (
         <DeleteModuleModal
-          moduleInstanceId={deleteModal.moduleInstanceId}
+          moduleId={deleteModal.moduleId}
           moduleName={deleteModal.moduleName}
           onClose={() => setDeleteModal(null)}
           onSuccess={() => {
             void loadModules();
             // If the deleted module was selected, clear selection
-            if (selectedModuleId === deleteModal.moduleInstanceId) {
+            if (selectedModuleId === deleteModal.moduleId) {
               navigate('/editor');
             }
           }}
