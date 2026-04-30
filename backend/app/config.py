@@ -22,10 +22,10 @@ class Settings(BaseSettings):
     # Security
     secret_key: str = "dev-secret-key-change-in-production"
     encryption_key: str = ""
-    access_token_expire_hours: int = 720  # 30 days
+    access_token_expire_hours: int = 720  # 30 days — web admin and mobile sessions
     refresh_token_expire_days: int = 30
-    # Sessions idle longer than this many hours are rejected; default 7 days.
-    session_idle_timeout_hours: int = 168
+    # Sessions idle longer than this many hours are rejected; matches token expiry.
+    session_idle_timeout_hours: int = 720  # 30 days
 
     # Server
     server_name: str = "Helm"
