@@ -30,8 +30,10 @@ async def list_users(
 ):
     base_where = []
     if search:
-        # Escape SQL wildcards to prevent pattern matching abuse
-        escaped_search = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        # Escape LIKE wildcards: % → \%, but _ is NOT escaped because SQLite's
+        # ILIKE does not treat backslash as an escape character (no ESCAPE clause).
+        # This preserves correct substring matching for terms like "_test".
+        escaped_search = search.replace("\\", "\\\\").replace("%", "\\%")
         base_where.append(User.username.ilike(f"%{escaped_search}%"))
 
     count_q = select(func.count()).select_from(User)
