@@ -28,7 +28,7 @@ class ModuleInstanceUpdate(BaseModel):
 class ModuleInstanceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: str
+    module_instance_id: str
     user_id: str
     template_id: str | None
     module_type: str
@@ -45,7 +45,7 @@ class ModuleInstanceOut(BaseModel):
         """Convenience builder that maps created_at → installed_at."""
         return cls.model_validate(
             {
-                "id": obj.id,  # type: ignore[attr-defined]
+                "module_instance_id": obj.id,  # type: ignore[attr-defined]
                 "user_id": obj.user_id,  # type: ignore[attr-defined]
                 "template_id": obj.template_id,  # type: ignore[attr-defined]
                 "module_type": obj.module_type,  # type: ignore[attr-defined]

@@ -3,13 +3,14 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user_id
+from app.dependencies import PaginationParams, get_current_user_id
 from app.models.module_instance import ModuleInstance
 from app.models.template import SDUITemplate
+from app.schemas.common import PaginatedResponse
 from app.schemas.module_instance import ModuleInstallRequest, ModuleInstanceOut
 from app.services.audit import log_audit
 from app.services.websocket_manager import manager as ws_manager
@@ -21,19 +22,28 @@ router = APIRouter(prefix="/api/modules", tags=["module-instances"])
 # Read endpoints (Phase 4a)
 # ---------------------------------------------------------------------------
 
-@router.get("/instances", response_model=list[ModuleInstanceOut])
+@router.get("/instances", response_model=PaginatedResponse[ModuleInstanceOut])
 async def list_module_instances(
+    pagination: PaginationParams = Depends(),
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
-) -> list[ModuleInstanceOut]:
+) -> PaginatedResponse[ModuleInstanceOut]:
     """List all ModuleInstances for the authenticated user."""
     result = await db.execute(
         select(ModuleInstance)
         .where(ModuleInstance.user_id == user_id)
         .order_by(ModuleInstance.created_at.desc())
     )
-    instances = result.scalars().all()
-    return [ModuleInstanceOut.from_orm_alias(i) for i in instances]
+    all_instances = result.scalars().all()
+    total = len(all_instances)
+    instances = all_instances[pagination.offset : pagination.offset + pagination.limit]
+    return PaginatedResponse[ModuleInstanceOut](
+        items=[ModuleInstanceOut.from_orm_alias(i) for i in instances],
+        total=total,
+        limit=pagination.limit,
+        offset=pagination.offset,
+        has_more=pagination.offset + pagination.limit < total,
+    )
 
 
 @router.get("/instances/{instance_id}", response_model=ModuleInstanceOut)

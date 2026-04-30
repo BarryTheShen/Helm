@@ -3,10 +3,11 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user_id
+from app.dependencies import PaginationParams, get_current_user_id
 from app.schemas.app import (
     AppCreate,
     AppModulesUpdate,
@@ -14,6 +15,7 @@ from app.schemas.app import (
     AppUpdate,
     BottomBarConfigUpdate,
 )
+from app.schemas.common import PaginatedResponse
 from app.services import app_service
 from app.services.audit import log_audit
 from app.services.websocket_manager import manager
@@ -68,14 +70,23 @@ async def create_app(
     return AppResponse.model_validate(app)
 
 
-@router.get("", response_model=list[AppResponse])
+@router.get("", response_model=PaginatedResponse[AppResponse])
 async def list_apps(
+    pagination: PaginationParams = Depends(),
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     """List all apps for the current user."""
     apps = await app_service.list_apps(db, user_id)
-    return [AppResponse.model_validate(app) for app in apps]
+    total = len(apps)
+    apps = apps[pagination.offset : pagination.offset + pagination.limit]
+    return PaginatedResponse(
+        items=[AppResponse.model_validate(app) for app in apps],
+        total=total,
+        limit=pagination.limit,
+        offset=pagination.offset,
+        has_more=pagination.offset + pagination.limit < total,
+    )
 
 
 @router.get("/{app_id}", response_model=AppResponse)

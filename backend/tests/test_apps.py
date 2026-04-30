@@ -13,7 +13,8 @@ async def test_list_apps_empty(auth_client):
     resp = await auth_client.get(APPS)
     assert resp.status_code == 200
     data = resp.json()
-    assert data == []
+    assert data["items"] == []
+    assert data["total"] == 0
 
 
 async def test_apps_requires_auth(client):
@@ -77,9 +78,10 @@ async def test_list_apps_after_create(auth_client):
     resp = await auth_client.get(APPS)
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) == 2
-    assert data[0]["name"] == "App 1"
-    assert data[1]["name"] == "App 2"
+    assert data["total"] == 2
+    assert len(data["items"]) == 2
+    assert data["items"][0]["name"] == "App 1"
+    assert data["items"][1]["name"] == "App 2"
 
 
 async def test_get_app_by_id(auth_client):
@@ -158,7 +160,7 @@ async def test_delete_app(auth_client):
 
     # Verify app is deleted
     list_resp = await auth_client.get(APPS)
-    ids = [app["id"] for app in list_resp.json()]
+    ids = [app["id"] for app in list_resp.json()["items"]]
     assert app_id not in ids
 
 
