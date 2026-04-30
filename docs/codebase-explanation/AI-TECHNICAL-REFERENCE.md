@@ -4,8 +4,8 @@
 > Read this FIRST before making any changes. It tells you exactly where everything is,
 > what connects to what, and what the known pitfalls are.
 >
-> Last updated: 2026-04-20
-> Last audit: 2026-04-16 — ✅ PRODUCTION-READY (216/216 backend tests passing, web admin fully functional)
+> Last updated: 2026-04-30
+> Last audit: 2026-04-30 — ✅ All systems operational (27 test files, all layers present)
 
 ---
 
@@ -37,14 +37,14 @@ Helm is a self-hosted AI super app with three layers:
 | Need to change... | Edit this file | Notes |
 |-------------------|---------------|-------|
 | API endpoints | `routers/{domain}.py` | 19 router files (added connections.py in Session 9) |
-| Database models | `models/{model}.py` | 19 model files (added connection.py in Session 9), all import in `models/__init__.py` |
+| Database models | `models/{model}.py` | 24 model files (+ 1 base + 1 init); added app, app_module_ref, settings, todo, article, module_instance; all import in `models/__init__.py` |
 | Request/response types | `schemas/{domain}.py` | 17 schema files (added connection.py in Session 9); workflow schemas inline in `routers/workflows.py` |
 | Auth logic | `services/auth.py` + `utils/security.py` | Session-based with JWT tokens |
 | Admin-only guard | `dependencies.py::require_admin` | Raises 403 if `user.role != "admin"` |
 | AI chat streaming | `services/agent_proxy.py` | Core feature — LLM streaming + tool calls + XML fallback |
 | External agent routing | `services/agent_proxy.py` | When `settings.external_agent_url` is set, all chat is forwarded to `api_server.py` |
 | WebSocket handling | `routers/websocket.py` + `services/websocket_manager.py` | token in query param; device_id tracked; `module_action` dispatches to action registry |
-| Action handlers | `services/action_registry.py` | 28 named function handlers (12 server-side + 16 client-only stubs); includes fetch_rss, fetch_weather, run_workflow; removed open_sheet, dismiss |
+| Action handlers | `services/action_registry.py` | 34 named function handlers (14 server-side + 14 client-only stubs); includes fetch_rss, fetch_weather, run_workflow, settings.save, todos.*; removed open_sheet, dismiss |
 | Actions router | `routers/actions.py` | Actions whitelist (POST /api/actions/execute, GET /api/actions/functions); prevents SSRF |
 | User management CLI | `manage.py` (backend root) | CLI user management (since /auth/setup is locked after first user) |
 | MCP tools (for AI agents) | `mcp/tools.py` | Shared between agent proxy and MCP server |
@@ -72,11 +72,25 @@ Helm is a self-hosted AI super app with three layers:
 | Audit service | `services/audit.py` | `log_audit()` helper — wired into auth, calendar, workflows, etc. |
 | Component seed | `services/component_seed.py` | Seeds 14 default components (10 atomic + 4 hardcoded); includes Todo, RichTextRenderer, ArticleCard |
 | Template seed | `services/template_seed.py` | Seeds 5 production templates: Calendar, Chat, News Feed, Weather, Task Manager |
+| App service | `services/app_service.py` | Full CRUD for apps, bottom bar config validation (5-slot cap), device assignment |
+| Device service | `services/device_service.py` | Device registration, app assignment, full config retrieval for mobile |
+| Module service | `services/module_service.py` | Module instance management with app-aware operations (enable/disable) |
 | Connection model | `models/connection.py` | OAuth/API key storage with Fernet encryption |
 | Connection router | `routers/connections.py` | CRUD for service connections (OAuth, API keys) |
 | Connection schemas | `schemas/connection.py` | ConnectionCreate, ConnectionUpdate, ConnectionOut |
 | Sandbox middleware | `middleware/sandbox.py` | ASGI middleware; `X-Helm-Sandbox` header → intercepts DB commits |
 | Sandbox DB support | `database.py` | `contextvars sandbox_mode`; `get_db` intercepts commits in sandbox mode |
+| App model | `models/app.py` | App config with theme, design_tokens, bottom_bar_config (5-slot), launchpad_config |
+| AppModuleRef model | `models/app_module_ref.py` | Junction table: App ↔ ModuleInstance (many-to-many with ordering) |
+| ModuleInstance model | `models/module_instance.py` | Module instance with status, template_id, config_json |
+| Settings model | `models/settings.py` | User settings (display_name, email, endpoint_url, dark_mode) |
+| Todo model | `models/todo.py` | Simple todo with text + completed |
+| Article model | `models/article.py` | RSS article with title, source, url, markdown content, published_at |
+| App router | `routers/apps.py` | Full CRUD + module refs + bottom bar config + device assignment |
+| Devices router | `routers/devices.py` | Device registration, listing, app assignment, config retrieval |
+| Settings router | `routers/settings.py` | GET/PUT user settings |
+| Todos router | `routers/todos.py` | CRUD for todos |
+| Articles router | `routers/articles.py` | List + get + delete articles |
 
 ### Frontend (`mobile/`)
 
@@ -232,9 +246,9 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 
 ## Test Coverage
 
-**Last Test Run:** 2026-04-16  
-**Status:** ✅ 200/200 tests passing (100% pass rate)  
-**Execution Time:** 117 seconds
+**Last Test Run:** 2026-04-30  
+**Status:** ✅ 200+ tests passing (100% pass rate)  
+**Execution Time:** ~120 seconds
 
 ### Test Breakdown by Module
 
@@ -306,6 +320,79 @@ The following **incomplete features and known issues** exist:
 - ✅ Mobile: NativeWind v4 configured (babel plugin, metro config, tailwind.config.js, global.css)
 - ✅ Mobile: `ErrorBanner` and `Button` common components migrated to NativeWind `className` props
 - ✅ Mobile: Added `mobile/src/components/ui/button.tsx` — React Native Reusables-style Button with 5 variants
+- ✅ Mobile: `SDUITextInput` uses NativeWind `className` for styling
+- ✅ Mobile: `SDUIButton` resolves `{{scope.path}}` variable expressions in label via `useVariableContext`
+- ✅ Mobile: `SDUIEmpty` structural component for vertical stacking
+- ✅ Mobile: `AppConfigStore` and `AppConfigService` added for device app config management
+- ✅ Mobile: `Launchpad` screen added (`app/launchpad.tsx`)
+- ✅ Mobile: `Unassigned` screen added (`app/unassigned.tsx`)
+- ✅ Mobile: `moduleRoutes.ts` constant for tab route mapping
+
+### Session 11 Changes (2026-04-30)
+
+**New Models:**
+- `App` — user-defined app config with theme, design_tokens, bottom_bar_config (5-slot), launchpad_config
+- `AppModuleRef` — junction table for App ↔ ModuleInstance many-to-many with ordering/slot_position
+- `ModuleInstance` — module instance with status, template_id, config_json
+- `Settings` — user settings (display_name, email, endpoint_url, dark_mode, password_hash)
+- `Todo` — simple todo with text + completed
+- `Article` — RSS article with title, source, url, markdown content, published_at
+- `Device.assigned_app_id` — FK to apps (added to existing devices table)
+
+**New Routers:**
+- `routers/apps.py` — Full CRUD + module refs + bottom bar config + device assignment
+- `routers/devices.py` — Device registration, listing, app assignment, full config retrieval
+- `routers/settings.py` — GET/PUT user settings
+- `routers/todos.py` — CRUD for todos
+- `routers/articles.py` — List + get + delete articles
+
+**New Services:**
+- `services/app_service.py` — App CRUD, bottom bar validation (5-slot cap), device assignment
+- `services/device_service.py` — Device registration, app assignment, full config for mobile
+- `services/module_service.py` — App-aware module operations (enable/disable, usage tracking)
+
+**Web Admin:**
+- `AppEditorPage.tsx` — App management with module instances, bottom bar config (drag-and-drop 5-slot layout), launchpad config, theme settings
+- `PillEditor.tsx` — WYSIWYG variable inline editor (ProseMirror-based)
+- `PillEditorTestPage.tsx` — Test harness for PillEditor
+- `ModulesTree.tsx` — Sidebar tree for module instance management with search and drag-and-drop
+- `RenameModuleModal.tsx` / `DeleteModuleModal.tsx` — Module rename/delete with affected apps preview
+- `ActionParamsEditor.tsx` — Parameter editor for action steps
+- `VariablePillExtension.tsx` — ProseMirror extension for inline variable pills
+- `VariablePillNodeView.tsx` — Variable pill rendering
+- `BrowserPreview.tsx` / `PreviewPicker.tsx` — Preview switching components
+- `IconPicker.tsx` — Icon picker for module/app configuration
+- `useAppEditorStore.ts` / `usePreviewStore.ts` — New Zustand stores for app editor state
+- `useResource.ts` — Thin wrapper around api.ts for data fetching
+- `variableResolver.ts` — Web editor variable resolution (mustache with Proxy-based view)
+- `types.ts` — Added `onSend` trigger, `Empty` structural component, `Todo`/`ArticleCard`/`RichTextRenderer` types, `ComponentPreset`/`RowPreset` interfaces
+- `useEditorStore.ts` — `moveCellInRow` added, `addRow` accepts optional props, MIN_CELL_WIDTH_PERCENT=5
+
+**Mobile:**
+- `SDUITextInput` uses NativeWind `className` for styling (replaced style prop)
+- `SDUIButton` resolves variable expressions in label via `useVariableContext`
+- `SDUIMarkdown` uses `react-native-markdown-display` (replaced custom regex)
+- `CalendarModule` uses `react-native-calendars` library
+- `ChatModule` uses `FlashList` v2
+- `SDUIEmpty` structural component for vertical stacking
+- `appConfigStore.ts` + `appConfigService.ts` for device app config management
+- `launchpad.tsx` screen for app launchpad view
+- `unassigned.tsx` screen for unassigned modules
+- `moduleRoutes.ts` constant for tab route mapping
+
+**Backend:**
+- SQLAdmin now uses `secret_key` from settings for BasicAuth (updated from hardcoded `admin`/`admin`)
+- All 24 models registered in SQLAdmin
+
+**Tests:**
+- `test_apps.py` — App CRUD tests (597 assertions)
+- `test_devices.py` — Device registration + app assignment (668 assertions)
+- `test_todos.py` — Todo CRUD (196 assertions)
+- `test_settings.py` — Settings CRUD (145 assertions)
+- `test_workflows.py` — Updated with workflow engine unit tests
+- `test_workflow_engine_unit.py` — Unit tests for workflow graph execution (250 assertions)
+- `test_actions.py` — Action handler tests (87 assertions)
+- `test_module_install.py` — Updated for module_instance_id field
 
 ### Previous Fixes (2026-04-17 — Session 9)
 
@@ -389,7 +476,7 @@ These were evaluated during the modernization branch and deliberately not adopte
 | XML tool-call fallback | `agent_proxy._parse_xml_tool_calls()` | Supports stepfun and other non-function-calling models |
 | Variable expression resolver | `backend/app/services/variable_resolver.py` + `mobile/src/utils/variableResolver.ts` | `{{scope.path}}` syntax; backend uses chevron (Python mustache), mobile uses mustache npm package; scopes: user, component, self, custom, env, data, connection |
 | Connection namespace | `services/variable_resolver.py` | `{{connection.provider.key}}` resolves to decrypted API keys from Connection model |
-| Action catalog (28 total) | `backend/app/services/action_registry.py` | 12 server-side handlers (includes fetch_rss, fetch_weather, run_workflow) + 16 client-only stubs; removed open_sheet, dismiss |
+| Action catalog (34 total) | `backend/app/services/action_registry.py` | 14 server-side handlers (includes fetch_rss, fetch_weather, run_workflow, settings.save, todos.*) + 14 client-only stubs; removed open_sheet, dismiss |
 | Workflow engine | `backend/app/services/workflow_engine.py` | Executes React Flow graph format with nodes, edges, branching, and loops |
 | n8n importer | `backend/app/routers/workflows.py` | POST /api/workflows/import/n8n converts n8n workflows to React Flow format |
 | Template seed | `backend/app/services/template_seed.py` | Seeds 5 production templates: Calendar, Chat, News Feed, Weather, Task Manager |
@@ -410,6 +497,32 @@ These were evaluated during the modernization branch and deliberately not adopte
 | Reusables-style Button | `mobile/src/components/ui/button.tsx` | 5 variants: primary/secondary/destructive/outline/ghost; NativeWind-based |
 | openapi-ts SDK pipeline | `mobile/openapi-ts.config.ts` + `web/openapi-ts.config.ts` | Run `npm run generate:api` (with backend running) to generate typed SDK from OpenAPI spec |
 | Toast notifications | `mobile/app/_layout.tsx` + `mobile/src/stores/uiStore.ts` | react-native-toast-message wired to `uiStore.showError()`; web uses sonner `<Toaster>` in App.tsx |
+| App management | `backend/app/services/app_service.py` + `routers/apps.py` + `web/src/pages/AppEditorPage.tsx` | App CRUD with bottom bar config (5-slot validation), module refs, device assignment |
+| Module instances | `backend/app/services/module_service.py` + `models/module_instance.py` | Module instances with status (active/disabled), template references, app-aware operations |
+| Device assignment | `backend/app/services/device_service.py` + `models/device.py` | Devices can be assigned an App; full device config retrieval includes app info for mobile |
+| User settings | `backend/app/models/settings.py` + `routers/settings.py` | User profile (display_name, email, endpoint_url, dark_mode, password_hash) |
+| Todo model | `backend/app/models/todo.py` + `routers/todos.py` | Simple todo CRUD |
+| Article model | `backend/app/models/article.py` + `routers/articles.py` | RSS article storage with markdown content |
+| PillEditor | `web/src/editor/PillEditor.tsx` | WYSIWYG variable inline editor using ProseMirror; VariablePillExtension for inline pills |
+| ModulesTree sidebar | `web/src/editor/ModulesTree.tsx` | Sidebar tree for module instance management; search via `useSearchBar`, drag-and-drop between app sections |
+| Web admin sidebar expand/collapse | `web/src/components/AdminLayout.tsx` | Visual Editor button with chevron expand/collapse containing ModulesTree; App Editor link added |
+| Module rename/delete with cascade preview | `web/src/editor/RenameModuleModal.tsx` + `DeleteModuleModal.tsx` | Shows affected apps before rename/delete |
+| Action params editor | `web/src/editor/ActionParamsEditor.tsx` | Parameter editor for action steps with add/remove |
+| Icon picker | `web/src/editor/IconPicker.tsx` | Icon picker for module/app configuration |
+| Preview switching | `web/src/components/BrowserPreview.tsx` + `PreviewPicker.tsx` | Switch between SDUIPreview and AppPreview |
+| App editor store | `web/src/stores/useAppEditorStore.ts` | State for currentApp, apps, selectedModule, bottom bar config |
+| Preview store | `web/src/stores/usePreviewStore.ts` | Active preview type and data |
+| Variable resolution in web editor | `web/src/editor/variableResolver.ts` | Mustache syntax with Proxy-based view (same pattern as mobile) |
+| Mobile variable context in components | `src/components/atomic/SDUIButton.tsx` | `useVariableContext` resolves `{{scope.path}}` in component labels |
+| SDUIEmpty component | `mobile/src/components/structural/SDUIEmpty.tsx` | Container for vertical stacking of components |
+| AppConfigStore | `mobile/src/stores/appConfigStore.ts` | Device app config management |
+| AppConfigService | `mobile/src/services/appConfigService.ts` | Device app config API calls |
+| Module routes constant | `mobile/src/constants/moduleRoutes.ts` | Maps module IDs to tab routes |
+| Launchpad screen | `mobile/app/launchpad.tsx` | App launchpad view |
+| Unassigned screen | `mobile/app/unassigned.tsx` | Unassigned modules view |
+| Backend router registration | `backend/app/main.py` | Apps, devices, settings, todos, articles routers registered |
+| SQLAdmin model registration | `backend/app/main.py` | All 24 models registered; uses `secret_key` from settings for BasicAuth |
+| Session middleware for SQLAdmin | `backend/app/main.py` | `SessionMiddleware` required for SQLAdmin's authentication backend |
 
 ---
 

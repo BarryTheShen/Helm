@@ -2,7 +2,7 @@
 
 How to run, configure, and edit every part of the stack.
 
-> Last updated: 2026-04-16  
+> Last updated: 2026-04-30
 > Last audit: 2026-04-16 — ✅ All systems operational
 
 ---
@@ -291,16 +291,15 @@ npm run build    # outputs to web/dist/
 | Page | URL | Description |
 |------|-----|-------------|
 | Login | `/login` | Authenticates against backend `/auth/login` |
-| Dashboard | `/` | Admin stats: users, sessions, WS connections, events, workflows, notifications, screens, templates, audit entries |
-| Users | `/users` | CRUD user management (admin-only) |
-| Sessions | `/sessions` | View and revoke active sessions |
-| Audit | `/audit` | Filterable by action_type, user_id, resource_type, date range |
-| Workflows | `/workflows` | CRUD. Dropdown shows 5 of 7 trigger types (DATA_CHANGED and SERVER_EVENT missing) |
-| Templates | `/templates` | SDUI template library (CRUD + import/export) |
-| Components | `/components` | View/edit registered SDUI component definitions |
-| Variables | `/variables` | Two tabs: Variables CRUD + Data Sources management |
-| Actions & Triggers | `/actions-triggers` | Two tabs: hardcoded actions catalog (19 actions, 6 categories) + TriggerDefinition CRUD with test button |
-| Editor | `/editor` | Custom 3-panel visual SDUI editor with template library, device preview, and draft publishing |
+| Editor | `/editor` | Custom SDUI editor; sidebar has expandable ModulesTree; percentage width rendering; VariablePillExtension |
+| App Editor | `/app-editor` | App management: create apps, assign module instances, bottom bar config (5-slot drag-and-drop), launchpad, theme/dark-mode |
+| Templates | `/templates` | SDUI template library (CRUD + import/export + SDUIPreview/AppPreview) |
+| Workflows | `/workflows` | React Flow visual workflow builder with node inspector; n8n import |
+| Variables | `/variables` | Variables CRUD + Data Sources (React Hook Form + Zod) |
+| Connections | `/connections` | OAuth/API key management with Fernet encryption (React Hook Form + Zod) |
+| Settings | `/settings` | Device management (replaced Users page); React Hook Form + Zod |
+| Logs | `/logs` | Merged Sessions + Audit Logs |
+| Pill Editor Test | `/pill-editor-test` | Test harness for PillEditor variable inline editing |
 
 ### Custom SDUI Editor
 

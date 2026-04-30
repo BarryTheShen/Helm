@@ -1,6 +1,6 @@
 # Agents, MCP, Workflows & Additional Systems
 
-> Last updated: 2026-04-14
+> Last updated: 2026-04-30
 
 ## Tier 1: TLDR
 
@@ -177,7 +177,7 @@ All functions are `async`. Main `execute_tool(name, args, user_id)` dispatcher.
 ### How it works
 - Uses `APScheduler` with `AsyncIOScheduler(timezone="UTC")`
 - Started in `main.py` lifespan (`start_scheduler()`)
-- On startup: scans DB for all active SCHEDULE workflows → registers cron jobs
+- On startup: scans DB for all active onSchedule workflows → registers cron jobs
 
 ### Trigger Types
 
@@ -192,6 +192,23 @@ All functions are `async`. Main `execute_tool(name, args, user_id)` dispatcher.
 | `SERVER_EVENT` | — | Exists in enum; not yet wired to a firing site |
 
 ⚠️ `DATA_CHANGED` and `SERVER_EVENT` exist in the enum but the Workflows page dropdown only shows 5 types (these two are missing from the UI dropdown).
+
+### Workflow Structure (React Flow Graph)
+- `graph` field stores React Flow JSON: `{nodes: [...], edges: [...]}`
+- `trigger_type`: `onSchedule`, `onDataChange`, `onServerEvent`, `manual`
+- `trigger_config`: JSON config (e.g., `{cron: "0 9 * * *"}` for onSchedule)
+
+### Node Types
+- `action` — executes MCP tool via `execute_tool()`
+- `condition` — evaluates expression, branches on true/false edges
+- `switch` — multi-way branching based on expression
+- `loop` — iterates over array, executes subgraph for each item
+
+### Execution
+- Topological sort via in-degree queue
+- Context passing between nodes (`context.results[node_id]`)
+- Branching via edge `sourceHandle` matching condition results
+- Max iterations limit to prevent infinite loops
 
 ### Workflow Action
 `action_config.tool` + `action_config.params` → `execute_tool(tool, merged_args, user_id)` in `mcp/tools.py`.

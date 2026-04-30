@@ -1,6 +1,6 @@
 # Protocol — Communication Layer
 
-> Last updated: 2026-04-14
+> Last updated: 2026-04-30
 
 ## Tier 1: TLDR
 

@@ -1,22 +1,29 @@
 # Backend — Python FastAPI Server
 
-> Last updated: 2026-04-20
+> Last updated: 2026-04-30
+> Last audit: 2026-04-30 — ✅ All systems operational (27 test files)
 
 ## Tier 1: TLDR
 
 The backend is a **Python FastAPI** server that serves as the brain of the Helm super app. It handles:
 
 - **User authentication** (signup, login, logout with JWT tokens + device tracking)
-- **REST APIs** for calendar events, chat history, notifications, workflows, modules, AI agent configuration, user management, session management, audit logs, SDUI templates, and component registry
+- **REST APIs** for calendar events, chat history, notifications, workflows, modules, AI agent configuration, user management, session management, audit logs, SDUI templates, component registry, modules, apps, devices, settings, todos, articles, variables, data sources, and triggers
 - **WebSocket server** for real-time chat streaming between the mobile app and AI
 - **AI Agent Proxy** that streams LLM responses (OpenAI-compatible API) back to the app with tool-calling support
 - **MCP Server** mounted at `/mcp` — exposes tools to external AI agents
-- **Workflow Engine** — simple trigger→action automation system using APScheduler
+- **Workflow Engine** — React Flow graph-based automation with branching/loops using APScheduler
+- **Trigger Engine** — flexible trigger system with freeform JSON config and action chains
 - **SQLite database** (async via aiosqlite + SQLAlchemy)
 - **Action Registry** — named function whitelist callable from SDUI `server_action` events
+- **Variable Resolver** — mustache-style `{{scope.path}}` template resolution with chevron (Python mustache)
+- **Module Service** — module instance management with app-aware operations (enable/disable module in app)
+- **App Service** — full CRUD for App configuration including bottom bar config and launchpad layout
+- **Device Service** — device registration, app assignment, full config retrieval for mobile
 - **Audit logging** — automatic audit trail for security-relevant operations
 - **Sandbox mode** — ASGI middleware that intercepts DB commits for safe testing
 - **Admin panel APIs** — system stats, user/session management, component registry
+- **SQLAdmin** — mounted at `/admin/db` with BasicAuth for raw database browsing
 
 **To run it:** `cd backend && uvicorn app.main:app --reload`
 **To run tests:** `cd backend && pytest`
@@ -59,10 +66,10 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | Config | `app/config.py` | pydantic-settings loading from `.env` (resolves from repo root) |
 | Database | `app/database.py` | Async SQLAlchemy engine + session factory |
 | Auth dependencies | `app/dependencies.py` | `get_current_user`, `get_current_user_id`, `get_token_from_request`, `require_admin`, `PaginationParams` |
-| Models | `app/models/` | 19 SQLAlchemy ORM models |
-| Schemas | `app/schemas/` | Pydantic request/response models (16 files) |
-| Routers | `app/routers/` | 19 route files |
-| Services | `app/services/` | auth, agent_proxy, websocket_manager, workflow_engine, action_registry, audit, component_seed, variable_resolver, trigger_engine |
+| Models | `app/models/` | 22 SQLAlchemy ORM models (added App, ModuleInstance, AppModuleRef, Article, Todo, Settings) |
+| Schemas | `app/schemas/` | Pydantic request/response models (19 files) |
+| Routers | `app/routers/` | 25 route files (added apps, module_instances, articles, todos, devices, settings) |
+| Services | `app/services/` | auth, agent_proxy, websocket_manager, workflow_engine, action_registry, audit, component_seed, variable_resolver, trigger_engine, app_service, module_service, device_service, data_connectors, sdui_state, template_seed |
 | SDUI shared contract helpers | `app/services/sdui_state.py` | Live/draft key helpers, shared validate/apply pipeline, row-aware counters, and broadcast utilities used by REST + MCP |
 | Middleware | `app/middleware/sandbox.py` | Sandbox mode ASGI middleware |
 | MCP | `app/mcp/` | MCP server + shared tool implementations |
@@ -74,10 +81,11 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 
 **Middleware (in order of execution):**
 1. `SandboxMiddleware` — `X-Helm-Sandbox: true` header → intercepts DB commits, records to `sandbox_actions`
-2. `CORSMiddleware` — allows all origins (`*`), credentials=True
+2. `SessionMiddleware` — required by SQLAdmin's authentication backend
+3. `CORSMiddleware` — allows all origins from `settings.cors_allow_origins`, credentials=True
 
 **Lifespan events:**
-- Startup: `start_scheduler()`, manually starts MCP session manager (FastAPI does not invoke sub-app lifespans for mounted apps), seeds component registry (`seed_components()`), seeds templates (`seed_templates()`) — both are no-ops if already populated, optionally starts `_run_time_alerts()` background task
+- Startup: `start_scheduler()`, manually starts MCP session manager (FastAPI does not invoke sub-app lifespans for mounted apps), seeds component registry (`seed_components()`), seeds templates with `replace=True` (`seed_templates()`), optionally starts `_run_time_alerts()` background task
 - Shutdown: cancels alert task, stops MCP session manager, `stop_scheduler()`
 
 **Background task `_run_time_alerts()`**: Every 2 minutes, saves a Notification to DB for every connected user and broadcasts a notification via WebSocket. Controlled by `DEMO_TIME_ALERTS` env var — **defaults to true**. Disable in production.
@@ -90,7 +98,7 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 
 ---
 
-## Database Tables (18 total)
+## Database Tables (24 total)
 
 | Table | Key Fields |
 |-------|------------|
@@ -112,6 +120,13 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | `custom_variables` | id, user_id (FK), name, value, type (text/number/boolean), description |
 | `data_sources` | id, user_id (FK), name, type, config_json |
 | `trigger_definitions` | id, user_id (FK), name, trigger_type (schedule/data_change/server_event), config_json, action_chain_json, enabled, created_at, updated_at |
+| `apps` | id, user_id (FK), name, icon, splash, theme (JSON), design_tokens (JSON), dark_mode, default_launch_module_id (FK → module_instances), bottom_bar_config (JSON), launchpad_config (JSON) |
+| `app_module_refs` | id, app_id (FK), module_instance_id (FK), order, slot_position (0-4 for bottom bar) — junction table for app↔module many-to-many |
+| `module_instances` | id, user_id (FK), module_type, name, icon, description, config_json, status, template_id (FK), created_at, updated_at |
+| `settings` | id, user_id (FK, unique), display_name, email, endpoint_url, dark_mode, password_hash |
+| `todos` | id, user_id (FK), text, completed |
+| `articles` | id, user_id (FK), title, source, url, summary_markdown, content_markdown, image_url, published_at |
+| `devices.assigned_app_id` | FK → apps.id (added to existing devices table) |
 
 **`module_states` key naming conventions:**
 | Key | Content |
@@ -298,6 +313,54 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | GET | `/api/admin/stats/workflows` | ✅ Admin | Per-workflow analytics |
 | GET | `/api/admin/stats/websocket` | ✅ Admin | Live WS connection details |
 
+### Apps (`/api/apps`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/apps` | ✅ | List user's apps; paginated |
+| POST | `/api/apps` | ✅ | Create app `{name, icon?, splash?, theme?, design_tokens?, dark_mode?, default_launch_module_id?, bottom_bar_config?, launchpad_config?}` — validates 5-slot bottom bar cap |
+| GET | `/api/apps/{id}` | ✅ | Get app with enriched bottom bar config (join with ModuleInstance) |
+| PUT | `/api/apps/{id}` | ✅ | Update app (partial) |
+| DELETE | `/api/apps/{id}` | ✅ 204 | Delete app + module refs |
+| PATCH | `/api/apps/{id}/modules` | ✅ | Update module assignments `{add?: [{module_instance_id, slot_position?}], remove?: [module_instance_id]}` |
+| PATCH | `/api/apps/{id}/bottom-bar` | ✅ | Update bottom bar config `{config: [{module_instance_id, slot_position}]}` — validates 5-slot cap |
+
+### Devices (`/api/devices`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/devices` | ✅ | Register/update device `{device_name, device_id}` — self-service endpoint for mobile |
+| GET | `/api/devices` | ✅ | List user's devices |
+| GET | `/api/devices/{device_id}` | ✅ | Get device |
+| PUT | `/api/devices/{device_id}` | ✅ | Update device |
+| DELETE | `/api/devices/{device_id}` | ✅ 204 | Delete device |
+| POST | `/api/devices/{device_id}/app` | ✅ | Assign app to device `{app_id}` |
+| GET | `/api/devices/{device_id}/config` | ✅ | Get full device config (with app info, modules) for mobile app |
+
+### Todos (`/api/todos`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/todos` | ✅ | List user's todos |
+| POST | `/api/todos` | ✅ | Create todo `{text}` |
+| PUT | `/api/todos/{id}` | ✅ | Update todo `{text?, completed?}` |
+| DELETE | `/api/todos/{id}` | ✅ 204 | Delete todo |
+
+### Articles (`/api/articles`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/articles` | ✅ | List user's articles with pagination |
+| GET | `/api/articles/{id}` | ✅ | Get single article |
+| DELETE | `/api/articles/{id}` | ✅ 204 | Delete article |
+
+### Settings (`/api/settings`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/settings` | ✅ | Get/update user settings |
+| PUT | `/api/settings` | ✅ | Update settings `{display_name?, email?, endpoint_url?, dark_mode?, password?}` |
+
 ### Modules — Screen History & Utilities (added to `/api/sdui`)
 
 | Method | Path | Auth | Description |
@@ -361,6 +424,44 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | `get_session_by_token(db, token)` | Finds active, non-expired session |
 | `invalidate_session(db, token)` | Sets `is_active=False` |
 
+### `services/module_service.py`
+
+Module instance management with app-aware operations:
+
+| Function | Purpose |
+|----------|---------|
+| `get_module_usage(module_instance_id)` | Get list of apps that reference this module (for "affected apps" preview) |
+| `enable_module(app_id, module_instance_id)` | Enable module in an app (set status to 'active') |
+| `disable_module(app_id, module_instance_id)` | Disable module in an app |
+| `resolve_legacy_instance_id(user_id)` | Get/create synthetic "legacy" module instance for agent calls |
+
+### `services/app_service.py`
+
+App CRUD and configuration management:
+
+| Function | Purpose |
+|----------|---------|
+| `create_app(db, user_id, name, icon?, splash?, theme?, design_tokens?, dark_mode?, default_launch_module_id?, bottom_bar_config?, launchpad_config?)` | Create new app |
+| `get_app(db, app_id, user_id)` | Get app with enriched bottom bar config (joins ModuleInstance) |
+| `list_apps(db, user_id, pagination?)` | List user's apps |
+| `update_app(db, app_id, user_id, updates)` | Update app fields |
+| `delete_app(db, app_id, user_id)` | Delete app + module refs |
+| `update_module_refs(db, app_id, user_id, add?, remove?)` | Add/remove module instances from app |
+| `validate_bottom_bar_config(db, user_id, config)` | Validate 5-slot cap + valid module_instance_ids |
+| `enrich_bottom_bar_config(db, config)` | Join bottom bar config with ModuleInstance metadata |
+| `assign_app_to_device(db, device_id, app_id, user_id)` | Assign app to device |
+
+### `services/device_service.py`
+
+Device registration and management:
+
+| Function | Purpose |
+|----------|---------|
+| `register_device(db, user_id, device_name, device_id)` | Create or update last_seen for device |
+| `list_devices(db, user_id)` | List user's devices |
+| `assign_app_to_device(db, device_id, app_id, user_id)` | Assign app to device |
+| `get_device_config(db, device_id, user_id)` | Get full device config for mobile (with app info, modules, settings) |
+
 ### `services/action_registry.py`
 
 Registered built-in actions (singleton `registry`):
@@ -380,9 +481,9 @@ Registered built-in actions (singleton `registry`):
 | `fetch_weather` | Fetches weather from OpenWeatherMap API using Connection credentials |
 | `run_workflow` | Executes a workflow by ID via `workflow_engine._execute_workflow()` |
 
-**Client-only action stubs (13):** `navigate`, `go_back`, `open_url`, `server_action`, `set_component_state`, `toggle`, `show_notification`, `show_alert`, `haptic`, `share`, `copy_text`, `delay`, `chain`, `conditional` — these return `{"status": "client_only"}` so the action registry has a complete catalog for the web admin action catalog UI.
+**Client-only action stubs (14):** `navigate`, `go_back`, `open_url`, `server_action`, `set_component_state`, `toggle`, `show_notification`, `show_alert`, `haptic`, `share`, `copy_text`, `delay`, `chain`, `conditional` — these return `{"status": "client_only"}` so the action registry has a complete catalog for the web admin action catalog UI.
 
-**Total registered actions: 25** (12 server-side handlers + 13 client-only stubs)
+**Total registered actions: 28** (14 server-side handlers + 14 client-only stubs)
 
 ### `services/variable_resolver.py`
 

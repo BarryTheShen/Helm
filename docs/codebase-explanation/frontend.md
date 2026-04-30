@@ -1,6 +1,6 @@
 # Frontend — React Native (Expo) Mobile App + Web Admin
 
-> Last updated: 2026-04-20
+> Last updated: 2026-04-30
 
 ## Tier 1: TLDR
 
@@ -458,7 +458,7 @@ A separate React + TypeScript web application for backend administration. **Not 
 | Vite | Build tool + dev server |
 | React 19 + TypeScript | UI framework |
 | Tailwind CSS | Styling |
-| Zustand | Auth state management |
+| Zustand | App + auth + preview state management |
 | React Router | Client-side routing |
 | React Flow | Workflow visual editor |
 | @dnd-kit/sortable | Row drag-and-drop in EditorCanvas (Session 10) |
@@ -472,80 +472,96 @@ A separate React + TypeScript web application for backend administration. **Not 
 ```
 web/src/
 ├── main.tsx              → React entry point
-├── App.tsx               → React Router + auth guard + AdminLayout
+├── App.tsx               → React Router + auth guard + AdminLayout + sonner Toaster
 ├── index.css             → Tailwind globals
 ├── components/
-│   └── AdminLayout.tsx   → Sidebar nav + top bar
+│   ├── AdminLayout.tsx   → Sidebar nav + top bar; Session 9: restructured sidebar; Session 11: App Editor link
+│   ├── SDUIPreview.tsx   → Template preview with simplified component renderers
+│   ├── AppPreview.tsx    → Whole app preview with tab navigation
+│   ├── PreviewPicker.tsx → Preview mode picker (browser vs device)
+│   ├── BrowserPreview.tsx → Browser-based full app preview modal
+│   └── AppEditor/
+│       └── BottomBarConfig.tsx → Draggable bottom bar slot configuration (Session 11)
 ├── pages/
 │   ├── LoginPage.tsx     → Auth against /auth/login
-│   ├── UsersPage.tsx     → CRUD /api/admin/users (Session 9: moved to Settings)
-│   ├── WorkflowsPage.tsx → React Flow visual workflow builder (Session 9: major rewrite)
-│   ├── TemplatesPage.tsx → SDUI template CRUD + import/export + preview features (Session 9: added SDUIPreview and AppPreview)
-│   ├── ConnectionsPage.tsx → NEW Session 9: OAuth/API key management with Fernet encryption
-│   ├── LogsPage.tsx      → NEW Session 9: merged Sessions + Audit Logs
-│   ├── VariablesPage.tsx → Custom variable management
-│   └── EditorPage.tsx    → Custom SDUI editor shell + toolbar + status bar; toolbar and status bar use actual `deviceWidth`/`deviceHeight` from Zustand store for display; confirms destructive unsaved-change flows, preserves legacy V1 section titles as heading rows, keeps imported V1 section components vertically stacked by emitting one row per legacy component, and supports module CRUD (create custom modules with name+icon, delete custom modules with ✦ marker)
+│   ├── AppEditorPage.tsx → NEW Session 11: Multi-app management; 3-column layout with sidebar + iPhone mockup center + right panel
+│   ├── EditorPage.tsx    → Custom SDUI editor; ModulesTree sidebar using SDUIModule interface; draft save/push-live; session logs for debugging
+│   ├── TemplatesPage.tsx → SDUI template CRUD + import/export + preview (Session 9)
+│   ├── WorkflowsPage.tsx → React Flow visual workflow builder with node inspector (Session 9)
+│   ├── VariablesPage.tsx → Custom variable management with React Hook Form + Zod (Session 10)
+│   ├── ConnectionsPage.tsx → OAuth/API key management with Fernet encryption (Session 9)
+│   ├── SettingsPage.tsx  → General settings (Session 9: replaced Users page)
+│   ├── LogsPage.tsx      → Merged Sessions + Audit Logs (Session 9)
+│   └── PillEditorTestPage.tsx → Test harness for PillEditor variable inline editing
 ├── editor/
-│   ├── types.ts          → Editor types, row visual props, device presets, component registry; preserves lowercase legacy runtime component types as read-only, non-authorable inspection entries instead of normalizing them away, filters non-authorable picker entries, and requires a non-empty `server_action.function` plus valid JSON-object `params` when provided before persistence
-│   ├── templateLibrary.ts→ Local starter screens + reusable row templates aligned to live component props; starter `InputBar` templates no longer seed dead `send_to_agent.message` defaults
-│   ├── componentSchemas.ts → Dynamic property schema definitions for the inspector; unsupported imported actions fall back to generic editable fields, but only supported authorable actions are offered for new edits; Session 9: added Todo, RichTextRenderer, ArticleCard, Calendar variant schemas
-│   ├── useEditorStore.ts → Rows-first Zustand editor contract, history, selection, device preview state
+│   ├── types.ts          → Editor types, row visual props, device presets, component registry; preserves lowercase legacy types as read-only; requires valid server_action.function+params before persistence
+│   ├── templateLibrary.ts→ Local starter screens + reusable row templates; starter InputBar no longer seeds dead send_to_agent.message defaults
+│   ├── componentSchemas.ts → Dynamic property schemas for inspector; only supported authorable actions offered for new edits; Session 9: Todo, RichTextRenderer, ArticleCard, Calendar variants
+│   ├── useEditorStore.ts → Rows-first Zustand contract, 50-state undo/redo, selection, device preview
 │   ├── StructureTree.tsx → Left panel tree + JSON copy actions
-│   ├── EditorCanvas.tsx  → Center canvas with cell resize, row-height resize, stable multi-step row drag via @dnd-kit/sortable (replaced HTML5 DnD in Session 10), external drag handles, percentage width rendering
-│   ├── PropertyInspector.tsx → Right panel editor for rows/components with explicit auto width controls, uniform + per-side padding, runtime-aligned props, InputBar-specific action narrowing with fallback handling for imported unknown actions, and read-only summaries for preserved legacy runtime payloads including structured action/list/stat/form data; Session 9: width toggle (flex vs percentage), VariableInput integration
-│   ├── VariablePicker.tsx → NEW Session 9: @ trigger variable picker with namespace support
-│   ├── VariableInput.tsx → NEW Session 9: Text input with variable picker integration
-│   ├── useVariablePicker.tsx → NEW Session 9: Hook for variable picker state management
-│   └── ComponentPicker.tsx → Component type chooser for empty cells
-├── lib/
-│   ├── api.ts            → Typed fetch wrapper for all admin endpoints; login can suppress the global 401 handler; Session 9: added connection endpoints, workflow graph endpoints, template preview
-│   ├── puckConfig.tsx    → Deprecated delete stub; current editor does not import it
-│   ├── sduiAdapter.ts    → Legacy normalization helper retained from the old editor
-│   └── utils.ts          → Shared helpers
-├── components/
-│   ├── AdminLayout.tsx   → Sidebar nav + top bar; Session 9: restructured sidebar (Visual Editor, Templates, Workflows, Variables, Connections, Advanced [Logs], Settings)
-│   ├── SDUIPreview.tsx   → NEW Session 9: Template preview component with simplified component renderers
-│   └── AppPreview.tsx    → NEW Session 9: Whole app preview with tab navigation
-└── stores/
-    └── authStore.ts      → Zustand auth store (token, user, serverUrl); failed `/auth/login` requests do not clear stored auth state
+│   ├── EditorCanvas.tsx  → Center canvas with cell resize, row-height resize, @dnd-kit/sortable multi-step row drag, external drag handles, percentage width rendering
+│   ├── PropertyInspector.tsx → Right panel editor with auto width controls, uniform + per-side padding, InputBar action narrowing, read-only summaries for legacy payloads; Session 9: width toggle, VariableInput integration
+│   ├── VariablePicker.tsx → @ trigger variable picker with namespace support
+│   ├── VariableInput.tsx → Text input with variable picker integration
+│   ├── useVariablePicker.tsx → Hook for variable picker state management
+│   ├── ComponentPicker.tsx → Component type chooser for empty cells
+│   ├── ModulesTree.tsx   → Module instance tree sidebar; SDUIModule interface (module_id, name, icon, has_screen, is_custom); direct /api/sdui/modules fetch; RenameModuleModal and DeleteModuleModal
+│   ├── RenameModuleModal.tsx → Inline rename dialog for modules
+│   ├── DeleteModuleModal.tsx → Inline delete dialog for modules with redirect on success
+│   ├── PillEditor.tsx    → Variable pill inline editor with @ trigger
+│   ├── VariablePillExtension.ts → TipTap/ProseMirror extension for variable pills
+│   ├── VariablePillNodeView.tsx → Node view for pill rendering in editor
+│   ├── variableResolver.ts → Variable resolution for editor
+│   ├── ActionParamsEditor.tsx → Parameter editor for action steps
+│   ├── RuleBuilder.tsx   → Notion-style visual rule builder for action chains
+│   ├── IconPicker.tsx    → Emoji/icon picker for module/app icons
+│   ├── PILL_EDITOR_QUICK_REFERENCE.ts → Documentation for pill editor behavior
+│   ├── VARIABLE_PICKER.md → Variable picker documentation
+│   └── pill-editor.css   → Pill editor styles
+├── stores/
+│   ├── authStore.ts      → Zustand auth store (token, user, serverUrl); failed /auth/login requests do not clear auth state
+│   ├── useAppEditorStore.ts → NEW Session 11: App management state (App, ModuleInstance, BottomBarSlot types; CRUD operations)
+│   └── usePreviewStore.ts → NEW Session 11: Preview mode state (startPreview, exitPreview, previewAppConfig, previewType)
+└── lib/
+    ├── api.ts            → Typed fetch wrapper; login suppresses global 401 handler; Session 9: connections, workflows, template preview; Session 10: openapi-ts SDK; Session 11: app endpoints, module instance endpoints, data source CRUD, trigger CRUD + test
+    └── utils.ts          → Shared helpers
 ```
 
 ### Custom SDUI Editor
 
 The editor page (`/editor`) is a custom React + Zustand SDUI editor built from `EditorPage.tsx` and the `web/src/editor/` folder. It loads live and draft module screens in parallel, prefers the draft when both exist, surfaces module/screen load failures instead of fabricating fallback module state, normalizes legacy payloads in `normalizeScreenData()`, preserves V1 section titles by turning them into heading rows, imports each legacy section component into its own row so V1 section stacks stay vertical instead of being flattened horizontally, preserves lowercase legacy runtime components including legacy form payloads as type-stable read-only inspectable entries rather than rewriting them or surfacing them as Unknown, and no longer depends on a Puck translation layer.
 
-**Module CRUD:** The editor supports creating and deleting custom modules. A (+) button next to the module dropdown opens a create dialog (name, icon). Custom modules appear in the dropdown with a ✦ marker and a trash button for deletion. Created via `POST /api/sdui/modules`, deleted via `DELETE /api/sdui/modules/{module_id}`. The `ModuleInfo` type includes an `is_custom` field to distinguish custom from built-in modules.
+**Module selection:** Uses `SDUIModule` interface (`module_id`, `name`, `icon`, `has_screen`, `is_custom`) loaded from `GET /api/sdui/modules`. URL param `module_instance_id` maps to `module_id`. Session logs (`[Editor]` prefix) added for debugging module loads and screen fetches.
 
 **Core layout:**
 - The left panel combines `StructureTree` with a collapsible Template Library
 - `StructureTree` includes a screen root item plus row/cell hierarchy, row reorder, duplication/delete, and copy-screen/copy-row JSON actions
-- The Template Library surfaces saved full-screen templates from `/api/templates` and local starter/row templates from `templateLibrary.ts`; local starter templates stay aligned with live runtime props, the form starter remains a supported single-message `Contact Intake` flow using `InputBar` + `send_to_agent`, and starter `InputBar` templates no longer pre-seed dead `send_to_agent.message` values
+- The Template Library surfaces saved full-screen templates from `/api/templates` and local starter/row templates from `templateLibrary.ts`
 
 **Editing flow:**
-- Device preview supports presets, rotation, and custom width/height values with an explicit Apply action; the toolbar and status bar read actual `deviceWidth`/`deviceHeight` from the Zustand store (not swapped preset values) so display text stays correct across all device/orientation combinations
-- The canvas provides component previews, add-row buttons, row drag handles, cell width resize handles, and direct row-height drag handles; preserved lowercase legacy runtime components render read-only previews and switch the hover affordance from `Edit` to `Inspect`, multi-step row dragging uses a 50px movement threshold and 300ms debounce to prevent overshoot (rows move exactly 1 position per drag gesture), and adjacent-cell resize changes are previewed live and committed once on mouse-up so undo reverts the full resize in a single step
-- **Session 9:** External drag handles for rows, percentage width rendering in canvas
-- `ComponentPicker` only offers components marked authorable in `types.ts`, so internal-only components stay out of the add-component flow
-- `PropertyInspector` edits row height, cell count, cell widths, background, uniform and per-side padding, horizontal scrollability, and component props/actions; preserved legacy runtime payloads instead get read-only summaries, including structured action/list/stat/form data, cell widths preserve `auto` through explicit Auto controls instead of coercing unset widths to numbers, side-specific padding inputs stay blank when inheriting the uniform row padding value, runtime-aligned schemas no longer expose the removed `ChatModule.showHistory` or `NotesModule.showToolbar` controls, new actions stay limited to the supported authorable set (`navigate`, `server_action`, `open_url`, `go_back`, `send_to_agent`, `dismiss`, `copy_text`), `InputBar` narrows new action authoring further to `None`, `Send to Agent`, and `Server Action`, and imported unsupported actions still fall back to generic editable fields, including imported `InputBar` actions outside that narrowed set
-- **Session 9:** Width toggle (flex vs percentage), VariablePicker with @ trigger for variable insertion in text fields
-- Switching modules, applying saved server templates, importing JSON, applying local screen templates, and appending local row templates all prompt before destructive unsaved-change paths
-- Switching modules loads the live screen and draft together; pending drafts win so review/edit resumes from the newest unsaved state
-- If module or screen fetch fails, `EditorPage` shows the error state and disables editing for that selection instead of fabricating empty module data
-- Save stores a draft, while Push Live saves then auto-approves it; draft badges expose Approve/Reject controls when a pending draft exists
-- Delete Screen is only enabled when the selected module has a persisted live screen or a pending draft
-- JSON view and JSON import are built into the editor; import preserves nested components and runtime-style action objects
+- Device preview supports presets, rotation, and custom width/height values with an explicit Apply action; the toolbar and status bar read actual `deviceWidth`/`deviceHeight` from the Zustand store
+- The canvas provides component previews, add-row buttons, row drag handles, cell width resize handles, and direct row-height drag handles
+- Multi-step row dragging uses a 50px movement threshold and 300ms debounce to prevent overshoot
+- `ComponentPicker` only offers components marked authorable in `types.ts`
+- `PropertyInspector` edits row height, cell count, cell widths, background, uniform and per-side padding, horizontal scrollability, and component props/actions
+- New actions limited to supported authorable set (`navigate`, `server_action`, `open_url`, `go_back`, `send_to_agent`, `dismiss`, `copy_text`)
+- Save stores a draft; Push Live saves then auto-approves it
+- Delete Screen only enabled when module has a persisted live screen or pending draft
 
-**State + status:**
-- `useEditorStore.ts` exposes the rows-first contract shared by `EditorPage`, `EditorCanvas`, `PropertyInspector`, and `StructureTree`: `rows`, `selection`, `history/historyIndex` (50-state undo/redo), `deviceWidth/deviceHeight/isLandscape`, and actions for screen load/apply/serialize, device changes, row CRUD/reorder, cell sizing, and component prop updates
-- The store preserves top-level screen metadata in an internal snapshot and re-serializes runtime output through `getScreen()`
-- Persistence is gated by `getPersistableScreen()`, which rejects `server_action` values unless `function` is non-empty and, when `params` are provided, they are blank or parse to a JSON object before drafts, push-live writes, or template saves
-- Local screen templates, local row templates, and JSON import all go through the history-preserving apply path, so one undo returns to the pre-apply or pre-import screen state
-- The status bar shows unsaved changes, last saved time, current preview dimensions, and AI connection status
-- `web/src/lib/puckConfig.tsx` remains only as a deprecated delete stub; the current editor does not import it
+### App Editor (`/app-editor`)
 
-No active cosmetic issues are currently documented for the custom editor.
+**NEW in Session 11:** Multi-app management page with 3-column layout.
 
-### Session 9 Web Admin Changes Summary
+- **Left sidebar:** Bottom bar configuration with drag-and-drop slot management (5-slot cap)
+- **Center:** iPhone mockup preview showing bottom bar layout
+- **Right panel:** Launchpad section (modules not in bottom bar) + app properties (name, icon, dark mode)
+- **State:** `useAppEditorStore` — `App` type with id, user_id, name, icon, splash, theme, design_tokens, dark_mode, default_launch_module_instance_id, bottom_bar_config, launchpad_config
+- **Preview:** `usePreviewStore` with `startPreview()` launching browser-based iframe preview of app configuration
+- **API calls:** `getApps()`, `createApp()`, `updateApp()`, `deleteApp()`, `updateAppBottomBar()` via `/api/apps` endpoints
+
+---
+
+## Session 9 Web Admin Changes Summary
 
 **Sidebar restructure:**
 - New order: Visual Editor, Templates, Workflows, Variables, Connections, Advanced (collapsible), Settings
@@ -565,7 +581,6 @@ No active cosmetic issues are currently documented for the custom editor.
 **TemplatesPage:**
 - Added SDUIPreview component for template preview
 - Added AppPreview component for whole app preview with tab navigation
-- Preview features integrated into template management
 
 **Editor improvements:**
 - Percentage widths for cells (flex vs percentage toggle)
