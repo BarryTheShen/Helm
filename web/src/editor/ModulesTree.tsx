@@ -90,7 +90,7 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
   const [contextMenu, setContextMenu] = useState<{ moduleInstance: ModuleInstance; x: number; y: number } | null>(null);
   const [renameModal, setRenameModal] = useState<{ moduleInstanceId: string; currentName: string } | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ moduleInstanceId: string; moduleName: string } | null>(null);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const selectedModuleId = searchParams.get('module_instance_id');
@@ -116,7 +116,7 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
     if (onModuleSelect) {
       onModuleSelect(moduleInstanceId);
     }
-    navigate(`/editor?module_instance_id=${moduleInstanceId}`);
+    setSearchParams({ module_instance_id: moduleInstanceId });
   };
 
   const handleContextMenu = (e: React.MouseEvent, moduleInstance: ModuleInstance) => {
