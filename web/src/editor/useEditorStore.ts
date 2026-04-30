@@ -385,6 +385,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
   clipboard: null,
 
   loadScreen: (screen) => {
+    console.log('[EditorStore] loadScreen() — rows:', screen && 'rows' in screen ? (screen as EditorScreen).rows.length : 'null');
     const normalized = normalizeScreen(screen);
 
     set((state) => ({
@@ -398,13 +399,16 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
       deviceHeight: state.deviceHeight,
       isLandscape: state.isLandscape,
     }));
+    console.log(`[EditorStore] loadScreen() — done: ${normalized.rows.length} rows, ${normalized.rows.reduce((s, r) => s + r.cells.length, 0)} cells`);
   },
 
   applyScreen: (screen) => {
+    console.log('[EditorStore] applyScreen() — applying screen, rows:', screen && 'rows' in screen ? (screen as EditorScreen).rows.length : 'null');
     const normalized = normalizeScreen(screen);
 
     set((state) => {
       const nextHistory = pushHistory(state.history, state.historyIndex, normalized.snapshot);
+      console.log(`[EditorStore] applyScreen() — applied: ${normalized.rows.length} rows, history index: ${nextHistory.historyIndex}`);
 
       return {
         rows: normalized.rows,
@@ -421,11 +425,13 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
   undo: () => {
     set((state) => {
       if (state.historyIndex <= 0) {
+        console.log('[EditorStore] undo() — nothing to undo (at start of history)');
         return state;
       }
 
       const nextHistoryIndex = state.historyIndex - 1;
       const screenSnapshot = cloneScreen(state.history[nextHistoryIndex]);
+      console.log(`[EditorStore] undo() — went to index ${nextHistoryIndex}/${state.history.length - 1}`);
 
       return {
         rows: normalizeScreen(screenSnapshot).rows,
@@ -439,11 +445,13 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
   redo: () => {
     set((state) => {
       if (state.historyIndex >= state.history.length - 1) {
+        console.log('[EditorStore] redo() — nothing to redo (at end of history)');
         return state;
       }
 
       const nextHistoryIndex = state.historyIndex + 1;
       const screenSnapshot = cloneScreen(state.history[nextHistoryIndex]);
+      console.log(`[EditorStore] redo() — went to index ${nextHistoryIndex}/${state.history.length - 1}`);
 
       return {
         rows: normalizeScreen(screenSnapshot).rows,
@@ -459,6 +467,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
       return;
     }
 
+    console.log(`[EditorStore] setDevice() — ${width}x${height}, landscape: ${width > height}`);
     set(() => ({
       deviceWidth: width,
       deviceHeight: height,
@@ -467,14 +476,18 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
   },
 
   toggleLandscape: () => {
-    set((state) => ({
-      deviceWidth: state.deviceHeight,
-      deviceHeight: state.deviceWidth,
-      isLandscape: !state.isLandscape,
-    }));
+    set((state) => {
+      console.log(`[EditorStore] toggleLandscape() — ${!state.isLandscape ? 'to landscape' : 'to portrait'}`);
+      return {
+        deviceWidth: state.deviceHeight,
+        deviceHeight: state.deviceWidth,
+        isLandscape: !state.isLandscape,
+      };
+    });
   },
 
   setSelection: (selection) => {
+    console.log(`[EditorStore] setSelection() — type: ${selection?.type ?? 'null'}`, selection);
     set(() => ({ selection }));
   },
 
@@ -491,6 +504,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
       }
 
       nextRows.splice(insertIndex, 0, newRow);
+      console.log(`[EditorStore] addRow() — inserted at index ${insertIndex}, ${cellCount} cells`);
 
       return commitRows(state, nextRows);
     });
@@ -505,6 +519,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
 
       const nextRows = state.rows.filter((row) => row.id !== rowId);
       const nextSelection = state.selection?.rowId === rowId ? null : state.selection;
+      console.log(`[EditorStore] deleteRow() — deleted ${rowIndex}: ${rowId}, rows remaining: ${nextRows.length}`);
 
       return commitRows(state, nextRows, { selection: nextSelection });
     });
@@ -519,6 +534,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
 
       const nextRows = [...state.rows];
       nextRows.splice(rowIndex + 1, 0, cloneRow(state.rows[rowIndex]));
+      console.log(`[EditorStore] duplicateRow() — duplicated ${rowId} at index ${rowIndex + 1}`);
 
       return commitRows(state, nextRows);
     });
@@ -533,12 +549,14 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
         toIndex >= state.rows.length ||
         fromIndex === toIndex
       ) {
+        console.log('[EditorStore] moveRow() — skipped: invalid indices');
         return state;
       }
 
       const nextRows = [...state.rows];
       const [row] = nextRows.splice(fromIndex, 1);
       nextRows.splice(toIndex, 0, row);
+      console.log(`[EditorStore] moveRow() — moved from index ${fromIndex} to ${toIndex}`);
 
       return commitRows(state, nextRows);
     });
@@ -552,6 +570,8 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
       }
 
       const nextComponent = createComponent(componentType);
+      console.log(`[EditorStore] setComponent() — rowId: ${rowId}, cell: ${cellIndex}, type: ${componentType}`);
+
       const nextRows = state.rows.map((row) => {
         if (row.id !== rowId) {
           return row;
@@ -594,6 +614,8 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
           ? { type: 'cell' as const, rowId, cellIndex }
           : state.selection;
 
+      console.log(`[EditorStore] removeComponent() — rowId: ${rowId}, cell: ${cellIndex}, removed type: ${cell.content?.type ?? 'null'}`);
+
       return commitRows(state, nextRows, { selection: nextSelection });
     });
   },
@@ -616,6 +638,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
           data: cloneRow(state.rows[rowIndex]),
         },
       }));
+      console.log(`[EditorStore] copySelection() — copied row at index ${rowIndex}`);
       return;
     }
 
@@ -635,6 +658,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
         data: cloneEditorComponent(content),
       },
     }));
+    console.log(`[EditorStore] copySelection() — copied component: ${content.type}`);
   },
 
   updateAdjacentCellWidths: (rowId, cellIndex, leftWidth, rightWidth) => {
@@ -643,6 +667,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
       if (rowIndex === -1 || cellIndex < 0 || cellIndex >= state.rows[rowIndex].cells.length - 1) {
         return state;
       }
+      console.log(`[EditorStore] updateAdjacentCellWidths() — rowId: ${rowId}, cell: ${cellIndex}, widths: ${leftWidth}/${rightWidth}`);
 
       const nextLeftWidth = Math.max(0.25, leftWidth);
       const nextRightWidth = Math.max(0.25, rightWidth);
@@ -686,6 +711,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
       if (rowIndex === -1) {
         return state;
       }
+      console.log(`[EditorStore] updateRowHeight() — rowId: ${rowId}, height: ${height}`);
 
       const nextHeight = normalizeRowHeight(height);
       if (state.rows[rowIndex].height === nextHeight) {
@@ -699,6 +725,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
   },
 
   updateRowProps: (rowId, patch) => {
+    console.log(`[EditorStore] updateRowProps() — rowId: ${rowId}, props:`, Object.keys(patch));
     set((state) => {
       const rowIndex = findRowIndex(state.rows, rowId);
       if (rowIndex === -1) {
@@ -712,6 +739,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
   },
 
   setCellCount: (rowId, count) => {
+    console.log(`[EditorStore] setCellCount() — rowId: ${rowId}, count: ${count}`);
     set((state) => {
       const rowIndex = findRowIndex(state.rows, rowId);
       if (rowIndex === -1) {
@@ -733,7 +761,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
 
       // Validate before applying
       if (!validateCellWidths(nextCells)) {
-        console.warn('Cell count update rejected: would violate minimum width constraints');
+        console.warn('[EditorStore] setCellCount() — rejected: would violate minimum width constraints');
         return state;
       }
 
@@ -746,11 +774,13 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
           ? { type: 'row' as const, rowId }
           : state.selection;
 
+      console.log(`[EditorStore] setCellCount() — done: ${nextCells.length} cells`);
       return commitRows(state, nextRows, { selection: nextSelection });
     });
   },
 
   moveCellInRow: (rowId, fromIndex, toIndex) => {
+    console.log(`[EditorStore] moveCellInRow() — rowId: ${rowId}, from: ${fromIndex}, to: ${toIndex}`);
     set((state) => {
       const rowIndex = findRowIndex(state.rows, rowId);
       if (rowIndex === -1) {
@@ -765,6 +795,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
         toIndex >= row.cells.length ||
         fromIndex === toIndex
       ) {
+        console.log('[EditorStore] moveCellInRow() — skipped: invalid indices');
         return state;
       }
 
@@ -781,6 +812,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
   },
 
   updateCellWidth: (rowId, cellIndex, width) => {
+    console.log(`[EditorStore] updateCellWidth() — rowId: ${rowId}, cell: ${cellIndex}, width: ${width}`);
     set((state) => {
       const rowIndex = findRowIndex(state.rows, rowId);
       if (rowIndex === -1 || cellIndex < 0 || cellIndex >= state.rows[rowIndex].cells.length) {
@@ -800,7 +832,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
 
       // Validate before applying
       if (!validateCellWidths(updatedCells)) {
-        console.warn('Width update rejected: violates minimum width constraints');
+        console.warn('[EditorStore] updateCellWidth() — rejected: violates minimum width constraints');
         return state;
       }
 
@@ -818,6 +850,8 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
       if (!cell?.content) {
         return state;
       }
+
+      console.log(`[EditorStore] updateComponentProps() — row: ${rowId}, cell: ${cellIndex}, type: ${cell.content.type}, keys: ${Object.keys(props).join(', ')}`);
 
       const nextComponent = normalizeComponentForEditor({
         id: cell.content.id,
@@ -849,6 +883,7 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
   },
 
   updateCellRules: (rowId, cellIndex, rules) => {
+    console.log(`[EditorStore] updateCellRules() — rowId: ${rowId}, cell: ${cellIndex}, rules count: ${rules?.length ?? 0}`);
     set((state) => {
       const cell = findCell(state.rows, rowId, cellIndex);
       if (!cell) {

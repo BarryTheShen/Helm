@@ -192,14 +192,20 @@ class ApiClient {
   private unauthorizedHandler: (() => void) | null = null;
 
   setToken(token: string | null) {
+    console.log('[API] setToken:', token ? `${token.slice(0, 16)}...` : 'null');
     this.token = token;
   }
 
   setUnauthorizedHandler(handler: (() => void) | null) {
+    console.log('[API] setUnauthorizedHandler registered');
     this.unauthorizedHandler = handler;
   }
 
   async request<T>(path: string, options: ApiOptions = {}): Promise<T> {
+    const method = options.method || 'GET';
+    console.log(`[API] ${method} ${path}`, options.body ? `{ body: ${JSON.stringify(options.body).slice(0, 200)} }` : '');
+    const startTime = performance.now();
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...options.headers,
@@ -210,24 +216,32 @@ class ApiClient {
     }
 
     const response = await fetch(`${API_BASE}${path}`, {
-      method: options.method || 'GET',
+      method,
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
 
-    if (!response.ok) {
-      if (response.status === 401 && !options.suppressUnauthorizedHandler) {
-        this.unauthorizedHandler?.();
-      }
+    const elapsed = Math.round(performance.now() - startTime);
+    console.log(`[API] ${method} ${path} → ${response.status} (${elapsed}ms)`);
 
+    if (!response.ok) {
       const error = await response.json().catch(() => null);
       const detail = error && typeof error === 'object' && 'detail' in error
         ? (error as { detail?: unknown }).detail
         : error;
+      console.error(`[API] ${method} ${path} FAILED:`, typeof detail === 'string' ? detail : response.statusText);
+
+      if (response.status === 401 && !options.suppressUnauthorizedHandler) {
+        console.log('[API] Unauthorized — clearing auth state');
+        this.unauthorizedHandler?.();
+      }
 
       throw new Error(typeof detail === 'string' ? detail : response.statusText || `HTTP ${response.status}`);
     }
-    if (response.status === 204) return undefined as T;
+    if (response.status === 204) {
+      console.log(`[API] ${method} ${path} → 204 (no content)`);
+      return undefined as T;
+    }
     return response.json();
   }
 

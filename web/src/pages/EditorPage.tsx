@@ -401,11 +401,13 @@ export function EditorPage() {
   }, []);
 
   const markScreenSaved = useCallback((screen: { rows: any[] }) => {
+    console.log(`[Editor] markScreenSaved() — rows: ${screen.rows.length}, cells: ${screen.rows.reduce((s, r) => s + r.cells.length, 0)}`);
     setLastSavedSnapshot(buildScreenSnapshot(screen));
     setLastSavedAt(new Date());
   }, []);
 
   const loadModules = useCallback(async () => {
+    console.log('[Editor] loadModules() — starting');
     setLoading(true);
     setModulesLoadError(null);
     let startedModuleTransition = false;
@@ -413,6 +415,7 @@ export function EditorPage() {
     try {
       const data = await api.get<{ items: ModuleInfo[] }>('/api/sdui/modules');
       const mods = data.items || [];
+      console.log(`[Editor] loadModules() — success: ${mods.length} modules loaded`);
       const currentSelected = selectedModuleRef.current;
       const nextSelectedModule = mods.some(mod => mod.module_id === currentSelected)
         ? currentSelected
@@ -421,6 +424,7 @@ export function EditorPage() {
       setModules(mods);
       if (nextSelectedModule && nextSelectedModule !== currentSelected) {
         startedModuleTransition = true;
+        console.log(`[Editor] loadModules() — auto-switching to module: ${nextSelectedModule}`);
         beginModuleTransition(nextSelectedModule);
       } else if (!nextSelectedModule) {
         selectedModuleRef.current = '';
@@ -429,6 +433,7 @@ export function EditorPage() {
         setScreenLoadError(null);
       }
     } catch (err) {
+      console.error('[Editor] loadModules() — error:', err instanceof Error ? err.message : err);
       setModules([]);
       selectedModuleRef.current = '';
       setSelectedModule('');
@@ -443,6 +448,7 @@ export function EditorPage() {
 
   const loadSelectedModule = useCallback(async () => {
     if (!selectedModule) {
+      console.log('[Editor] loadSelectedModule() — no module selected, clearing screen');
       loadScreen(null);
       setDraftInfo({ has_draft: false });
       setHasPersistedScreen(false);
@@ -455,6 +461,7 @@ export function EditorPage() {
     const requestId = moduleLoadRequestIdRef.current + 1;
     moduleLoadRequestIdRef.current = requestId;
 
+    console.log(`[Editor] loadSelectedModule() — loading module: ${selectedModule}`);
     setLoading(true);
     setScreenLoadError(null);
     setDraftInfo({ has_draft: false });
@@ -464,8 +471,10 @@ export function EditorPage() {
         api.get<any>(`/api/sdui/${selectedModule}`),
         api.get<DraftInfo>(`/api/sdui/${selectedModule}/draft`).catch(() => ({ has_draft: false })),
       ]);
+      console.log(`[Editor] loadSelectedModule() — API success: screen=${!!screenData, draft.has_draft}`, draft);
 
       if (moduleLoadRequestIdRef.current !== requestId) {
+        console.log('[Editor] loadSelectedModule() — stale request, skipping');
         return;
       }
 
@@ -476,6 +485,7 @@ export function EditorPage() {
         ? normalizeScreenData(loadedDraftInfo.screen ?? null)
         : null;
         const nextScreen = draftScreen ?? liveScreen ?? { rows: [] };
+      console.log(`[Editor] loadSelectedModule() — applying screen (rows=${nextScreen.rows.length}, hasDraft=${loadedDraftInfo.has_draft}, hasLive=${hasLiveScreen})`);
       loadScreen(nextScreen);
       setHasPersistedScreen(hasLiveScreen);
       updateModuleHasScreen(selectedModule, hasLiveScreen);
@@ -483,6 +493,7 @@ export function EditorPage() {
       setLastSavedAt(null);
       setDraftInfo(loadedDraftInfo);
     } catch (err) {
+      console.error(`[Editor] loadSelectedModule() — error for module ${selectedModule}:`, err instanceof Error ? err.message : err);
       if (moduleLoadRequestIdRef.current !== requestId) {
         return;
       }
@@ -529,7 +540,7 @@ export function EditorPage() {
 
   const handleDeviceChange = useCallback((preset: DevicePreset) => {
     const naturalDimensions = getNaturalPresetDimensions(preset);
-
+    console.log(`[Editor] handleDeviceChange() — selected preset: ${preset.name} (${naturalDimensions.width}x${naturalDimensions.height})`);
     setSelectedPreset({
       ...preset,
       width: naturalDimensions.width,
@@ -546,10 +557,12 @@ export function EditorPage() {
     const height = Number.parseInt(customDeviceHeight, 10);
 
     if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+      console.log('[Editor] handleApplyCustomDevice() — invalid dimensions:', { width, height });
       showMsg('error', 'Enter valid custom width and height.');
       return;
     }
 
+    console.log(`[Editor] handleApplyCustomDevice() — custom device: ${width}x${height}`);
     setSelectedPreset({
       name: `Custom ${width}x${height}`,
       width,
@@ -565,7 +578,9 @@ export function EditorPage() {
 
   // Save draft
   const handleSaveDraft = useCallback(async () => {
+    console.log('[Editor] handleSaveDraft() — button pressed');
     if (!canModifySelectedModule) {
+      console.log('[Editor] handleSaveDraft() — blocked: cannot modify selected module');
       showMsg('error', screenLoadError || 'Wait for the screen to finish loading.');
       return;
     }
@@ -576,13 +591,17 @@ export function EditorPage() {
     try {
       const screen = getPersistableScreen();
       const empty = isEffectivelyEmptyScreen(screen);
+      console.log(`[Editor] handleSaveDraft() — screen data collected: ${screen.rows.length} rows, empty=${empty}`);
       if (empty && !window.confirm('This will save an empty screen with no content. Continue?')) {
+        console.log('[Editor] handleSaveDraft() — user cancelled empty screen save');
         setSaving(false);
         return;
       }
       const result = await api.post<any>(`/api/sdui/${currentModule}`, { screen });
+      console.log(`[Editor] handleSaveDraft() — API response: draft=${result.draft}, version=${result.version}`);
 
       if (selectedModuleRef.current !== currentModule) {
+        console.log('[Editor] handleSaveDraft() — module changed, ignoring stale response');
         return;
       }
 
@@ -599,6 +618,7 @@ export function EditorPage() {
       }
       markScreenSaved(screen);
     } catch (err) {
+      console.error('[Editor] handleSaveDraft() — error:', err instanceof Error ? err.message : err);
       if (selectedModuleRef.current !== currentModule) {
         return;
       }
@@ -631,7 +651,9 @@ export function EditorPage() {
 
   // Push live
   const handlePushLive = useCallback(async () => {
+    console.log('[Editor] handlePushLive() — button pressed');
     if (!canModifySelectedModule) {
+      console.log('[Editor] handlePushLive() — blocked: cannot modify selected module');
       showMsg('error', screenLoadError || 'Wait for the screen to finish loading.');
       return;
     }
@@ -642,15 +664,20 @@ export function EditorPage() {
     try {
       const screen = getPersistableScreen();
       const empty = isEffectivelyEmptyScreen(screen);
+      console.log(`[Editor] handlePushLive() — screen data: ${screen.rows.length} rows, empty=${empty}`);
       if (empty && !window.confirm('This will push an empty screen live with no content. Continue?')) {
+        console.log('[Editor] handlePushLive() — user cancelled empty screen push');
         setPushing(false);
         return;
       }
       const saveResult = await api.post<any>(`/api/sdui/${currentModule}`, { screen });
+      console.log(`[Editor] handlePushLive() — save response: draft=${saveResult.draft}`);
       if (saveResult.draft) {
         const approveResult = await api.post<any>(`/api/sdui/${currentModule}/draft/approve`);
+        console.log(`[Editor] handlePushLive() — approve response: version=${approveResult.version}`);
 
         if (selectedModuleRef.current !== currentModule) {
+          console.log('[Editor] handlePushLive() — module changed, ignoring stale response');
           return;
         }
 
@@ -659,6 +686,7 @@ export function EditorPage() {
         setDraftInfo({ has_draft: false });
       } else {
         if (selectedModuleRef.current !== currentModule) {
+          console.log('[Editor] handlePushLive() — module changed, ignoring stale response');
           return;
         }
 
@@ -671,6 +699,7 @@ export function EditorPage() {
       updateModuleHasScreen(currentModule, true);
       markScreenSaved(screen);
     } catch (err) {
+      console.error('[Editor] handlePushLive() — error:', err instanceof Error ? err.message : err);
       if (selectedModuleRef.current !== currentModule) {
         return;
       }
@@ -683,13 +712,16 @@ export function EditorPage() {
 
   // Approve/Reject draft
   const handleApproveDraft = useCallback(async () => {
+    console.log('[Editor] handleApproveDraft() — button pressed for module:', selectedModule);
     const currentModule = selectedModule;
     setApprovingDraft(true);
     try {
       const result = await api.post<any>(`/api/sdui/${currentModule}/draft/approve`);
+      console.log(`[Editor] handleApproveDraft() — approve API success, version=${result.version}`);
       const screenData = await api.get<any>(`/api/sdui/${currentModule}`);
 
       if (selectedModuleRef.current !== currentModule) {
+        console.log('[Editor] handleApproveDraft() — module changed, ignoring stale response');
         return;
       }
 
@@ -702,6 +734,7 @@ export function EditorPage() {
       updateModuleHasScreen(currentModule, hasLiveScreen);
       markScreenSaved(useEditorStore.getState().getScreen());
     } catch (err) {
+      console.error('[Editor] handleApproveDraft() — error:', err instanceof Error ? err.message : err);
       if (selectedModuleRef.current !== currentModule) {
         return;
       }
@@ -713,12 +746,15 @@ export function EditorPage() {
   }, [selectedModule, showMsg, loadScreen, markScreenSaved, updateModuleHasScreen]);
 
   const handleRejectDraft = useCallback(async () => {
+    console.log('[Editor] handleRejectDraft() — button pressed for module:', selectedModule);
     const currentModule = selectedModule;
     try {
       await api.post(`/api/sdui/${currentModule}/draft/reject`);
+      console.log('[Editor] handleRejectDraft() — reject API success');
       const screenData = await api.get<any>(`/api/sdui/${currentModule}`);
 
       if (selectedModuleRef.current !== currentModule) {
+        console.log('[Editor] handleRejectDraft() — module changed, ignoring stale response');
         return;
       }
 
@@ -731,6 +767,7 @@ export function EditorPage() {
       updateModuleHasScreen(currentModule, hasLiveScreen);
       markScreenSaved(useEditorStore.getState().getScreen());
     } catch (err) {
+      console.error('[Editor] handleRejectDraft() — error:', err instanceof Error ? err.message : err);
       if (selectedModuleRef.current !== currentModule) {
         return;
       }
@@ -741,11 +778,15 @@ export function EditorPage() {
 
   // Templates
   const loadTemplates = useCallback(async () => {
+    console.log('[Editor] loadTemplates() — starting');
     setLoadingTemplates(true);
     try {
       const data = await api.get<{ items: Template[] }>('/api/templates');
+      const count = data.items?.length || 0;
+      console.log(`[Editor] loadTemplates() — success: ${count} templates loaded`);
       setTemplates(data.items || []);
-    } catch {
+    } catch (err) {
+      console.error('[Editor] loadTemplates() — error:', err instanceof Error ? err.message : err);
       setTemplates([]);
     } finally {
       setLoadingTemplates(false);
@@ -759,7 +800,11 @@ export function EditorPage() {
   }, [showTemplatePanel, loadTemplates]);
 
   const handleSaveTemplate = useCallback(async () => {
-    if (!templateName.trim()) return;
+    console.log(`[Editor] handleSaveTemplate() — saving template: ${templateName} (category: ${templateCategory})`);
+    if (!templateName.trim()) {
+      console.log('[Editor] handleSaveTemplate() — no name, aborting');
+      return;
+    }
     try {
       const screen = getPersistableScreen();
       await api.post('/api/templates', {
@@ -768,30 +813,38 @@ export function EditorPage() {
         screen_json: screen,
         is_public: true,
       });
+      console.log(`[Editor] handleSaveTemplate() — API success for: ${templateName}`);
       showMsg('success', 'Template saved!');
       await loadTemplates();
       setShowSaveTemplate(false);
       setTemplateName('');
     } catch (err) {
+      console.error('[Editor] handleSaveTemplate() — error:', err instanceof Error ? err.message : err);
       showMsg('error', err instanceof Error ? err.message : 'Save failed');
     }
   }, [templateName, templateCategory, getPersistableScreen, showMsg, loadTemplates]);
 
   const handleApplyTemplate = useCallback(async (templateId: string) => {
+    console.log(`[Editor] handleApplyTemplate() — loading template ID: ${templateId}`);
     if (!confirmDestructiveEditorAction('Applying a template will replace the current canvas.')) {
+      console.log('[Editor] handleApplyTemplate() — user cancelled');
       return;
     }
 
     try {
       const detail = await api.get<TemplateDetail>(`/api/templates/${templateId}`);
+      console.log(`[Editor] handleApplyTemplate() — fetched template: ${detail.name}`);
       const normalized = normalizeScreenData(detail.screen_json);
       if (!normalized) {
+        console.error('[Editor] handleApplyTemplate() — normalized screen data is null');
         showMsg('error', 'Template data is invalid.');
         return;
       }
+      console.log(`[Editor] handleApplyTemplate() — applying: ${normalized.rows.length} rows`);
       applyScreen(normalized);
       showMsg('success', `Template loaded: ${detail.name}`);
     } catch (err) {
+      console.error('[Editor] handleApplyTemplate() — error:', err instanceof Error ? err.message : err);
       showMsg('error', err instanceof Error ? err.message : 'Failed to load template');
     }
     setShowLoadTemplate(false);
@@ -803,45 +856,56 @@ export function EditorPage() {
   }, []);
 
   const handleImportJson = useCallback(() => {
+    console.log('[Editor] handleImportJson() — importing JSON');
     try {
       const parsed = JSON.parse(importJsonValue);
       const importableScreen = extractImportableScreen(parsed);
       const normalized = normalizeScreenData(importableScreen);
 
       if (!normalized) {
+        console.error('[Editor] handleImportJson() — normalized screen is null');
         throw new Error('JSON must contain rows or sections.');
       }
 
       if (!confirmDestructiveEditorAction('Importing JSON will replace the current canvas.')) {
+        console.log('[Editor] handleImportJson() — user cancelled');
         return;
       }
 
+      console.log(`[Editor] handleImportJson() — parsed: ${normalized.rows.length} rows, applying`);
       applyScreen(normalized);
       showMsg('success', 'JSON imported into the editor.');
       closeImportJsonModal();
     } catch (err) {
+      console.error('[Editor] handleImportJson() — error:', err instanceof Error ? err.message : err);
       showMsg('error', err instanceof Error ? err.message : 'Import failed');
     }
   }, [applyScreen, closeImportJsonModal, confirmDestructiveEditorAction, importJsonValue, showMsg]);
 
   const handleApplyLocalScreenTemplate = useCallback((template: LocalTemplateDefinition) => {
+    console.log(`[Editor] handleApplyLocalScreenTemplate() — applying: ${template.name}`);
     if (!confirmDestructiveEditorAction('Applying a local screen template will replace the current canvas.')) {
+      console.log('[Editor] handleApplyLocalScreenTemplate() — user cancelled');
       return false;
     }
 
     const clonedScreen = cloneTemplateScreen(template.screen);
+    console.log(`[Editor] handleApplyLocalScreenTemplate() — applying ${clonedScreen.rows.length} rows`);
     applyScreen(clonedScreen);
     showMsg('success', `Template loaded: ${template.name}`);
     return true;
   }, [applyScreen, confirmDestructiveEditorAction, showMsg]);
 
   const handleAppendLocalRowTemplate = useCallback((template: LocalTemplateDefinition) => {
+    console.log(`[Editor] handleAppendLocalRowTemplate() — appending: ${template.name}`);
     if (!confirmDestructiveEditorAction('Appending a row template will modify the current canvas.')) {
+      console.log('[Editor] handleAppendLocalRowTemplate() — user cancelled');
       return;
     }
 
     const clonedScreen = cloneTemplateScreen(template.screen);
     const currentScreen = getScreen();
+    console.log(`[Editor] handleAppendLocalRowTemplate() — current: ${currentScreen.rows.length} rows, adding: ${clonedScreen.rows.length} rows`);
     applyScreen({ ...currentScreen, rows: [...currentScreen.rows, ...clonedScreen.rows] });
     showMsg('success', `Row template added: ${template.name}`);
   }, [applyScreen, confirmDestructiveEditorAction, getScreen, showMsg]);

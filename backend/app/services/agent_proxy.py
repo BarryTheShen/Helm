@@ -80,6 +80,7 @@ async def handle_chat_message(
     conversation_id: str | None = None,
 ) -> None:
     """Entry point called from WebSocket handler (runs as background task)."""
+    logger.info(f"handle_chat_message() — user={user_id}, conversation_id={conversation_id}, content={repr(content[:80])}")
     try:
         # Save the user message first regardless of routing
         async with AsyncSessionLocal() as db:
@@ -91,6 +92,7 @@ async def handle_chat_message(
             )
             db.add(user_msg)
             await db.commit()
+            logger.info(f"handle_chat_message() — user message saved: id={user_msg.id}")
 
         await fire_trigger("message_received", user_id, {
             "content": content,
@@ -99,8 +101,10 @@ async def handle_chat_message(
 
         # Route: external agent when configured, else built-in OpenRouter proxy
         if settings.external_agent_url:
+            logger.info(f"handle_chat_message() — routing via external agent: {settings.external_agent_url}")
             await _process_via_external_agent(user_id, content)
         else:
+            logger.info(f"handle_chat_message() — routing via built-in proxy")
             await _process_chat(user_id, content, conversation_id)
     except Exception as exc:
         logger.exception(f"Agent proxy error for user={user_id}: {exc}")
@@ -118,6 +122,7 @@ async def _process_via_external_agent(user_id: str, content: str) -> None:
     """
     url = f"{settings.external_agent_url.rstrip('/')}/api/run"
     assistant_msg_id = str(uuid4())
+    logger.info(f"_process_via_external_agent() — sending to {url}, user={user_id}")
 
     await manager.send(user_id, {"type": "chat_start", "message_id": assistant_msg_id})
 
@@ -126,7 +131,9 @@ async def _process_via_external_agent(user_id: str, content: str) -> None:
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream("POST", url, json={"message": content}) as resp:
                 if resp.status_code != 200:
-                    raise RuntimeError(f"External agent returned {resp.status_code}")
+                    body = await resp.aread()
+                    raise RuntimeError(f"External agent returned {resp.status_code}: {body}")
+                token_count = 0
                 async for line in resp.aiter_lines():
                     if not line.startswith("data:"):
                         continue
@@ -142,18 +149,19 @@ async def _process_via_external_agent(user_id: str, content: str) -> None:
                     if event_type == "token":
                         token = event.get("text", "")
                         full_response += token
+                        token_count += 1
                         await manager.send(user_id, {
                             "type": "chat_token",
                             "message_id": assistant_msg_id,
                             "token": token,
                         })
                     elif event_type == "done":
-                        # Use the final full text from the agent
                         final = event.get("text", "")
                         if final and not full_response:
                             full_response = final
                     elif event_type == "error":
                         raise RuntimeError(event.get("text", "Unknown agent error"))
+                logger.info(f"_process_via_external_agent() — completed: {token_count} tokens, response length={len(full_response)}")
     except Exception as exc:
         logger.error(f"External agent error for user={user_id}: {exc}")
         await manager.send(user_id, {
@@ -172,6 +180,7 @@ async def _process_via_external_agent(user_id: str, content: str) -> None:
         )
         db.add(assistant_msg)
         await db.commit()
+        logger.info(f"_process_via_external_agent() — persisted assistant message: id={assistant_msg_id}")
 
     await manager.send(user_id, {
         "type": "chat_complete",

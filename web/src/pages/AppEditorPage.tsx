@@ -35,21 +35,26 @@ export function AppEditorPage() {
   const currentApp = apps?.find(app => app.id === currentAppId);
 
   const showMsg = (type: 'success' | 'error' | 'info', text: string) => {
+    console.log(`[AppEditor] message: ${type} — ${text}`);
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 4000);
   };
 
   // Load apps on mount
   useEffect(() => {
+    console.log('[AppEditor] mount — loading apps');
     const loadApps = async () => {
       setLoading(true);
       try {
         const response = await api.getApps();
+        console.log(`[AppEditor] loadApps() — loaded ${response.items.length} apps`);
         setApps(response.items);
         if (response.items.length > 0 && !currentAppId) {
+          console.log(`[AppEditor] loadApps() — auto-selecting first app: ${response.items[0].id}`);
           setCurrentApp(response.items[0].id);
         }
       } catch (err) {
+        console.error('[AppEditor] loadApps() — failed:', err instanceof Error ? err.message : err);
         showMsg('error', err instanceof Error ? err.message : 'Failed to load apps');
       } finally {
         setLoading(false);
@@ -61,11 +66,15 @@ export function AppEditorPage() {
 
   // Load available modules
   useEffect(() => {
+    console.log('[AppEditor] mount — loading modules');
     const loadModules = async () => {
       try {
         const response = await api.getModuleInstances();
+        const activeCount = response.items.filter(m => m.status === 'active').length;
+        console.log(`[AppEditor] loadModules() — loaded ${response.items.length} modules, ${activeCount} active`);
         setAvailableModules(response.items.filter(m => m.status === 'active'));
       } catch (err) {
+        console.error('[AppEditor] loadModules() — failed:', err instanceof Error ? err.message : err);
         showMsg('error', 'Failed to load modules');
       }
     };
@@ -117,11 +126,14 @@ export function AppEditorPage() {
 
   const handleSave = async () => {
     if (!currentApp) return;
+    console.log('[AppEditor] handleSave() — saving app:', currentApp.id);
     setSaving(true);
     try {
       await api.updateApp(currentApp.id, currentApp);
+      console.log('[AppEditor] handleSave() — app saved successfully');
       showMsg('success', 'App saved successfully');
     } catch (err) {
+      console.error('[AppEditor] handleSave() — failed:', err instanceof Error ? err.message : err);
       showMsg('error', err instanceof Error ? err.message : 'Failed to save app');
     } finally {
       setSaving(false);
@@ -130,6 +142,7 @@ export function AppEditorPage() {
 
   const handlePreviewBrowser = () => {
     if (!currentApp) return;
+    console.log('[AppEditor] handlePreviewBrowser() — opening browser preview for:', currentApp.name);
     setShowPreviewPicker(false);
 
     // Start preview with current app config
@@ -153,11 +166,13 @@ export function AppEditorPage() {
   const handlePreviewDevice = () => {
     if (!currentApp) return;
     setShowPreviewPicker(false);
+    console.log('[AppEditor] handlePreviewDevice() — clicked (not yet implemented)');
     showMsg('info', 'Device preview coming soon');
     // TODO: Implement device preview
   };
 
   const handleCreateApp = async () => {
+    console.log('[AppEditor] handleCreateApp() — creating new app');
     try {
       const newApp = await api.createApp({
         name: 'New App',
@@ -169,11 +184,13 @@ export function AppEditorPage() {
         bottom_bar_config: [],
         launchpad_config: [],
       });
+      console.log('[AppEditor] handleCreateApp() — created app:', newApp.id);
       setApps([...apps, newApp]);
       setCurrentApp(newApp.id);
       setShowAppSwitcher(false);
       showMsg('success', 'App created successfully');
     } catch (err) {
+      console.error('[AppEditor] handleCreateApp() — failed:', err instanceof Error ? err.message : err);
       showMsg('error', err instanceof Error ? err.message : 'Failed to create app');
     }
   };

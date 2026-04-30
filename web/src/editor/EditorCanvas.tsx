@@ -1327,16 +1327,19 @@ export function EditorCanvas() {
 
   const handleEmptyCellClick = (rowId: string, cellIndex: number, e: React.MouseEvent) => {
     e.stopPropagation();
+    console.log('[EditorCanvas] empty cell clicked — row:', rowId, 'cell:', cellIndex);
     setSelection({ type: 'cell', rowId, cellIndex });
     setPickerState({ rowId, cellIndex, position: { x: e.clientX, y: e.clientY } });
   };
 
   const handleComponentClick = (rowId: string, cellIndex: number, e: React.MouseEvent) => {
     e.stopPropagation();
+    console.log('[EditorCanvas] component clicked — row:', rowId, 'cell:', cellIndex);
     setSelection({ type: 'component', rowId, cellIndex });
   };
 
   const handlePickerSelect = (componentType: string) => {
+    console.log('[EditorCanvas] component picker selected:', componentType);
     if (pickerState) {
       setComponent(pickerState.rowId, pickerState.cellIndex, componentType);
     }
@@ -1358,6 +1361,7 @@ export function EditorCanvas() {
     const fromIndex = rows.findIndex(r => r.id === active.id);
     const toIndex = rows.findIndex(r => r.id === over.id);
     if (fromIndex !== -1 && toIndex !== -1) {
+      console.log('[EditorCanvas] row dragged — from index:', fromIndex, 'to index:', toIndex);
       moveRow(fromIndex, toIndex);
     }
   }, [rows, moveRow]);

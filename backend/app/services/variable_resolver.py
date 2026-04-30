@@ -18,6 +18,7 @@ Supported scopes:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from typing import Any
@@ -26,6 +27,8 @@ import chevron
 from cryptography.fernet import Fernet
 from sqlalchemy import select
 
+
+logger = logging.getLogger(__name__)
 
 _EXPRESSION_RE = re.compile(r"\{\{(.+?)\}\}")
 
@@ -112,11 +115,14 @@ async def _resolve_connection_scope(
 
     connection_name = parts[1]
     credential_key = parts[2]
+    logger.debug(f"_resolve_connection_scope() — connection: {connection_name}, key: {credential_key}")
 
     connections_cache = context.get("connections_cache", {})
     if connection_name in connections_cache:
         value = connections_cache[connection_name].get(credential_key)
-        return str(value) if value is not None else None
+        result = str(value) if value is not None else None
+        logger.debug(f"_resolve_connection_scope() — from cache: {result}")
+        return result
 
     db = context.get("db")
     user_id = context.get("user_id")
@@ -137,10 +143,13 @@ async def _resolve_connection_scope(
                 credentials = _decrypt_credentials(connection.credentials_encrypted, encryption_key)
                 connections_cache[connection_name] = credentials
                 value = credentials.get(credential_key)
+                logger.debug(f"_resolve_connection_scope() — from DB: {connection_name}.{credential_key} = {repr(value)}")
                 return str(value) if value is not None else None
-            except Exception:
+            except Exception as exc:
+                logger.warning(f"_resolve_connection_scope() — failed to decrypt {connection_name}: {exc}")
                 pass
 
+    logger.debug(f"_resolve_connection_scope() — unresolved: {connection_name}.{credential_key}")
     return None
 
 
@@ -173,9 +182,11 @@ async def resolve_expression(expr: str, context: dict[str, Any]) -> str:
         return expr
 
     tokens = list(dict.fromkeys(m.group(1) for m in _EXPRESSION_RE.finditer(expr)))
+    logger.debug(f"resolve_expression() — expr: {repr(expr[:100])}, tokens: {tokens}")
 
     # Resolve each token
     resolved: dict[str, str] = {}
+    unresolved: list[str] = []
     for token in tokens:
         raw = token.strip()
         if raw.startswith("connection."):
@@ -185,6 +196,12 @@ async def resolve_expression(expr: str, context: dict[str, Any]) -> str:
 
         if value is not None:
             resolved[token] = value
+            logger.debug(f"resolve_expression() — resolved {token} → {repr(value)}")
+        else:
+            unresolved.append(token)
+
+    if unresolved:
+        logger.debug(f"resolve_expression() — unresolved tokens: {unresolved}")
 
     # Build a working template where ALL tokens use triple-mustache ({{{...}}})
     # to disable HTML escaping — SDUI values are plain text, not HTML.
@@ -225,6 +242,7 @@ async def resolve_expression(expr: str, context: dict[str, Any]) -> str:
         node[parts[-1]] = value
 
     rendered = chevron.render(working, view)
+    logger.debug(f"resolve_expression() — result: {repr(rendered[:100])}")
 
     # Restore any placeholders that chevron may have left (shouldn't happen,
     # but defensive in case chevron skips unknown keys).
