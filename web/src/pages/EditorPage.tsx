@@ -345,9 +345,31 @@ export function EditorPage() {
     setSearchParams(nextModule ? { module_instance_id: nextModule } : {});
   }, [setSearchParams]);
 
+  // Redirect to first module when URL is empty but modules exist.
+  // Use a ref guard that compares against the redirect target (which updates synchronously
+  // via state) rather than selectedModule (which updates asynchronously from React Router).
+  // This prevents infinite redirect loops even when React Router defers URL updates.
+  const [redirectedTo, setRedirectedTo] = useState<string | null>(null);
+
   useEffect(() => {
-    selectedModuleRef.current = selectedModule;
-  }, [selectedModule]);
+    // Sync redirectedTo with selectedModule whenever it changes externally
+    setRedirectedTo(selectedModule);
+
+    if (!selectedModule && modules.length > 0) {
+      const target = modules[0]?.module_id || '';
+      if (!target) return;
+
+      // Guard: only redirect if we haven't already redirected to this target.
+      // redirectedTo updates synchronously (state), so this works even if
+      // React Router delays updating selectedModule asynchronously.
+      if (redirectedTo !== target) {
+        console.log(`[Editor] redirect effect — redirecting to: ${target}`);
+        setRedirectedTo(target);
+        selectedModuleRef.current = target;
+        setSearchParams({ module_instance_id: target });
+      }
+    }
+  }, [selectedModule, modules.length]);
 
   const updateModuleHasScreen = useCallback((moduleId: string, hasScreen: boolean) => {
     setModules(prev => prev.map(module => (
@@ -406,45 +428,51 @@ export function EditorPage() {
     setLastSavedAt(new Date());
   }, []);
 
+  const modulesLoadedRef = useRef(false);
+
   const loadModules = useCallback(async () => {
-    console.log('[Editor] loadModules() — starting');
+    // Only load once. Never recreate to avoid stale closure cascade.
+    if (modulesLoadedRef.current) return;
+    modulesLoadedRef.current = true;
+
+    console.log(`[Editor] loadModules() — starting, url="${selectedModule}"`);
     setLoading(true);
     setModulesLoadError(null);
-    let startedModuleTransition = false;
 
     try {
       const data = await api.get<{ items: ModuleInfo[] }>('/api/sdui/modules');
       const mods = data.items || [];
       console.log(`[Editor] loadModules() — success: ${mods.length} modules loaded`);
-      const currentSelected = selectedModule;
-      const nextSelectedModule = mods.some(mod => mod.module_id === currentSelected)
-        ? currentSelected
-        : (mods[0]?.module_id || '');
 
       setModules(mods);
-      if (nextSelectedModule && nextSelectedModule !== currentSelected) {
-        startedModuleTransition = true;
-        console.log(`[Editor] loadModules() — auto-switching to module: ${nextSelectedModule}`);
-        beginModuleTransition(nextSelectedModule);
-      } else if (!nextSelectedModule) {
-        selectedModuleRef.current = '';
-        setSelectedModule('');
-        setDraftInfo({ has_draft: false });
-        setScreenLoadError(null);
+
+      // Sync ref to URL param (reads fresh value each time)
+      const urlModule = selectedModule;
+      if (urlModule && mods.some(mod => mod.module_id === urlModule)) {
+        selectedModuleRef.current = urlModule;
+      } else {
+        // Invalid/empty — mark for redirect (handled by redirect effect)
+        const first = mods[0]?.module_id || '';
+        if (first) {
+          console.log(`[Editor] loadModules() — URL invalid, redirect pending to: ${first}`);
+          selectedModuleRef.current = first;
+        } else {
+          selectedModuleRef.current = '';
+        }
       }
+      setScreenLoadError(null);
+      setDraftInfo({ has_draft: false });
+      setHasPersistedScreen(false);
     } catch (err) {
       console.error('[Editor] loadModules() — error:', err instanceof Error ? err.message : err);
       setModules([]);
       selectedModuleRef.current = '';
-      setSelectedModule('');
       setHasPersistedScreen(false);
       setModulesLoadError(err instanceof Error ? err.message : 'Failed to load modules');
     } finally {
-      if (!startedModuleTransition) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
-  }, [beginModuleTransition]);
+  }, []);
 
   const loadSelectedModule = useCallback(async () => {
     if (!selectedModule) {
@@ -511,10 +539,11 @@ export function EditorPage() {
     }
   }, [loadScreen, selectedModule, updateModuleHasScreen]);
 
-  // Load modules
+  // Load modules on mount and whenever the modules list changes.
+  // Does NOT update the URL — uses the URL param as the single source of truth.
   useEffect(() => {
     void loadModules();
-  }, [loadModules]);
+  }, []);
 
   // Load screen when module changes
   useEffect(() => {
