@@ -346,22 +346,21 @@ export function EditorPage() {
   }, [setSearchParams]);
 
   // Redirect to first module when URL is empty but modules exist.
-  // Use a ref guard that compares against the redirect target (which updates synchronously
-  // via state) rather than selectedModule (which updates asynchronously from React Router).
-  // This prevents infinite redirect loops even when React Router defers URL updates.
+  // Read searchParams directly inside the effect — React Router defers updating
+  // the selectedModule variable, so reading it from the closure would be stale.
+  // searchParams.get() always reads the current URL, avoiding the race.
   const [redirectedTo, setRedirectedTo] = useState<string | null>(null);
 
   useEffect(() => {
-    // Sync redirectedTo with selectedModule whenever it changes externally
-    setRedirectedTo(selectedModule);
+    // Read directly from URL — always fresh, never stale
+    const currentUrlModule = searchParams.get('module_instance_id') || '';
+    setRedirectedTo(currentUrlModule);
 
-    if (!selectedModule && modules.length > 0) {
+    if (!currentUrlModule && modules.length > 0) {
       const target = modules[0]?.module_id || '';
       if (!target) return;
 
       // Guard: only redirect if we haven't already redirected to this target.
-      // redirectedTo updates synchronously (state), so this works even if
-      // React Router delays updating selectedModule asynchronously.
       if (redirectedTo !== target) {
         console.log(`[Editor] redirect effect — redirecting to: ${target}`);
         setRedirectedTo(target);
@@ -369,7 +368,7 @@ export function EditorPage() {
         setSearchParams({ module_instance_id: target });
       }
     }
-  }, [selectedModule, modules.length]);
+  }, [searchParams, modules.length]);
 
   const updateModuleHasScreen = useCallback((moduleId: string, hasScreen: boolean) => {
     setModules(prev => prev.map(module => (
@@ -446,8 +445,8 @@ export function EditorPage() {
 
       setModules(mods);
 
-      // Sync ref to URL param (reads fresh value each time)
-      const urlModule = selectedModule;
+      // Sync ref to URL param — read directly from searchParams (not the stale closure)
+      const urlModule = searchParams.get('module_instance_id') || '';
       if (urlModule && mods.some(mod => mod.module_id === urlModule)) {
         selectedModuleRef.current = urlModule;
       } else {
