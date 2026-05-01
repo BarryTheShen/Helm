@@ -416,7 +416,7 @@ export function EditorPage() {
       const data = await api.get<{ items: ModuleInfo[] }>('/api/sdui/modules');
       const mods = data.items || [];
       console.log(`[Editor] loadModules() — success: ${mods.length} modules loaded`);
-      const currentSelected = selectedModuleRef.current;
+      const currentSelected = selectedModule;
       const nextSelectedModule = mods.some(mod => mod.module_id === currentSelected)
         ? currentSelected
         : (mods[0]?.module_id || '');
