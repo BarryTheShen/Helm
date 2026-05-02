@@ -9,6 +9,7 @@ import type { ComponentType } from 'react';
 // Tier 2 — Atomic
 import { SDUIText } from '@/components/atomic/SDUIText';
 import { SDUIMarkdown } from '@/components/atomic/SDUIMarkdown';
+import { SDUIRichTextRenderer } from '@/components/atomic/SDUIRichTextRenderer';
 import { SDUIButton } from '@/components/atomic/SDUIButton';
 import { SDUIImage } from '@/components/atomic/SDUIImage';
 import { SDUITextInput } from '@/components/atomic/SDUITextInput';
@@ -23,6 +24,8 @@ import { SDUIEmpty } from '@/components/structural/SDUIEmpty';
 import { CalendarModule } from '@/components/composite/CalendarModule';
 import { ChatModule } from '@/components/composite/ChatModule';
 import { NotesModule } from '@/components/composite/NotesModule';
+import { TodoModule } from '@/components/composite/TodoModule';
+import { ArticleCardModule } from '@/components/composite/ArticleCardModule';
 import { InputBar } from '@/components/composite/InputBar';
 
 // Tier 4 — SDUI-specific (shared across V1 + V2)
@@ -50,6 +53,8 @@ const registry: Record<string, ComponentType<any>> = {
   CalendarModule: CalendarModule,
   ChatModule: ChatModule,
   NotesModule: NotesModule,
+  TodoModule: TodoModule,
+  ArticleCardModule: ArticleCardModule,
   InputBar: InputBar,
   // Composites used by AI-generated SDUI
   Badge: SDUIBadge,
