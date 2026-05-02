@@ -123,7 +123,7 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
     }
     // Navigate to /editor with module param — not setSearchParams which only
     // changes query params on the current page (e.g. /templates?module_instance_id=x)
-    navigate('/editor', { search: { module_instance_id: moduleId } });
+    navigate('/editor?module_instance_id=' + moduleId);
   };
 
   const handleContextMenu = (e: React.MouseEvent, moduleInstance: SDUIModule) => {
