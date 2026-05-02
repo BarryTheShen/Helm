@@ -13,6 +13,7 @@ interface MockVariableContext {
   env: Record<string, unknown>;
   custom: Record<string, unknown>;
   connection: Record<string, unknown>;
+  date: Record<string, unknown>;
 }
 
 // Mock data for preview
@@ -33,6 +34,10 @@ const MOCK_CONTEXT: MockVariableContext = {
     appName: 'Helm',
   },
   connection: {},
+  date: {
+    today: new Date().toISOString().split('T')[0],
+    now: new Date().toISOString(),
+  },
 };
 
 // Disable HTML escaping for mustache

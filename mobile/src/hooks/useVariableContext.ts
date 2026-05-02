@@ -71,6 +71,10 @@ export function useVariableContext(selfId?: string): VariableContext {
       data: {},
       env: {},
       custom: customVars,
+      date: {
+        today: new Date().toISOString().split('T')[0],
+        now: new Date().toISOString(),
+      },
     }),
     [user, componentStates, selfState, customVars],
   );

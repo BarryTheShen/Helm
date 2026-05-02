@@ -17,6 +17,7 @@ export interface VariableContext {
   data: Record<string, unknown>;
   env: Record<string, unknown>;
   custom: Record<string, unknown>;
+  date: Record<string, unknown>;
 }
 
 /**
@@ -57,6 +58,7 @@ function buildMustacheView(context: VariableContext): Record<string, unknown> {
     data: makeNotFoundProxy(context.data, 'data'),
     env: makeNotFoundProxy(context.env, 'env'),
     custom: makeNotFoundProxy(context.custom, 'custom'),
+    date: makeNotFoundProxy(context.date, 'date'),
   };
 
   // Backward compat: bare {{input}} → self.value
