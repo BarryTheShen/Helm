@@ -260,9 +260,12 @@ function serializeCellForRuntime(cell: EditorCell): EditorCell {
     }
   }
 
+  const cellRules = Array.isArray(clonedCell.rules) ? clonedCell.rules : undefined;
+
   return {
     ...clonedCell,
     content: serializedContent,
+    ...(cellRules !== undefined ? { rules: cellRules } : {}),
   };
 }
 
