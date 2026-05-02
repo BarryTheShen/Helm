@@ -21,6 +21,7 @@ import type {
 } from './types';
 
 const HISTORY_LIMIT = 50;
+export const MIN_ROW_HEIGHT = 48; // Minimum row height in pixels
 const MIN_CELL_WIDTH_PERCENT = 5; // Minimum 5% width per cell
 const DEFAULT_DEVICE = DEVICE_PRESETS[1] ?? {
   name: 'Default',
@@ -713,7 +714,9 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
       }
       console.log(`[EditorStore] updateRowHeight() — rowId: ${rowId}, height: ${height}`);
 
-      const nextHeight = normalizeRowHeight(height);
+      const normalizedHeight = normalizeRowHeight(height);
+      // Enforce minimum row height for numeric values
+      const nextHeight = normalizedHeight === 'auto' ? 'auto' : Math.max(MIN_ROW_HEIGHT, normalizedHeight);
       if (state.rows[rowIndex].height === nextHeight) {
         return state;
       }

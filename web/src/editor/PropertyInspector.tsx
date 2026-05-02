@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useEditorStore } from './useEditorStore';
+import { useEditorStore, MIN_ROW_HEIGHT } from './useEditorStore';
 import { COMPONENT_SCHEMAS, ACTION_TYPES } from './componentSchemas';
 import type { ActionSchema, FieldSchema } from './componentSchemas';
 import { getActionPropName, getComponentDefinition } from './types';
@@ -760,13 +760,13 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
               const val = e.target.value;
               if (val) {
                 const numVal = Number(val);
-                // Enforce minimum of 48px
-                updateRowHeight(rowId, Math.max(48, numVal));
+                // Enforce minimum row height
+                updateRowHeight(rowId, Math.max(MIN_ROW_HEIGHT, numVal));
               } else {
                 updateRowHeight(rowId, 'auto');
               }
             }}
-            min={48}
+            min={MIN_ROW_HEIGHT}
             step={1}
             placeholder="px"
             className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none w-20"
