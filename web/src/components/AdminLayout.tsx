@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { Users, Workflow, FileText, Paintbrush, Braces, Plug, ScrollText, LogOut, ChevronDown, ChevronRight, Smartphone } from 'lucide-react';
 import { ModulesTree } from '../editor/ModulesTree';
@@ -20,7 +20,24 @@ export function AdminLayout() {
   const logout = useAuthStore(s => s.logout);
   const user = useAuthStore(s => s.user);
   const location = useLocation();
+  const navigate = useNavigate();
   const [editorExpanded, setEditorExpanded] = useState(true);
+
+  // Clear module_instance_id from search params when navigating away from /editor.
+  // React Router v7 preserves query params across SPA navigation, so ?module_instance_id=home
+  // would stick around on /templates and cause issues when navigating back to /editor.
+  const prevPathnameRef = useRef(location.pathname);
+  useEffect(() => {
+    const prev = prevPathnameRef.current;
+    prevPathnameRef.current = location.pathname;
+    if (prev.startsWith('/editor') && !location.pathname.startsWith('/editor')) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('module_instance_id')) {
+        params.delete('module_instance_id');
+        navigate({ search: params.toString() || undefined }, { replace: true });
+      }
+    }
+  }, [location.pathname, navigate]);
 
   const requiresWideViewport = WIDE_VIEWPORT_PAGES.some(p => location.pathname.startsWith(p));
   const isEditorActive = location.pathname.startsWith('/editor');
