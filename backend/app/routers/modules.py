@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -6,6 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.dependencies import PaginationParams, get_current_user, get_current_user_id
@@ -837,7 +840,17 @@ async def validate_screen(
     _current_user_id: str = Depends(get_current_user_id),
 ):
     """Validate screen_json against the same normalization contract used by save/apply."""
-    normalized_screen, errors = validate_sdui_screen_payload(body.screen_json)
+    screen_json = body.screen_json
+    normalized_screen, errors = validate_sdui_screen_payload(screen_json)
+
+    # Log screen structure summary
+    rows = normalized_screen.get("rows", []) if normalized_screen else screen_json.get("rows", []) if isinstance(screen_json, dict) else []
+    comp_types = [
+        cell.get("content", {}).get("type", "<no-type>")
+        for row in (rows if isinstance(rows, list) else [])
+        for cell in (row.get("cells", []) if isinstance(row, dict) else [])
+    ]
+    logger.info(f"[SDUI] validate_screen() — rows: {len(rows)}, components: {len(comp_types)}, types: {comp_types}, errors: {len(errors)}")
 
     return {
         "valid": len(errors) == 0,
@@ -1016,6 +1029,15 @@ async def set_sdui_screen(
         screen_json = prepare_sdui_screen_for_storage(body.screen, module_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    # Log screen structure summary
+    rows = screen_json.get("rows", []) if isinstance(screen_json, dict) else []
+    comp_types = [
+        cell.get("content", {}).get("type", "<no-type>")
+        for row in (rows if isinstance(rows, list) else [])
+        for cell in (row.get("cells", []) if isinstance(row, dict) else [])
+    ]
+    logger.info(f"[SDUI] set_sdui_screen({module_id}) — rows: {len(rows)}, components: {len(comp_types)}, types: {comp_types}")
 
     # Check auto-approve config for this module
     config = await _get_module_config(db, user_id, module_id)

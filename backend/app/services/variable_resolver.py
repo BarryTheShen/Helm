@@ -213,6 +213,7 @@ async def resolve_expression(expr: str, context: dict[str, Any]) -> str:
             placeholder = f"__HELM_UNRESOLVED_{i}__"
             unresolved_map[placeholder] = "{{" + token + "}}"
             working = working.replace("{{" + token + "}}", "{{{" + placeholder + "}}}")
+            logger.debug(f"[VariableResolver] resolve_expression() — created placeholder {placeholder} for unresolved {{{{token}}}}")
         else:
             # Replace {{token}} with {{{token}}} to skip HTML escaping
             working = working.replace("{{" + token + "}}", "{{{" + token + "}}}")
@@ -242,11 +243,13 @@ async def resolve_expression(expr: str, context: dict[str, Any]) -> str:
         node[parts[-1]] = value
 
     rendered = chevron.render(working, view)
-    logger.debug(f"resolve_expression() — result: {repr(rendered[:100])}")
+    logger.debug(f"[VariableResolver] resolve_expression() — rendered result: {repr(rendered[:100])}")
 
     # Restore any placeholders that chevron may have left (shouldn't happen,
     # but defensive in case chevron skips unknown keys).
     for placeholder, original in unresolved_map.items():
+        if placeholder in rendered:
+            logger.debug(f"[VariableResolver] resolve_expression() — restoring placeholder {placeholder} → {original}")
         rendered = rendered.replace(placeholder, original)
 
     return rendered
@@ -263,9 +266,15 @@ async def resolve_all_expressions(payload: Any, context: dict[str, Any]) -> Any:
         A new structure with all string expressions resolved.
     """
     if isinstance(payload, dict):
-        return {k: await resolve_all_expressions(v, context) for k, v in payload.items()}
+        result = {k: await resolve_all_expressions(v, context) for k, v in payload.items()}
+        logger.debug(f"[VariableResolver] resolve_all_expressions() — dict with {len(payload)} keys")
+        return result
     elif isinstance(payload, list):
-        return [await resolve_all_expressions(item, context) for item in payload]
+        result = [await resolve_all_expressions(item, context) for item in payload]
+        logger.debug(f"[VariableResolver] resolve_all_expressions() — list with {len(payload)} items")
+        return result
     elif isinstance(payload, str):
-        return await resolve_expression(payload, context)
+        result = await resolve_expression(payload, context)
+        logger.debug(f"[VariableResolver] resolve_all_expressions() — string value processed")
+        return result
     return payload

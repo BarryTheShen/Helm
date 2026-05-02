@@ -1,5 +1,6 @@
 """Shared SDUI state helpers used by both REST routes and MCP tools."""
 
+import logging
 from collections.abc import Sequence
 from typing import Any
 from uuid import uuid4
@@ -10,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.module_state import ModuleState
 from app.services.websocket_manager import manager
+
+logger = logging.getLogger(__name__)
 
 SDUI_MODULE_PREFIX = "sdui__"
 LEGACY_CONFIG_PREFIX = "config__"
@@ -131,21 +134,31 @@ def normalize_screen_for_client(screen: dict[str, Any] | None) -> dict[str, Any]
 
 def validate_sdui_screen_payload(screen: Any) -> tuple[dict[str, Any] | None, list[str]]:
     """Return the normalized storage payload plus any contract validation errors."""
+    logger.info(f"[SDUI] validate_sdui_screen_payload() — type: {type(screen).__name__}")
     if not isinstance(screen, dict):
+        logger.info("[SDUI] validate_sdui_screen_payload() — REJECTED: not a dict")
         return None, ["SDUI screen must be a JSON object."]
 
     from app.mcp.tools import _validate_sdui_v2, normalize_sdui_screen
 
     normalized_screen = normalize_sdui_screen(screen, convert_legacy_sections=False)
+    row_count = len(normalized_screen.get("rows", []))
+    logger.debug(f"[SDUI] normalize_sdui_screen() — rows: {row_count}, sections: {len(normalized_screen.get('sections', []))}")
 
     if "rows" in normalized_screen:
-        return normalized_screen, _validate_sdui_v2(normalized_screen)
+        errors = _validate_sdui_v2(normalized_screen)
+        logger.debug(f"[SDUI] _validate_sdui_v2() returned {len(errors)} errors")
+        if errors:
+            logger.debug(f"[SDUI] validation errors: {errors}")
+        return normalized_screen, errors
 
     if "sections" in normalized_screen:
+        logger.info("[SDUI] validate_sdui_screen_payload() — using legacy sections path")
         if not isinstance(normalized_screen.get("sections"), list):
             return normalized_screen, ["legacy 'sections' must be an array when provided."]
         return normalized_screen, []
 
+    logger.warning("[SDUI] validate_sdui_screen_payload() — REJECTED: no rows or sections found")
     return normalized_screen, [
         "screen must contain either a row-first 'rows' array or a legacy 'sections' array."
     ]
@@ -159,9 +172,11 @@ def prepare_sdui_screen_for_storage(screen: dict[str, Any], module_id: str) -> d
     """
     normalized_screen, validation_errors = validate_sdui_screen_payload(screen)
     if validation_errors:
-        error_summary = "; ".join(validation_errors[:5])
+        error_detail = "\n".join(f"  - {e}" for e in validation_errors)
+        logger.error(f"[SDUI] prepare_sdui_screen_for_storage({module_id}) — validation failed:\n{error_detail}")
         raise ValueError(
-            f"SDUI validation failed for module '{module_id}': {error_summary}. "
+            f"SDUI validation failed for module '{module_id}':\n"
+            f"{error_detail}\n"
             "Provide a valid row-first screen or use legacy sections for backward compatibility."
         )
 
