@@ -402,6 +402,7 @@ _LEGACY_V2_TYPE_MAP: dict[str, str] = {
     "stat": "Stat",
     "list": "List",
     "alert": "Alert",
+    "RichTextRenderer": "RichText",
 }
 
 

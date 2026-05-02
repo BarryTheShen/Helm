@@ -703,6 +703,15 @@ function ContainerPreview({
   );
 }
 
+function EmptyPreview({ gap, padding, backgroundColor }: any) {
+  return (
+    <div className="min-h-[48px] border border-dashed border-gray-200 rounded p-2"
+         style={{ gap, padding, backgroundColor }}>
+      <div className="text-xs italic text-gray-400">Empty container</div>
+    </div>
+  );
+}
+
 const PREVIEW_RENDERERS: Record<string, (props: any) => JSX.Element> = {
   Text: TextPreview,
   Markdown: MarkdownPreview,
@@ -722,6 +731,8 @@ const PREVIEW_RENDERERS: Record<string, (props: any) => JSX.Element> = {
   article_card: ArticleCardPreview,
   RichTextRenderer: RichTextRendererPreview,
   rich_text_renderer: RichTextRendererPreview,
+  RichText: RichTextRendererPreview,
+  Empty: EmptyPreview,
   icon_button: IconButtonPreview,
   spacer: SpacerPreview,
   card: CardPreview,
