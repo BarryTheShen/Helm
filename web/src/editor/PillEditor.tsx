@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -123,7 +123,11 @@ export function PillEditor({
     onUpdate: ({ editor }) => {
       const json = editor.getJSON();
       const serialized = serializeEditorContent(json);
-      onChange(serialized);
+      // Only notify parent when value actually changed to prevent
+      // unnecessary re-renders that cause cursor snap during typing.
+      if (serialized !== value) {
+        onChange(serialized);
+      }
     },
     onCreate: ({ editor }) => {
       // Initialize content from value prop

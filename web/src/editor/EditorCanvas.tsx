@@ -634,7 +634,7 @@ function TodoPreview() {
   );
 }
 
-function ArticleCardPreview({ title, summary, imageUrl }: any) {
+function ArticleCardPreview({ title, description, imageUrl }: any) {
   return (
     <div className="bg-white rounded-lg border overflow-hidden">
       {imageUrl && (
@@ -644,7 +644,7 @@ function ArticleCardPreview({ title, summary, imageUrl }: any) {
       )}
       <div className="p-3">
         <div className="text-sm font-bold mb-1">{title || 'Article Title'}</div>
-        <div className="text-xs text-gray-600">{summary || 'Article summary...'}</div>
+        <div className="text-xs text-gray-600">{description || 'Article summary...'}</div>
       </div>
     </div>
   );

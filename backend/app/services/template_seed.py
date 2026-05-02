@@ -57,7 +57,7 @@ SEED_TEMPLATES = [
                         "content": {
                             "type": "CalendarModule",
                             "props": {
-                                "variant": "agenda",
+                                "variant": "month",
                                 "dataBinding": {
                                     "dataSourceId": "calendar_events",
                                     "refreshInterval": 60000
