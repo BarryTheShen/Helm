@@ -463,6 +463,7 @@ export function WorkflowsPage() {
         {/* Node Inspector */}
         {showNodeInspector && selectedNode && (
           <NodeInspector
+            key={selectedNode?.id}
             node={selectedNode}
             onClose={() => setShowNodeInspector(false)}
             onUpdate={updateNodeData}
