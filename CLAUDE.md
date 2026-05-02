@@ -1,5 +1,15 @@
 # Agentic AI Super App
 
+## Persistent Workflow Rules — ALWAYS APPLY (do NOT skip these)
+
+- **Use sub-agents for everything.** Never do work yourself. Launch up to 10 sub-agents. Sub-agents CANNOT spawn other sub-agents. Always pass: "You CANNOT spawn sub-agents. Do the work yourself." + "Check .helm-sessions/current/global-context.md for codebase context."
+- **Always commit and push** atomic changes to the `modernize/import-libraries` branch after each step.
+- **Exhaustive testing:** Use up to 6 parallel live-tester agents. Especially check against `docs/Agentic AI Super App — Project Hub/Feature Feedback 3 34bb13d65bb38028b625e2a2da97056b.md` for known bugs. Fix bugs found, re-test until clean.
+- **Standard pipeline:** Due Diligence → Requirements → Plan → Plan-Critic (max 3 rounds) → Implement → Tester → Live-Test (up to 6 parallel) → Feature-Validator → Reviewer → Feature-Critic (gatekeeper) → Docs-Updater (last).
+- **Debugging:** Write debug scripts and debug hints in code. Never guess — add console.log with clear labels showing WHERE in the process things are. Use debug output to identify exactly where a full process breaks.
+
+---
+
 An independent, open-source React Native (Expo) mobile app — a universal agentic AI frontend that dynamically renders rich native UI components connected to any service via APIs. WeChat/Alipay super app model but AI-native.
 
 ## Tech Stack
