@@ -128,6 +128,8 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | `articles` | id, user_id (FK), title, source, url, summary_markdown, content_markdown, image_url, published_at |
 | `devices.assigned_app_id` | FK → apps.id (added to existing devices table) |
 
+**Component validation sync (FF3 gap fix):** `Empty` and `Divider` are now fully synchronized across all three layers — backend `_VALID_V2_COMPONENT_TYPES` + `_LEGACY_V2_TYPE_MAP` (`mcp/tools.py`), component seed (`component_seed.py`), and web editor `COMPONENT_REGISTRY` + `COMPONENT_SCHEMAS`. Empty and Divider can round-trip from LLM generation through server validation to editor property inspection without errors.
+
 **`module_states` key naming conventions:**
 | Key | Content |
 |-----|---------|
@@ -552,7 +554,7 @@ React Flow graph execution engine with APScheduler (`AsyncIOScheduler(timezone="
 
 Seeds the `component_registry` table on startup with default components. Only inserts if the component type doesn't already exist.
 
-**Atomic components (11):** `text`, `markdown`, `rich_text_renderer`, `button`, `image`, `textinput`, `container`, `divider`, `spacer`, `alert`, `list`
+**Atomic components (12):** `text`, `markdown`, `rich_text_renderer`, `button`, `image`, `textinput`, `container`, `divider`, `spacer`, `alert`, `list`, `empty`
 
 **Composite components (6):** `calendar`, `form`, `todo`, `article_card`, `calendar_module`, `chat_module`, `notes_module`, `input_bar`
 

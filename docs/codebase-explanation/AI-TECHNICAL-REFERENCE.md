@@ -437,6 +437,8 @@ The following **incomplete features and known issues** exist:
 - ✅ RichTextRenderer type alias — `"RichTextRenderer": "RichText"` added to `_LEGACY_V2_TYPE_MAP` in `mcp/tools.py` so LLM-generated legacy type normalizes before validation
 - ✅ Template validation — Home template Calendar variant changed from `"agenda"` to `"month"` (mobile only supports month view); ArticleCard preview field names aligned (`"description"` not `"summary"`)
 - ✅ Variable resolver — `date.today` and `date.now` namespaces added to `variable_resolver.py` for date variables in templates
+- ✅ Empty component validation — `"Empty"` added to `_VALID_V2_COMPONENT_TYPES` in `mcp/tools.py`; also added `"Empty": "Empty"` to `_LEGACY_V2_TYPE_MAP` for round-trip consistency (Gap Fix 1)
+- ✅ Empty component seed — `Empty` added to `INITIAL_COMPONENTS` in `component_seed.py` with tier=atomic, props_schema (gap, padding, backgroundColor) — now available in DB component registry on fresh installs (Gap Fix 2)
 
 **Web Admin Editor:**
 - ✅ MIN_ROW_HEIGHT — `export const MIN_ROW_HEIGHT = 48` constant in `useEditorStore.ts`; store clamps row height to `Math.max(MIN_ROW_HEIGHT, height)`; `PropertyInspector.tsx` imports constant for input min + clamp
@@ -444,6 +446,9 @@ The following **incomplete features and known issues** exist:
 - ✅ PillEditor cursor snap — value-comparison guard in `onUpdate` (`if (serialized !== value)`) prevents unnecessary re-renders during typing
 - ✅ Empty/RichText preview — `EmptyPreview` and `RichTextRendererPreview` renderers added to `PREVIEW_RENDERERS` in `EditorCanvas.tsx`
 - ✅ `date` namespace in `variableResolver.ts` — MOCK_CONTEXT includes `date.today` and `date.now`
+- ✅ Divider in COMPONENT_REGISTRY — `Divider` added to `COMPONENT_REGISTRY` in `types.ts` as atomic component with `➖` icon, description "Horizontal line separator" (Gap Fix 3)
+- ✅ Divider in COMPONENT_SCHEMAS — `Divider` field schema (color, thickness, margin) added to `COMPONENT_SCHEMAS` in `componentSchemas.ts` for property inspector support (Gap Fix 3)
+- ✅ Date category in VariablePicker — `date` category with `date.today` and `date.now` variables added to `STATIC_NAMESPACES` in `VariablePicker.tsx` (Gap Fix 4)
 
 **Workflow Editor:**
 - ✅ NodeInspector key prop — `key={selectedNode?.id}` on `NodeInspector` in `WorkflowsPage.tsx` ensures fresh component instance on node switch, preventing stale state
@@ -557,6 +562,9 @@ These were evaluated during the modernization branch and deliberately not adopte
 | NodeInspector key remount | `web/src/pages/WorkflowsPage.tsx` | `key={selectedNode?.id}` on NodeInspector ensures fresh instance per selection |
 | date namespace in variables | `backend/app/services/variable_resolver.py` + `web/src/editor/variableResolver.ts` + `mobile/src/utils/variableResolver.ts` | `{{date.today}}` and `{{date.now}}` resolve to current date/ISO timestamp |
 | Mobile composite registration | `mobile/src/renderer/componentRegistry.ts` | `TodoModule`, `ArticleCardModule`, `SDUIRichTextRenderer`, `SDUIEmpty` all registered |
+| Empty validation pattern | `backend/app/mcp/tools.py` | `_VALID_V2_COMPONENT_TYPES` frozenset must include every component type that can appear in LLM-generated screens; `_LEGACY_V2_TYPE_MAP` maps legacy names to canonical PascalCase; both must stay in sync with `component_seed.py` + web `COMPONENT_REGISTRY` |
+| Divider web editor support | `web/src/editor/types.ts` + `componentSchemas.ts` | Every component in `COMPONENT_REGISTRY` must have a corresponding entry in `COMPONENT_SCHEMAS` with field definitions for the property inspector |
+| VariablePicker STATIC_NAMESPACES | `web/src/editor/VariablePicker.tsx` | Namespace categories (user, component, self, custom, env, data, date) must match all supported variable scopes; Date category provides `date.today` and `date.now` |
 
 ---
 

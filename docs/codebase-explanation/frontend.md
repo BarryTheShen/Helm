@@ -498,12 +498,12 @@ web/src/
 ├── editor/
 │   ├── types.ts          → Editor types, row visual props, device presets, component registry; preserves lowercase legacy types as read-only; requires valid server_action.function+params before persistence
 │   ├── templateLibrary.ts→ Local starter screens + reusable row templates; starter InputBar no longer seeds dead send_to_agent.message defaults
-│   ├── componentSchemas.ts → Dynamic property schemas for inspector; only supported authorable actions offered for new edits; Session 9: Todo, RichTextRenderer, ArticleCard, Calendar variants
+│   ├── componentSchemas.ts → Dynamic property schemas for inspector; only supported authorable actions offered for new edits; Session 9: Todo, RichTextRenderer, ArticleCard, Calendar variants; FF3 gap fix: Divider (color, thickness, margin)
 │   ├── useEditorStore.ts → Rows-first Zustand contract, 50-state undo/redo, selection, device preview; exports MIN_ROW_HEIGHT=48 constant; updateRowHeight() clamps to MIN_ROW_HEIGHT; serializeCellForRuntime() preserves rules array
 │   ├── StructureTree.tsx → Left panel tree + JSON copy actions
 │   ├── EditorCanvas.tsx  → Center canvas with cell resize, row-height resize, @dnd-kit/sortable multi-step row drag, external drag handles, percentage width rendering; PREVIEW_RENDERERS includes EmptyPreview and RichTextRendererPreview
 │   ├── PropertyInspector.tsx → Right panel editor with auto width controls, uniform + per-side padding, InputBar action narrowing, read-only summaries for legacy payloads; Session 9: width toggle, VariableInput integration
-│   ├── VariablePicker.tsx → @ trigger variable picker with namespace support
+│   ├── VariablePicker.tsx → @ trigger variable picker with namespace support; includes Date category (date.today, date.now) in STATIC_NAMESPACES
 │   ├── VariableInput.tsx → Text input with variable picker integration
 │   ├── useVariablePicker.tsx → Hook for variable picker state management
 │   ├── ComponentPicker.tsx → Component type chooser for empty cells
