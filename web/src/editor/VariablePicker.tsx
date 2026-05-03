@@ -41,6 +41,14 @@ const STATIC_NAMESPACES: VariableCategory[] = [
       { namespace: 'self', key: 'state', displayName: 'State', description: 'Current component state' },
     ],
   },
+  {
+    title: 'Date',
+    namespace: 'date',
+    variables: [
+      { namespace: 'date', key: 'today', displayName: 'Today', description: "Today's date (YYYY-MM-DD)" },
+      { namespace: 'date', key: 'now', displayName: 'Now', description: 'Current date/time (ISO 8601)' },
+    ],
+  },
 ];
 
 function CategoryGroup({ title, variables, onSelect, filter }: {
