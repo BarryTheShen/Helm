@@ -248,6 +248,19 @@ INITIAL_COMPONENTS = [
             "imageUrl": "",
         },
     },
+    {
+        "type": "Empty",
+        "tier": "atomic",
+        "name": "Empty",
+        "icon": "⬜",
+        "description": "Spacer / placeholder component with configurable gap, padding, and background",
+        "props_schema": {
+            "gap": {"type": "number", "default": 8},
+            "padding": {"type": "number", "default": 0},
+            "backgroundColor": {"type": "string", "default": "#FFFFFF"},
+        },
+        "default_props": {"gap": 8, "padding": 0, "backgroundColor": "#FFFFFF"},
+    },
 ]
 
 
