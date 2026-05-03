@@ -377,7 +377,7 @@ _VALID_V2_COMPONENT_TYPES: frozenset[str] = frozenset({
     "Icon", "Divider", "Container",
     "CalendarModule", "ChatModule", "NotesModule", "InputBar",
     "Badge", "Stat", "List", "Alert",
-    "Todo", "RichText", "ArticleCard",
+    "Todo", "RichText", "ArticleCard", "Empty",
 })
 
 _LEGACY_V2_TYPE_MAP: dict[str, str] = {
@@ -403,6 +403,7 @@ _LEGACY_V2_TYPE_MAP: dict[str, str] = {
     "list": "List",
     "alert": "Alert",
     "RichTextRenderer": "RichText",
+    "Empty": "Empty",
 }
 
 
