@@ -40,6 +40,10 @@ export interface EditorRowVisualProps {
   padding?: EditorRowPaddingValue;
   scrollable?: boolean;
   gap?: number;
+  showDivider?: boolean;
+  dividerColor?: string;
+  dividerThickness?: number;
+  dividerMargin?: number;
   compact?: { hidden?: boolean; stack?: boolean };
   regular?: { hidden?: boolean };
 }
@@ -211,7 +215,6 @@ export const COMPONENT_REGISTRY: ComponentDefinition[] = [
   { type: 'Image', displayName: 'Image', icon: '🖼️', category: 'atomic', description: 'Display an image' },
   { type: 'TextInput', displayName: 'Text Input', icon: '✏️', category: 'atomic', description: 'User text input field' },
   { type: 'Icon', displayName: 'Icon', icon: '⭐', category: 'atomic', description: 'Display an icon' },
-  { type: 'Divider', displayName: 'Divider', icon: '➖', category: 'atomic', description: 'Horizontal line separator' },
   // Structural
   { type: 'Empty', displayName: 'Empty', icon: '📦', category: 'structural', description: 'Container for vertical stacking of components' },
   { type: 'Container', displayName: 'Container', icon: '🧱', category: 'structural', description: 'Flex layout container with nested children', authorable: false },

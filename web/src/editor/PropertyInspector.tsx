@@ -930,16 +930,68 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
       {/* Bottom Divider */}
       <div>
         <div className="flex items-center justify-between">
-          <label className="text-xs font-medium text-gray-500">Bottom Divider</label>
+          <label className="text-xs font-medium text-gray-500">Show Divider</label>
           <button
-            onClick={() => updateRowProps(rowId, { show_bottom_divider: !(row.show_bottom_divider ?? false) })}
-            className={`relative w-9 h-5 rounded-full transition-colors ${row.show_bottom_divider ? 'bg-blue-600' : 'bg-gray-300'}`}
+            onClick={() => updateRowProps(rowId, { showDivider: !(row.showDivider ?? false) })}
+            className={`relative w-9 h-5 rounded-full transition-colors ${row.showDivider ? 'bg-blue-600' : 'bg-gray-300'}`}
           >
-            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${row.show_bottom_divider ? 'left-[18px]' : 'left-0.5'}`} />
+            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${row.showDivider ? 'left-[18px]' : 'left-0.5'}`} />
           </button>
         </div>
-        <div className="text-[10px] text-gray-400 mt-1">Show a divider line below this row on mobile.</div>
+        <div className="text-[10px] text-gray-400 mt-1">Show a horizontal divider line below this row.</div>
       </div>
+
+      {/* Divider Color */}
+      {row.showDivider && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Divider Color</label>
+          <div className="flex gap-1.5 items-center">
+            <input
+              type="color"
+              value={row.dividerColor ?? '#E0E0E0'}
+              onChange={e => updateRowProps(rowId, { dividerColor: e.target.value })}
+              className="w-7 h-7 rounded border border-gray-200 cursor-pointer"
+            />
+            <input
+              type="text"
+              value={row.dividerColor ?? '#E0E0E0'}
+              onChange={e => updateRowProps(rowId, { dividerColor: e.target.value })}
+              className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md outline-none font-mono"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Divider Thickness */}
+      {row.showDivider && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Divider Thickness (px)</label>
+          <input
+            type="number"
+            value={getOptionalNumberInputValue(row.dividerThickness)}
+            min={1}
+            max={8}
+            onChange={e => updateRowProps(rowId, { dividerThickness: parseOptionalNumberInput(e.target.value, 1) })}
+            placeholder="1"
+            className="w-full px-2 py-1 text-xs border border-gray-200 rounded-md outline-none"
+          />
+        </div>
+      )}
+
+      {/* Divider Margin */}
+      {row.showDivider && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Divider Margin (px)</label>
+          <input
+            type="number"
+            value={getOptionalNumberInputValue(row.dividerMargin)}
+            min={0}
+            onChange={e => updateRowProps(rowId, { dividerMargin: parseOptionalNumberInput(e.target.value, 0) })}
+            placeholder="8"
+            className="w-full px-2 py-1 text-xs border border-gray-200 rounded-md outline-none"
+          />
+        </div>
+      )}
 
       {/* Row ID */}
       <div>

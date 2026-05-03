@@ -1265,6 +1265,11 @@ function SortableRow({
           })}
         </div>
 
+        {/* Bottom divider */}
+        {row.showDivider && (
+          <hr style={{ borderColor: row.dividerColor || '#E0E0E0', borderWidth: row.dividerThickness ?? 1, borderStyle: 'solid', margin: `${row.dividerMargin ?? 8}px 0` }} />
+        )}
+
         <RowHeightResizeHandle
           rowId={row.id}
           onPreview={handleRowResizePreview}
