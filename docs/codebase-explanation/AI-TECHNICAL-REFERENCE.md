@@ -4,8 +4,8 @@
 > Read this FIRST before making any changes. It tells you exactly where everything is,
 > what connects to what, and what the known pitfalls are.
 >
-> Last updated: 2026-04-30
-> Last audit: 2026-04-30 — ✅ All systems operational (27 test files, all layers present)
+> Last updated: 2026-05-03
+> Last audit: 2026-05-03 — ✅ All systems operational (27 test files, 338 tests passing, FF3 fixes verified)
 
 ---
 
@@ -246,8 +246,8 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 
 ## Test Coverage
 
-**Last Test Run:** 2026-04-30  
-**Status:** ✅ 200+ tests passing (100% pass rate)  
+**Last Test Run:** 2026-05-03  
+**Status:** ✅ 338 tests passing (100% pass rate)  
 **Execution Time:** ~120 seconds
 
 ### Test Breakdown by Module
@@ -429,6 +429,33 @@ The following **incomplete features and known issues** exist:
 - ✅ Web admin port corrected in documentation (5174, not 5173)
 - ✅ All 200 backend tests verified passing
 
+### FF3 Bug Fixes (2026-05-03) — All Verified
+
+**338/338 backend tests passing, 7/7 manual live tests passing.**
+
+**Backend:**
+- ✅ RichTextRenderer type alias — `"RichTextRenderer": "RichText"` added to `_LEGACY_V2_TYPE_MAP` in `mcp/tools.py` so LLM-generated legacy type normalizes before validation
+- ✅ Template validation — Home template Calendar variant changed from `"agenda"` to `"month"` (mobile only supports month view); ArticleCard preview field names aligned (`"description"` not `"summary"`)
+- ✅ Variable resolver — `date.today` and `date.now` namespaces added to `variable_resolver.py` for date variables in templates
+
+**Web Admin Editor:**
+- ✅ MIN_ROW_HEIGHT — `export const MIN_ROW_HEIGHT = 48` constant in `useEditorStore.ts`; store clamps row height to `Math.max(MIN_ROW_HEIGHT, height)`; `PropertyInspector.tsx` imports constant for input min + clamp
+- ✅ RuleBuilder persistence — `serializeCellForRuntime()` now explicitly preserves `rules` array on serialized cell, so rules survive save-and-reload cycles
+- ✅ PillEditor cursor snap — value-comparison guard in `onUpdate` (`if (serialized !== value)`) prevents unnecessary re-renders during typing
+- ✅ Empty/RichText preview — `EmptyPreview` and `RichTextRendererPreview` renderers added to `PREVIEW_RENDERERS` in `EditorCanvas.tsx`
+- ✅ `date` namespace in `variableResolver.ts` — MOCK_CONTEXT includes `date.today` and `date.now`
+
+**Workflow Editor:**
+- ✅ NodeInspector key prop — `key={selectedNode?.id}` on `NodeInspector` in `WorkflowsPage.tsx` ensures fresh component instance on node switch, preventing stale state
+
+**Mobile:**
+- ✅ TodoModule — New composite component for todo list (155 lines)
+- ✅ ArticleCardModule — New composite component for article cards (115 lines)
+- ✅ SDUIRichTextRenderer — New atomic component (21 lines)
+- ✅ Component registry — Registered `TodoModule`, `ArticleCardModule`, `SDUIRichTextRenderer`, `SDUIEmpty` in `componentRegistry.ts`
+- ✅ Variable resolver — `date` namespace added to `variableResolver.ts`
+- ✅ `useVariableContext` — `date` namespace added (date.today, date.now)
+
 ---
 
 ## Assessed and Rejected Libraries (Phase F)
@@ -523,6 +550,13 @@ These were evaluated during the modernization branch and deliberately not adopte
 | Backend router registration | `backend/app/main.py` | Apps, devices, settings, todos, articles routers registered |
 | SQLAdmin model registration | `backend/app/main.py` | All 24 models registered; uses `secret_key` from settings for BasicAuth |
 | Session middleware for SQLAdmin | `backend/app/main.py` | `SessionMiddleware` required for SQLAdmin's authentication backend |
+| RichTextRenderer legacy alias | `backend/app/mcp/tools.py` | `_LEGACY_V2_TYPE_MAP` contains `"RichTextRenderer": "RichText"` for backward compat |
+| MIN_ROW_HEIGHT constant | `web/src/editor/useEditorStore.ts` | `export const MIN_ROW_HEIGHT = 48`; store clamps height to `Math.max(MIN_ROW_HEIGHT, height)` |
+| RuleBuilder rules persistence | `web/src/editor/useEditorStore.ts` | `serializeCellForRuntime()` preserves `rules` array on serialized cell output |
+| PillEditor value guard | `web/src/editor/PillEditor.tsx` | `onUpdate` only fires `onChange` when `serialized !== value`, preventing cursor snap |
+| NodeInspector key remount | `web/src/pages/WorkflowsPage.tsx` | `key={selectedNode?.id}` on NodeInspector ensures fresh instance per selection |
+| date namespace in variables | `backend/app/services/variable_resolver.py` + `web/src/editor/variableResolver.ts` + `mobile/src/utils/variableResolver.ts` | `{{date.today}}` and `{{date.now}}` resolve to current date/ISO timestamp |
+| Mobile composite registration | `mobile/src/renderer/componentRegistry.ts` | `TodoModule`, `ArticleCardModule`, `SDUIRichTextRenderer`, `SDUIEmpty` all registered |
 
 ---
 

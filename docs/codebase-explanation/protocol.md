@@ -1,6 +1,6 @@
 # Protocol — Communication Layer
 
-> Last updated: 2026-04-30
+> Last updated: 2026-05-03
 
 ## Tier 1: TLDR
 
@@ -293,6 +293,7 @@ Template strings use `{{expression}}` mustache syntax. Resolved both server-side
 | `custom` | `{{custom.<name>}}` | CustomVariable record |
 | `env` | `{{env.<key>}}` | Environment variables |
 | `data` | `{{data.<source>.<field>}}` | Data source cache |
+| `date` | `{{date.today}}`, `{{date.now}}` | Current date (YYYY-MM-DD) and ISO timestamp |
 
 Unresolved expressions are left as-is `{{original}}`. `{{input}}` is a backward-compat alias for `{{self.value}}`.
 

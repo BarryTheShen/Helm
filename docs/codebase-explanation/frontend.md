@@ -1,6 +1,6 @@
 # Frontend — React Native (Expo) Mobile App + Web Admin
 
-> Last updated: 2026-04-30
+> Last updated: 2026-05-03
 
 ## Tier 1: TLDR
 
@@ -342,6 +342,8 @@ Uses `resolveColor()` and `themeShadows` from `src/theme/tokens.ts`.
 | `ChatModule` | Placeholder | Shows "navigate to Chat tab"; pull-to-refresh via RefreshControl |
 | `NotesModule` | Implemented | TextInput + SDUIMarkdown preview; pull-to-refresh via RefreshControl |
 | `InputBar` | Full MVP | Text input + send strip; send stays disabled unless both `onSend` and `dispatch` are available, and typed text is only cleared after a send action actually dispatches |
+| `TodoModule` | Implemented | FF3: Todo list with toggle, add, delete actions |
+| `ArticleCardModule` | Implemented | FF3: Article preview card with image, metadata, tap navigation |
 
 ### V2 SDUI Components (NEW in Session 9)
 
@@ -497,9 +499,9 @@ web/src/
 │   ├── types.ts          → Editor types, row visual props, device presets, component registry; preserves lowercase legacy types as read-only; requires valid server_action.function+params before persistence
 │   ├── templateLibrary.ts→ Local starter screens + reusable row templates; starter InputBar no longer seeds dead send_to_agent.message defaults
 │   ├── componentSchemas.ts → Dynamic property schemas for inspector; only supported authorable actions offered for new edits; Session 9: Todo, RichTextRenderer, ArticleCard, Calendar variants
-│   ├── useEditorStore.ts → Rows-first Zustand contract, 50-state undo/redo, selection, device preview
+│   ├── useEditorStore.ts → Rows-first Zustand contract, 50-state undo/redo, selection, device preview; exports MIN_ROW_HEIGHT=48 constant; updateRowHeight() clamps to MIN_ROW_HEIGHT; serializeCellForRuntime() preserves rules array
 │   ├── StructureTree.tsx → Left panel tree + JSON copy actions
-│   ├── EditorCanvas.tsx  → Center canvas with cell resize, row-height resize, @dnd-kit/sortable multi-step row drag, external drag handles, percentage width rendering
+│   ├── EditorCanvas.tsx  → Center canvas with cell resize, row-height resize, @dnd-kit/sortable multi-step row drag, external drag handles, percentage width rendering; PREVIEW_RENDERERS includes EmptyPreview and RichTextRendererPreview
 │   ├── PropertyInspector.tsx → Right panel editor with auto width controls, uniform + per-side padding, InputBar action narrowing, read-only summaries for legacy payloads; Session 9: width toggle, VariableInput integration
 │   ├── VariablePicker.tsx → @ trigger variable picker with namespace support
 │   ├── VariableInput.tsx → Text input with variable picker integration
@@ -508,7 +510,7 @@ web/src/
 │   ├── ModulesTree.tsx   → Module instance tree sidebar; SDUIModule interface (module_id, name, icon, has_screen, is_custom); direct /api/sdui/modules fetch; RenameModuleModal and DeleteModuleModal
 │   ├── RenameModuleModal.tsx → Inline rename dialog for modules
 │   ├── DeleteModuleModal.tsx → Inline delete dialog for modules with redirect on success
-│   ├── PillEditor.tsx    → Variable pill inline editor with @ trigger
+│   ├── PillEditor.tsx    → Variable pill inline editor with @ trigger; value-comparison guard in onUpdate prevents cursor snap during typing
 │   ├── VariablePillExtension.ts → TipTap/ProseMirror extension for variable pills
 │   ├── VariablePillNodeView.tsx → Node view for pill rendering in editor
 │   ├── variableResolver.ts → Variable resolution for editor

@@ -2,8 +2,8 @@
 
 How to run, configure, and edit every part of the stack.
 
-> Last updated: 2026-04-30
-> Last audit: 2026-04-16 — ✅ All systems operational
+> Last updated: 2026-05-03
+> Last audit: 2026-05-03 — ✅ All systems operational (338 backend tests, 7/7 live tests)
 
 ---
 

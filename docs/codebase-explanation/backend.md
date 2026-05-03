@@ -1,7 +1,7 @@
 # Backend — Python FastAPI Server
 
-> Last updated: 2026-04-30
-> Last audit: 2026-04-30 — ✅ All systems operational (27 test files)
+> Last updated: 2026-05-03
+> Last audit: 2026-05-03 — ✅ All systems operational (27 test files, 338 tests passing)
 
 ## Tier 1: TLDR
 
@@ -499,6 +499,7 @@ Resolves `{{expression}}` mustache syntax in SDUI payloads server-side using **c
 | `env` | `{{env.<key>}}` | `os.environ` |
 | `data` | `{{data.<source_name>.<field>}}` | Data source cache dict |
 | `connection` | `{{connection.<name>.<credential_key>}}` | Connection credentials (Fernet-decrypted) |
+| `date` | `{{date.today}}`, `{{date.now}}` | Current date (YYYY-MM-DD) and ISO timestamp |
 
 Async entry point: `resolve_expression(expr, context)` replaces all `{{...}}` in a string. Unresolved expressions are left as-is.
 
@@ -692,3 +693,17 @@ All tool logic is here; shared between the Agent Proxy (internal) and MCP Server
 ### Template Seed
 - 5 new production templates (Calendar, Chat, News, Weather, Tasks)
 - Templates now use new components and actions
+
+---
+
+## FF3 Bug Fixes (2026-05-03)
+
+### RichTextRenderer Legacy Type Alias
+`mcp/tools.py::_LEGACY_V2_TYPE_MAP` contains `"RichTextRenderer": "RichText"` so the LLM's legacy component type name normalizes to the canonical `"RichText"` before validation against `_VALID_V2_COMPONENT_TYPES`. This prevents validation failures when external agents use the snake_case name.
+
+### Variable Resolver — date namespace
+Added `date.today` (YYYY-MM-DD) and `date.now` (ISO 8601 timestamp) to the variable resolution context. Templates referencing `{{date.today}}` (e.g., Daily Planner) now resolve correctly.
+
+### Template Validation Fixes
+- Home template Calendar variant changed from `"agenda"` to `"month"` (mobile only supports month view)
+- ArticleCard preview field names aligned to `"description"` (matching template seed, not `"summary"`)
