@@ -272,6 +272,11 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'placeholder', label: 'Placeholder', type: 'text', defaultValue: 'Type a message...' },
     { key: 'maxLines', label: 'Max Lines', type: 'number', defaultValue: 6 },
   ],
+  Divider: [
+    { key: 'color', label: 'Color', type: 'color', defaultValue: '#E0E0E0' },
+    { key: 'thickness', label: 'Thickness', type: 'number', defaultValue: 1 },
+    { key: 'margin', label: 'Margin', type: 'number', defaultValue: 8 },
+  ],
   Empty: [
     { key: 'gap', label: 'Gap', type: 'number', defaultValue: 8 },
     { key: 'padding', label: 'Padding', type: 'number', defaultValue: 0 },
