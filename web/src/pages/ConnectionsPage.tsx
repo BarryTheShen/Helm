@@ -277,6 +277,7 @@ export function ConnectionsPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
                 <input {...createForm.register('name')} className={inputClass} placeholder="My Weather API" />
+                <p className="text-xs text-gray-500 mt-1">A friendly name to identify this connection.</p>
                 {createForm.formState.errors.name && <p className={errorClass}>{createForm.formState.errors.name.message}</p>}
               </div>
               <div>
@@ -294,10 +295,12 @@ export function ConnectionsPage() {
                     </optgroup>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">Select the external service or API provider.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-                <input {...createForm.register('api_key')} type="password" className={inputClass} placeholder="Enter API key" />
+                <input {...createForm.register('api_key')} type="password" className={inputClass} placeholder='e.g., sk-1234567890abcdef' />
+                <p className="text-xs text-gray-500 mt-1">Enter the raw API key or token provided by the service.</p>
                 {createForm.formState.errors.api_key && <p className={errorClass}>{createForm.formState.errors.api_key.message}</p>}
               </div>
               <div className="flex justify-end gap-3 pt-2">
@@ -395,6 +398,7 @@ export function ConnectionsPage() {
                     </optgroup>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">Select the external service or API provider.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>

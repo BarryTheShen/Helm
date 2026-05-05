@@ -173,7 +173,21 @@ def prepare_sdui_screen_for_storage(screen: dict[str, Any], module_id: str) -> d
     normalized_screen, validation_errors = validate_sdui_screen_payload(screen)
     if validation_errors:
         error_detail = "\n".join(f"  - {e}" for e in validation_errors)
-        logger.error(f"[SDUI] prepare_sdui_screen_for_storage({module_id}) — validation failed:\n{error_detail}")
+        # Log full screen structure for debugging
+        rows = screen.get("rows", [])
+        cell_info = []
+        for r_idx, r in enumerate(rows if isinstance(rows, list) else []):
+            if not isinstance(r, dict):
+                continue
+            for c_idx, c in enumerate(r.get("cells", []) if isinstance(r.get("cells"), list) else []):
+                content = c.get("content") if isinstance(c, dict) else None
+                cell_info.append(f"  row[{r_idx}].cell[{c_idx}]: content={type(content).__name__ if content is not None else 'None'}, type={content.get('type') if isinstance(content, dict) else 'N/A'}, has_id={'id' in c if isinstance(c, dict) else False}")
+        logger.error(
+            f"[SDUI] prepare_sdui_screen_for_storage({module_id}) — validation failed:\n"
+            f"  Screen has {len(rows)} rows.\n"
+            f"  Cell details:\n" + "\n".join(cell_info) + "\n"
+            f"  Validation errors:\n" + "\n".join(f"    {e}" for e in validation_errors)
+        )
         raise ValueError(
             f"SDUI validation failed for module '{module_id}':\n"
             f"{error_detail}\n"

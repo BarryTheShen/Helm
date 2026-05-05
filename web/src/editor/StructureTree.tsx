@@ -42,7 +42,7 @@ interface AddRowPopoverProps {
 }
 
 interface StructureTreeProps {
-  screenLabel?: string;
+  moduleLabel?: string;
 }
 
 function AddRowPopover({ onAdd, onClose, anchorRect }: AddRowPopoverProps) {
@@ -110,7 +110,7 @@ function AddRowPopover({ onAdd, onClose, anchorRect }: AddRowPopoverProps) {
   );
 }
 
-export function StructureTree({ screenLabel = 'Current Screen' }: StructureTreeProps) {
+export function StructureTree({ moduleLabel = 'Current Module' }: StructureTreeProps) {
   const rows = useEditorStore(s => s.rows);
   const selection = useEditorStore(s => s.selection);
   const setSelection = useEditorStore(s => s.setSelection);
@@ -188,8 +188,8 @@ export function StructureTree({ screenLabel = 'Current Screen' }: StructureTreeP
           onClick={() => setSelection(null)}
         >
           <Rows3 size={12} className="text-gray-400 shrink-0" />
-          <span className="text-xs font-medium flex-1 truncate" title={screenLabel}>
-            Screen: {screenLabel}
+          <span className="text-xs font-medium flex-1 truncate" title={moduleLabel}>
+            Module: {moduleLabel}
             <span className="text-gray-400 font-normal"> ({rows.length} row{rows.length !== 1 ? 's' : ''})</span>
           </span>
           <div className="hidden group-hover:flex items-center gap-0.5">
@@ -199,7 +199,7 @@ export function StructureTree({ screenLabel = 'Current Screen' }: StructureTreeP
                 void copyJsonToClipboard(getScreen());
               }}
               className="p-0.5 hover:bg-gray-200 rounded"
-              title="Copy Screen JSON"
+              title="Copy Module JSON"
             >
               <Copy size={10} />
             </button>

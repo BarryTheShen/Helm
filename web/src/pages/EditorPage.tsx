@@ -1128,7 +1128,7 @@ export function EditorPage() {
 
           <button onClick={handleDeleteScreen} disabled={!canDeleteSelectedScreen}
             className="flex items-center gap-1 px-2 py-1 text-xs bg-red-50 hover:bg-red-100 text-red-700 rounded transition-colors disabled:opacity-50 disabled:hover:bg-red-50">
-            <Trash2 size={11} /> Delete Screen
+            <Trash2 size={11} /> Delete Module
           </button>
           <button onClick={handleSaveDraft} disabled={saving || !canModifySelectedModule}
             className="flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors disabled:opacity-50">
@@ -1146,7 +1146,7 @@ export function EditorPage() {
         {/* Left Panel: Structure Tree */}
         <div className="w-[240px] bg-white border-r border-gray-200 shrink-0 overflow-hidden flex flex-col min-h-0">
           <div className="flex-1 min-h-0 overflow-hidden">
-            <StructureTree screenLabel={selectedModuleLabel} />
+            <StructureTree moduleLabel={selectedModuleLabel} />
           </div>
           <div className="border-t border-gray-200 shrink-0 bg-gray-50/60">
             <button
@@ -1209,7 +1209,7 @@ export function EditorPage() {
                             {template.category}
                           </span>
                         </div>
-                        <div className="mt-2 text-[11px] font-medium text-blue-600">Apply screen</div>
+                        <div className="mt-2 text-[11px] font-medium text-blue-600">Apply module</div>
                       </button>
                     ))
                   ) : (
@@ -1239,7 +1239,7 @@ export function EditorPage() {
                           {template.category}
                         </span>
                       </div>
-                      <div className="mt-2 text-[11px] font-medium text-blue-600">Apply screen</div>
+                      <div className="mt-2 text-[11px] font-medium text-blue-600">Apply module</div>
                     </button>
                   ))}
                 </div>
@@ -1309,7 +1309,7 @@ export function EditorPage() {
       {/* ── Status Bar ───────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-3 py-1 bg-white border-t border-gray-200 text-[10px] text-gray-400 shrink-0">
         <div className="flex items-center gap-3">
-          <span>Screen: {selectedModuleStatusLabel}</span>
+          <span>Module: {selectedModuleStatusLabel}</span>
           <span>Rows: {rows.length}</span>
           <span>Cells: {rows.reduce((sum, r) => sum + r.cells.length, 0)}</span>
         </div>
