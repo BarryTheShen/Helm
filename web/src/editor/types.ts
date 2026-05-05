@@ -528,13 +528,17 @@ function normalizeButtonSize(value: unknown): unknown {
   return value;
 }
 
-function normalizeCalendarView(value: unknown): 'month' | 'week' | 'day' | 'agenda' | 'compact' | undefined {
-  if (value === 'month' || value === 'week' || value === 'day' || value === 'agenda' || value === 'compact') {
+function normalizeCalendarView(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const lower = value.toLowerCase();
+  // Known valid variants — pass through as-is (case-insensitive match)
+  if (lower === 'month' || lower === 'week' || lower === 'day' || lower === 'agenda' || lower === 'compact') {
     return value;
   }
   // Legacy threeDay mapping
-  if (value === 'threeDay') return 'week';
-  return undefined;
+  if (lower === 'threeday') return 'week';
+  // Preserve any other user-selected string variant (forward-compatible)
+  return value;
 }
 
 function createFallbackSheetContent(sheetId: string): EditorComponent {

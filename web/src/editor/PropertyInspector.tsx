@@ -766,6 +766,12 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
                 updateRowHeight(rowId, 'auto');
               }
             }}
+            onBlur={() => {
+              // Safety net: clamp to minimum on blur in case value bypassed onChange
+              if (typeof row.height === 'number' && row.height < MIN_ROW_HEIGHT) {
+                updateRowHeight(rowId, MIN_ROW_HEIGHT);
+              }
+            }}
             min={MIN_ROW_HEIGHT}
             step={1}
             placeholder="px"

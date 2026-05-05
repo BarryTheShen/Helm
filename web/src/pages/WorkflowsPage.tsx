@@ -23,10 +23,10 @@ import { NodeInspector } from '../components/workflow/NodeInspector';
 function ActionNode({ data }: { data: any }) {
   return (
     <div className="px-4 py-3 bg-blue-50 border-2 border-blue-500 rounded-lg shadow-sm min-w-[180px]">
-      <Handle type="target" position={Position.Top} className="!bg-blue-500" />
+      <Handle type="target" position={Position.Top} style={{ background: '#3b82f6', width: 12, height: 12, border: '2px solid #fff' }} />
       <div className="font-semibold text-sm text-blue-900">{data.label || 'Action'}</div>
       {data.action && <div className="text-xs text-blue-600 mt-1">{data.action}</div>}
-      <Handle type="source" position={Position.Bottom} className="!bg-blue-500" />
+      <Handle type="source" position={Position.Bottom} style={{ background: '#3b82f6', width: 12, height: 12, border: '2px solid #fff' }} />
     </div>
   );
 }
@@ -82,7 +82,7 @@ function SwitchNode({ data }: { data: any }) {
 
 function LoopNode({ data }: { data: any }) {
   return (
-    <div className="px-4 py-3 bg-green-50 border-2 border-green-500 rounded-xl shadow-sm min-w-[180px]">
+    <div className="px-4 py-3 bg-green-50 border-2 border-green-500 rounded-lg shadow-sm min-w-[180px]">
       <Handle type="target" position={Position.Top} className="!bg-green-500" />
       <div className="font-semibold text-sm text-green-900 text-center">{data.label || 'Loop'}</div>
       {data.items && <div className="text-xs text-green-600 mt-1 text-center truncate">{data.items}</div>}
@@ -294,8 +294,10 @@ export function WorkflowsPage() {
     setNodes((nds) =>
       nds.map((node) => (node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node))
     );
-    // selectedNode stays stable — no update needed here
-    // Inspector reads from stable selectedNode reference set on initial click
+    setSelectedNode((prev) => {
+      if (!prev || prev.id !== nodeId) return prev;
+      return { ...prev, data: { ...prev.data, ...data } };
+    });
   }, [setNodes]);
 
   const deleteNode = useCallback(() => {

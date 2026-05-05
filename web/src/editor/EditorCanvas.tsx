@@ -27,8 +27,7 @@ import ReactMarkdown from 'react-markdown';
 
 const MIN_ROW_HEIGHT = 48;
 const ROW_DRAG_HANDLE_WIDTH = 24;
-const ROW_DRAG_HANDLE_OFFSET = -32; // Position drag handle outside the screen (negative = left of screen)
-const DEFAULT_ROW_RIGHT_PADDING = 4;
+const ROW_DRAG_HANDLE_OFFSET = -60; // Position drag handle well outside the phone mockup (negative = left of screen)
 const SCROLLABLE_CELL_WIDTH = 160;
 const SCROLLABLE_CELL_MIN_WIDTH = 120;
 const MAX_PREVIEW_WIDTH = 960;
@@ -116,19 +115,9 @@ function IconPreview({ name, size, color }: any) {
   return <span style={{ fontSize: size || 24, color: color || '#000' }}>⭐ {name || 'star'}</span>;
 }
 
-function TextInputPreview({ placeholder, multiline, value, secureTextEntry, options }: any) {
+function TextInputPreview({ placeholder, multiline, value, secureTextEntry }: any) {
   const rawValue = value === undefined || value === null ? '' : String(value);
   const displayValue = secureTextEntry && rawValue ? '*'.repeat(Math.max(rawValue.length, 4)) : rawValue;
-  const isSelectLike = Array.isArray(options) || typeof options === 'string';
-
-  if (isSelectLike) {
-    return (
-      <div className="flex items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm">
-        <span className={displayValue ? 'text-gray-700' : 'text-gray-400'}>{displayValue || placeholder || 'Select option'}</span>
-        <span className="text-gray-400">v</span>
-      </div>
-    );
-  }
 
   return (
     <div>
@@ -703,11 +692,17 @@ function ContainerPreview({
   );
 }
 
-function EmptyPreview({ gap, padding, backgroundColor }: any) {
+function EmptyPreview({ gap, padding, backgroundColor, children }: { gap?: number; padding?: number; backgroundColor?: string; children?: EditorComponent[] }) {
   return (
-    <div className="min-h-[48px] border border-dashed border-gray-200 rounded p-2"
-         style={{ gap, padding, backgroundColor }}>
-      <div className="text-xs italic text-gray-400">Empty container</div>
+    <div
+      className="flex flex-col min-h-[48px] border border-dashed border-gray-200 rounded p-2"
+      style={{ gap: gap ?? 0, padding: padding ?? 0, backgroundColor }}
+    >
+      {children && children.length > 0 ? (
+        children.map((child) => <ComponentPreview key={child.id} component={child} />)
+      ) : (
+        <div className="text-xs italic text-gray-400">Empty container</div>
+      )}
     </div>
   );
 }
@@ -799,19 +794,32 @@ function resolveSpacingValue(value: unknown): number | undefined {
 function getRowContentStyle(row: EditorRow): CSSProperties {
   const uniformPadding = resolveSpacingValue(row.padding);
 
-  return {
+  const style: CSSProperties = {
     display: 'flex',
     flex: '1 1 auto',
     minHeight: 0,
     gap: row.gap ?? 4,
     paddingTop: resolveSpacingValue(row.paddingTop) ?? uniformPadding ?? 0,
     paddingBottom: resolveSpacingValue(row.paddingBottom) ?? uniformPadding ?? 0,
-    paddingRight: resolveSpacingValue(row.paddingRight) ?? uniformPadding ?? DEFAULT_ROW_RIGHT_PADDING,
+    paddingRight: resolveSpacingValue(row.paddingRight) ?? uniformPadding ?? 0,
     paddingLeft: resolveSpacingValue(row.paddingLeft) ?? uniformPadding ?? 0,
     // Only enable scrolling if explicitly set to true
     overflowX: row.scrollable === true ? 'auto' : 'hidden',
     overflowY: 'hidden',
   };
+
+  // Bottom divider as CSS border on the cells container
+  if (row.showDivider) {
+    const thickness = typeof row.dividerThickness === 'number' ? row.dividerThickness : 1;
+    const color = row.dividerColor || '#E0E0E0';
+    const margin = typeof row.dividerMargin === 'number' ? row.dividerMargin : 0;
+    style.borderBottom = `${thickness}px solid ${color}`;
+    if (margin > 0) {
+      style.marginBottom = margin;
+    }
+  }
+
+  return style;
 }
 
 function getNumericCellWidth(width: EditorCell['width']): number {
@@ -998,18 +1006,17 @@ function RowDragHandle({
 
 function RowHeightResizeHandle({
   rowId,
-  onPreview,
   onCommit,
 }: {
   rowId: string;
-  onPreview: (rowId: string, height: number) => void;
   onCommit: (rowId: string, height: number) => void;
 }) {
   const startYRef = useRef(0);
   const startHeightRef = useRef(MIN_ROW_HEIGHT);
   const nextHeightRef = useRef(MIN_ROW_HEIGHT);
   const hasMovedRef = useRef(false);
-  const rafIdRef = useRef<number>();
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const originalHeightRef = useRef<number | null>(null);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -1018,9 +1025,11 @@ function RowHeightResizeHandle({
     const rowElement = e.currentTarget.parentElement;
     if (!rowElement) return;
 
+    rowRef.current = rowElement;
     startYRef.current = e.clientY;
     startHeightRef.current = rowElement.getBoundingClientRect().height;
     nextHeightRef.current = Math.max(MIN_ROW_HEIGHT, Math.round(startHeightRef.current));
+    originalHeightRef.current = startHeightRef.current;
     hasMovedRef.current = false;
     document.body.style.cursor = 'row-resize';
 
@@ -1029,16 +1038,13 @@ function RowHeightResizeHandle({
       const nextHeight = Math.max(MIN_ROW_HEIGHT, Math.round(startHeightRef.current + delta));
 
       hasMovedRef.current = true;
-
       nextHeightRef.current = nextHeight;
 
-      // Use RAF to throttle updates and prevent cursor lag
-      if (rafIdRef.current) {
-        cancelAnimationFrame(rafIdRef.current);
+      // Direct DOM manipulation — no React re-render per frame
+      if (rowRef.current) {
+        rowRef.current.style.height = nextHeight + 'px';
+        rowRef.current.style.minHeight = nextHeight + 'px';
       }
-      rafIdRef.current = requestAnimationFrame(() => {
-        onPreview(rowId, nextHeight);
-      });
     };
 
     const handleMouseUp = () => {
@@ -1046,9 +1052,11 @@ function RowHeightResizeHandle({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
 
-      if (rafIdRef.current) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = undefined;
+      // Clear direct DOM override — let React take over
+      if (rowRef.current) {
+        rowRef.current.style.height = '';
+        rowRef.current.style.minHeight = '';
+        rowRef.current = null;
       }
 
       if (hasMovedRef.current) {
@@ -1058,7 +1066,7 @@ function RowHeightResizeHandle({
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-  }, [rowId, onCommit, onPreview]);
+  }, [rowId, onCommit]);
 
   return (
     <div
@@ -1166,9 +1174,9 @@ function SortableRow({
         {/* Drag handle */}
         <RowDragHandle isDragging={isDragging} attributes={attributes} listeners={listeners} />
 
-        {/* Delete row button - moved to top-left outside row */}
+        {/* Delete row button - top-right outside content area */}
         <button
-          className="absolute -left-2.5 -top-2.5 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-red-600 shadow-md"
+          className="absolute -right-2.5 -top-2.5 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-red-600 shadow-md"
           onClick={(e) => { e.stopPropagation(); deleteRow(row.id); }}
           title="Delete row"
         >
@@ -1264,11 +1272,6 @@ function SortableRow({
             );
           })}
         </div>
-
-        {/* Bottom divider */}
-        {row.showDivider && (
-          <hr style={{ borderColor: row.dividerColor || '#E0E0E0', borderWidth: row.dividerThickness ?? 1, borderStyle: 'solid', margin: `${row.dividerMargin ?? 8}px 0` }} />
-        )}
 
         <RowHeightResizeHandle
           rowId={row.id}

@@ -302,7 +302,7 @@ export function PillEditor({
       editor.commands.setContent({
         type: 'doc',
         content: [{ type: 'paragraph', content: content.length > 0 ? content : [] }],
-      });
+      }, { updatesSelection: false });
     }
   }, [value, editor]);
 

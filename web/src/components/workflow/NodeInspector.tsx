@@ -299,15 +299,15 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
   );
 
   return (
-    <div className="w-80 bg-white border-l overflow-y-auto">
-      <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
+    <div className="w-80 bg-white border-l flex flex-col z-30">
+      <div className="p-4 border-b flex items-center justify-between bg-white">
         <h2 className="font-semibold text-gray-900">Node Inspector</h2>
         <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      <div className="p-4 space-y-4">
+      <div className="p-4 space-y-4 overflow-y-auto flex-1">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Label</label>
           <input

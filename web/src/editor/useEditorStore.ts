@@ -249,6 +249,7 @@ function serializeCellForRuntime(cell: EditorCell): EditorCell {
       // Use the last rule that has at least one action step
       const activeRule = [...rules].reverse().find(r => r.actions && r.actions.length > 0);
       if (activeRule) {
+        console.log('[serializeCellForRuntime] action injected:', actionPropName);
         const action: Record<string, unknown> = activeRule.actions.length === 1
           ? { type: activeRule.actions[0].type, ...activeRule.actions[0].params }
           : {
