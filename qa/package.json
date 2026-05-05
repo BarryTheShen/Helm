@@ -1,0 +1,1 @@
+{"name":"helm-qa","version":"1.0.0","private":true,"scripts":{"test":"playwright test","setup":"playwright install chromium"},"devDependencies":{"@playwright/test":"^1.52.0","execa":"^9.5.0"}}
