@@ -50,8 +50,10 @@ export default async () => {
     ['-c', 'source .venv/bin/activate && uvicorn app.main:app --host 127.0.0.1 --port 8000'],
     { cwd: path.join(ROOT, 'backend'), env, detached: true, stdout: 'ignore', stderr: 'ignore' }
   );
-  process.env.BACKEND_PID = String(backendPromise.pid ?? '');
-  console.log(`Backend PID: ${process.env.BACKEND_PID}`);
+  const backendPid = String(backendPromise.pid ?? '');
+  process.env.BACKEND_PID = backendPid;
+  fs.writeFileSync(path.join(ROOT, 'qa', '.backend-pid.txt'), backendPid);
+  console.log(`Backend PID: ${backendPid}`);
 
   // Wait for backend health
   console.log('Waiting for backend health check...');
@@ -108,6 +110,24 @@ export default async () => {
     role: loginResp.role,
   }));
   console.log(`Auth credentials written to ${authFile}`);
+
+  // Start Vite dev server
+  console.log('Starting Vite dev server...');
+  const vitePromise = execa(
+    'bash',
+    ['-c', `cd "${path.join(ROOT, 'web')}" && npx vite dev --host 127.0.0.1 --port 5174 > /dev/null 2>&1 & echo $!`],
+    { env, detached: true, stdout: 'pipe', stderr: 'ignore' }
+  );
+  const vitePid = vitePromise.stdout?.toString()?.trim() || '';
+  process.env.VITE_PID = vitePid;
+  // Write Vite PID to shared file so globalTeardown can read it
+  fs.writeFileSync(path.join(ROOT, 'qa', '.vite-pid.txt'), vitePid);
+  console.log(`Vite PID: ${vitePid}`);
+
+  // Wait for Vite
+  console.log('Waiting for Vite health check...');
+  await waitUntilHealthy('http://127.0.0.1:5174');
+  console.log('Vite is healthy.');
 
   // Discover templates/pages
   const { discover } = await import('./discover');
