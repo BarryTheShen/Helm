@@ -1,6 +1,13 @@
+import { execa } from 'execa';
+
 export default async () => {
-  const { execa } = await import('execa');
-  if (process.env.BACKEND_PID) await execa('kill', [process.env.BACKEND_PID]).catch(() => {});
-  if (process.env.WEB_PID) await execa('kill', [process.env.WEB_PID]).catch(() => {});
-  console.log('Servers stopped.');
+  if (process.env.BACKEND_PID) {
+    await execa('kill', [process.env.BACKEND_PID]).catch(() => {});
+    console.log(`Backend process ${process.env.BACKEND_PID} killed.`);
+  }
+  if (process.env.VITE_PID) {
+    await execa('kill', [process.env.VITE_PID]).catch(() => {});
+    console.log(`Vite process ${process.env.VITE_PID} killed.`);
+  }
+  console.log('Global teardown complete.');
 };

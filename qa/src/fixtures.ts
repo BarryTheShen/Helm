@@ -1,13 +1,16 @@
 import { test as base } from '@playwright/test';
+import fs from 'fs';
+import path from 'path';
+
 export const test = base.extend<{ login: () => Promise<void> }>({
   login: async ({ page }, use) => {
-    await page.goto('http://127.0.0.1:5174/login');
-    // Login form has username, password, org (3 fields from Session 9)
-    await page.getByPlaceholder(/username/i).fill('admin');
-    await page.getByPlaceholder(/password/i).fill('admin');
-    await page.getByPlaceholder(/organization/i).fill('Helm');
-    await page.getByRole('button', { name: /sign in|login/i }).click();
-    await page.waitForURL('!*=login');
+    const auth = JSON.parse(fs.readFileSync(path.join(__dirname, '.qa-auth.json'), 'utf-8'));
+    await page.addInitScript((a: any) => {
+      window.localStorage.setItem('admin_token', a.token);
+      window.localStorage.setItem('admin_user', JSON.stringify({
+        id: a.user_id, username: a.username, role: a.role
+      }));
+    }, auth);
     await use();
   },
 });
