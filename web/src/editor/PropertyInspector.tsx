@@ -563,11 +563,12 @@ const DATA_BINDING_SOURCE_TYPE: Record<string, string> = {
 
 // ── Field Renderers ──────────────────────────────────────────────────────────
 
-function FieldRenderer({ field, value, onChange, screenComponents }: {
+function FieldRenderer({ field, value, onChange, screenComponents, testId }: {
   field: FieldSchema;
   value: unknown;
   onChange: (value: unknown) => void;
   screenComponents?: Array<{ id: string; type: string }>;
+  testId?: string;
 }) {
   switch (field.type) {
     case 'text':
@@ -596,6 +597,7 @@ function FieldRenderer({ field, value, onChange, screenComponents }: {
     case 'select':
       return (
         <select
+          data-testid={testId}
           value={String(value ?? field.defaultValue ?? '')}
           onChange={e => onChange(e.target.value)}
           className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
@@ -608,6 +610,7 @@ function FieldRenderer({ field, value, onChange, screenComponents }: {
     case 'toggle':
       return (
         <button
+          data-testid={testId}
           onClick={() => onChange(!value)}
           className={`relative w-9 h-5 rounded-full transition-colors ${value ? 'bg-blue-600' : 'bg-gray-300'}`}
         >
@@ -938,6 +941,7 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
         <div className="flex items-center justify-between">
           <label className="text-xs font-medium text-gray-500">Show Divider</label>
           <button
+            data-testid="toggle-show-divider"
             onClick={() => updateRowProps(rowId, { showDivider: !(row.showDivider ?? false) })}
             className={`relative w-9 h-5 rounded-full transition-colors ${row.showDivider ? 'bg-blue-600' : 'bg-gray-300'}`}
           >
@@ -1110,6 +1114,7 @@ function ComponentPropertiesPanel({ rowId, cellIndex }: { rowId: string; cellInd
                 value={props[field.key]}
                 onChange={(val) => handleChange(field.key, val)}
                 screenComponents={screenComponents}
+                testId={field.key === 'variant' ? 'select-variant' : undefined}
               />
             </div>
           ))}
@@ -1300,7 +1305,7 @@ export function PropertyInspector() {
   const selection = useEditorStore(s => s.selection);
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div data-testid="property-inspector" className="h-full overflow-y-auto">
       {!selection && <NoSelectionPanel />}
       {selection?.type === 'row' && <RowPropertiesPanel rowId={selection.rowId} />}
       {selection?.type === 'cell' && selection.cellIndex !== undefined && (

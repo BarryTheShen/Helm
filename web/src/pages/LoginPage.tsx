@@ -27,7 +27,7 @@ export function LoginPage() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <form onSubmit={handleSubmit} className="bg-white p-8 rounded-lg shadow-md w-[360px]">
+      <form data-testid="login-form" onSubmit={handleSubmit} className="bg-white p-8 rounded-lg shadow-md w-[360px]">
         <h1 className="text-2xl font-bold mb-6">⛵ Helm Admin</h1>
         {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded mb-4">{error}</div>}
         <div className="mb-4">

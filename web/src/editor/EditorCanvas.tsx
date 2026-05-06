@@ -975,17 +975,20 @@ function RowDragHandle({
   isDragging,
   attributes,
   listeners,
+  testId,
 }: {
   isDragging: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   attributes: Record<string, any>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   listeners: Record<string, any> | undefined;
+  testId?: string;
 }) {
   return (
     <div
       {...attributes}
       {...listeners}
+      data-testid={testId}
       className={`absolute z-10 flex select-none items-center justify-center transition-opacity touch-none ${
         isDragging
           ? 'opacity-100 cursor-grabbing'
@@ -1172,7 +1175,7 @@ function SortableRow({
         onClick={(e) => { e.stopPropagation(); setSelection({ type: 'row', rowId: row.id }); }}
       >
         {/* Drag handle */}
-        <RowDragHandle isDragging={isDragging} attributes={attributes} listeners={listeners} />
+        <RowDragHandle testId={`row-drag-handle-${row.id}`} isDragging={isDragging} attributes={attributes} listeners={listeners} />
 
         {/* Delete row button - top-right outside content area */}
         <button
@@ -1390,7 +1393,7 @@ export function EditorCanvas() {
   const previewHeight = Math.round(deviceHeight * frameScale);
 
   return (
-    <div className="h-full flex flex-col items-center bg-gray-100 overflow-auto p-6">
+    <div data-testid="editor-canvas" className="h-full flex flex-col items-center bg-gray-100 overflow-auto p-6">
       {/* Device frame */}
       <div
         className="shrink-0"

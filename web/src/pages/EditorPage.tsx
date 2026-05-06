@@ -962,7 +962,7 @@ export function EditorPage() {
   return (
     <div className="flex h-full flex-col">
       {/* ── Top Toolbar ─────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-white border-b border-gray-200 shrink-0">
+      <div data-testid="toolbar" className="flex items-center justify-between px-3 py-1.5 bg-white border-b border-gray-200 shrink-0">
         {/* Left: Module info + Draft */}
         <div className="flex items-center gap-2">
           <div className="px-3 py-1 text-sm font-medium text-gray-700">
@@ -996,11 +996,11 @@ export function EditorPage() {
 
         {/* Center: Undo/Redo + Device picker */}
         <div className="flex items-center gap-1.5">
-          <button onClick={undo} disabled={historyIndex <= 0}
+          <button data-testid="btn-undo" onClick={undo} disabled={historyIndex <= 0}
             className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30 transition-colors" title="Undo (Ctrl+Z)">
             <Undo2 size={14} />
           </button>
-          <button onClick={redo} disabled={historyIndex >= history.length - 1}
+          <button data-testid="btn-redo" onClick={redo} disabled={historyIndex >= history.length - 1}
             className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30 transition-colors" title="Redo (Ctrl+Y)">
             <Redo2 size={14} />
           </button>
@@ -1010,6 +1010,7 @@ export function EditorPage() {
           {/* Device picker */}
           <div className="relative">
             <button
+              data-testid="btn-device-picker"
               onClick={() => setShowDevicePicker(!showDevicePicker)}
               className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-gray-100 transition-colors"
             >
@@ -1126,15 +1127,15 @@ export function EditorPage() {
 
           <div className="w-px h-4 bg-gray-200 mx-0.5" />
 
-          <button onClick={handleDeleteScreen} disabled={!canDeleteSelectedScreen}
+          <button data-testid="btn-delete-module" onClick={handleDeleteScreen} disabled={!canDeleteSelectedScreen}
             className="flex items-center gap-1 px-2 py-1 text-xs bg-red-50 hover:bg-red-100 text-red-700 rounded transition-colors disabled:opacity-50 disabled:hover:bg-red-50">
             <Trash2 size={11} /> Delete Module
           </button>
-          <button onClick={handleSaveDraft} disabled={saving || !canModifySelectedModule}
+          <button data-testid="btn-save" onClick={handleSaveDraft} disabled={saving || !canModifySelectedModule}
             className="flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors disabled:opacity-50">
             <Save size={11} /> {saving ? 'Saving...' : 'Save'}
           </button>
-          <button onClick={handlePushLive} disabled={pushing || !canModifySelectedModule}
+          <button data-testid="btn-push-live" onClick={handlePushLive} disabled={pushing || !canModifySelectedModule}
             className="flex items-center gap-1 px-3 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors disabled:opacity-50">
             <Rocket size={11} /> {pushing ? 'Pushing...' : 'Push Live'}
           </button>

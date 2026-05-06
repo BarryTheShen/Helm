@@ -145,11 +145,12 @@ export function StructureTree({ moduleLabel = 'Current Module' }: StructureTreeP
   const isScreenSelected = selection === null;
 
   return (
-    <div className="h-full flex flex-col">
+    <div data-testid="structure-tree" className="h-full flex flex-col">
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
         <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Structure</span>
         <div className="relative">
           <button
+            data-testid="btn-add-row"
             ref={addRowBtnRef}
             onClick={() => {
               if (!showAddRow && addRowBtnRef.current) {
