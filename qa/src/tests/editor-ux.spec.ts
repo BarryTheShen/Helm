@@ -1,13 +1,14 @@
 import { test, expect } from '../fixtures';
+import { EditorPage } from '../page-objects/editor';
 
 test('Issue 1: drag handles are positioned outside the canvas area', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  await page.waitForTimeout(1500);
+  await expect(page.locator(EditorPage.canvas)).toBeVisible();
 
-  // The editor canvas is the center panel — drag handles should be outside/beside it
+  // The editor canvas is the center panel -- drag handles should be outside/beside it
   // Look for drag handles (grippers/drag icons on rows)
-  const dragHandles = page.locator('[class*="drag"], [class*="grip"], [class*="handle"]').first();
+  const dragHandles = page.locator('[class*="drag"], [class*="grip"], [class*="handle"]');
   const handleCount = await dragHandles.count();
 
   if (handleCount > 0) {
@@ -15,9 +16,10 @@ test('Issue 1: drag handles are positioned outside the canvas area', async ({ pa
     const handleBox = await handle.boundingBox();
     expect(handleBox, 'drag handle should exist').not.toBeNull();
 
-    // The canvas area is typically a centered gray container
-    const canvas = page.locator('.bg-gray-100').first();
-    if (await canvas.count() > 0) {
+    // Find the editor canvas for bounding comparison
+    const canvas = page.locator(EditorPage.canvas).first();
+    const canvasVisible = await canvas.isVisible();
+    if (canvasVisible) {
       const canvasBox = await canvas.boundingBox();
       expect(canvasBox, 'canvas should exist').not.toBeNull();
 
@@ -34,7 +36,7 @@ test('Issue 1: drag handles are positioned outside the canvas area', async ({ pa
     }
   } else {
     // Fallback: look for the external drag handle by its visual icon
-    const gripIcon = page.locator('[class*="bar"], [class*="dots"], [class*="grip"]').first();
+    const gripIcon = page.locator('[class*="bar"], [class*="dots"], [class*="grip"]');
     expect(
       await gripIcon.count(),
       'external drag handles should be visible on rows'
@@ -45,32 +47,33 @@ test('Issue 1: drag handles are positioned outside the canvas area', async ({ pa
 test('Issue 10: divider shows visual border-bottom on row', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  await page.waitForTimeout(1500);
+  await expect(page.locator(EditorPage.structureTree)).toBeVisible();
 
   // Ensure there is at least one row in the structure
-  const rowInTree = page.locator('text=/Row \\d+/').first();
-  if (await rowInTree.count() === 0) {
-    const addRowBtn = page.getByText('Add Row').first();
-    if (await addRowBtn.count() > 0) {
+  const rowInTree = page.locator('text=/Row \\d+/');
+  const rowCount = await rowInTree.count();
+  if (rowCount === 0) {
+    const addRowBtn = page.locator(EditorPage.btnAddRow).first();
+    if (await addRowBtn.isVisible()) {
       await addRowBtn.click();
-      await page.waitForTimeout(1000);
+      await expect(rowInTree.first()).toBeVisible();
     }
   }
 
   // Select a row from the structure tree
-  const firstRow = page.locator('text=/Row \\d+/').first();
-  if (await firstRow.count() > 0) {
+  const firstRow = rowInTree.first();
+  if (await firstRow.isVisible()) {
     await firstRow.click();
-    await page.waitForTimeout(1000);
+    await expect(page.locator(EditorPage.propertyInspector)).toBeVisible();
 
     // Find and enable the "Show Divider" toggle in the property inspector
     const dividerLabel = page.locator('text=Show Divider').first();
-    if (await dividerLabel.count() > 0) {
-      // Toggle button near the label
-      const toggleBtn = page.locator('button.relative.w-9.h-5').first();
-      if (await toggleBtn.count() > 0) {
+    if (await dividerLabel.isVisible()) {
+      // Use data-testid selector for the toggle
+      const toggleBtn = page.locator(EditorPage.toggleShowDivider).first();
+      if (await toggleBtn.isVisible()) {
         await toggleBtn.click();
-        await page.waitForTimeout(1000);
+        await expect(dividerLabel).toBeVisible();
 
         // Verify the divider color field appeared (confirms toggle is on)
         const colorLabel = page.locator('text=Divider Color').first();
@@ -88,10 +91,10 @@ test('Issue 10: divider shows visual border-bottom on row', async ({ page, login
         ).toBeGreaterThan(0);
       }
     } else {
-      // "Show Divider" label not found — the inspector may not expose it yet
+      // "Show Divider" label not found -- the inspector may not expose it yet
       // At minimum verify the row is selected and inspector is showing
       expect(
-        await page.locator('text=/Row \\d+/').count(),
+        await rowInTree.count(),
         'row should be selectable in the tree'
       ).toBeGreaterThan(0);
     }

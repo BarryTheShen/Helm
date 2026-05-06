@@ -1,22 +1,23 @@
 import { test, expect } from '../fixtures';
+import { EditorPage } from '../page-objects/editor';
 
 test('Issue 11: pill cursor does not snap after variable insert', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  await page.waitForTimeout(1500);
+  // Wait for the editor UI to load
+  await expect(page.locator(EditorPage.canvas)).toBeVisible();
+  await expect(page.locator(EditorPage.propertyInspector)).toBeVisible();
 
   // Find a text input in the property inspector (content/label field)
   const input = page.getByPlaceholder(/type.*@/i).first();
+  await expect(input).toBeVisible();
   await input.click();
-  await page.waitForTimeout(300);
 
   // Type prefix text before the variable
   await page.keyboard.type('Hello ');
-  await page.waitForTimeout(200);
 
   // Trigger the variable picker with @
   await page.keyboard.press('@');
-  await page.waitForTimeout(500);
 
   // Wait for the variable dropdown/popover to appear and pick the first option
   const variableOption = page.locator('[class*="variable"] li, [class*="picker"] li, [role="option"]').first();
@@ -24,11 +25,12 @@ test('Issue 11: pill cursor does not snap after variable insert', async ({ page,
 
   if (optionCount > 0) {
     await variableOption.click();
-    await page.waitForTimeout(400);
+
+    // Wait for the input to be focused again after the picker closes
+    await expect(input).toBeFocused();
 
     // Type suffix text after the inserted variable pill
     await page.keyboard.type(' World');
-    await page.waitForTimeout(300);
 
     // Verify the full value contains prefix + variable + suffix in order
     const val = await input.inputValue();
@@ -41,16 +43,20 @@ test('Issue 11: pill cursor does not snap after variable insert', async ({ page,
 test('Issue 13: markdown content renders as HTML heading, not raw text', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  await page.waitForTimeout(1500);
+  // Wait for the editor UI to load
+  await expect(page.locator(EditorPage.canvas)).toBeVisible();
+  await expect(page.locator(EditorPage.propertyInspector)).toBeVisible();
 
   // Find a text input in the property inspector (content/label field)
   const input = page.getByPlaceholder(/type.*@/i).first();
+  await expect(input).toBeVisible();
   await input.click();
-  await page.waitForTimeout(300);
 
   // Type markdown heading syntax
   await page.keyboard.type('# Heading');
-  await page.waitForTimeout(500);
+
+  // Wait for the canvas to update after typing
+  await expect(page.locator(EditorPage.canvas)).toBeVisible();
 
   // Look for a markdown-rendered preview area (could be in canvas or inspector)
   const preview = page.locator('[class*="markdown"], [class*="preview"]');

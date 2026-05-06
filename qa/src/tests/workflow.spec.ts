@@ -1,17 +1,19 @@
 import { test, expect } from '../fixtures';
+import { WorkflowsPage } from '../page-objects/workflows';
 
 test('Issue 38: dropdown persistence - value survives re-select', async ({ page, login }) => {
   await login();
   await page.goto('/workflows');
-  await page.waitForTimeout(1000);
+  await expect(page.locator(WorkflowsPage.heading)).toBeVisible();
   // Add a trigger node
-  await page.getByText(/add/i).first().click();
-  await page.getByText('trigger', { exact: true }).click();
-  await page.waitForTimeout(500);
-  // Click node to open inspector, change dropdown to a non-default option
+  await page.getByRole('button', { name: /add/i }).first().click();
+  await page.getByRole('menuitem', { name: 'trigger' }).click();
+  // Wait for node to render on canvas
   const node = page.locator('.react-flow__node').first();
+  await expect(node).toBeVisible();
+  // Click node to open inspector, change dropdown to a non-default option
   await node.click();
-  await page.waitForTimeout(300);
+  await expect(page.locator(WorkflowsPage.nodeInspector)).toBeVisible();
   // Find a dropdown in the property inspector and change it
   const dropdown = page.locator('select').first();
   const count = await dropdown.count();
@@ -22,7 +24,7 @@ test('Issue 38: dropdown persistence - value survives re-select', async ({ page,
       await dropdown.selectOption({ index: 1 });
       await page.locator('body').click(); // click away
       await node.click(); // re-select
-      await page.waitForTimeout(300);
+      await expect(dropdown).toBeVisible();
       expect(await dropdown.inputValue()).not.toBe(orig);
     }
   }
@@ -31,34 +33,35 @@ test('Issue 38: dropdown persistence - value survives re-select', async ({ page,
 test('Issue 39: condition typing keeps all characters', async ({ page, login }) => {
   await login();
   await page.goto('/workflows');
-  await page.waitForTimeout(1000);
+  await expect(page.locator(WorkflowsPage.heading)).toBeVisible();
   // Add a condition node
-  await page.getByText(/add/i).first().click();
-  await page.getByText('condition', { exact: true }).click();
-  await page.waitForTimeout(500);
-  await page.locator('.react-flow__node').first().click();
-  await page.waitForTimeout(300);
-  // Type "hello world" into a condition input field
+  await page.getByRole('button', { name: /add/i }).first().click();
+  await page.getByRole('menuitem', { name: 'condition' }).click();
+  // Wait for node to render on canvas
+  const node = page.locator('.react-flow__node').first();
+  await expect(node).toBeVisible();
+  await node.click();
+  // Wait for inspector input to appear
   const input = page.locator('input[type="text"]').first();
-  const cnt = await input.count();
-  if (cnt > 0) {
-    await input.fill('hello world');
-    await page.waitForTimeout(200);
-    const val = await input.inputValue();
-    expect(val).toBe('hello world');
-    expect(val.length).toBe(11);
-  }
+  await expect(input).toBeVisible();
+  // Type "hello world" into a condition input field
+  await input.fill('hello world');
+  const val = await input.inputValue();
+  expect(val).toBe('hello world');
+  expect(val.length).toBe(11);
 });
 
 test('Issue 42: action nodes have visible connection handles', async ({ page, login }) => {
   await login();
   await page.goto('/workflows');
-  await page.waitForTimeout(1000);
+  await expect(page.locator(WorkflowsPage.heading)).toBeVisible();
   // Add an action node
-  await page.getByText(/add/i).first().click();
-  await page.getByText('action', { exact: true }).click();
-  await page.waitForTimeout(500);
+  await page.getByRole('button', { name: /add/i }).first().click();
+  await page.getByRole('menuitem', { name: 'action' }).click();
+  // Wait for node to render on canvas
+  const node = page.locator('.react-flow__node').first();
+  await expect(node).toBeVisible();
   // Verify handle dots exist on the action node
-  const handles = page.locator('.react-flow__node').locator('.react-flow__handle');
+  const handles = node.locator('.react-flow__handle');
   expect(await handles.count()).toBeGreaterThanOrEqual(2); // top + bottom
 });

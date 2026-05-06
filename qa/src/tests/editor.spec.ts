@@ -1,11 +1,13 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
+import { EditorPage } from '../page-objects/editor';
 
 // ---------------------------------------------------------------------------
 // Helper: add a component to the first empty cell on the canvas
 // ---------------------------------------------------------------------------
-async function addComponentToFirstCell(page: any, componentName: string) {
+async function addComponentToFirstCell(page: Page, componentName: string) {
   // Wait for canvas to be populated
-  await page.waitForTimeout(1000);
+  await expect(page.locator(EditorPage.canvas)).toBeVisible();
 
   // Find the first empty cell (shows a + button / "Add Component" placeholder)
   // Empty cells have the Plus icon with gray-300 class
@@ -17,19 +19,19 @@ async function addComponentToFirstCell(page: any, componentName: string) {
 
   if (await emptyCells.count() > 0) {
     await emptyCells.click();
-    await page.waitForTimeout(800);
+    await expect(page.locator('[data-testid="component-picker"]')).toBeVisible({ timeout: 5000 });
   } else {
     // If no empty cell found, add a row first
-    const addRowBtn = page.getByText('Add Row').first();
+    const addRowBtn = page.locator(EditorPage.addRowByText);
     if (await addRowBtn.count() > 0) {
       await addRowBtn.click();
-      await page.waitForTimeout(800);
+      await expect(page.locator('div.border-dashed')).toBeVisible({ timeout: 5000 });
     }
     // Now try again
     const emptyCellAfterRow = page.locator('div.border-dashed').first();
     if (await emptyCellAfterRow.count() > 0) {
       await emptyCellAfterRow.click();
-      await page.waitForTimeout(800);
+      await expect(page.locator('[data-testid="component-picker"]')).toBeVisible({ timeout: 5000 });
     }
   }
 
@@ -39,23 +41,39 @@ async function addComponentToFirstCell(page: any, componentName: string) {
 
   if (await componentBtn.count() > 0) {
     await componentBtn.click();
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
   }
 }
 
 // ---------------------------------------------------------------------------
 // Helper: ensure there is at least one row with an empty cell
 // ---------------------------------------------------------------------------
-async function ensureEmptyCellExists(page: any) {
+async function ensureEmptyCellExists(page: Page) {
   let emptyCellCount = await page.locator('div.border-dashed').count();
   if (emptyCellCount === 0) {
-    // Add a row
-    const addRowBtn = page.getByText('Add Row').first();
+    const addRowBtn = page.locator(EditorPage.addRowByText);
     if (await addRowBtn.count() > 0) {
       await addRowBtn.click();
-      await page.waitForTimeout(800);
+      await expect(page.locator('div.border-dashed')).toBeVisible({ timeout: 5000 });
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helper: click the save button and wait for the response
+// ---------------------------------------------------------------------------
+async function clickSaveAndWait(page: Page) {
+  const saveResponse = page.waitForResponse(resp =>
+    resp.url().includes('/api/screens') && resp.status() === 200
+  );
+  const saveBtn = page.locator(EditorPage.btnSave);
+  if (await saveBtn.count() > 0) {
+    await saveBtn.click();
+  } else {
+    // Fallback: text-based save button
+    await page.getByText('Save', { exact: true }).first().click();
+  }
+  await saveResponse;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,28 +82,25 @@ async function ensureEmptyCellExists(page: any) {
 test('Calendar variant persists after re-selecting row', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  await page.waitForTimeout(2000);
+  await page.waitForLoadState('networkidle');
 
   // Ensure we have a row to work with
   await ensureEmptyCellExists(page);
   await addComponentToFirstCell(page, 'CalendarModule');
 
   // Click on the calendar component to select it in inspector
-  await page.waitForTimeout(500);
-  // Find the calendar component in the canvas and click it
   const calendarPreview = page.locator('text=Calendar').first();
   if (await calendarPreview.count() > 0) {
     // Find the parent cell and click it
     const cellWithCalendar = page.locator('.group\\/cell').first();
     if (await cellWithCalendar.count() > 0) {
       await cellWithCalendar.click();
-      await page.waitForTimeout(1000);
+      await page.waitForLoadState('networkidle');
     }
   }
 
   // Look for the variant dropdown in the property inspector
-  // The inspector has a "View Type" label with a select underneath
-  const variantLabel = page.locator('text=View Type').first();
+  const variantLabel = page.locator(EditorPage.viewTypeLabel).first();
   if (await variantLabel.count() > 0) {
     // Find the select element near the "View Type" label
     const variantSelect = page.locator('select').first();
@@ -93,17 +108,19 @@ test('Calendar variant persists after re-selecting row', async ({ page, login })
 
     // Change to "Week"
     await variantSelect.selectOption('week');
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
-    // Click away to deselect
-    await page.locator('.bg-gray-100').first().click();
-    await page.waitForTimeout(500);
+    // Click away to deselect — click on the canvas background
+    const canvas = page.locator(EditorPage.canvas);
+    if (await canvas.count() > 0) {
+      await canvas.click();
+    }
 
     // Re-select the component
     const cellAgain = page.locator('.group\\/cell').first();
     if (await cellAgain.count() > 0) {
       await cellAgain.click();
-      await page.waitForTimeout(1000);
+      await page.waitForLoadState('networkidle');
     }
 
     // Re-read the select value
@@ -124,16 +141,15 @@ test('Calendar variant persists after re-selecting row', async ({ page, login })
 test('TextInput renders as an input field', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  await page.waitForTimeout(2000);
+  await page.waitForLoadState('networkidle');
 
   await ensureEmptyCellExists(page);
   await addComponentToFirstCell(page, 'TextInput');
-  await page.waitForTimeout(1000);
 
   // Verify it renders as an input (has type="text")
   // TextInputPreview renders <input type="text"> or <textarea>
-  const inputInCanvas = page.locator('input[type="text"]').first();
-  const textareaInCanvas = page.locator('textarea').first();
+  const inputInCanvas = page.locator(EditorPage.canvas).locator('input[type="text"]').first();
+  const textareaInCanvas = page.locator(EditorPage.canvas).locator('textarea').first();
 
   const hasInput = await inputInCanvas.count();
   const hasTextarea = await textareaInCanvas.count();
@@ -143,18 +159,12 @@ test('TextInput renders as an input field', async ({ page, login }) => {
     'TextInput should render as an input or textarea, not a select dropdown'
   ).toBe(true);
 
-  // Also verify it is NOT a select element
-  const selectInCanvas = page.locator('select').first();
-  // Selects exist elsewhere (inspector), so we check specifically in the canvas area
-  // The canvas is the center panel; check if the canvas area has a select
-  const canvasArea = page.locator('.bg-gray-100').first();
-  if (await canvasArea.count() > 0) {
-    const selectsInCanvas = canvasArea.locator('select');
-    expect(
-      await selectsInCanvas.count(),
-      'TextInput preview should NOT contain a select element'
-    ).toBe(0);
-  }
+  // Also verify it is NOT a select element inside the canvas
+  const selectsInCanvas = page.locator(EditorPage.canvas).locator('select');
+  expect(
+    await selectsInCanvas.count(),
+    'TextInput preview should NOT contain a select element inside canvas'
+  ).toBe(0);
 
   await page.screenshot({ path: 'results/screenshots/textinput-as-input.png' });
 });
@@ -165,29 +175,24 @@ test('TextInput renders as an input field', async ({ page, login }) => {
 test('Empty component renders without Unknown label', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  await page.waitForTimeout(2000);
+  await page.waitForLoadState('networkidle');
 
   await ensureEmptyCellExists(page);
   await addComponentToFirstCell(page, 'Empty');
-  await page.waitForTimeout(1000);
 
   // Look for "Unknown" text in the canvas area - should not exist
-  // Unknown components show "Unknown: {type}" text
-  const unknownText = page.locator('text=Unknown: Empty');
+  const unknownText = page.locator(EditorPage.canvas).locator('text=Unknown: Empty');
   expect(
     await unknownText.count(),
     'Empty component should NOT show "Unknown: Empty" — it should have a renderer'
   ).toBe(0);
 
-  // Also check for generic "Unknown" near where the component is
-  const unknownInCanvas = page.locator('.bg-gray-100').first();
-  if (await unknownInCanvas.count() > 0) {
-    const unknowns = unknownInCanvas.locator('text=Unknown');
-    expect(
-      await unknowns.count(),
-      'No "Unknown" text should appear in the canvas for Empty component'
-    ).toBe(0);
-  }
+  // Also check for generic "Unknown" in the canvas area
+  const unknownInCanvas = page.locator(EditorPage.canvas).locator('text=Unknown');
+  expect(
+    await unknownInCanvas.count(),
+    'No "Unknown" text should appear in the canvas for Empty component'
+  ).toBe(0);
 
   await page.screenshot({ path: 'results/screenshots/empty-component-no-unknown.png' });
 });
@@ -198,61 +203,66 @@ test('Empty component renders without Unknown label', async ({ page, login }) =>
 test('Bottom divider shows visual line below row', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  await page.waitForTimeout(2000);
+  await page.waitForLoadState('networkidle');
 
   // Ensure there is at least one row
-  const rowCount = await page.locator('text=/Row \\d+/').count();
+  const rowCount = await page.locator(EditorPage.rowInTree).count();
   if (rowCount === 0) {
-    const addRowBtn = page.getByText('Add Row').first();
+    const addRowBtn = page.locator(EditorPage.addRowByText);
     if (await addRowBtn.count() > 0) {
       await addRowBtn.click();
-      await page.waitForTimeout(1000);
+      await page.waitForLoadState('networkidle');
     }
   }
 
-  // Select a row (click on the row in the structure tree or canvas)
-  const rowInTree = page.locator('text=/Row \\d+/').first();
+  // Select a row (click on the row in the structure tree)
+  const rowInTree = page.locator(EditorPage.rowInTree).first();
   if (await rowInTree.count() > 0) {
     await rowInTree.click();
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
   }
 
   // Enable "Show Divider" toggle in inspector
-  const dividerLabel = page.locator('text=Show Divider').first();
+  const dividerLabel = page.locator(EditorPage.toggleShowDivider).first();
   if (await dividerLabel.count() > 0) {
-    // The toggle button is near the "Show Divider" label
-    // It's a button with bg-gray-300 (off) or bg-blue-600 (on)
-    // Find the toggle near the label
-    const toggleBtn = page.locator('button.relative.w-9.h-5').first();
-    const toggleCount = await toggleBtn.count();
+    await dividerLabel.click();
+    await page.waitForLoadState('networkidle');
 
-    // Click the toggle to enable it
-    if (toggleCount > 0) {
-      await toggleBtn.click();
-      await page.waitForTimeout(1500);
+    // Verify the toggle enabled — Divider Color field should appear
+    const dividerColorLabel = page.locator(EditorPage.dividerColorLabel).first();
+    const colorLabelVisible = await dividerColorLabel.isVisible();
 
-      // Verify the toggle is now blue (enabled)
-      // Check by looking at the divider color field which appears when enabled
-      const dividerColorLabel = page.locator('text=Divider Color').first();
-      const colorLabelVisible = await dividerColorLabel.isVisible();
+    expect(
+      colorLabelVisible,
+      'Divider Color field should appear when Show Divider is enabled'
+    ).toBe(true);
 
-      expect(
-        colorLabelVisible,
-        'Divider Color field should appear when Show Divider is enabled'
-      ).toBe(true);
-
-      // Now check the canvas for the visual divider
-      // The row should have a border-bottom style
-      // Take a screenshot as evidence
-      await page.screenshot({ path: 'results/screenshots/bottom-divider-enabled.png' });
-    }
+    await page.screenshot({ path: 'results/screenshots/bottom-divider-enabled.png' });
   } else {
     // If toggle not found, the row inspector might not be open
-    // Just verify we can see row properties
-    expect(
-      await page.locator('text=/Row \\d+/').count(),
-      'Should have rows in the inspector'
-    ).toBeGreaterThan(0);
+    // Try falling back to text-based toggle
+    const dividerTextLabel = page.locator('text=Show Divider').first();
+    if (await dividerTextLabel.count() > 0) {
+      const toggleBtn = page.locator(EditorPage.toggleSwitch).first();
+      if (await toggleBtn.count() > 0) {
+        await toggleBtn.click();
+        await page.waitForLoadState('networkidle');
+
+        const dividerColorLabel = page.locator(EditorPage.dividerColorLabel).first();
+        const colorLabelVisible = await dividerColorLabel.isVisible();
+        expect(
+          colorLabelVisible,
+          'Divider Color field should appear when Show Divider is enabled'
+        ).toBe(true);
+
+        await page.screenshot({ path: 'results/screenshots/bottom-divider-enabled.png' });
+      }
+    } else {
+      expect(
+        await page.locator(EditorPage.rowInTree).count(),
+        'Should have rows in the inspector'
+      ).toBeGreaterThan(0);
+    }
   }
 });
 
@@ -262,28 +272,25 @@ test('Bottom divider shows visual line below row', async ({ page, login }) => {
 test('Button fills the cell width', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  await page.waitForTimeout(2000);
+  await page.waitForLoadState('networkidle');
 
   await ensureEmptyCellExists(page);
   await addComponentToFirstCell(page, 'Button');
-  await page.waitForTimeout(1000);
 
   // ButtonPreview has w-full class — verify the button element has width matching its container
-  // Look for the button in the canvas area
-  const buttonInCanvas = page.locator('button:has-text("Button")').first();
+  // Look for the button inside the canvas
+  const buttonInCanvas = page.locator(EditorPage.canvas).locator('button:has-text("Button")').first();
   if (await buttonInCanvas.count() > 0) {
-    // Get the computed width of the button
     const buttonRect = await buttonInCanvas.boundingBox();
     expect(buttonRect, 'Button element should exist').not.toBeNull();
 
     // The button should have significant width (filling the cell)
-    // A cell in a 390px-wide phone would be roughly 340px or more
     expect(
       buttonRect!.width,
       'Button width should fill the cell (expect > 200px)'
     ).toBeGreaterThan(200);
 
-    // Verify w-full class is applied via checking the button has rounded-md (from ButtonPreview)
+    // Verify w-full class is applied
     const buttonClasses = await buttonInCanvas.getAttribute('class');
     expect(
       buttonClasses?.includes('w-full'),
@@ -291,7 +298,7 @@ test('Button fills the cell width', async ({ page, login }) => {
     ).toBe(true);
   } else {
     // Button might have different text; look for any button in canvas with primary styling
-    const primaryButton = page.locator('button.bg-blue-600').first();
+    const primaryButton = page.locator(EditorPage.canvas).locator('button.bg-blue-600').first();
     if (await primaryButton.count() > 0) {
       const rect = await primaryButton.boundingBox();
       expect(
@@ -301,7 +308,7 @@ test('Button fills the cell width', async ({ page, login }) => {
     } else {
       // Fallback: just verify the button component was added (no "Unknown")
       expect(
-        await page.locator('text=Unknown').count(),
+        await page.locator(EditorPage.canvas).locator(EditorPage.unknownLabel).count(),
         'Button should not show "Unknown"'
       ).toBe(0);
     }
@@ -313,10 +320,9 @@ test('Button fills the cell width', async ({ page, login }) => {
 // ---------------------------------------------------------------------------
 // Test: Component save returns 200 not 422 (Issues 21-24)
 // ---------------------------------------------------------------------------
-async function testComponentSave(page: any, componentName: string, expectedStatus: number = 200) {
+async function testComponentSave(page: Page, componentName: string, expectedStatus: number = 200) {
   await ensureEmptyCellExists(page);
   await addComponentToFirstCell(page, componentName);
-  await page.waitForTimeout(1000);
 
   // Intercept the save request
   const savePromise = page.waitForResponse(async resp => {
@@ -325,9 +331,11 @@ async function testComponentSave(page: any, componentName: string, expectedStatu
   }).catch(null);
 
   // Click save
-  const saveBtn = page.locator('button:has-text("Save")').first();
+  const saveBtn = page.locator(EditorPage.btnSave);
   if (await saveBtn.count() > 0) {
     await saveBtn.click();
+  } else {
+    await page.getByText('Save', { exact: true }).first().click();
   }
 
   // Wait for response
@@ -343,9 +351,6 @@ async function testComponentSave(page: any, componentName: string, expectedStatu
       `${componentName} save should return ${expectedStatus}, got ${status}`
     ).toBe(expectedStatus);
   }
-  // If no POST was intercepted, the component might have been saved via a different route
-  // or the save button might behave differently. Just verify no error toast.
-  await page.waitForTimeout(1500);
 
   // Check for error messages
   const errorToast = page.locator('text=Unprocessable Content');
@@ -362,27 +367,27 @@ async function testComponentSave(page: any, componentName: string, expectedStatu
 test('NotesModule save does not return 422 (Issue 21)', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  await page.waitForTimeout(2000);
+  await page.waitForLoadState('networkidle');
   await testComponentSave(page, 'NotesModule');
 });
 
 test('Todo save does not return 422 (Issue 22)', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  await page.waitForTimeout(2000);
+  await page.waitForLoadState('networkidle');
   await testComponentSave(page, 'Todo');
 });
 
 test('ArticleCard save does not return 422 (Issue 23)', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  await page.waitForTimeout(2000);
+  await page.waitForLoadState('networkidle');
   await testComponentSave(page, 'ArticleCard');
 });
 
 test('RichTextRenderer save does not return 422 (Issue 24)', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  await page.waitForTimeout(2000);
+  await page.waitForLoadState('networkidle');
   await testComponentSave(page, 'RichTextRenderer');
 });

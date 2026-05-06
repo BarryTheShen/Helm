@@ -16,4 +16,14 @@ export const EditorPage = {
   btnSaveAsTemplate: 'button:has-text("Save as Template")',
   btnPreviewApp: 'button:has-text("Preview App")',
   unknownLabel: 'text=Unknown',
+  // Added: row item in structure tree (matches "Row 1", "Row 2", etc.)
+  rowInTree: '[data-testid="structure-tree"] text=/Row \\d+/',
+  // Added: toggle switch button (used for Show Divider)
+  toggleSwitch: 'button.relative.w-9.h-5',
+  // Added: add row button (fallback text-based selector)
+  addRowByText: 'button:has-text("Add Row")',
+  // Added: divider color label in inspector
+  dividerColorLabel: 'text=Divider Color',
+  // Added: view type label in inspector
+  viewTypeLabel: 'text=View Type',
 };
