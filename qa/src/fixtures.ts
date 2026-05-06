@@ -1,6 +1,10 @@
-import { test as base } from '@playwright/test';
+import { test as base, expect } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const test = base.extend<{ login: () => Promise<void> }>({
   login: async ({ page }, use) => {
@@ -11,7 +15,7 @@ export const test = base.extend<{ login: () => Promise<void> }>({
         id: a.user_id, username: a.username, role: a.role
       }));
     }, auth);
-    await use();
+    await use(() => {});
   },
 });
 export { expect } from '@playwright/test';

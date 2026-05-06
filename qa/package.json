@@ -1,1 +1,15 @@
-{"name":"helm-qa","version":"1.0.0","private":true,"scripts":{"test":"playwright test","setup":"playwright install chromium"},"devDependencies":{"@playwright/test":"^1.52.0","execa":"^9.5.0"}}
+{
+  "name": "helm-qa",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:backend": "playwright test --project backend-only",
+    "test:e2e": "playwright test --project e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "execa": "^9.5.0"
+  }
+}
