@@ -23,6 +23,9 @@ test.describe('Template Quality', () => {
     const actions = new Set(discovered.actions || []);
     const components = new Set((discovered.components || []).map((c: any) => c.type || c.name));
 
+    const invalidComponents: string[] = [];
+    const invalidActions: string[] = [];
+
     for (const tmpl of templates) {
       const screen = tmpl.screen;
       if (!screen) continue;
@@ -35,11 +38,8 @@ test.describe('Template Quality', () => {
 
           // Check component type exists
           const compType = content.type;
-          if (compType) {
-            const isValid = components.has(compType);
-            if (!isValid) {
-              console.log(`Template "${tmpl.name}": component type "${compType}" not in backend registry`);
-            }
+          if (compType && !components.has(compType)) {
+            invalidComponents.push(`${tmpl.name}: "${compType}"`);
           }
 
           // Check action references are valid
@@ -49,7 +49,7 @@ test.describe('Template Quality', () => {
             if (val && typeof val === 'object' && val.type === 'server_action') {
               const func = val.function;
               if (func && !actions.has(func)) {
-                console.log(`Template "${tmpl.name}": action "${func}" not in action registry`);
+                invalidActions.push(`${tmpl.name}: "${func}"`);
               }
             }
           }
@@ -57,7 +57,7 @@ test.describe('Template Quality', () => {
       }
     }
 
-    // Don't fail on drift — just report
-    expect(true).toBe(true);
+    expect(invalidComponents.length, `Invalid component types: ${invalidComponents.join(', ')}`).toBe(0);
+    expect(invalidActions.length, `Invalid actions: ${invalidActions.join(', ')}`).toBe(0);
   });
 });

@@ -912,3 +912,8 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
     });
   },
 }));
+
+// Expose for QA testing (Playwright can access via window.__editorStore)
+if (typeof window !== 'undefined') {
+  (window as any).__editorStore = useEditorStore;
+}

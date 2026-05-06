@@ -10,7 +10,7 @@ test.describe('Edge Case Data', () => {
       const { normalizeComponentForEditor } = await import('/src/editor/types.ts');
       return normalizeComponentForEditor({ type: 'Text', props: { content: '' } });
     });
-    expect(result).toBeTruthy();
+    expect(result.props.content).toBe('');
   });
 
   test('normalization handles very long text', async ({ page, login }) => {
@@ -22,7 +22,7 @@ test.describe('Edge Case Data', () => {
       const { normalizeComponentForEditor } = await import('/src/editor/types.ts');
       return normalizeComponentForEditor({ type: 'Text', props: { content: 'x'.repeat(10000) } });
     });
-    expect(result).toBeTruthy();
+    expect(result.props.content.length).toBe(10000);
   });
 
   test('normalization handles unicode emoji', async ({ page, login }) => {
@@ -34,7 +34,7 @@ test.describe('Edge Case Data', () => {
       const { normalizeComponentForEditor } = await import('/src/editor/types.ts');
       return normalizeComponentForEditor({ type: 'Text', props: { content: 'Hello \u{1F600}\u{1F389}' } });
     });
-    expect(result).toBeTruthy();
+    expect(result.props.content).toContain('Hello');
   });
 
   test('normalization handles null props', async ({ page, login }) => {
@@ -64,6 +64,6 @@ test.describe('Edge Case Data', () => {
       const { normalizeComponentForEditor } = await import('/src/editor/types.ts');
       return normalizeComponentForEditor({ type: 'Text', props: { content: String(-999) } });
     });
-    expect(result).toBeTruthy();
+    expect(result.props.content).toBe('-999');
   });
 });

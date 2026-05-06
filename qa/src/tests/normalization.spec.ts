@@ -66,10 +66,7 @@ test.describe('Normalization', () => {
       const serialized = input ? serializeComponentForRuntime(input) : null;
       return serialized ? { hasType: !!serialized.type, hasProps: !!serialized.props } : null;
     });
-    expect(result).toBeTruthy();
-    if (result) {
-      expect(result.hasType).toBe(true);
-      expect(result.hasProps).toBe(true);
-    }
+    expect(result.hasType).toBe(true);
+    expect(result.hasProps).toBe(true);
   });
 });

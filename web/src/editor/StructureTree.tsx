@@ -217,6 +217,7 @@ export function StructureTree({ moduleLabel = 'Current Module' }: StructureTreeP
           <div key={row.id}>
             {/* Row item */}
             <div
+              data-testid="row-in-tree"
               className={`flex items-center gap-1 px-2 py-1.5 mx-1 rounded cursor-pointer group transition-colors ${
                 isRowSelected(row.id) ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'
               }`}

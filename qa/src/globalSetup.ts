@@ -99,6 +99,10 @@ export default async () => {
     device_name: 'QA',
     device_id: `qa-${Date.now()}`,
   });
+  // Guard: ensure login returned a valid session token
+  if (!loginResp?.session_token) {
+    throw new Error('QA login failed: no session_token in response');
+  }
   console.log('Login successful.');
 
   // Write auth file for fixtures

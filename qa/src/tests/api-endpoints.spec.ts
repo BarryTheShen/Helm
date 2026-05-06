@@ -10,8 +10,7 @@ test.describe('API Endpoints', () => {
       );
       const endpoints = discovered.endpoints || [];
       if (endpoints.length === 0) {
-        console.log('No endpoints discovered, skipping');
-        return;
+        test.skip(true, 'No endpoints discovered');
       }
 
       const auth = JSON.parse(fs.readFileSync(path.join(__dirname, '../.qa-auth.json'), 'utf-8'));

@@ -20,7 +20,7 @@ test.describe('API Auth', () => {
 
   test('login with wrong credentials returns 401', async ({ request }) => {
     const res = await request.post('http://127.0.0.1:8000/auth/login', {
-      data: { username: 'wrong', password: 'wrong', device_name: 'QA', device_id: 'qa' },
+      data: { username: 'wrong', password: 'wrong', device_name: 'QA', device_id: 'qa-wrong-' + Date.now() },
     });
     expect(res.status()).toBe(401);
   });

@@ -58,8 +58,8 @@ test.describe('Schema Reconciliation', () => {
     const expectedDrift = ['RichTextRenderer', 'RichText', 'RichTextRendererRenderer'];
     const actualDrift = missingInBackend.filter((t) => !expectedDrift.includes(t));
 
-    // Don't fail — just report. The test passes if we can compare.
-    expect(true).toBe(true);
+    // Fail only on unexpected drift (RichTextRenderer/RichText drift is expected)
+    expect(actualDrift.length, `Unexpected components in web but not backend: ${actualDrift.join(', ')}`).toBe(0);
   });
 
   test('all backend actions are registered', async () => {
