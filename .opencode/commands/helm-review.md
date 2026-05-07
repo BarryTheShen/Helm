@@ -1,5 +1,5 @@
 ---
-description: Review code quality and architecture
+description: Review code quality, architecture, and feature completeness
 agent: helm-reviewer
 ---
 
@@ -9,6 +9,9 @@ Review the following: $ARGUMENTS
 
 ## Checklist
 
+This combines the previous `reviewer` and `feature-validator` responsibilities.
+
+**Code Quality:**
 - Does this address the root cause, not a symptom?
 - Could this break downstream dependencies?
 - Are there tests covering the change?
@@ -17,6 +20,11 @@ Review the following: $ARGUMENTS
 - Are error cases handled?
 - Does it follow existing patterns in the codebase?
 - Are API contracts consistent between backend and frontend?
+
+**Feature Completeness** (for medium/large features):
+- Does the implementation cover all required sub-features?
+- Check against `docs/Agentic AI Super App — Project Hub/Blueprint — Production Spec Documents/` if a blueprint spec exists.
+- Are edge cases handled: auth failures, empty states, error responses?
 
 ## Rules
 

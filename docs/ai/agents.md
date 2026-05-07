@@ -18,10 +18,9 @@ These are the active Claude Code sub-agents defined in `.claude/agents/`. They a
 | `tester` | sonnet | pytest-asyncio test writing |
 | `live-tester` | sonnet | Playwright functional verification |
 | `ui-reviewer` | sonnet | Visual quality review |
-| `reviewer` | sonnet | Code quality gate |
-| `feature-validator` | sonnet | Blueprint spec feature extraction |
-| `feature-critic` | sonnet | Product completeness gatekeeper |
-| `docs-updater` | sonnet | Living documentation maintenance |
+| `reviewer` | sonnet | Code quality gate — now includes feature-validator checklist |
+| `feature-critic` | sonnet | Large-feature checklist only, not a default agent |
+| `docs-updater` | sonnet | Living documentation maintenance — conditional |
 
 Copilot-compatible agent definitions live in `.github/agents/` (18 files). These are tool-specific and not portable.
 
@@ -38,7 +37,7 @@ Prompt 3 will add project-local OpenCode config using `opencode.jsonc` and `.ope
 | `helm-protocol` | API/WS/MCP contract definitions |
 | `helm-agent-runtime` | PydanticAI + MCP implementation |
 | `helm-tester` | Test writing and execution |
-| `helm-reviewer` | Code quality gate, architecture review |
+| `helm-reviewer` | Code quality gate, architecture review, feature completeness |
 | `helm-docs` | Documentation maintenance |
 | `helm-security` | Security audit, secrets detection |
 | `helm-git` | Branch management, commit discipline |

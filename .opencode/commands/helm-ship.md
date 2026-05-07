@@ -1,5 +1,5 @@
 ---
-description: Verify, commit, and prepare for PR
+description: Verify branch, tests, diff, and push safety
 agent: helm-git
 ---
 
@@ -9,18 +9,18 @@ Ship the following work: $ARGUMENTS
 
 ## What It Does
 
-1. Check branch — never commit to `main`.
-2. Check working tree: `git status -s`
-3. Review changes: `git diff --stat`
-4. Run verification proportional to what changed (see `docs/ai/verification.md`):
+1. **Check branch** — Never commit to `main`. Verify current branch is a feature branch.
+2. **Check working tree:** `git status -s`
+3. **Review changes:** `git diff --stat`
+4. **Run verification** proportional to what changed (see `docs/ai/verification.md`):
    - Backend changes: `cd backend && pytest -q`
    - Web changes: `cd web && npm run lint`
    - Mobile changes: `cd mobile && npx expo start`
-   - MCP changes: sync check across tools.py, agent_proxy.py, server.py
-5. Scan for secrets: `git diff | grep -iE "api.key|secret|password|token" | grep -v ".env"`
-6. Stage only relevant files: `git add <specific files>`
-7. Commit with type prefix: `git commit -m "<type>: <description>"`
-8. Push: `git push -u origin <branch>`
+   - MCP changes: sync check across `tools.py`, `agent_proxy.py`, `server.py`
+5. **Scan for secrets:** `git diff | grep -iE "api.key|secret|password|token" | grep -v ".env"`
+6. **Stage** only relevant files: `git add <specific files>`
+7. **Commit** with type prefix: `git commit -m "<type>: <description>"`
+8. **Push:** `git push -u origin <branch>`
 
 ## Rules
 
