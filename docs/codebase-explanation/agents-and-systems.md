@@ -1,6 +1,6 @@
 # Agents, MCP, Workflows & Additional Systems
 
-> Last updated: 2026-05-03
+> Last updated: 2026-05-07
 
 ## Tier 1: TLDR
 

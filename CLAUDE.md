@@ -95,6 +95,21 @@ Helm/
 │       ├── test_admin.py
 │       ├── test_triggers.py
 │       └── test_variable_resolver.py
+├── qa/                           # Playwright QA test suite
+│   ├── playwright.config.ts      # 2 projects: backend-only + e2e
+│   ├── package.json              # ESM, scripts: test, test:backend, test:e2e
+│   ├── .qa-env.json              # QA credentials (username + password)
+│   ├── run.sh                    # Full pipeline: backend pytest + Playwright
+│   └── src/
+│       ├── globalSetup.cjs       # Auto-starts backend + Vite, handles auth
+│       ├── globalTeardown.cjs    # Kills servers if QA started them
+│       ├── discover.cjs          # Scans routes, actions, components, templates
+│       ├── fixtures.ts           # Extended fixture with login() via addInitScript
+│       ├── utils.ts              # qaPath() for ESM-safe path resolution
+│       ├── page-objects/         # Login, Editor, Templates, Workflows, Connections
+│       ├── tests/                # 16 test files (see qa.md for details)
+│       ├── .qa-auth.json         # Generated at runtime — NOT committed
+│       └── discovered.json       # Generated at runtime — NOT committed
 ├── web/                          # Web Admin Panel (Vite + React + TypeScript + Tailwind)
 │   ├── src/
 │   │   ├── App.tsx               # React Router, auth guard, AdminLayout
@@ -122,7 +137,8 @@ Helm/
     │   ├── backend.md
     │   ├── frontend.md
     │   ├── protocol.md
-    │   └── agents-and-systems.md
+    │   ├── agents-and-systems.md
+    │   └── qa.md
     └── Agentic AI Super App — Project Hub/
         └── Blueprint — Production Spec Documents/
             ├── Backend Spec — Python FastAPI Server.md
@@ -159,6 +175,13 @@ source backend/.venv/bin/activate
 cd agent && python helm_agent.py --web            # Web UI at http://localhost:7860
 cd agent && python helm_agent.py                  # Interactive REPL
 cd agent && python helm_agent.py "Your task"      # One-shot mode
+
+### QA Test Suite
+cd qa && npm install                               # One-time setup
+cd qa && npx playwright install chromium            # One-time setup
+cd qa && npx playwright test                       # Run all tests (auto-starts servers)
+cd qa && npx playwright test --project backend-only # API tests only
+cd qa && npx playwright test --project e2e         # E2E tests only
 
 ### Build
 eas build --platform ios    # Production iOS build (Mac required)

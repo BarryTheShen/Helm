@@ -2,8 +2,8 @@
 
 How to run, configure, and edit every part of the stack.
 
-> Last updated: 2026-05-03
-> Last audit: 2026-05-03 — ✅ All systems operational (338 backend tests, 7/7 live tests)
+> Last updated: 2026-05-07
+> Last audit: 2026-05-07 — ✅ All systems operational (338 backend tests, 29 QA tests passing)
 
 ---
 
@@ -512,6 +512,43 @@ node helm-sdui-test2.js     # SDUI V2 integration test
 ```
 
 > **Note:** Some scripts have hardcoded JWT tokens that must be updated before use. Check the top of each file.
+
+### QA Test Suite (`qa/`)
+
+A Playwright-based test suite for the web admin panel and backend API. Auto-starts backend and Vite if not already running.
+
+```bash
+# One-time setup
+cd qa
+npm install
+npx playwright install chromium
+
+# Run all tests (auto-starts servers)
+npx playwright test
+
+# Backend-only tests (no browser)
+npx playwright test --project backend-only
+
+# E2E tests only (browser)
+npx playwright test --project e2e
+
+# Specific test file
+npx playwright test schema-reconciliation
+npx playwright test editor
+```
+
+**Configuration file:** `qa/.qa-env.json` — contains QA credentials (username/password). Create it before first run:
+```json
+{"username": "admin", "password": "your_password"}
+```
+
+If `qa/.qa-env.json` doesn't exist, `globalSetup` creates it with default values `admin`/`admin` and attempts to set up the backend.
+
+**Servers:** Tests run against `http://127.0.0.1:8000` (backend) and `http://127.0.0.1:5174` (web admin). `globalSetup.cjs` auto-starts them if not already running.
+
+**Results:** `qa/results/playwright-results.json` (JSON report)
+
+See `docs/codebase-explanation/qa.md` for full details.
 
 ### Python dev scripts
 
