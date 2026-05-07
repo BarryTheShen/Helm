@@ -65,7 +65,7 @@ The goal is a clean, fully working state — not a partial fix.
 
 Before proposing any edit, consult the project's internal documentation:
 
-- **`docs/code-explanation/`** — Read this for explanations of existing code, architecture decisions, and module responsibilities. Always check here before modifying unfamiliar code.
+- **`docs/codebase-explanation/`** — Read this for explanations of existing code, architecture decisions, and module responsibilities. Always check here before modifying unfamiliar code.
 - **`docs/Agentic AI Super App — Project Hub`** — Go to the **docs/Agentic AI Super App — Project Hub/Blueprint — Production Spec Documents** and **docs/Agentic AI Super App — Project Hub/Architecture Decisions — Session 2 (2026-03-29) 8c271ee63ff84db797d10a11214bfd47.md** for system-level architecture, design decisions, and component relationships. This is the source of truth for high-level design.
 - When in doubt about how something works or why it was built a certain way, **read the docs first, then read the code, then ask.**
 

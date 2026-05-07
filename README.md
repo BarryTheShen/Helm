@@ -36,9 +36,9 @@ The app is a **Server-Driven UI (SDUI) renderer** — the AI sends JSON componen
 └───────────────────┬─────────────────────────────────────────┘
                     │  WebSocket (real-time events) + REST API
 ┌───────────────────▼──────────────────┐  ┌────────────────────┐
-│  Python FastAPI Backend   port 9100  │  │  Web Admin Panel   │
+│  Python FastAPI Backend   port 8000  │  │  Web Admin Panel   │
 │  Auth · Calendar · Chat · Workflows  │  │  (Vite + React)    │
-│  Agent Proxy (OpenRouter streaming)  │  │  port 5173         │
+│  Agent Proxy (OpenRouter streaming)  │  │  port 5174         │
 │  MCP Server (22 tools)               │  │  SDUI Editor       │
 │  Workflow Engine (APScheduler)       │  │  User/Session Mgmt │
 └─────────────────┬────────────────────┘  └────────────────────┘
@@ -64,7 +64,7 @@ The app is a **Server-Driven UI (SDUI) renderer** — the AI sends JSON componen
 | Real-time transport | WebSocket (FastAPI + reconnecting-websocket) |
 | Auth | JWT session tokens (bcrypt passwords, Bearer header) |
 | Scheduling | APScheduler (cron + event-trigger workflow engine) |
-| Tests | pytest-asyncio (113 tests across 15 test files) |
+| Tests | pytest-asyncio (run `cd backend && pytest -q` to verify) |
 
 ---
 
@@ -107,7 +107,7 @@ Components are registered by PascalCase type string and resolved at render time 
 
 ### Web Admin Panel
 
-A React + Vite web dashboard for administrators at `http://localhost:5173`:
+A React + Vite web dashboard for administrators at `http://localhost:5174`:
 
 - **Dashboard** — system stats (users, sessions, events, workflows)
 - **Users** — create, edit, delete, list users
@@ -134,7 +134,7 @@ docker compose exec backend python /app/../manage.py create_user \
   --username admin --password yourpassword
 ```
 
-Web admin: <http://localhost:8080> — API: <http://localhost:9100>
+Web admin: <http://localhost:8080> — API: <http://localhost:8000> (Docker uses port 8000, same as local dev)
 
 ### Option B — Local Dev
 
@@ -160,7 +160,6 @@ DEFAULT_PROVIDER=openrouter
 OPENROUTER_API_KEY=sk-or-...
 
 DATABASE_URL=sqlite+aiosqlite:///./helm.db
-SERVER_PORT=9100
 ```
 
 The backend will refuse to start if `ENCRYPTION_KEY` is missing — this is intentional; it encrypts stored API keys.
@@ -174,12 +173,12 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 
 .venv/bin/python -m alembic upgrade head
-.venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 9100
+.venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0
 ```
 
 > If your shell aliases `python` globally (e.g. `/Library/Frameworks/Python.framework/...`), always call `.venv/bin/python` explicitly so you don't accidentally use the system Python.
 
-Verify it's up: `curl http://localhost:9100/health`.
+Verify it's up: `curl http://localhost:8000/health`.
 
 ### 3. Create your admin account
 
@@ -215,9 +214,9 @@ On the **Connect** screen, enter the server URL for your target:
 
 | Target | Server URL |
 |---|---|
-| iOS simulator on Mac | `http://localhost:9100` |
-| Android emulator | `http://10.0.2.2:9100` |
-| Physical phone on same Wi-Fi | `http://<mac-lan-ip>:9100` (find with `ipconfig getifaddr en0`) |
+| iOS simulator on Mac | `http://localhost:8000` |
+| Android emulator | `http://10.0.2.2:8000` |
+| Physical phone on same Wi-Fi | `http://<mac-lan-ip>:8000` (find with `ipconfig getifaddr en0`) |
 
 Then log in with the same admin credentials.
 
@@ -234,7 +233,7 @@ Other things to try:
 - *"Send me a warning notification saying tests pass"* → check the Alerts tab
 - *"Rename the Chat tab to Assistant"* → tab bar updates live
 
-### 5. Standalone Agent (Optional)
+### 7. Standalone Agent (Optional)
 
 The standalone Helm Agent is a developer / power-user tool with a browser chat UI that has full MCP access and can also read/write mobile source files:
 
@@ -270,7 +269,7 @@ cd agent && python api_server.py   # default port 7860
 ```bash
 cd backend
 source .venv/bin/activate
-pytest                              # All 113 tests
+pytest                              # Run full test suite
 pytest -v tests/test_auth.py        # Auth tests
 pytest -v tests/test_calendar.py    # Calendar tests
 pytest -v tests/test_drafts.py      # Draft/approval workflow tests
@@ -301,19 +300,14 @@ Helm/
 │   └── app/
 │       ├── main.py                 # FastAPI app, lifespan, middleware
 │       ├── config.py               # Settings (pydantic-settings + .env)
-│       ├── routers/                # 15 routers: auth, modules, chat, calendar,
-│       │                           # notifications, workflows, actions, users,
-│       │                           # sessions, audit, components, templates,
-│       │                           # admin, agent_config, websocket
-│       ├── services/               # agent_proxy, ws_manager, workflow_engine,
-│       │                           # auth, action_registry, audit, component_seed,
-│       │                           # sdui_state, template_seed
-│       ├── models/                 # 14 SQLAlchemy ORM models
-│       ├── schemas/                # Pydantic request/response schemas (15 files)
-│       ├── mcp/                    # FastMCP server + 22 tool implementations
+│       ├── routers/                # FastAPI route modules
+│       ├── services/               # Business logic
+│       ├── models/                 # SQLAlchemy ORM models
+│       ├── schemas/                # Pydantic request/response schemas
+│       ├── mcp/                    # FastMCP server + tool implementations
 │       ├── middleware/             # sandbox.py (X-Helm-Sandbox test aid)
 │       └── utils/                  # security.py (JWT, bcrypt)
-│   └── tests/                      # 113 pytest-asyncio tests (15 files)
+│   └── tests/                      # pytest-asyncio test suite
 ├── mobile/
 │   ├── app/
 │   │   ├── _layout.tsx             # Root layout + auth guard
@@ -375,7 +369,7 @@ Helm/
 
 ## MCP Tools Reference
 
-Any MCP-compatible agent can connect to `http://localhost:9100/mcp/` with a valid Bearer token:
+Any MCP-compatible agent can connect to `http://localhost:8000/mcp/` with a valid Bearer token:
 
 ### Calendar
 
@@ -468,7 +462,7 @@ Package versions drifted from what Expo 55 Go bundles. Fix: `cd mobile && npx ex
 **Android emulator can't reach the backend**
 Android uses `10.0.2.2` (not `localhost`) to reach the host Mac. Also start uvicorn with `--host 0.0.0.0`, not the default `127.0.0.1`.
 
-**Port 9100 conflicts with something else**
+**Port 8000 conflicts with something else**
 Change `SERVER_PORT` in `backend/.env`, the `--port` flag on uvicorn, the proxy targets in `web/vite.config.ts`, the server URL on the mobile Connect screen, and the `ports:` / `CORS_ALLOW_ORIGINS` in `docker-compose.yml`.
 
 **Chat replies nothing, WebSocket disconnects immediately**

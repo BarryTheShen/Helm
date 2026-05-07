@@ -5,7 +5,7 @@
 > what connects to what, and what the known pitfalls are.
 >
 > Last updated: 2026-05-07
-> Last audit: 2026-05-07 — ✅ All systems operational (27 backend test files, 338 tests passing, FF3 fixes verified, QA suite operational)
+> Last audit: 2026-05-07 — ✅ All systems operational (23 test files, run `cd backend && pytest -q` for current count)
 
 ---
 
@@ -38,15 +38,15 @@ Helm is a self-hosted AI super app with three layers:
 
 | Need to change... | Edit this file | Notes |
 |-------------------|---------------|-------|
-| API endpoints | `routers/{domain}.py` | 19 router files (added connections.py in Session 9) |
-| Database models | `models/{model}.py` | 24 model files (+ 1 base + 1 init); added app, app_module_ref, settings, todo, article, module_instance; all import in `models/__init__.py` |
-| Request/response types | `schemas/{domain}.py` | 17 schema files (added connection.py in Session 9); workflow schemas inline in `routers/workflows.py` |
+| API endpoints | `routers/{domain}.py` | Route modules (25 files — see `backend/app/routers/`) |
+| Database models | `models/{model}.py` | 25 model files — see `backend/app/models/` for current list |
+| Request/response types | `schemas/{domain}.py` | 24 schema files — see `backend/app/schemas/` for current list |
 | Auth logic | `services/auth.py` + `utils/security.py` | Session-based with JWT tokens |
 | Admin-only guard | `dependencies.py::require_admin` | Raises 403 if `user.role != "admin"` |
 | AI chat streaming | `services/agent_proxy.py` | Core feature — LLM streaming + tool calls + XML fallback |
 | External agent routing | `services/agent_proxy.py` | When `settings.external_agent_url` is set, all chat is forwarded to `api_server.py` |
 | WebSocket handling | `routers/websocket.py` + `services/websocket_manager.py` | token in query param; device_id tracked; `module_action` dispatches to action registry |
-| Action handlers | `services/action_registry.py` | 34 named function handlers (14 server-side + 14 client-only stubs); includes fetch_rss, fetch_weather, run_workflow, settings.save, todos.*; removed open_sheet, dismiss |
+| Action handlers | `services/action_registry.py` | Named function handlers (server-side + client-only); includes fetch_rss, fetch_weather, run_workflow, settings.save, todos.*; removed open_sheet, dismiss |
 | Actions router | `routers/actions.py` | Actions whitelist (POST /api/actions/execute, GET /api/actions/functions); prevents SSRF |
 | User management CLI | `manage.py` (backend root) | CLI user management (since /auth/setup is locked after first user) |
 | MCP tools (for AI agents) | `mcp/tools.py` | Shared between agent proxy and MCP server |
@@ -269,7 +269,7 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 ## Test Coverage
 
 **Last Test Run:** 2026-05-07
-**Backend Tests:** ✅ 338 tests passing (100% pass rate) — ~120 seconds
+**Backend Tests:** ✅ All passing (run `cd backend && pytest -q` for current count) — ~120 seconds
 **QA Test Suite:** 16 test files, 29 tests pass, 25 e2e tests have stale selectors needing fixes (pending)
 
 ### Backend Test Breakdown by Module
@@ -295,7 +295,7 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 | Variable Resolver | 5 | ✅ |
 | Variables | 8 | ✅ |
 | Workflows | 13 | ✅ |
-| **TOTAL** | **216** | **✅** |
+| **TOTAL** | **(run `pytest --co -q` for current count)** | **✅** |
 
 ### Coverage Gaps
 
@@ -456,7 +456,7 @@ The following **incomplete features and known issues** exist:
 - ✅ Mobile: Added Article Reader screen (app/(tabs)/article.tsx)
 - ✅ Mobile: Added customizable tab bar via tabsStore.enabledTabIds
 - ✅ Mobile: Added Module Store view in modules.tsx showing all available templates
-- ✅ All 216 backend tests passing
+- ✅ All backend tests passing
 
 ### Previous Fixes (2026-04-16)
 
@@ -543,7 +543,7 @@ These were evaluated during the modernization branch and deliberately not adopte
 | XML tool-call fallback | `agent_proxy._parse_xml_tool_calls()` | Supports stepfun and other non-function-calling models |
 | Variable expression resolver | `backend/app/services/variable_resolver.py` + `mobile/src/utils/variableResolver.ts` | `{{scope.path}}` syntax; backend uses chevron (Python mustache), mobile uses mustache npm package; scopes: user, component, self, custom, env, data, connection |
 | Connection namespace | `services/variable_resolver.py` | `{{connection.provider.key}}` resolves to decrypted API keys from Connection model |
-| Action catalog (34 total) | `backend/app/services/action_registry.py` | 14 server-side handlers (includes fetch_rss, fetch_weather, run_workflow, settings.save, todos.*) + 14 client-only stubs; removed open_sheet, dismiss |
+| Action catalog | `backend/app/services/action_registry.py` | Server-side + client-only handlers (includes fetch_rss, fetch_weather, run_workflow, settings.save, todos.*); removed open_sheet, dismiss |
 | Workflow engine | `backend/app/services/workflow_engine.py` | Executes React Flow graph format with nodes, edges, branching, and loops |
 | n8n importer | `backend/app/routers/workflows.py` | POST /api/workflows/import/n8n converts n8n workflows to React Flow format |
 | Template seed | `backend/app/services/template_seed.py` | Seeds 5 production templates: Calendar, Chat, News Feed, Weather, Task Manager |
@@ -608,7 +608,7 @@ These were evaluated during the modernization branch and deliberately not adopte
 | Service | Default Port | How to change |
 |---------|-------------|---------------|
 | Backend FastAPI | `8000` | `SERVER_PORT` in `.env` |
-| Web Admin Panel (Vite) | `5173` | `web/vite.config.ts` or `--port` CLI arg |
+| Web Admin Panel (Vite) | `5174` | `web/vite.config.ts` or `--port` CLI arg |
 | Standalone agent web UI / api_server | `7860` | `AGENT_WEB_PORT` in `.env` or `--port` CLI arg |
 | WebSocket | Same as backend (`8000`) | `ws://host:8000/ws?token=...` |
 | MCP endpoint | Same as backend (`8000`) | `http://host:8000/mcp/` |
