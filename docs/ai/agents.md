@@ -1,6 +1,6 @@
 # Agent Definitions
 
-## Current: Claude Code Agent Stack (16 Agents)
+## Legacy/Current Claude Code Agent Stack (16 Agents)
 
 These are the active Claude Code sub-agents defined in `.claude/agents/`. They are **Claude Code-specific** — not portable to other tools. Sub-agents cannot spawn other sub-agents.
 
@@ -25,9 +25,9 @@ These are the active Claude Code sub-agents defined in `.claude/agents/`. They a
 
 Copilot-compatible agent definitions live in `.github/agents/` (18 files). These are tool-specific and not portable.
 
-## Target: Simplified Agent Roster (Future)
+## Target OpenCode Agent Roster
 
-When OpenCode config is added, the agent roster should be simplified. Do not blindly copy `fmflurry/settings-opencode` — borrow patterns, adapt to Helm's context.
+Prompt 3 will add project-local OpenCode config using `opencode.jsonc` and `.opencode/agents` + `.opencode/commands` folders, following official OpenCode docs. We are borrowing patterns from `fmflurry/settings-opencode`, not blindly copying it.
 
 | Agent | Purpose |
 |-------|---------|
@@ -43,7 +43,7 @@ When OpenCode config is added, the agent roster should be simplified. Do not bli
 | `helm-security` | Security audit, secrets detection |
 | `helm-git` | Branch management, commit discipline |
 
-Future OpenCode setup should use `AGENTS.md` plus `opencode.jsonc` and `.opencode/` folders, following official OpenCode docs.
+The OpenCode config will be in `AGENTS.md` (portable instructions) plus `opencode.jsonc` (project-local config) and `.opencode/` (agents, commands).
 
 ## Orchestration Principles (Claude Code)
 

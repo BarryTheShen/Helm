@@ -46,6 +46,16 @@ The monolithic `CLAUDE.md` (470+ lines) was Claude Code-specific and not portabl
 - Docs-only changes no longer require full test suite.
 - Removed "docs-updater always last" as a universal rule.
 
+## 2026-05-07: Clean Up AI Workflow Migration Notes
+
+### What Changed
+
+- Renamed Claude Code agent roster section to "Legacy/Current Claude Code Agent Stack" in `docs/ai/agents.md` and `CLAUDE.md`.
+- Removed "Standard Pipeline" heading in `CLAUDE.md` — replaced with "Pipeline (Large Features Only)".
+- Added explicit Prompt 3 roadmap: project-local OpenCode config using `opencode.jsonc` and `.opencode/agents` + `.opencode/commands`.
+- Clarified that we borrow patterns from `fmflurry/settings-opencode`, not blindly copy.
+- Verified no suspicious/injection-looking text in new instruction files.
+
 ### Future OpenCode Config
 
-Future OpenCode setup should use `AGENTS.md` as the portable instruction file, plus `opencode.jsonc` and `.opencode/` folders following official OpenCode docs. Do not blindly copy `fmflurry/settings-opencode` — borrow patterns, adapt to Helm's context.
+Future OpenCode setup should use `AGENTS.md` as the portable instruction file, plus project-local `opencode.jsonc` and `.opencode/` folders (agents, commands), following official OpenCode docs.

@@ -1,6 +1,6 @@
 # Development Workflow
 
-Choose the workflow that matches the task size. The old 16-agent mega-loop is legacy Claude Code infrastructure — it is **not** the default.
+Choose the workflow that matches the task size. There is no single "standard pipeline" — the workflow scales with the task.
 
 ## Task-Size Workflows
 

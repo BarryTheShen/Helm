@@ -16,30 +16,32 @@ This file exists for Claude Code compatibility — it adds Claude Code-specific 
 - **Exhaustive testing:** Use up to 6 parallel live-tester agents for large features. Especially check against `docs/Agentic AI Super App — Project Hub/Feature Feedback 3 34bb13d65bb38028b625e2a2da97056b.md` for known bugs.
 - **Debugging:** Write debug scripts and debug hints in code. Never guess — add console.log with clear labels showing WHERE in the process things are.
 
-### Agent Definitions
+### Legacy Claude Code Agent Stack (16 Agents)
+
+> These are Claude Code-specific — not portable to other tools. See `docs/ai/agents.md` for the target OpenCode roster.
 
 16 agent definitions live in `.claude/agents/`. Read the relevant agent file for its full prompt.
 
 | Agent | Scope |
 |-------|-------|
-| `session-init` | Session folder creation/archiving |
-| `requirements` | Maps tasks to affected files via docs |
-| `due-diligence` | Reads source, outputs compressed context |
-| `planner` | Generates implementation plans |
-| `plan-critic` | Challenges plan assumptions |
-| `protocol-dev` | API/WS/MCP contract definitions |
-| `backend-dev` | Python FastAPI implementation |
-| `frontend-dev` | React Native + Web admin |
-| `agent-dev` | PydanticAI + MCP implementation |
-| `tester` | pytest-asyncio test writing |
-| `live-tester` | Playwright functional verification |
-| `ui-reviewer` | Visual quality review |
-| `reviewer` | Code quality gate |
-| `feature-validator` | Blueprint spec feature extraction |
-| `feature-critic` | Product completeness gatekeeper |
-| `docs-updater` | Living documentation maintenance |
+| `session-init` | haiku — session folder creation/archiving |
+| `requirements` | sonnet — maps tasks to affected files via docs |
+| `due-diligence` | sonnet — reads source, outputs compressed context |
+| `planner` | sonnet — generates implementation plans |
+| `plan-critic` | sonnet — challenges plan assumptions |
+| `protocol-dev` | sonnet — API/WS/MCP contract definitions |
+| `backend-dev` | sonnet — Python FastAPI implementation |
+| `frontend-dev` | sonnet — React Native + Web admin |
+| `agent-dev` | sonnet — PydanticAI + MCP implementation |
+| `tester` | sonnet — pytest-asyncio test writing |
+| `live-tester` | sonnet — Playwright functional verification |
+| `ui-reviewer` | sonnet — visual quality review |
+| `reviewer` | sonnet — code quality gate |
+| `feature-validator` | sonnet — blueprint spec feature extraction |
+| `feature-critic` | sonnet — product completeness gatekeeper |
+| `docs-updater` | sonnet — living documentation maintenance |
 
-### Standard Pipeline (Large Features)
+### Pipeline (Large Features Only)
 
 The full 16-agent pipeline is available for large features. For smaller tasks, match the workflow to task size — see `docs/ai/workflows.md`.
 
