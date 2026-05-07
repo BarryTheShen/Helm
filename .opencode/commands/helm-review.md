@@ -5,11 +5,7 @@ agent: helm-reviewer
 
 # /helm-review
 
-Review code quality, architecture consistency, and completeness. Read-only — no edits.
-
-## Usage
-
-/helm-review <optional: file path, branch, or change description>
+Review the following: $ARGUMENTS
 
 ## Checklist
 
@@ -28,3 +24,4 @@ Review code quality, architecture consistency, and completeness. Read-only — n
 - Prioritize: correctness > security > readability > convention.
 - Reference `AGENTS.md` engineering rules for judgment criteria.
 - If reviewing a diff, focus on what changed — don't audit the entire file.
+- If no target specified, review the current git diff.

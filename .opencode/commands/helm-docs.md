@@ -5,11 +5,7 @@ agent: helm-docs
 
 # /helm-docs
 
-Maintain project documentation. Edits docs only — no code changes, no bash.
-
-## Usage
-
-/helm-docs <description of what changed, or "update based on git diff">
+Update documentation for: $ARGUMENTS
 
 ## Scope
 

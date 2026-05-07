@@ -59,3 +59,26 @@ The monolithic `CLAUDE.md` (470+ lines) was Claude Code-specific and not portabl
 ### Future OpenCode Config
 
 Future OpenCode setup should use `AGENTS.md` as the portable instruction file, plus project-local `opencode.jsonc` and `.opencode/` folders (agents, commands), following official OpenCode docs.
+
+## 2026-05-07: Fix OpenCode Config Validity
+
+### What Changed
+
+Rewrote `opencode.jsonc` to match official OpenCode v1.14 config format. Updated all 11 agent files and 8 command files.
+
+### Issues Fixed
+
+- **`contextPaths` → `instructions`:** `contextPaths` is not a recognized OpenCode config key (confirmed via `opencode debug config`). Replaced with `instructions: ["AGENTS.md", "docs/ai/*.md"]`.
+- **`${process.env...}` not evaluated:** OpenCode does NOT evaluate JavaScript expressions in config. The literal string was stored as-is. Removed all per-agent model interpolation — model/provider setup deferred to a future prompt.
+- **Duplicate agent/command definitions:** Agents and commands were defined in both `opencode.jsonc` AND `.opencode/agents/*.md` / `.opencode/commands/*.md`. OpenCode loads markdown files from `.opencode/` automatically. Removed all agent and command entries from `opencode.jsonc` — it now only contains `$schema`, `model`, `instructions`, and `default_agent`.
+- **`helm-build` made primary agent:** Changed `mode: subagent` → `mode: primary`. Set `default_agent: "helm-build"` in config. Removed "Do not fix issues yourself" — the default development agent should fix issues, not just report them.
+- **Commands now include `$ARGUMENTS`:** All 8 command markdown files now reference `$ARGUMENTS` so the user's request is passed into the command prompt.
+- **`helm-ship` verification is now proportional:** Changed from always running backend tests to running verification proportional to what changed (backend, web, mobile, MCP — based on diff). Added secret scan.
+- **Added `$schema` to config.**
+
+### Validation
+
+- `opencode debug config` runs successfully with no errors (OpenCode v1.14).
+- 11 agents loaded from `.opencode/agents/*.md` (1 primary, 10 subagent).
+- 8 commands loaded from `.opencode/commands/*.md`.
+- No app source files changed.

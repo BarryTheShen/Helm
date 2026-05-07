@@ -5,11 +5,7 @@ agent: helm-backend
 
 # /helm-api
 
-Work on backend API endpoints, routes, models, services, and business logic.
-
-## Usage
-
-/helm-api <description of the endpoint or backend change>
+Work on the following backend change: $ARGUMENTS
 
 ## What It Does
 

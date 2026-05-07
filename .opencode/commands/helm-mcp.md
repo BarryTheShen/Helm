@@ -5,11 +5,7 @@ agent: helm-agent-runtime
 
 # /helm-mcp
 
-Work on MCP tool definitions, the MCP server, and the PydanticAI agent runtime.
-
-## Usage
-
-/helm-mcp <description of the tool, agent, or MCP change>
+Work on the following MCP/agent change: $ARGUMENTS
 
 ## What It Does
 

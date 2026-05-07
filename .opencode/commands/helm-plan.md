@@ -5,11 +5,7 @@ agent: helm-planner
 
 # /helm-plan
 
-Plan the implementation strategy for a feature, refactor, or investigation.
-
-## Usage
-
-/helm-plan <description of what to build or investigate>
+Plan the implementation strategy for: $ARGUMENTS
 
 ## What It Does
 

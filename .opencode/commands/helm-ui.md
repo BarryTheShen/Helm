@@ -5,11 +5,7 @@ agent: helm-frontend
 
 # /helm-ui
 
-Work on the web admin panel (Vite + React + TypeScript) or mobile app (React Native + Expo).
-
-## Usage
-
-/helm-ui <web|mobile> <description of the UI change>
+Work on the following UI change: $ARGUMENTS
 
 ## What It Does
 

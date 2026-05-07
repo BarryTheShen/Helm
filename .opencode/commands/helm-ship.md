@@ -5,20 +5,22 @@ agent: helm-git
 
 # /helm-ship
 
-Verify all tests pass, commit atomic changes, and prepare for PR.
-
-## Usage
-
-/helm-ship <optional: commit message>
+Ship the following work: $ARGUMENTS
 
 ## What It Does
 
-1. Run verification: `cd backend && pytest -q`
+1. Check branch — never commit to `main`.
 2. Check working tree: `git status -s`
 3. Review changes: `git diff --stat`
-4. Stage only relevant files: `git add <specific files>`
-5. Commit with type prefix: `git commit -m "<type>: <description>"`
-6. Push: `git push -u origin <branch>`
+4. Run verification proportional to what changed (see `docs/ai/verification.md`):
+   - Backend changes: `cd backend && pytest -q`
+   - Web changes: `cd web && npm run lint`
+   - Mobile changes: `cd mobile && npx expo start`
+   - MCP changes: sync check across tools.py, agent_proxy.py, server.py
+5. Scan for secrets: `git diff | grep -iE "api.key|secret|password|token" | grep -v ".env"`
+6. Stage only relevant files: `git add <specific files>`
+7. Commit with type prefix: `git commit -m "<type>: <description>"`
+8. Push: `git push -u origin <branch>`
 
 ## Rules
 

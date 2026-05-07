@@ -5,11 +5,7 @@ agent: helm-build
 
 # /helm-bug
 
-Fix a bug using the reproduce → diagnose → fix → verify loop.
-
-## Usage
-
-/helm-bug <description of the bug, error message, or failing behavior>
+Fix the following bug: $ARGUMENTS
 
 ## What It Does
 
