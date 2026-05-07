@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
 import fs from 'fs';
-import path from 'path';
+import { qaPath } from '../utils';
 
 test.describe('API Auth', () => {
   test('login with correct credentials returns 200', async ({ request }) => {
-    const qaEnv = JSON.parse(fs.readFileSync(path.join(__dirname, '../../.qa-env.json'), 'utf-8'));
+    const qaEnv = JSON.parse(fs.readFileSync(qaPath('.qa-env.json'), 'utf-8'));
     const res = await request.post('http://127.0.0.1:8000/auth/login', {
       data: {
         username: qaEnv.username,
@@ -31,7 +31,7 @@ test.describe('API Auth', () => {
   });
 
   test('authenticated API request returns 200', async ({ request }) => {
-    const auth = JSON.parse(fs.readFileSync(path.join(__dirname, '../.qa-auth.json'), 'utf-8'));
+    const auth = JSON.parse(fs.readFileSync(qaPath('src/.qa-auth.json'), 'utf-8'));
     const res = await request.get('http://127.0.0.1:8000/api/components/registry', {
       headers: { Authorization: `Bearer ${auth.token}` },
     });

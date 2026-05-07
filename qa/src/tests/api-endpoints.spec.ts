@@ -1,19 +1,17 @@
 import { test, expect } from '@playwright/test';
 import fs from 'fs';
-import path from 'path';
+import { qaPath } from '../utils';
 
 test.describe('API Endpoints', () => {
   test('all discovered endpoints return valid status', async ({ request }) => {
     try {
-      const discovered = JSON.parse(
-        fs.readFileSync(path.join(__dirname, '../discovered.json'), 'utf-8'),
-      );
+      const discovered = JSON.parse(fs.readFileSync(qaPath('src/discovered.json'), 'utf-8'));
       const endpoints = discovered.endpoints || [];
       if (endpoints.length === 0) {
         test.skip(true, 'No endpoints discovered');
       }
 
-      const auth = JSON.parse(fs.readFileSync(path.join(__dirname, '../.qa-auth.json'), 'utf-8'));
+      const auth = JSON.parse(fs.readFileSync(qaPath('src/.qa-auth.json'), 'utf-8'));
       const baseUrl = 'http://127.0.0.1:8000';
 
       for (const ep of endpoints) {

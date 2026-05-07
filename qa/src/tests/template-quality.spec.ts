@@ -1,21 +1,14 @@
 import { test, expect } from '@playwright/test';
 import fs from 'fs';
-import path from 'path';
+import { qaPath } from '../utils';
 
 test.describe('Template Quality', () => {
   test('all templates have valid component types and actions', async ({ request }) => {
-    let discovered: any = {};
-    try {
-      discovered = JSON.parse(
-        fs.readFileSync(path.join(__dirname, '../discovered.json'), 'utf-8'),
-      );
-    } catch {
-      console.log('discovered.json not found, skipping');
-      return;
-    }
+    const discovered = JSON.parse(fs.readFileSync(qaPath('src/discovered.json'), 'utf-8'));
 
-    const templates = discovered.templates || [];
-    if (templates.length === 0) {
+    const templates = (discovered.templates?.items) || (discovered.templates) || [];
+    const templateList = Array.isArray(templates) ? templates : [];
+    if (templateList.length === 0) {
       console.log('No templates discovered, skipping');
       return;
     }
@@ -26,7 +19,7 @@ test.describe('Template Quality', () => {
     const invalidComponents: string[] = [];
     const invalidActions: string[] = [];
 
-    for (const tmpl of templates) {
+    for (const tmpl of templateList) {
       const screen = tmpl.screen;
       if (!screen) continue;
 
