@@ -1,0 +1,137 @@
+// OpenCode project-local config for Helm
+// Official schema: https://opencode.ai/config.json
+//
+// Model routing uses environment variables:
+//   OPENCODE_MODEL_PRIMARY    - default model for most agents (e.g. anthropic/claude-sonnet-4-6)
+//   OPENCODE_MODEL_PLANNER    - model for planner/reviewer agents
+//   OPENCODE_MODEL_WORKER     - model for implementation agents
+//   OPENCODE_MODEL_MINI       - fast/cheap model for small tasks
+//   OPENCODE_REASONING_PRIMARY    - reasoning model tier 1
+//   OPENCODE_REASONING_SECONDARY  - reasoning model tier 2
+//   OPENCODE_REASONING_TERTIARY   - reasoning model tier 3
+
+{
+  // Default model — override via OPENCODE_MODEL_PRIMARY env var
+  "model": "${process.env.OPENCODE_MODEL_PRIMARY || 'anthropic/claude-sonnet-4-6'}",
+
+  // Project instruction files — loaded into context automatically
+  "contextPaths": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/ai/README.md",
+    "docs/ai/workflows.md",
+    "docs/ai/verification.md"
+  ],
+
+  // Providers — auto-detected from env vars (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.)
+  // Override specific provider here if needed:
+  // "provider": { "anthropic": { "apiKey": "${process.env.ANTHROPIC_API_KEY}" } },
+
+  // Agent definitions — see .opencode/agents/ for full prompts
+  "agent": {
+    "helm-build": {
+      "description": "Build, lint, typecheck across all layers",
+      "mode": "subagent",
+      "model": "${process.env.OPENCODE_MODEL_PRIMARY || 'anthropic/claude-sonnet-4-6'}"
+    },
+    "helm-planner": {
+      "description": "Implementation planning and strategy — read-oriented",
+      "mode": "subagent",
+      "model": "${process.env.OPENCODE_MODEL_PLANNER || 'anthropic/claude-sonnet-4-6'}",
+      "permission": { "edit": "deny", "bash": "deny" }
+    },
+    "helm-backend": {
+      "description": "Python FastAPI implementation",
+      "mode": "subagent",
+      "model": "${process.env.OPENCODE_MODEL_WORKER || 'anthropic/claude-sonnet-4-6'}"
+    },
+    "helm-frontend": {
+      "description": "React Native + Web admin implementation",
+      "mode": "subagent",
+      "model": "${process.env.OPENCODE_MODEL_WORKER || 'anthropic/claude-sonnet-4-6'}"
+    },
+    "helm-protocol": {
+      "description": "API/WS/MCP contract definitions",
+      "mode": "subagent",
+      "model": "${process.env.OPENCODE_MODEL_WORKER || 'anthropic/claude-sonnet-4-6'}"
+    },
+    "helm-agent-runtime": {
+      "description": "PydanticAI + MCP implementation",
+      "mode": "subagent",
+      "model": "${process.env.OPENCODE_MODEL_WORKER || 'anthropic/claude-sonnet-4-6'}"
+    },
+    "helm-tester": {
+      "description": "Test writing and execution",
+      "mode": "subagent",
+      "model": "${process.env.OPENCODE_MODEL_WORKER || 'anthropic/claude-sonnet-4-6'}"
+    },
+    "helm-reviewer": {
+      "description": "Code quality gate, architecture review — read-oriented",
+      "mode": "subagent",
+      "model": "${process.env.OPENCODE_MODEL_PLANNER || 'anthropic/claude-sonnet-4-6'}",
+      "permission": { "edit": "deny", "bash": "deny" }
+    },
+    "helm-docs": {
+      "description": "Documentation maintenance — edits docs only",
+      "mode": "subagent",
+      "model": "${process.env.OPENCODE_MODEL_MINI || 'anthropic/claude-haiku-4-5'}",
+      "permission": { "bash": "deny" }
+    },
+    "helm-security": {
+      "description": "Security audit, secrets detection — auth/secrets/user-input/permission-sensitive work",
+      "mode": "subagent",
+      "model": "${process.env.OPENCODE_MODEL_PLANNER || 'anthropic/claude-sonnet-4-6'}",
+      "permission": { "edit": "deny", "bash": "deny" }
+    },
+    "helm-git": {
+      "description": "Branch management, commit discipline — bash only, no unrelated pushes",
+      "mode": "subagent",
+      "model": "${process.env.OPENCODE_MODEL_MINI || 'anthropic/claude-haiku-4-5'}"
+    }
+  },
+
+  // Commands — see .opencode/commands/ for full prompts
+  "command": {
+    "helm-plan": {
+      "description": "Plan an implementation strategy",
+      "agent": "helm-planner"
+    },
+    "helm-bug": {
+      "description": "Fix a bug with reproduce-diagnose-fix-verify loop",
+      "agent": "helm-build"
+    },
+    "helm-api": {
+      "description": "Work on backend API endpoints",
+      "agent": "helm-backend"
+    },
+    "helm-ui": {
+      "description": "Work on web admin or mobile UI",
+      "agent": "helm-frontend"
+    },
+    "helm-mcp": {
+      "description": "Work on MCP tools and agent runtime",
+      "agent": "helm-agent-runtime"
+    },
+    "helm-review": {
+      "description": "Review code quality and architecture",
+      "agent": "helm-reviewer"
+    },
+    "helm-docs": {
+      "description": "Update documentation",
+      "agent": "helm-docs"
+    },
+    "helm-ship": {
+      "description": "Verify, commit, and prepare for PR",
+      "agent": "helm-git"
+    }
+  },
+
+  // MCP — minimal, optional. Add servers as needed.
+  // "mcp": {
+  //   "context7": {
+  //     "type": "stdio",
+  //     "command": "npx",
+  //     "args": ["-y", "@upstash/context7-server"]
+  //   }
+  // }
+}
