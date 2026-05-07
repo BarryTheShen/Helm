@@ -26,7 +26,7 @@ Copilot-compatible agent definitions live in `.github/agents/` (18 files). These
 
 ## Target OpenCode Agent Roster
 
-Prompt 3 will add project-local OpenCode config using `opencode.jsonc` and `.opencode/agents` + `.opencode/commands` folders, following official OpenCode docs. We are borrowing patterns from `fmflurry/settings-opencode`, not blindly copying it.
+The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/` (agents, commands), following official OpenCode docs. We borrowed patterns from `fmflurry/settings-opencode`, not blindly copying it.
 
 | Agent | Purpose |
 |-------|---------|
@@ -36,13 +36,13 @@ Prompt 3 will add project-local OpenCode config using `opencode.jsonc` and `.ope
 | `helm-frontend` | React Native + Web admin implementation |
 | `helm-protocol` | API/WS/MCP contract definitions |
 | `helm-agent-runtime` | PydanticAI + MCP implementation |
-| `helm-tester` | Test writing and execution |
+| `helm-tester` | Test writing and execution — can use QA suite/discovery system for drift checks |
 | `helm-reviewer` | Code quality gate, architecture review, feature completeness |
 | `helm-docs` | Documentation maintenance |
 | `helm-security` | Security audit, secrets detection |
 | `helm-git` | Branch management, commit discipline |
 
-The OpenCode config will be in `AGENTS.md` (portable instructions) plus `opencode.jsonc` (project-local config) and `.opencode/` (agents, commands).
+The OpenCode config uses `AGENTS.md` (portable instructions), `opencode.jsonc` (project settings), and `.opencode/` (agents, commands).
 
 ## Orchestration Principles (Claude Code)
 

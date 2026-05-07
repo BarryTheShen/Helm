@@ -26,6 +26,11 @@ This combines the previous `reviewer` and `feature-validator` responsibilities.
 - Check against `docs/Agentic AI Super App — Project Hub/Blueprint — Production Spec Documents/` if a blueprint spec exists.
 - Are edge cases handled: auth failures, empty states, error responses?
 
+**QA Evidence** (optional — for medium/large reviews):
+- Review `qa/src/discovered.json` for endpoint, route, action, or component drift.
+- Check `qa/results/` for recent test run results.
+- Use QA discovery output as evidence, not as a pass/fail gate.
+
 ## Rules
 
 - Read-only. Report findings with file paths and line numbers.

@@ -16,7 +16,7 @@ Work on the following UI change: $ARGUMENTS
 
 ### Conditional Verification
 
-- **UI visibly changed?** Start the dev server and test in a real browser/simulator. Check the golden path and edge cases. Visual correctness matters — don't just check that TypeScript compiles.
+- **UI visibly changed?** Start the dev server and test in a real browser/simulator. Check the golden path and edge cases. Visual correctness matters — don't just check that TypeScript compiles. When web UI behavior changed, also run `cd qa && npm run test:e2e` (note: e2e has known stale selectors — triage failures).
 - **UI not visibly changed** (e.g., internal refactor, type-only change)? Run `cd web && npm run lint` — no browser needed.
 
 ## Rules

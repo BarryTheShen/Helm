@@ -82,3 +82,27 @@ Rewrote `opencode.jsonc` to match official OpenCode v1.14 config format. Updated
 - 11 agents loaded from `.opencode/agents/*.md` (1 primary, 10 subagent).
 - 8 commands loaded from `.opencode/commands/*.md`.
 - No app source files changed.
+
+## 2026-05-07: Integrate QA Discovery System
+
+### What Changed
+
+- **Command mismatch fix:** Removed references to non-existent `/helm-tester` and `/helm-protocol` slash commands from `docs/ai/workflows.md`. These are agents only (`helm-tester`, `helm-protocol`) — referenced without the leading `/` to clarify they are not slash commands.
+- **Revert discipline restored:** Replaced "revert completely" with "if the approach is wrong, revert; if a small localized mistake, fix it once; do not stack blind patches" in both `docs/ai/workflows.md` and `.opencode/commands/helm-bug.md`.
+- **QA discovery system integrated:** Added a new "QA Discovery System" section to `docs/ai/workflows.md` explaining when and how to use `qa/` (test:backend, test:e2e, npm test, run.sh), with caveats about early-stage status and stale e2e selectors.
+- **Command docs updated:** `.opencode/commands/helm-bug.md`, `helm-api.md`, `helm-ui.md`, `helm-review.md`, and `helm-ship.md` now include conditional QA check guidance appropriate to their scope.
+- **`docs/ai/agents.md` updated:** Replaced stale "Prompt 3 will add..." language with "The OpenCode config lives in..."; added QA suite/discovery capability to `helm-tester` agent description.
+
+### QA Integration Summary
+
+- `qa/src/discover.cjs` documented as discovery/sanity infrastructure (not a test replacement).
+- `npm run test:backend` integrated into API workflow and bug fix verification.
+- `npm run test:e2e` integrated into UI workflow (with stale selector caveat).
+- QA checks in `/helm-ship` are conditional — skipped for docs/config-only changes.
+- `/helm-review` can optionally reference QA discovery output as evidence.
+
+### Notes
+
+- QA is early-stage — backend tests are functional, e2e has known stale selectors.
+- Failures should be triaged, not blindly treated as app regressions.
+- No app source files changed.

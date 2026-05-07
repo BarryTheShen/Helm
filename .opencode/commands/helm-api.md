@@ -16,6 +16,7 @@ Work on the following backend change: $ARGUMENTS
 5. If the contract affects frontend (web or mobile), document the exact changes for `/helm-ui` follow-up.
 6. Write tests in `backend/tests/`.
 7. Verify: `cd backend && pytest -q`
+8. If endpoints or schemas changed, also run `cd qa && npm run test:backend` to check for drift.
 
 ## Rules
 

@@ -17,10 +17,15 @@ Ship the following work: $ARGUMENTS
    - Web changes: `cd web && npm run lint`
    - Mobile changes: `cd mobile && npx expo start`
    - MCP changes: sync check across `tools.py`, `agent_proxy.py`, `server.py`
-5. **Scan for secrets:** `git diff | grep -iE "api.key|secret|password|token" | grep -v ".env"`
-6. **Stage** only relevant files: `git add <specific files>`
-7. **Commit** with type prefix: `git commit -m "<type>: <description>"`
-8. **Push:** `git push -u origin <branch>`
+5. **Conditional QA checks** — not mandatory for every change:
+   - API/schema changes: `cd qa && npm run test:backend`
+   - Visible web UI changes: `cd qa && npm run test:e2e` (triage stale selector failures)
+   - Large feature PR readiness: `cd qa && npm test` or `cd qa && bash run.sh`
+   - Docs/config only: skip QA
+6. **Scan for secrets:** `git diff | grep -iE "api.key|secret|password|token" | grep -v ".env"`
+7. **Stage** only relevant files: `git add <specific files>`
+8. **Commit** with type prefix: `git commit -m "<type>: <description>"`
+9. **Push:** `git push -u origin <branch>`
 
 ## Rules
 
