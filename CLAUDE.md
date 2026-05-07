@@ -13,7 +13,7 @@ This file exists for Claude Code compatibility — it adds Claude Code-specific 
 - **Use sub-agents for everything.** Launch up to 16 sub-agents (depth-1, cannot spawn children). Your context window is finite — delegate.
 - **Series, not parallel.** Invoke one sub-agent at a time. Wait for output before invoking the next.
 - **Always commit and push** atomic changes to the `modernize/import-libraries` branch after each step.
-- **Exhaustive testing:** Use up to 6 parallel live-tester agents. Especially check against `docs/Agentic AI Super App — Project Hub/Feature Feedback 3 34bb13d65bb38028b625e2a2da97056b.md` for known bugs.
+- **Exhaustive testing:** Use up to 6 parallel live-tester agents for large features. Especially check against `docs/Agentic AI Super App — Project Hub/Feature Feedback 3 34bb13d65bb38028b625e2a2da97056b.md` for known bugs.
 - **Debugging:** Write debug scripts and debug hints in code. Never guess — add console.log with clear labels showing WHERE in the process things are.
 
 ### Agent Definitions
@@ -39,12 +39,13 @@ This file exists for Claude Code compatibility — it adds Claude Code-specific 
 | `feature-critic` | Product completeness gatekeeper |
 | `docs-updater` | Living documentation maintenance |
 
-### Standard Pipeline
+### Standard Pipeline (Large Features)
+
+The full 16-agent pipeline is available for large features. For smaller tasks, match the workflow to task size — see `docs/ai/workflows.md`.
 
 ```
 Requirements → Due Diligence → Plan → Plan-Critic (max 3 rounds)
-  → Implement → Test → Live-Test → Feature-Validator → Reviewer
-  → Feature-Critic (gatekeeper) → Docs-Updater (always last)
+  → Implement → Test → Live-Test (if UI change) → Reviewer → Docs-Updater (if needed)
 ```
 
 ### Invoking Sub-Agents
@@ -86,7 +87,7 @@ Read these before any work:
 ## Known Patterns
 
 - **Flat agent hierarchy:** All 16 sub-agents are depth-1. Sub-agents cannot spawn other sub-agents.
-- **Completion loop:** Nothing is done until feature-critic approves. Max 5 iterations.
+- **Task-size workflows:** Match workflow to task size — see `docs/ai/workflows.md`.
 - **Memory system:** Mem0 persistent memory across sessions. Save after tasks, search before tasks.
 - **Context7:** Up-to-date library docs via MCP. Use instead of guessing API syntax.
 - **Backend port:** 8000 (confirmed in `config.py`). Web Admin: 5174. Agent: 7860.

@@ -1,45 +1,84 @@
 # Verification Guide
 
-## Quick Verification Commands
+Run verification proportional to what you changed. Not every change needs every test.
+
+## Layer-Specific Commands
+
+### Backend Code Changed
 
 ```bash
-# Backend tests (must all pass)
+# Required — always run for backend changes
 cd backend && pytest -q
 
-# Count collected tests
-cd backend && pytest --co -q
+# Conditional — if database models changed
+cd backend && .venv/bin/python -m alembic check
+```
 
-# Web lint
+### Web Admin Code Changed
+
+```bash
+# Required
 cd web && npm run lint
 
-# Web build (catches type errors)
+# Conditional — if types or imports changed
 cd web && npm run build
 
-# QA test suite (Playwright)
-cd qa && npx playwright test
-
-# QA backend-only tests
-cd qa && npx playwright test --project backend-only
-
-# QA e2e tests
+# Conditional — if UI behavior changed
 cd qa && npx playwright test --project e2e
+```
+
+### Mobile Code Changed
+
+```bash
+# Smoke check — start dev server
+cd mobile && npx expo start
+
+# Conditional — simulator/device check for UI behavior changes
+```
+
+### MCP Tool Changed
+
+```bash
+# Backend tests cover MCP tool logic
+cd backend && pytest -q
+
+# Conditional — MCP integration smoke test
+```
+
+### Agent Runtime Changed
+
+```bash
+# Deterministic tool-call/API tests
+cd backend && pytest -v backend/tests/test_actions.py
+```
+
+### Docs / Config Only
+
+```bash
+# Path sanity — verify no stale references
+grep -rn "docs/code-explanation/" --include="*.md" . | grep -v "codebase-explanation" | grep -v node_modules
+
+# Port sanity — verify consistent ports
+grep -rn "localhost:9100" --include="*.md" --include="*.json" --include="*.ts" . | grep -v node_modules | grep -v worktree
+
+# Secrets check — no hardcoded keys in diff
+git diff | grep -iE "api.key|secret|password|token" | grep -v ".env"
+
+# Markdown link sanity (optional)
+grep -rn "\]\(http" --include="*.md" docs/ | head -20
 ```
 
 ## Path Sanity Checks
 
 ```bash
-# Verify file counts match docs
-find backend/app/models -name '*.py' ! -name '__init__*.py' | wc -l   # Should be 25
-find backend/app/schemas -name '*.py' ! -name '__init__*.py' | wc -l  # Should be 24
-find backend/app/routers -name '*.py' ! -name '__init__*.py' | wc -l  # Should be 25
-find backend/app/services -name '*.py' ! -name '__init__*.py' | wc -l # Should be 15
-find backend/tests -name 'test_*.py' | wc -l                           # Should be 23
-
-# Verify port references are consistent
-grep -rn "localhost:8000" web/vite.config.ts web/package.json mobile/package.json
-
-# Verify docs/codebase-explanation/ path is correct (not docs/code-explanation/)
+# Verify correct doc path exists
 ls docs/codebase-explanation/
+
+# Verify file counts (update docs if these drift)
+find backend/app/models -name '*.py' ! -name '__init__*.py' | wc -l
+find backend/app/schemas -name '*.py' ! -name '__init__*.py' | wc -l
+find backend/app/routers -name '*.py' ! -name '__init__*.py' | wc -l
+find backend/app/services -name '*.py' ! -name '__init__*.py' | wc -l
 ```
 
 ## Port Verification
@@ -50,12 +89,9 @@ ls docs/codebase-explanation/
 | Web Admin | 5174 | `web/vite.config.ts` |
 | Agent | 7860 | `agent/api_server.py` |
 
-All `generate:api` scripts should target `localhost:8000`.
-
 ## Post-Change Checklist
 
-- [ ] Backend tests pass: `cd backend && pytest -q`
+- [ ] Relevant tests pass for the layers changed
 - [ ] No stale port references introduced
-- [ ] File counts still match (if adding/removing models/routers/schemas)
-- [ ] `docs/codebase-explanation/` updated if architecture changed
 - [ ] No hardcoded secrets in diff
+- [ ] Docs updated if behavior/API/architecture changed (not for every commit)

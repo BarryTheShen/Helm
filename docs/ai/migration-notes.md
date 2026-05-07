@@ -6,7 +6,7 @@
 
 - Created `AGENTS.md` at repo root as primary source of truth for all AI coding agents.
 - Rewrote `CLAUDE.md` as a short compatibility wrapper that references `AGENTS.md`.
-- Created `docs/ai/` directory with detailed workflow, project map, verification, agent, and migration docs.
+- Created `docs/ai/` directory with workflow, project map, verification, agent, and migration docs.
 
 ### Why
 
@@ -34,6 +34,18 @@ The monolithic `CLAUDE.md` (470+ lines) was Claude Code-specific and not portabl
 - Blueprint specs — Authoritative product specs, untouched
 - All application source code — Out of scope
 
-### OpenCode Compatibility
+## 2026-05-07: Normalize Workflow Verification Rules
 
-OpenCode reads `CLAUDE.md` as a compatible instruction file. For native OpenCode instructions, create `OpenCode.md` in a future step. See `AGENTS.md` for the portable instruction format.
+### What Changed
+
+- Replaced "Playwright is mandatory for everything" with layer-specific verification rules.
+- Replaced the 16-agent mega-loop as the default workflow with task-size workflows.
+- Labeled the 16 Claude Code agents as legacy/current Claude Code stack.
+- Added target simplified agent roster for future OpenCode config.
+- Softened revert rule: wrong approach = revert, small mistake = fix once, no blind patches.
+- Docs-only changes no longer require full test suite.
+- Removed "docs-updater always last" as a universal rule.
+
+### Future OpenCode Config
+
+Future OpenCode setup should use `AGENTS.md` as the portable instruction file, plus `opencode.jsonc` and `.opencode/` folders following official OpenCode docs. Do not blindly copy `fmflurry/settings-opencode` — borrow patterns, adapt to Helm's context.

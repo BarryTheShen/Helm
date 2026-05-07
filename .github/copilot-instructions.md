@@ -20,44 +20,42 @@ This repository enforces the following mandatory behavior rules for contributors
 
 ## Workflow: Reproduce → Diagnose → Fix → Verify → Document → Prevent
 
-Follow this exact cycle for every bug fix or feature:
+Follow this cycle for bug fixes and features:
 
-1. **Reproduce:** Produce a failing test or minimal reproduction first. Always use the **Playwright to live test** — do NOT use simulations or mocked browser behavior, because simulations frequently produce false passes.
+1. **Reproduce:** Produce a failing test or minimal reproduction first.
 2. **Diagnose:** Gather evidence. Read relevant source code AND documentation before proposing a fix — see the Documentation Reference section below.
 3. **Fix:** Implement an elegant, minimal fix targeting the root cause.
-4. **Verify:** Live test again with Playwright. Run all relevant unit/integration tests.
-   - **If verification still fails:** Immediately **revert your change**, reassess the situation, and try a different approach. Do not keep patching a failing path — backtrack and find a better method.
+4. **Verify:** Run layer-appropriate verification (see below).
+   - If the approach is wrong, revert and try a different method.
+   - If it's a small localized mistake, fix it once.
+   - Do not stack blind patches.
 5. **Document:** Document the root cause and rationale. Add or update short docstrings or docs explaining WHY non-obvious decisions were made.
 6. **Prevent:** Add tests or guards to prevent regression.
 
 ---
 
-## Exhaustive Bug Fixing
+## Layer-Specific Verification
 
-Do NOT stop after fixing one bug. Follow this loop:
+Run the verification that matches what you changed:
 
-1. Fix the current bug using the workflow above.
-2. After fixing, run a **full test suite** (live test with Playwright + unit/integration tests).
-3. Identify any additional bugs or regressions.
-4. Fix them — repeat from step 1.
-5. Continue until there are **zero bugs** you can find. Only then move on.
-
-The goal is a clean, fully working state — not a partial fix.
-
----
-
-## Live Testing (Mandatory)
-
-- **Always use Playwright for live testing.** This is non-negotiable.
-- Do not rely on simulated environments, mocked browsers, or headless assumptions. Real browser testing catches issues that simulations miss.
-- After every change, open the app in Playwright, verify the fix visually and functionally, and confirm no regressions.
+| Layer Changed | Required Verification | Conditional |
+|---------------|----------------------|-------------|
+| Backend code | `cd backend && pytest -q` | Migration check if models changed |
+| Web admin UI | `cd web && npm run lint` | `npm run build` for type check; Playwright if UI behavior changed |
+| Mobile code | `cd mobile && npx expo start` smoke | Simulator/device check if UI behavior changed |
+| MCP tools | Backend tests + MCP smoke test | Integration test if tool behavior changed |
+| Agent runtime | Deterministic tool-call/API tests | |
+| Docs/config only | Path/link sanity, no secrets | Grep stale references |
 
 ---
 
-## Sub-Agents
+## Bug Fixing Discipline
 
-- **Spawn sub-agents to improve efficiency** when tasks can be parallelized (e.g., one agent fixes a backend bug while another fixes a frontend bug, or one agent writes tests while another implements the fix).
-- Coordinate sub-agent work to avoid conflicting changes.
+Fix the issue thoroughly. After fixing:
+
+1. Run the relevant test suite for the layer changed.
+2. Check for obvious regressions in adjacent features.
+3. If the fix introduces new issues, assess: wrong approach (revert) or small localized mistake (fix once). Do not stack blind patches.
 
 ---
 
@@ -66,7 +64,8 @@ The goal is a clean, fully working state — not a partial fix.
 Before proposing any edit, consult the project's internal documentation:
 
 - **`docs/codebase-explanation/`** — Read this for explanations of existing code, architecture decisions, and module responsibilities. Always check here before modifying unfamiliar code.
-- **`docs/Agentic AI Super App — Project Hub`** — Go to the **docs/Agentic AI Super App — Project Hub/Blueprint — Production Spec Documents** and **docs/Agentic AI Super App — Project Hub/Architecture Decisions — Session 2 (2026-03-29) 8c271ee63ff84db797d10a11214bfd47.md** for system-level architecture, design decisions, and component relationships. This is the source of truth for high-level design.
+- **`docs/Agentic AI Super App — Project Hub`** — Go to the **docs/Agentic AI Super App — Project Hub/Blueprint — Production Spec Documents** for system-level architecture and design decisions.
+- **`AGENTS.md`** — Primary source of truth for coding agent behavior.
 - When in doubt about how something works or why it was built a certain way, **read the docs first, then read the code, then ask.**
 
 ---
@@ -74,7 +73,7 @@ Before proposing any edit, consult the project's internal documentation:
 ## Tests First
 
 - When fixing bugs or adding features, **add a failing unit/integration test that reproduces the issue before changing production code.**
-- Verify fully: run and describe the commands to run relevant tests locally and in CI; include new tests that would catch the issue.
+- Verify fully: run and describe the commands to run relevant tests locally; include new tests that would catch the issue.
 
 ---
 

@@ -77,19 +77,32 @@ Helm is a self-hosted AI super app — a React Native (Expo) mobile frontend tha
 
 ---
 
+## Task-Size Workflow
+
+Match the workflow to the task size. See `docs/ai/workflows.md` for detail.
+
+| Size | Workflow |
+|------|----------|
+| Small edit (docs, config, single-file fix) | Edit → relevant check → self-review |
+| Bug fix | Reproduce → diagnose → fix → verify → regression test if useful |
+| Medium feature | Plan → implement → test → review |
+| Large feature | Research → plan → plan critic → implement → test → review → docs |
+
+---
+
 ## Verification Policy
 
-1. **Reproduce** — Write a failing test or minimal reproduction before fixing.
-2. **Diagnose** — Trace execution path. Find root cause, not symptom.
-3. **Fix** — Minimal change. Address root cause.
-4. **Verify** — Run reproduction + full test suite. No regressions.
-5. **Document** — Commit message explains WHY, not just WHAT.
-6. **Prevent** — Add test to catch this class of bug.
+Run verification proportional to the layers you touched:
 
-**Backend tests:** `cd backend && pytest -q` (must all pass before committing)
-**QA tests:** `cd qa && npx playwright test` (for endpoint-level verification)
+| Layer | Required Check |
+|-------|---------------|
+| Backend code | `cd backend && pytest -q` |
+| Web admin | `cd web && npm run lint` (build if types changed) |
+| Mobile | `cd mobile && npx expo start` smoke check |
+| Docs/config only | Path/link sanity, no hardcoded secrets |
+| Multi-layer | Relevant checks for each layer changed |
 
-If the fix doesn't work or introduces new issues, **revert completely** and try a different approach. Do not stack fixes.
+**Revert discipline:** If the approach is wrong, revert. If it's a small localized mistake, fix it once. Do not stack blind patches.
 
 ---
 
