@@ -11,6 +11,7 @@ Detailed guidance for AI coding agents working on the Helm project.
 | [verification.md](verification.md) | Testing strategy, QA pipeline, verification checklist |
 | [agents.md](agents.md) | Claude Code agent definitions, orchestration patterns |
 | [migration-notes.md](migration-notes.md) | Migration history — what changed and why |
+| [opencode-models.md](opencode-models.md) | Local-first model policy, provider routing, env var examples |
 
 ## How to Use
 

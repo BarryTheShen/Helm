@@ -12,7 +12,7 @@ This file exists for Claude Code compatibility — it adds Claude Code-specific 
 
 - **Use sub-agents for everything.** Launch up to 16 sub-agents (depth-1, cannot spawn children). Your context window is finite — delegate.
 - **Series, not parallel.** Invoke one sub-agent at a time. Wait for output before invoking the next.
-- **Always commit and push** atomic changes to the `modernize/import-libraries` branch after each step.
+- **Branch safety:** Work on a feature/migration branch unless Barry explicitly asks to merge into the base branch. Never commit to `main`. If `AGENTS.md` and this file conflict, `AGENTS.md` takes priority.
 - **Exhaustive testing:** Use up to 6 parallel live-tester agents for large features. Especially check against `docs/Agentic AI Super App — Project Hub/Feature Feedback 3 34bb13d65bb38028b625e2a2da97056b.md` for known bugs.
 - **Debugging:** Write debug scripts and debug hints in code. Never guess — add console.log with clear labels showing WHERE in the process things are.
 

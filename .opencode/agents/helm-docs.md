@@ -2,6 +2,7 @@
 description: Documentation maintenance — edits docs only
 mode: subagent
 permission:
+  edit: allow
   bash: deny
 ---
 

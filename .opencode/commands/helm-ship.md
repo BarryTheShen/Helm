@@ -23,9 +23,17 @@ Ship the following work: $ARGUMENTS
    - Large feature PR readiness: `cd qa && npm test` or `cd qa && bash run.sh`
    - Docs/config only: skip QA
 6. **Scan for secrets:** `git diff | grep -iE "api.key|secret|password|token" | grep -v ".env"`
-7. **Stage** only relevant files: `git add <specific files>`
-8. **Commit** with type prefix: `git commit -m "<type>: <description>"`
-9. **Push:** `git push -u origin <branch>`
+7. **Stage** reviewed files only.
+8. **Commit** with type prefix.
+9. **Push** to current branch.
+
+> **WARNING:** The commands below are examples — determine the actual file list and branch name. Do not run placeholders literally.
+
+```bash
+git add <reviewed-files>
+git commit -m "<type>: <summary>"
+git push -u origin <current-branch>
+```
 
 ## Rules
 
