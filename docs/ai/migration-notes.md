@@ -106,3 +106,20 @@ Rewrote `opencode.jsonc` to match official OpenCode v1.14 config format. Updated
 - QA is early-stage — backend tests are functional, e2e has known stale selectors.
 - Failures should be triaged, not blindly treated as app regressions.
 - No app source files changed.
+
+## 2026-05-08: Add Local-First OpenCode Model Policy
+
+### What Changed
+
+- Created `docs/ai/opencode-models.md` — local-first model policy for OpenCode.
+- Updated `opencode.jsonc` — replaced `"model": "anthropic/claude-sonnet-4-6"` with `"model": "local/qwen3.6-27b-autoround"`.
+- Added pointer to `docs/ai/opencode-models.md` in `AGENTS.md` source-of-truth docs table.
+- Barry handles provider setup personally; no Claude fallback, no OpenRouter default in repo config.
+
+### Model Policy
+
+- Local model (`qwen3.6-27b-autoround` on `192.168.110.26:8000`) is confirmed reachable.
+- All agent roles default to local model.
+- OpenCode Go and GitHub Copilot are user-managed optional backups.
+- No provider secrets committed; no Claude fallback in repo guidance.
+- No app source files changed.
