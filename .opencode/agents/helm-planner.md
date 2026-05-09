@@ -1,6 +1,7 @@
 ---
 description: Implementation planning and strategy — read-oriented
 mode: subagent
+model: TODO-MIMO_PRO_V2_5
 permission:
   edit: deny
   bash: deny

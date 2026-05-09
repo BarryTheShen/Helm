@@ -5,6 +5,8 @@ agent: helm-build
 
 # /helm-bug
 
+> This command is an optional shortcut. The default path is to ask `helm-orchestrator` normally — it will classify the task and route accordingly. Use this command when you already know it is a bug fix.
+
 Fix the following bug: $ARGUMENTS
 
 ## What It Does

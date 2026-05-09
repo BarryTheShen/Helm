@@ -60,6 +60,10 @@ Helm is a self-hosted AI super app — a React Native (Expo) mobile frontend tha
 
 ---
 
+## Default OpenCode Orchestration
+
+`helm-orchestrator` is the default primary agent (set in `opencode.jsonc`). Barry does not manually route every step — the orchestrator classifies the task, delegates subagents conditionally, verifies, reviews, documents when needed, and reports completion. Slash commands are optional shortcuts for when Barry already knows the scope.
+
 ## Task Routing
 
 | Task | Docs to Read | Where to Work |

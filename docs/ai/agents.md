@@ -28,19 +28,25 @@ Copilot-compatible agent definitions live in `.github/agents/` (18 files). These
 
 The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/` (agents, commands), following official OpenCode docs. We borrowed patterns from `fmflurry/settings-opencode`, not blindly copying it.
 
-| Agent | Purpose |
-|-------|---------|
-| `helm-build` | Build, lint, typecheck across all layers |
-| `helm-planner` | Implementation planning and strategy |
-| `helm-backend` | Python FastAPI implementation |
-| `helm-frontend` | React Native + Web admin implementation |
-| `helm-protocol` | API/WS/MCP contract definitions |
-| `helm-agent-runtime` | PydanticAI + MCP implementation |
-| `helm-tester` | Test writing and execution — can use QA suite/discovery system for drift checks |
-| `helm-reviewer` | Code quality gate, architecture review, feature completeness |
-| `helm-docs` | Documentation maintenance |
-| `helm-security` | Security audit, secrets detection |
-| `helm-git` | Branch management, commit discipline |
+**Default agent:** `helm-orchestrator` (primary agent, set in `opencode.jsonc`). Barry does not manually route every step — the orchestrator classifies the task, delegates subagents conditionally, verifies, reviews, documents when needed, and reports completion.
+
+**Subagent delegation:** The orchestrator uses `permission.task` in its frontmatter to control which subagents it can invoke. `allow` means automatic delegation; `ask` means the orchestrator must get user approval before delegating.
+
+| Agent | Mode | Purpose |
+|-------|------|---------|
+| `helm-orchestrator` | primary | Workflow owner — classifies tasks, delegates subagents, verifies completion |
+| `helm-build` | subagent | General implementation worker — code edits, builds, lint, typecheck, routine fixes |
+| `helm-planner` | subagent | Implementation planning and strategy |
+| `helm-backend` | subagent | Python FastAPI implementation |
+| `helm-frontend` | subagent | React Native + Web admin implementation |
+| `helm-protocol` | subagent | API/WS/MCP contract definitions |
+| `helm-agent-runtime` | subagent | PydanticAI + MCP implementation |
+| `helm-tester` | subagent | Test writing and execution — can use QA suite/discovery system for drift checks |
+| `helm-reviewer` | subagent | Code quality gate, architecture review, feature completeness |
+| `helm-ui-reviewer` | subagent | Multimodal UI reviewer — screenshots, layout, visual regressions |
+| `helm-docs` | subagent | Documentation maintenance |
+| `helm-security` | subagent | Security audit, secrets detection |
+| `helm-git` | subagent | Branch management, commit discipline |
 
 The OpenCode config uses `AGENTS.md` (portable instructions), `opencode.jsonc` (project settings), and `.opencode/` (agents, commands).
 

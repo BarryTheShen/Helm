@@ -1,6 +1,8 @@
 # Development Workflow
 
-Choose the workflow that matches the task size. There is no mandatory mega-loop — the workflow scales with the task. The large feature pipeline is **exceptional**, reserved for cross-layer features that touch multiple modules.
+`helm-orchestrator` executes workflows by default. Barry does not need to manually choose each step — the orchestrator classifies the task, chooses the smallest sufficient workflow, delegates subagents conditionally, and reports completion.
+
+There is no mandatory mega-loop — the workflow scales with the task. The large feature pipeline is **exceptional**, reserved for cross-layer features that touch multiple modules. The orchestrator should not run the large-feature workflow unless the task actually needs it.
 
 ## Task-Size Workflows
 

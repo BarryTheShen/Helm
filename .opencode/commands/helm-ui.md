@@ -5,6 +5,8 @@ agent: helm-frontend
 
 # /helm-ui
 
+> This command is an optional shortcut. The default path is to ask `helm-orchestrator` normally — it will route to the right subagents. Use this command when you already know the scope is UI-focused.
+
 Work on the following UI change: $ARGUMENTS
 
 ## What It Does
@@ -18,6 +20,10 @@ Work on the following UI change: $ARGUMENTS
 
 - **UI visibly changed?** Start the dev server and test in a real browser/simulator. Check the golden path and edge cases. Visual correctness matters — don't just check that TypeScript compiles. When web UI behavior changed, also run `cd qa && npm run test:e2e` (note: e2e has known stale selectors — triage failures).
 - **UI not visibly changed** (e.g., internal refactor, type-only change)? Run `cd web && npm run lint` — no browser needed.
+
+### Visual Review
+
+For visual/screenshot review, delegate to `helm-ui-reviewer`. It is a multimodal agent that reviews screenshots, layout, and visual regressions.
 
 ## Rules
 

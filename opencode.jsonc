@@ -13,5 +13,5 @@
     "AGENTS.md",
     "docs/ai/*.md"
   ],
-  "default_agent": "helm-build"
+  "default_agent": "helm-orchestrator"
 }

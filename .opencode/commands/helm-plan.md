@@ -5,6 +5,8 @@ agent: helm-planner
 
 # /helm-plan
 
+> This command is an optional shortcut. The default path is to ask `helm-orchestrator` normally — it will decide whether planning is needed. Use this command when you want a targeted plan.
+
 Plan the implementation strategy for: $ARGUMENTS
 
 ## What It Does

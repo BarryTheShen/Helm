@@ -123,3 +123,31 @@ Rewrote `opencode.jsonc` to match official OpenCode v1.14 config format. Updated
 - OpenCode Go and GitHub Copilot are user-managed optional backups.
 - No provider secrets committed; no Claude fallback in repo guidance.
 - No app source files changed.
+
+## 2026-05-09: Add Automated OpenCode Orchestrator
+
+### What Changed
+
+- Created `.opencode/agents/helm-orchestrator.md` — primary default agent with `permission.task` delegation.
+- Changed `opencode.jsonc` — `"default_agent"` from `helm-build` to `helm-orchestrator`.
+- Changed `.opencode/agents/helm-build.md` — mode from `primary` to `subagent`; description updated to general implementation worker.
+- Created `.opencode/agents/helm-ui-reviewer.md` — multimodal visual review subagent.
+- Added `model` fields to all `.opencode/agents/*.md` with tier-based routing (MiMo Pro V2.5 for reasoning agents, DeepSeek V4 Flash for worker agents, Kimi 2.6 for UI reviewer).
+- Updated all `.opencode/commands/*.md` — added guidance that commands are optional shortcuts; the default path is to ask `helm-orchestrator`.
+- Updated `AGENTS.md` — added "Default OpenCode Orchestration" section.
+- Updated `docs/ai/agents.md` — added `helm-orchestrator` as default primary agent, `helm-ui-reviewer` as multimodal reviewer, documented `permission.task` delegation.
+- Updated `docs/ai/workflows.md` — clarified that `helm-orchestrator` executes workflows by default.
+- Updated `docs/ai/opencode-models.md` — added model tier strategy and agent-to-model mapping table.
+
+### Orchestration Model
+
+- `helm-orchestrator` is the primary default agent.
+- Barry does not manually route every step.
+- The orchestrator classifies the task, delegates subagents conditionally, verifies, reviews, documents when needed, and reports completion.
+- `permission.task` controls delegation: `allow` for automatic subagents, `ask` for security/git.
+- Slash commands remain optional shortcuts — they force a specific workflow when Barry already knows the scope.
+- No app source files changed.
+
+### Model IDs
+
+- Exact model IDs for MiMo Pro V2.5, DeepSeek V4 Flash, and Kimi 2.6 are **not yet filled** — placeholders in agent files. Barry must run `opencode models` and update.

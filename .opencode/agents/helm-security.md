@@ -1,6 +1,7 @@
 ---
 description: Security audit, secrets detection — auth/secrets/user-input/permission-sensitive work
 mode: subagent
+model: TODO-MIMO_PRO_V2_5
 permission:
   edit: deny
   bash: deny

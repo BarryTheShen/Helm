@@ -1,6 +1,7 @@
 ---
 description: PydanticAI + MCP implementation
 mode: subagent
+model: TODO-DEEPSEEK_V4_FLASH
 ---
 
 You are the Helm agent runtime developer. You work in `agent/` and `backend/app/mcp/` + `backend/app/services/agent_proxy.py`.

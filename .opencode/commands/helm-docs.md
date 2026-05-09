@@ -5,6 +5,8 @@ agent: helm-docs
 
 # /helm-docs
 
+> This command is an optional shortcut. The default path is to ask `helm-orchestrator` normally — it will invoke the docs agent when behavior/API/architecture has changed. Use this command for targeted docs updates.
+
 Update documentation for: $ARGUMENTS
 
 ## When to Run

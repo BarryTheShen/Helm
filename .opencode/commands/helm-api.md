@@ -5,6 +5,8 @@ agent: helm-backend
 
 # /helm-api
 
+> This command is an optional shortcut. The default path is to ask `helm-orchestrator` normally — it will route backend work and delegate protocol checks. Use this command when you already know the scope is API-focused.
+
 Work on the following backend change: $ARGUMENTS
 
 ## What It Does

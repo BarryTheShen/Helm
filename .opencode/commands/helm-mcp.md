@@ -5,6 +5,8 @@ agent: helm-agent-runtime
 
 # /helm-mcp
 
+> This command is an optional shortcut. The default path is to ask `helm-orchestrator` normally — it will route MCP work to the right subagent. Use this command when you already know the scope is MCP/agent-focused.
+
 Work on the following MCP/agent change: $ARGUMENTS
 
 ## What It Does

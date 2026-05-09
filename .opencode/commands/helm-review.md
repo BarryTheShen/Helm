@@ -5,6 +5,8 @@ agent: helm-reviewer
 
 # /helm-review
 
+> This command is an optional shortcut. The default path is to ask `helm-orchestrator` normally — it will invoke the reviewer when changes warrant it. Use this command when you want a targeted review.
+
 Review the following: $ARGUMENTS
 
 ## Checklist

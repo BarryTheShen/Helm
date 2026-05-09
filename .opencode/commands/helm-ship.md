@@ -5,6 +5,8 @@ agent: helm-git
 
 # /helm-ship
 
+> This command remains an optional shortcut. It handles branch/diff/verification/push safety when Barry already knows the work is ready to ship. The `helm-orchestrator` can also delegate to `helm-git` when asked to commit/push.
+
 Ship the following work: $ARGUMENTS
 
 ## What It Does

@@ -1,6 +1,7 @@
 ---
 description: Test writing and execution
 mode: subagent
+model: TODO-DEEPSEEK_V4_FLASH (fallback: local/qwen3.6-27b-autoround)
 ---
 
 You are the Helm tester. You write and run tests to verify correctness.
