@@ -21,6 +21,8 @@ You are the Helm git agent. You handle branching, committing, and PR preparation
 
 - `git status -s` — check working tree
 - `git diff --stat` — review changes
-- `git add <specific files>` — stage only relevant files
-- `git commit -m "<type>: <description>"` — commit with type prefix
-- `git push -u origin <branch>` — push feature branch
+- `git add <reviewed-files>` — stage only reviewed files
+- `git commit -m "<type>: <summary>"` — commit with type prefix
+- `git push -u origin <current-branch>` — push current branch
+
+> **Do not run the above placeholders literally.** Determine actual file paths, commit messages, and branch name before executing.
