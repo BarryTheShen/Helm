@@ -5,16 +5,29 @@ import { EditorPage } from './page-objects/editor';
 /**
  * Ensure there is at least one row with an empty cell on the canvas.
  * If no empty cells exist, clicks "Add Row" to create one.
+ *
+ * Uses a retry pattern with a generous timeout to handle cases where
+ * the editor canvas DOM element exists but the child cells haven't
+ * finished rendering yet (common on first load / slow networks).
  */
 export async function ensureEmptyCellExists(page: Page) {
   // Empty cells are inside the editor canvas with bg-gray-50 + border-dashed
   const emptyCellLocator = page.locator('[data-testid="editor-canvas"] .bg-gray-50.border-dashed');
-  let emptyCellCount = await emptyCellLocator.count();
-  if (emptyCellCount === 0) {
-    const addRowBtn = page.locator(EditorPage.addRowByText);
+  const addRowBtn = page.locator(EditorPage.addRowByText);
+
+  // First, ensure data fetches have settled
+  await page.waitForLoadState('networkidle');
+
+  // Retry: wait up to 10s for at least one empty cell to become visible.
+  // This handles the case where cells haven't rendered yet after navigation.
+  try {
+    await expect(emptyCellLocator.first()).toBeVisible({ timeout: 10000 });
+  } catch {
+    // No empty cells appeared after waiting — the canvas may be empty.
+    // Try adding a row to create an empty cell.
     if (await addRowBtn.count() > 0) {
       await addRowBtn.first().click();
-      await expect(emptyCellLocator.first()).toBeVisible({ timeout: 5000 });
+      await expect(emptyCellLocator.first()).toBeVisible({ timeout: 10000 });
     }
   }
 }

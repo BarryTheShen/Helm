@@ -5,8 +5,9 @@ import { ensureEmptyCellExists, addComponentToFirstCell } from '../editor-helper
 test('Issue 11: pill cursor does not snap after variable insert', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  // Wait for the editor UI to load
+  // Wait for the editor UI to fully load (initial data fetches + render)
   await expect(page.locator(EditorPage.canvas)).toBeVisible();
+  await page.waitForLoadState('networkidle');
 
   // Add a Text component so the property inspector has editable fields
   await ensureEmptyCellExists(page);
@@ -60,8 +61,9 @@ test('Issue 11: pill cursor does not snap after variable insert', async ({ page,
 test('Issue 13: markdown content renders as HTML heading, not raw text', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  // Wait for the editor UI to load
+  // Wait for the editor UI to fully load (initial data fetches + render)
   await expect(page.locator(EditorPage.canvas)).toBeVisible();
+  await page.waitForLoadState('networkidle');
 
   // Add a Markdown component to get a relevant text field in the inspector
   await ensureEmptyCellExists(page);
