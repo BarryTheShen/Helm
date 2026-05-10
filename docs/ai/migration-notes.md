@@ -168,3 +168,42 @@ Rewrote `opencode.jsonc` to match official OpenCode v1.14 config format. Updated
 - **Local fallback** (`helm-tester` fallback, private/local work) → `local/qwen3.6-27b-autoround`
 
 - No app source files changed.
+
+## 2026-05-10: Tighten Agent Responsibility Boundaries
+
+### What Changed
+
+- Rewrote all 13 `.opencode/agents/*.md` files with a standard 8-section structure: Purpose, When to use, Allowed actions, Forbidden actions, Edit policy, Test/command policy, Output format, Escalation/handoff rules.
+- Updated all 8 `.opencode/commands/*.md` files with explicit agent role assignments and "advisory findings" model.
+- Updated `docs/ai/agents.md` with comprehensive role matrix (Type, Can edit?, Can run tests?, Can commit/push?, Main responsibility, Explicitly does NOT do) and handoff model.
+- Updated `docs/ai/workflows.md` with Agent Handoff Model section describing the standard flow and anti-patterns.
+- Tightened `helm-orchestrator` prompt with "What you ARE / What you are NOT / Delegation philosophy" sections — CEO model: delegate everything, read summaries only, give subagents problems not micro-instructions.
+
+### Why
+
+- The tester agent was going beyond testing and fixing errors directly. That was not intended.
+- Specialist agents lacked explicit do/don't boundaries and could silently become general implementation agents.
+- The orchestrator prompt was too vague about what it should and should not do.
+- Commands did not state which agents own edits vs which are advisory.
+
+### Key Boundary Changes
+
+- **helm-tester**: Now explicitly forbidden from fixing application code. Must hand implementation back to build/backend/frontend. May edit test files only if explicitly asked.
+- **helm-reviewer**: Read-only by default. Returns findings grouped by severity. Does not apply fixes.
+- **helm-security**: Read-only by default. Reports findings. Does not add credentials or provider defaults.
+- **helm-orchestrator**: Delegation-only. Does not read source, write code, run tests, fix bugs, or review code. Reads subagent summaries and makes decisions.
+- **helm-protocol**: Default read-only. May edit contract/schema files only if explicitly asked.
+- **All specialist agents**: Advisory by default. Findings flow to orchestrator → orchestrator delegates fix to implementation agent.
+
+### Anti-patterns eliminated
+
+- Tester auto-fixing errors in "fix all loops"
+- Reviewer silently applying patches
+- Orchestrator reading source files instead of delegating
+- Commands running all agents by default
+
+### What was NOT changed
+
+- `opencode.jsonc` — no config changes needed
+- Application source code — out of scope
+- `.opencode/` frontmatter (model, mode, permission) — preserved as-is

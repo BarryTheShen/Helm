@@ -22,3 +22,8 @@ Plan the implementation strategy for: $ARGUMENTS
 - Reference existing patterns in the codebase — don't invent new architectures.
 - If the task crosses layers (backend + frontend), flag it for `/helm-api` or `/helm-ui` follow-up.
 - Keep plans concise: bullet points, not prose.
+
+## Agent roles in this workflow
+- **helm-planner**: Produces the implementation plan. Read-only. No edits, no bash.
+
+This is a planning-only command. No implementation happens here.

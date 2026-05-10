@@ -85,6 +85,40 @@ These are **conditional**, not always-on. Invoke only when the work warrants the
 | UI live-test | Only when the UI is visibly changed — start dev server, verify in browser |
 | QA discovery | Before/after medium+ changes, PR readiness, drift detection — see below |
 
+## Agent Handoff Model
+
+Specialist agents are advisory by default. They produce findings — the orchestrator decides what to act on.
+
+### Standard Handoff Flow
+
+1. **Specialist identifies issue** → reports finding (file path, line number, diagnosis, severity)
+2. **Orchestrator reads finding** → decides if fix is needed
+3. **Orchestrator delegates fix** → to appropriate implementation agent (build, backend, frontend, agent-runtime)
+4. **Implementation agent applies fix** → verifies proportionally
+5. **Tester verifies** (if behavior changed) → confirms fix or reports new failure
+6. **Reviewer checks** (if change is risky) → final quality gate
+
+### Who fixes what
+
+| Agent | Fixes code? | Default behavior |
+|-------|------------|-----------------|
+| `helm-tester` | **No** | Runs tests, diagnoses failures, recommends fixes. Hands implementation back to build/backend/frontend. |
+| `helm-reviewer` | **No** | Reviews code, reports findings grouped by severity. Suggests patches in prose only. |
+| `helm-security` | **No** | Audits for secrets/auth/injection issues. Reports findings. |
+| `helm-ui-reviewer` | **No** | Reviews screenshots/layout. Reports blocking vs polish issues. |
+| `helm-git` | **No** | Handles branch/commit/push. Does not modify source files. |
+| `helm-build` | **Yes** | General implementation worker. Applies fixes after reading specialist findings. |
+| `helm-backend` | **Yes** (backend/) | Backend specialist. Edits backend files when invoked for implementation. |
+| `helm-frontend` | **Yes** (mobile/, web/) | Frontend specialist. Edits frontend files when invoked for implementation. |
+| `helm-agent-runtime` | **Yes** (agent/, mcp/) | Agent runtime specialist. Edits agent/MCP files when invoked. |
+
+### Anti-patterns
+
+- **Tester fixing code:** The tester must NOT become a general implementation agent. If tests fail, it diagnoses and hands back.
+- **Reviewer applying patches:** The reviewer must NOT edit files. It reports findings; the orchestrator delegates fixes.
+- **Security adding credentials:** The security agent must NOT add secrets or provider defaults.
+- **Orchestrator doing groundwork:** The orchestrator must NOT read source files, write code, or run tests. It delegates.
+
 ## QA Discovery System
 
 The `qa/` directory contains an automatic bug discovery and test suite built on Playwright. It is **early-stage** — backend tests are functional, e2e selectors have known staleness. Triage failures rather than blindly treating them as regressions.

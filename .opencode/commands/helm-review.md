@@ -35,8 +35,17 @@ This combines the previous `reviewer` and `feature-validator` responsibilities.
 
 ## Rules
 
+- All agents in this workflow are READ-ONLY. No automatic fixes.
 - Read-only. Report findings with file paths and line numbers.
 - Prioritize: correctness > security > readability > convention.
 - Reference `AGENTS.md` engineering rules for judgment criteria.
 - If reviewing a diff, focus on what changed — don't audit the entire file.
 - If no target specified, review the current git diff.
+
+## Agent roles in this workflow
+- **helm-reviewer**: Code quality and architecture review. Read-only. Returns findings grouped by severity.
+- **helm-security** (optional): Security audit. Read-only. Returns security findings.
+- **helm-tester** (optional): Run tests to verify current state. Returns test results.
+- **helm-ui-reviewer** (optional): Visual review if UI changed. Read-only.
+
+All findings are ADVISORY. The orchestrator or primary agent decides what to fix, then delegates fixes to the appropriate implementation agent.

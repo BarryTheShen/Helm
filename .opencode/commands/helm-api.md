@@ -27,3 +27,11 @@ Work on the following backend change: $ARGUMENTS
 - No hardcoded secrets — use environment variables via `app/config.py`.
 - If the API contract affects the frontend, note the changes for `/helm-ui` follow-up.
 - Update `docs/codebase-explanation/backend.md` if adding new endpoints or models.
+
+## Agent roles in this workflow
+- **helm-backend**: Owns implementation. Edits backend files.
+- **helm-protocol** (optional): Advises on API contract changes. Read-only unless explicitly asked to edit schemas.
+- **helm-tester** (optional): Runs tests after implementation. Returns results — does NOT fix.
+- **helm-reviewer** (optional): Reviews code quality. Read-only.
+
+Implementation agent owns edits. Specialist agents advise and verify.

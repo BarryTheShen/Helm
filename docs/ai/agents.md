@@ -32,21 +32,40 @@ The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/
 
 **Subagent delegation:** The orchestrator uses `permission.task` in its frontmatter to control which subagents it can invoke. `allow` means automatic delegation; `ask` means the orchestrator must get user approval before delegating.
 
-| Agent | Mode | Purpose |
-|-------|------|---------|
-| `helm-orchestrator` | primary | Workflow owner — classifies tasks, delegates subagents, verifies completion |
-| `helm-build` | subagent | General implementation worker — code edits, builds, lint, typecheck, routine fixes |
-| `helm-planner` | subagent | Implementation planning and strategy |
-| `helm-backend` | subagent | Python FastAPI implementation |
-| `helm-frontend` | subagent | React Native + Web admin implementation |
-| `helm-protocol` | subagent | API/WS/MCP contract definitions |
-| `helm-agent-runtime` | subagent | PydanticAI + MCP implementation |
-| `helm-tester` | subagent | Test writing and execution — can use QA suite/discovery system for drift checks |
-| `helm-reviewer` | subagent | Code quality gate, architecture review, feature completeness |
-| `helm-ui-reviewer` | subagent | Multimodal UI reviewer — screenshots, layout, visual regressions |
-| `helm-docs` | subagent | Documentation maintenance |
-| `helm-security` | subagent | Security audit, secrets detection |
-| `helm-git` | subagent | Branch management, commit discipline |
+| Agent | Type | Can edit? | Can run tests? | Can commit/push? | Main responsibility | Explicitly does NOT do |
+|-------|------|-----------|----------------|------------------|--------------------|-----------------------|
+| `helm-orchestrator` | primary | No | No | No | Classify tasks, delegate subagents, verify completion, report | Read source, write code, fix bugs, review code, run tests |
+| `helm-build` | subagent | Yes (backend, frontend, mobile, config) | Yes | No | General implementation worker, routine fixes | Commit, edit docs/agent-prompts, blindly apply specialist suggestions |
+| `helm-planner` | subagent | No | No | No | Read-oriented implementation planning | Edit files, run commands, implement anything |
+| `helm-backend` | subagent | Yes (backend/ only) | Yes | No | Backend implementation (FastAPI, models, schemas, services) | Edit frontend/mobile/docs, commit, add secrets |
+| `helm-frontend` | subagent | Yes (mobile/, web/ only) | Yes | No | Frontend implementation (React Native, web admin) | Edit backend/docs, commit, add secrets |
+| `helm-protocol` | subagent | Default: No. Yes if explicitly asked | No | No | API/WS/MCP/SDUI contract alignment | Implement unrelated behavior, edit application logic |
+| `helm-agent-runtime` | subagent | Yes (agent/, backend/app/mcp/) | Yes | No | PydanticAI, MCP tools, agent proxy | Alter secrets, add paid providers, edit frontend |
+| `helm-tester` | subagent | Test files only (if explicitly asked) | Yes | No | Run tests, diagnose failures, recommend fixes | Fix application code, auto-fix loops, edit source |
+| `helm-reviewer` | subagent | No | No | No | Code quality and architecture review | Edit files, fix issues, run tests, apply patches |
+| `helm-ui-reviewer` | subagent | No | No | No | Visual/screenshot review, layout consistency | Edit files, run commands, fix UI issues |
+| `helm-docs` | subagent | Yes (docs/, README, AGENTS, CLAUDE) | No | No | Documentation maintenance | Edit app source, run app tests, commit |
+| `helm-security` | subagent | Default: No. Narrow fix if asked | No | No | Security audit, secrets detection | Add credentials, add paid providers, fix issues by default |
+| `helm-git` | subagent | No | No | Yes (with approval) | Branch management, commit, push | Edit source files, force push, push to main |
+
+### Handoff Model
+
+Specialist agents (tester, reviewer, security, ui-reviewer) are **advisory by default**. They produce findings, not fixes.
+
+**Standard handoff flow:**
+1. Specialist identifies issue → reports finding with file path, line number, diagnosis
+2. Orchestrator reads the finding → decides if a fix is needed
+3. Orchestrator delegates fix to the appropriate implementation agent (build, backend, frontend, agent-runtime)
+4. Implementation agent applies the fix
+5. Tester verifies the fix (if behavior changed)
+6. Reviewer checks quality (if the change is risky)
+
+**Key rules:**
+- Tester does NOT fix application code by default
+- Reviewer does NOT fix by default
+- Security does NOT fix by default
+- Git does NOT modify app code
+- Only implementation agents (build, backend, frontend, agent-runtime) edit application source
 
 The OpenCode config uses `AGENTS.md` (portable instructions), `opencode.jsonc` (project settings), and `.opencode/` (agents, commands).
 

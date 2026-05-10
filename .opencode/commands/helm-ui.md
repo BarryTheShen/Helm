@@ -31,3 +31,12 @@ For visual/screenshot review, delegate to `helm-ui-reviewer`. It is a multimodal
 - Functional components only. Named exports, no default exports.
 - Use existing stores (Zustand) — don't create new global state unless necessary.
 - If the UI change requires a new API endpoint or schema change, note it for `/helm-api` follow-up.
+
+## Agent roles in this workflow
+- **helm-frontend**: Owns implementation. Edits mobile/web files.
+- **helm-protocol** (optional): Advises if API contracts are affected. Read-only unless explicitly asked.
+- **helm-ui-reviewer** (optional): Visual review of screenshots/layout. Read-only.
+- **helm-tester** (optional): Runs tests after implementation. Returns results — does NOT fix.
+- **helm-reviewer** (optional): Reviews code quality. Read-only.
+
+Implementation agent owns edits. Specialist agents advise and verify.

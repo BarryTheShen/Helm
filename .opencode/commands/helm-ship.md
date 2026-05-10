@@ -46,3 +46,12 @@ git push -u origin <current-branch>
 - Do not push unrelated commits — only what was verified in this session.
 - Do not force push. Do not amend commits without explicit user approval.
 - Do not commit secrets, API keys, or `.env` files.
+
+## Agent roles in this workflow
+- **helm-git**: Branch safety, diff review, commit, push. Does NOT modify source files.
+- **helm-tester** (optional): Run proportional verification. Returns results — does NOT fix.
+- **helm-reviewer** (optional): Final quality check. Read-only.
+- **helm-security** (optional): Secret scan. Read-only.
+- **helm-build** (conditional): Only if verification fails and fixes are needed.
+
+Git agent commits/pushes only after all verification passes and the orchestrator confirms readiness.

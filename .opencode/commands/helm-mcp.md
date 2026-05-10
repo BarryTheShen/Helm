@@ -25,3 +25,11 @@ Work on the following MCP/agent change: $ARGUMENTS
 - Tool definitions must match exactly: name, parameters, description.
 - If adding a new tool, add it to the action registry (`action_registry.py`) if it needs server-side handling.
 - Keep tool descriptions concise — they're sent to the LLM on every turn.
+
+## Agent roles in this workflow
+- **helm-agent-runtime**: Owns implementation. Edits agent/MCP files.
+- **helm-protocol** (optional): Advises on MCP tool contract changes. Read-only unless explicitly asked.
+- **helm-tester** (optional): Runs tests after implementation. Returns results — does NOT fix.
+- **helm-reviewer** (optional): Reviews code quality. Read-only.
+
+Implementation agent owns edits. Specialist agents advise and verify.

@@ -26,3 +26,8 @@ This is **conditional** — run only when behavior, API contracts, architecture,
 - Keep file counts and ports current. Remove stale counts in favor of live verification commands.
 - Use `docs/codebase-explanation/` as the path (not `docs/code-explanation/`).
 - Don't create planning, decision, or analysis documents — work from conversation context.
+
+## Agent roles in this workflow
+- **helm-docs**: Updates documentation. Edits docs files only.
+
+No implementation agents needed. No test execution for docs-only changes.
