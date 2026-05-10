@@ -1,6 +1,6 @@
 export const LoginPage = {
-  usernameInput: 'label:has-text("Username") >> input',
-  passwordInput: 'label:has-text("Password") >> input',
+  usernameInput: 'input[type="text"]',
+  passwordInput: 'input[type="password"]',
   submitButton: 'button:has-text("Login")',
   loadingButton: 'button:has-text("Logging in...")',
   errorBox: '.text-red-600',

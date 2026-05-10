@@ -1,14 +1,18 @@
 import { test, expect } from '../fixtures';
 import { EditorPage } from '../page-objects/editor';
+import { ensureEmptyCellExists } from '../editor-helpers';
 
 test('Issue 1: drag handles are positioned outside the canvas area', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
   await expect(page.locator(EditorPage.canvas)).toBeVisible();
 
+  // Ensure there's at least one row so drag handles exist
+  await ensureEmptyCellExists(page);
+
   // The editor canvas is the center panel -- drag handles should be outside/beside it
-  // Look for drag handles (grippers/drag icons on rows)
-  const dragHandles = page.locator('[class*="drag"], [class*="grip"], [class*="handle"]');
+  // Row drag handles have data-testid="row-drag-handle-{rowId}" (see EditorCanvas.tsx)
+  const dragHandles = page.locator('[data-testid^="row-drag-handle"]');
   const handleCount = await dragHandles.count();
 
   if (handleCount > 0) {
@@ -35,8 +39,8 @@ test('Issue 1: drag handles are positioned outside the canvas area', async ({ pa
       ).toBe(true);
     }
   } else {
-    // Fallback: look for the external drag handle by its visual icon
-    const gripIcon = page.locator('[class*="bar"], [class*="dots"], [class*="grip"]');
+    // Fallback: look for the external drag handle by data-testid
+    const gripIcon = page.locator('[data-testid^="row-drag-handle"]');
     expect(
       await gripIcon.count(),
       'external drag handles should be visible on rows'
@@ -50,7 +54,7 @@ test('Issue 10: divider shows visual border-bottom on row', async ({ page, login
   await expect(page.locator(EditorPage.structureTree)).toBeVisible();
 
   // Ensure there is at least one row in the structure
-  const rowInTree = page.locator('text=/Row \\d+/');
+  const rowInTree = page.locator('[data-testid="row-in-tree"]');
   const rowCount = await rowInTree.count();
   if (rowCount === 0) {
     const addRowBtn = page.locator(EditorPage.btnAddRow).first();
@@ -83,11 +87,11 @@ test('Issue 10: divider shows visual border-bottom on row', async ({ page, login
         ).toBe(true);
 
         // Check the canvas for a visual border-bottom on the row
-        // The row container should have a border-bottom style applied
-        const rowInCanvas = page.locator('[class*="border-bottom"]').first();
+        // The row content container gets border-bottom as an inline style (see EditorCanvas.tsx getRowContentStyle)
+        const rowInCanvas = page.locator('[data-testid="editor-canvas"] [style*="border-bottom"]').first();
         expect(
           await rowInCanvas.count(),
-          'row should have border-bottom class when divider is enabled'
+          'row should have border-bottom style when divider is enabled'
         ).toBeGreaterThan(0);
       }
     } else {

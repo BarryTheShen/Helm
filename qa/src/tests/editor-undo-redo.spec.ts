@@ -27,9 +27,9 @@ test.describe('Undo/Redo', () => {
 
     // Add a row — the popover appears first; pick "1" cell count
     await page.locator(EditorPage.btnAddRow).click();
-    await page.waitForSelector('button:has-text("1")', { state: 'visible', timeout: 5000 });
+    await page.waitForSelector('button:text-is("1")', { state: 'visible', timeout: 5000 });
     // Click the "1" custom button in the popover to add a single-cell row
-    await page.locator('button:has-text("1")').first().click();
+    await page.locator('button:text-is("1")').first().click();
     await page.waitForTimeout(300);
 
     const afterAdd = await getRowCount(page);
@@ -69,8 +69,8 @@ test.describe('Undo/Redo', () => {
 
     // Add a row
     await page.locator(EditorPage.btnAddRow).click();
-    await page.waitForSelector('button:has-text("1")', { state: 'visible', timeout: 5000 });
-    await page.locator('button:has-text("1")').first().click();
+    await page.waitForSelector('button:text-is("1")', { state: 'visible', timeout: 5000 });
+    await page.locator('button:text-is("1")').first().click();
     await page.waitForTimeout(300);
 
     const beforeUndo = await getRowCount(page);

@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
-ROOT="$HOME/Nextcloud/vc_projects/Helm"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$ROOT/qa"
 echo "=== Installing dependencies ==="
 npm install

@@ -31,9 +31,22 @@ test.describe('API Auth', () => {
   });
 
   test('authenticated API request returns 200', async ({ request }) => {
-    const auth = JSON.parse(fs.readFileSync(qaPath('src/.qa-auth.json'), 'utf-8'));
+    const qaEnv = JSON.parse(fs.readFileSync(qaPath('.qa-env.json'), 'utf-8'));
+    const loginRes = await request.post('http://127.0.0.1:8000/auth/login', {
+      data: {
+        username: qaEnv.username,
+        password: qaEnv.password,
+        device_name: 'QA-Auth-Test',
+        device_id: 'qa-auth-test-' + Date.now(),
+      },
+    });
+    expect(loginRes.ok()).toBeTruthy();
+    const body = await loginRes.json();
+    const token = body.session_token;
+    expect(token).toBeTruthy();
+
     const res = await request.get('http://127.0.0.1:8000/api/components/registry', {
-      headers: { Authorization: `Bearer ${auth.token}` },
+      headers: { Authorization: `Bearer ${token}` },
     });
     expect(res.ok()).toBeTruthy();
   });

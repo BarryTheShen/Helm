@@ -1,0 +1,14 @@
+# Auth tokens (generated at runtime, expire)
+.qa-auth.json
+
+# Test results and artifacts
+results/
+playwright-report/
+test-results/
+
+# Backend/Vite PID files (auto-started by globalSetup)
+.backend-pid.txt
+.vite-pid.txt
+
+# Discovery output (regenerated each run)
+src/discovered.json

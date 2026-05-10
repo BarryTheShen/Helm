@@ -9,35 +9,50 @@ async function addComponentToFirstCell(page: Page, componentName: string) {
   // Wait for canvas to be populated
   await expect(page.locator(EditorPage.canvas)).toBeVisible();
 
-  // Find the first empty cell (shows a + button / "Add Component" placeholder)
-  // Empty cells have the Plus icon with gray-300 class
-  const emptyCellPlus = page.locator('.text-gray-300').filter({ hasText: '' }).first();
+  // Find the first empty cell: it has bg-gray-50 + border-dashed and lives inside the canvas
+  // Using canvas scope avoids matching other border-dashed elements (row insertion lines, spacers)
+  const canvasEmptyCells = page.locator('[data-testid="editor-canvas"] .bg-gray-50.border-dashed');
 
-  // Alternative: find the first cell that has no component content
-  // Look for cells with bg-gray-50 border-dashed (empty cell styling)
-  const emptyCells = page.locator('div.border-dashed').first();
+  // Component picker doesn't have a data-testid; identify it by its heading text
+  const componentPicker = page.getByText('Add Component').first();
 
-  if (await emptyCells.count() > 0) {
-    await emptyCells.click();
-    await expect(page.locator('[data-testid="component-picker"]')).toBeVisible({ timeout: 5000 });
+  if (await canvasEmptyCells.count() > 0) {
+    await canvasEmptyCells.first().click();
+    await expect(componentPicker).toBeVisible({ timeout: 5000 });
   } else {
     // If no empty cell found, add a row first
     const addRowBtn = page.locator(EditorPage.addRowByText);
     if (await addRowBtn.count() > 0) {
-      await addRowBtn.click();
-      await expect(page.locator('div.border-dashed')).toBeVisible({ timeout: 5000 });
+      await addRowBtn.first().click();
+      // Wait for the new row's empty cell to appear
+      await expect(canvasEmptyCells.first()).toBeVisible({ timeout: 5000 });
     }
     // Now try again
-    const emptyCellAfterRow = page.locator('div.border-dashed').first();
-    if (await emptyCellAfterRow.count() > 0) {
-      await emptyCellAfterRow.click();
-      await expect(page.locator('[data-testid="component-picker"]')).toBeVisible({ timeout: 5000 });
+    if (await canvasEmptyCells.count() > 0) {
+      await canvasEmptyCells.first().click();
+      await expect(componentPicker).toBeVisible({ timeout: 5000 });
     }
   }
 
   // Component picker popover should appear - find the component in the list
-  // The picker has buttons with component names like "Button", "TextInput", etc.
-  const componentBtn = page.getByText(componentName, { exact: true }).first();
+  // The picker shows display names which may differ from type names:
+  // e.g. type="TextInput" → displayName="Text Input"
+  // Try exact match first, then fall back to CamelCase→spaced conversion
+  let componentBtn = page.getByText(componentName, { exact: true }).first();
+  if (await componentBtn.count() === 0) {
+    // Convert CamelCase type names to display names: "TextInput" → "Text Input"
+    const spacedName = componentName
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2');
+    if (spacedName !== componentName) {
+      componentBtn = page.getByText(spacedName, { exact: true }).first();
+    }
+  }
+  if (await componentBtn.count() === 0) {
+    // Last resort: search within the picker container for buttons containing the name
+    const picker = page.locator('.shadow-xl').filter({ hasText: 'Add Component' });
+    componentBtn = picker.locator('button').filter({ hasText: componentName }).first();
+  }
 
   if (await componentBtn.count() > 0) {
     await componentBtn.click();
@@ -49,12 +64,15 @@ async function addComponentToFirstCell(page: Page, componentName: string) {
 // Helper: ensure there is at least one row with an empty cell
 // ---------------------------------------------------------------------------
 async function ensureEmptyCellExists(page: Page) {
-  let emptyCellCount = await page.locator('div.border-dashed').count();
+  // Empty cells are inside the editor canvas with bg-gray-50 + border-dashed
+  // Spacer previews also use bg-gray-50 + border-dashed but shouldn't exist on fresh load
+  const emptyCellLocator = page.locator('[data-testid="editor-canvas"] .bg-gray-50.border-dashed');
+  let emptyCellCount = await emptyCellLocator.count();
   if (emptyCellCount === 0) {
     const addRowBtn = page.locator(EditorPage.addRowByText);
     if (await addRowBtn.count() > 0) {
-      await addRowBtn.click();
-      await expect(page.locator('div.border-dashed')).toBeVisible({ timeout: 5000 });
+      await addRowBtn.first().click();
+      await expect(emptyCellLocator.first()).toBeVisible({ timeout: 5000 });
     }
   }
 }
@@ -64,7 +82,7 @@ async function ensureEmptyCellExists(page: Page) {
 // ---------------------------------------------------------------------------
 async function clickSaveAndWait(page: Page) {
   const saveResponse = page.waitForResponse(resp =>
-    resp.url().includes('/api/screens') && resp.status() === 200
+    resp.url().includes('/api/sdui/') && resp.status() === 200
   );
   const saveBtn = page.locator(EditorPage.btnSave);
   if (await saveBtn.count() > 0) {

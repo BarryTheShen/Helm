@@ -1,5 +1,5 @@
 export const WorkflowsPage = {
-  heading: 'text=Workflows',
+  heading: 'h1:text-is("Workflows")',
   workflowList: 'div:has-text("Your Workflows")',
   workflowListItems: '.divide-y > div.cursor-pointer',
   btnNewWorkflow: 'button:has-text("New Workflow")',

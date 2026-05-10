@@ -5,9 +5,13 @@ test('Issue 38: dropdown persistence - value survives re-select', async ({ page,
   await login();
   await page.goto('/workflows');
   await expect(page.locator(WorkflowsPage.heading)).toBeVisible();
-  // Add a trigger node
-  await page.getByRole('button', { name: /add/i }).first().click();
-  await page.getByRole('menuitem', { name: 'trigger' }).click();
+  // Create a new workflow
+  await page.locator(WorkflowsPage.btnNewWorkflow).click();
+  await expect(page.locator(WorkflowsPage.createModal)).toBeVisible();
+  await page.locator(WorkflowsPage.createNameInput).fill('Test Issue 38');
+  await page.locator(WorkflowsPage.createCreateBtn).click();
+  // Add a trigger node via the editor toolbar
+  await page.locator(WorkflowsPage.addNodeTrigger).click();
   // Wait for node to render on canvas
   const node = page.locator('.react-flow__node').first();
   await expect(node).toBeVisible();
@@ -34,9 +38,13 @@ test('Issue 39: condition typing keeps all characters', async ({ page, login }) 
   await login();
   await page.goto('/workflows');
   await expect(page.locator(WorkflowsPage.heading)).toBeVisible();
-  // Add a condition node
-  await page.getByRole('button', { name: /add/i }).first().click();
-  await page.getByRole('menuitem', { name: 'condition' }).click();
+  // Create a new workflow
+  await page.locator(WorkflowsPage.btnNewWorkflow).click();
+  await expect(page.locator(WorkflowsPage.createModal)).toBeVisible();
+  await page.locator(WorkflowsPage.createNameInput).fill('Test Issue 39');
+  await page.locator(WorkflowsPage.createCreateBtn).click();
+  // Add a condition node via the editor toolbar
+  await page.locator(WorkflowsPage.addNodeCondition).click();
   // Wait for node to render on canvas
   const node = page.locator('.react-flow__node').first();
   await expect(node).toBeVisible();
@@ -55,9 +63,13 @@ test('Issue 42: action nodes have visible connection handles', async ({ page, lo
   await login();
   await page.goto('/workflows');
   await expect(page.locator(WorkflowsPage.heading)).toBeVisible();
-  // Add an action node
-  await page.getByRole('button', { name: /add/i }).first().click();
-  await page.getByRole('menuitem', { name: 'action' }).click();
+  // Create a new workflow
+  await page.locator(WorkflowsPage.btnNewWorkflow).click();
+  await expect(page.locator(WorkflowsPage.createModal)).toBeVisible();
+  await page.locator(WorkflowsPage.createNameInput).fill('Test Issue 42');
+  await page.locator(WorkflowsPage.createCreateBtn).click();
+  // Add an action node via the editor toolbar
+  await page.locator(WorkflowsPage.addNodeAction).click();
   // Wait for node to render on canvas
   const node = page.locator('.react-flow__node').first();
   await expect(node).toBeVisible();

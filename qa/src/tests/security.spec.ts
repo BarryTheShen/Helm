@@ -39,8 +39,8 @@ test.describe('Security', () => {
     await noAuthPage.goto('http://127.0.0.1:5174/login');
     await noAuthPage.waitForLoadState('networkidle');
 
-    const usernameInput = noAuthPage.locator('label:has-text("Username") >> input');
-    const passwordInput = noAuthPage.locator('label:has-text("Password") >> input');
+    const usernameInput = noAuthPage.locator('input[type="text"]').first();
+    const passwordInput = noAuthPage.locator('input[type="password"]').first();
 
     await usernameInput.fill('invalid_user');
     await passwordInput.fill('wrong_password');

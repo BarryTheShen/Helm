@@ -2,10 +2,36 @@ import { test, expect } from '../fixtures';
 import { TemplatesPage } from '../page-objects/templates';
 import { EditorPage } from '../page-objects/editor';
 
+/**
+ * Helper: apply the current template by selecting the first available module
+ * and clicking "Apply as Draft". If no modules exist, just close the modal.
+ */
+async function applyCurrentTemplate(page: any) {
+  // Wait for the apply modal heading
+  await expect(page.locator(TemplatesPage.applyModalHeading)).toBeVisible({ timeout: 5000 });
+  
+  // Check if modules are available in the select dropdown
+  const moduleSelect = page.locator(TemplatesPage.applyModuleSelect);
+  const optionCount = await moduleSelect.locator('option').count();
+  const hasModules = optionCount > 1; // More than the "Select a module..." placeholder
+  
+  if (hasModules) {
+    // Select the first real module option
+    await moduleSelect.selectOption({ index: 1 });
+    await page.locator(TemplatesPage.applyAsDraftBtn).click();
+    // Brief pause for the API call to complete
+    await page.waitForTimeout(500);
+  } else {
+    // No modules available — close by pressing Escape
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+  }
+}
+
 test('templates page loads without errors', async ({ page, login }) => {
   await login();
   await page.goto('/templates');
-  await expect(page.locator(TemplatesPage.templateCards)).toBeVisible();
+  await expect(page.locator(TemplatesPage.templateCards).first()).toBeVisible();
 
   const body = page.locator('body');
   expect(await body.isVisible()).toBe(true);
@@ -14,52 +40,71 @@ test('templates page loads without errors', async ({ page, login }) => {
 test('no template produces Unknown components when applied', async ({ page, login }) => {
   await login();
   await page.goto('/templates');
-  await expect(page.locator(TemplatesPage.templateCards)).toBeVisible();
+  await expect(page.locator(TemplatesPage.templateCards).first()).toBeVisible();
 
   // Click each available template apply button and verify no "Unknown" components appear
   const applyButtons = page.locator(TemplatesPage.btnApply);
   const count = await applyButtons.count();
 
   for (let i = 0; i < count; i++) {
-    await applyButtons.nth(i).click();
-    await expect(page.locator(EditorPage.structureTree)).toBeVisible();
+    // Re-fetch apply buttons after any navigation
+    const currentApplyButtons = page.locator(TemplatesPage.btnApply);
+    const currentCount = await currentApplyButtons.count();
+    if (i >= currentCount) break;
+    
+    await currentApplyButtons.nth(i).click();
+    
+    // The apply button opens a modal (not direct navigation). Complete the modal flow.
+    await applyCurrentTemplate(page);
+    
+    // Navigate to editor to check structure tree and unknown components
+    await page.goto('/editor');
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator(EditorPage.structureTree)).toBeVisible({ timeout: 10000 });
 
     const unknownCount = await page.locator(EditorPage.unknownLabel).count();
     expect(
       unknownCount,
       `Template ${i + 1} should not produce any "Unknown" components`
     ).toBe(0);
+
+    // Navigate back to templates for the next iteration
+    await page.goto('/templates');
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator(TemplatesPage.templateCards).first()).toBeVisible();
   }
 });
 
 test('Home template: calendar uses compact variant, no Container component', async ({ page, login }) => {
   await login();
   await page.goto('/templates');
-  await expect(page.locator(TemplatesPage.templateCards)).toBeVisible();
+  await expect(page.locator(TemplatesPage.templateCards).first()).toBeVisible();
 
-  // Find and click the Home template
-  const homeBtn = page.locator('button:has-text("Home")').first();
-  if (await homeBtn.isVisible()) {
-    await homeBtn.click();
-    await expect(page.locator(EditorPage.structureTree)).toBeVisible();
-  } else {
-    // Try finding by label/card text
-    const homeCard = page.locator('text=Home').first();
-    if (await homeCard.isVisible()) {
-      await homeCard.click();
-      await expect(page.locator(EditorPage.structureTree)).toBeVisible();
-    }
-  }
+  // Find the Home template card by its title text
+  const homeCard = page.locator(TemplatesPage.templateCards).filter({ hasText: 'Home' });
+  await expect(homeCard.first()).toBeVisible();
+
+  // Click the apply button on the Home template card
+  const applyBtn = homeCard.locator(TemplatesPage.btnApply);
+  await applyBtn.click();
+
+  // Complete the apply modal flow
+  await applyCurrentTemplate(page);
+
+  // Navigate to editor to inspect the applied template
+  await page.goto('/editor');
+  await page.waitForLoadState('networkidle');
+  await expect(page.locator(EditorPage.structureTree)).toBeVisible({ timeout: 10000 });
 
   // Verify no "Container" text appears in canvas
-  const containerCount = await page.locator('text=Container').count();
+  const containerInCanvas = page.locator(EditorPage.canvas).locator('text=Container');
   expect(
-    containerCount,
+    await containerInCanvas.count(),
     'Home template should not contain any "Container" components'
   ).toBe(0);
 
   // Verify calendar variant is compact (check inspector or structure tree)
-  const variantSelect = page.locator('select').first();
+  const variantSelect = page.locator('[data-testid="property-inspector"] select').first();
   const variantCount = await variantSelect.count();
   if (variantCount > 0) {
     const variantValue = await variantSelect.inputValue();
@@ -73,36 +118,30 @@ test('Home template: calendar uses compact variant, no Container component', asy
 test('Chat template: no standalone Divider component', async ({ page, login }) => {
   await login();
   await page.goto('/templates');
-  await expect(page.locator(TemplatesPage.templateCards)).toBeVisible();
+  await expect(page.locator(TemplatesPage.templateCards).first()).toBeVisible();
 
-  // Find and click the Chat template
-  const chatBtn = page.locator('button:has-text("Chat")').first();
-  if (await chatBtn.isVisible()) {
-    await chatBtn.click();
-    await expect(page.locator(EditorPage.structureTree)).toBeVisible();
-  } else {
-    const chatCard = page.locator('text=Chat').first();
-    if (await chatCard.isVisible()) {
-      await chatCard.click();
-      await expect(page.locator(EditorPage.structureTree)).toBeVisible();
-    }
-  }
+  // Find the Chat template card by its title text
+  const chatCard = page.locator(TemplatesPage.templateCards).filter({ hasText: 'Chat' });
+  await expect(chatCard.first()).toBeVisible();
+
+  // Click the apply button on the Chat template card
+  const applyBtn = chatCard.locator(TemplatesPage.btnApply);
+  await applyBtn.click();
+
+  // Complete the apply modal flow
+  await applyCurrentTemplate(page);
+
+  // Navigate to editor to inspect the applied template
+  await page.goto('/editor');
+  await page.waitForLoadState('networkidle');
+  await expect(page.locator(EditorPage.structureTree)).toBeVisible({ timeout: 10000 });
 
   // Verify no standalone "Divider" text appears in the structure tree
   // Divider should be a row property, not a component entry
   const structureTree = page.locator(EditorPage.structureTree);
-  if (await structureTree.isVisible()) {
-    const dividerInTree = structureTree.locator('text=Divider');
-    expect(
-      await dividerInTree.count(),
-      'Chat template should not have Divider as a standalone component in structure tree'
-    ).toBe(0);
-  } else {
-    // Fallback: if we can't isolate the tree, check the full page
-    const dividerCount = await page.locator('text=Divider').count();
-    expect(
-      dividerCount,
-      'Chat template should not have standalone Divider -- it should be a row property'
-    ).toBe(0);
-  }
+  const dividerInTree = structureTree.locator('text=Divider');
+  expect(
+    await dividerInTree.count(),
+    'Chat template should not have Divider as a standalone component in structure tree'
+  ).toBe(0);
 });
