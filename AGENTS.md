@@ -102,7 +102,7 @@ Run verification proportional to the layers you touched:
 | Layer | Required Check |
 |-------|---------------|
 | Backend code | `cd backend && pytest -q` |
-| Web admin | `cd web && npm run lint` (build if types changed) |
+| Web admin | `cd web && npm run lint` (build if types changed); conditional: `cd qa && npx playwright test --project e2e` if UI behavior changed |
 | Mobile | `cd mobile && npx expo start` smoke check |
 | Docs/config only | Path/link sanity, no hardcoded secrets |
 | Multi-layer | Relevant checks for each layer changed |

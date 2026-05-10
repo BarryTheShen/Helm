@@ -93,7 +93,7 @@ export function qaPath(...segments: string[]) {
 }
 ```
 
-All test files use `qaPath()` instead of `__dirname` for file path resolution.
+Most test files use `qaPath()` instead of `__dirname` for file path resolution (though `fixtures.ts` reads auth via a relative path).
 
 ---
 
@@ -255,7 +255,7 @@ This runs `pytest` on the backend first, then the Playwright suite. Results go t
 ## Current State
 
 - **16 test files** across 2 projects
-- **29 tests pass**, 25 e2e tests have stale selectors needing fixes (pending)
+- Run `cd qa && npx playwright test` for current counts
 - Schema reconciliation correctly detects planted bugs (verified with TodoList test)
 - API auth tests fixed (ESM path resolution via `qaPath()`)
 - Security tests use isolated browser context to avoid contaminating shared auth state

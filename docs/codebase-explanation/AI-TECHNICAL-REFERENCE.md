@@ -270,7 +270,7 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 
 **Last Test Run:** 2026-05-07
 **Backend Tests:** ✅ All passing (run `cd backend && pytest -q` for current count) — ~120 seconds
-**QA Test Suite:** 16 test files, 29 tests pass, 25 e2e tests have stale selectors needing fixes (pending)
+**QA Test Suite:** Run `cd qa && npx playwright test` for current counts
 
 ### Backend Test Breakdown by Module
 
@@ -302,7 +302,7 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 | Area | Status |
 |------|--------|
 | Frontend (React Native) | No test suite |
-| Web Admin Panel | ✅ QA suite exists (`qa/`) — 16 test files, 29 passing, 25 e2e tests have stale selectors (pending fix) |
+| Web Admin Panel | ✅ QA suite exists (`qa/`) — run `cd qa && npx playwright test` for current counts |
 | Standalone Agent | No test suite |
 | MCP Server | No integration tests |
 | WebSocket real-time behavior | No live connection tests |
@@ -316,7 +316,7 @@ A Playwright-based test suite covering web admin UI, backend API contracts, and 
 - Auto-starts backend + Vite, handles auth via `addInitScript`
 - Schema reconciliation detects drift between web `COMPONENT_REGISTRY` and backend component registry
 - Template quality tests validate component types and action references
-- Current: 29 passing, 25 e2e tests have stale selectors needing fixes
+- Run `cd qa && npx playwright test` for current counts
 
 ---
 
@@ -649,7 +649,7 @@ These files live at the repo root and are **not** part of the production app —
 | File | Purpose |
 |------|---------|
 | `package.json` | Installs Playwright + Puppeteer for root-level JS test scripts (separate from `mobile/package.json`) |
-| `playwright.config.ts` | Playwright config for `tests/e2e.spec.ts`; targets frontend at port 8082; auto-starts backend |
+| `playwright.config.ts` | (Legacy — no longer present at repo root) |
 
 ### Python Dev Scripts
 

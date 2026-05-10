@@ -3,7 +3,7 @@
 How to run, configure, and edit every part of the stack.
 
 > Last updated: 2026-05-07
-> Last audit: 2026-05-07 — ✅ All systems operational (338 backend tests, 29 QA tests passing)
+> Last audit: 2026-05-07 — ✅ All systems operational (run `cd backend && pytest -q` and `cd qa && npx playwright test` for current counts)
 
 ---
 
@@ -477,24 +477,13 @@ The MCP server is mounted at `http://localhost:8000/mcp`.
 
 ---
 
-## Root-Level Dev & Test Scripts
+## Root-Level Dev & Test Scripts (Legacy)
 
-These scripts live at the repo root and are **not** part of the production app. They are development utilities and debugging tools.
+These scripts live at the repo root and are **not** part of the production app. They are development utilities and debugging tools. The root-level `playwright.config.ts` targeting port 8082 no longer exists — QA tests have moved to `qa/`.
 
-### Playwright E2E tests (official, runs in CI)
+### Playwright E2E tests (moved to `qa/`)
 
-```bash
-# Install root deps (one-time)
-npm install
-
-# Run the full Playwright E2E suite
-npx playwright test tests/e2e.spec.ts
-
-# View HTML report after a run
-npx playwright show-report
-```
-
-Requires both backend (port 8000) and frontend dev server (port 8082) to be running, or let Playwright auto-start them via `playwright.config.ts`.
+The official Playwright E2E suite now lives in `qa/` — see the QA Test Suite section below and `docs/codebase-explanation/qa.md` for current usage.
 
 ### Ad-hoc Playwright / Puppeteer scripts (manual, not CI)
 

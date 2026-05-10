@@ -12,6 +12,9 @@ cd backend && pytest -q
 
 # Conditional — if database models changed
 cd backend && .venv/bin/python -m alembic check
+
+# Conditional — QA API tests (backend endpoint contracts)
+cd qa && npm run test:backend
 ```
 
 ### Web Admin Code Changed
