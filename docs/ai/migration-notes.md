@@ -151,3 +151,20 @@ Rewrote `opencode.jsonc` to match official OpenCode v1.14 config format. Updated
 ### Model IDs
 
 - Exact model IDs for MiMo Pro V2.5, DeepSeek V4 Flash, and Kimi 2.6 are **not yet filled** — placeholders in agent files. Barry must run `opencode models` and update.
+
+## 2026-05-10: Finalize OpenCode Go Model Routing
+
+### What Changed
+
+- Replaced all `TODO-*` model placeholders in `.opencode/agents/*.md` with confirmed OpenCode Go model IDs.
+- Updated `opencode.jsonc` comments — per-agent model routing is now configured, replaced stale "not configured yet" wording.
+- Rewrote `docs/ai/opencode-models.md` — OpenCode Go is the primary daily model source; local Qwen is fallback/private/local.
+
+### Model Mapping
+
+- **Orchestrator/Reasoning agents** (`helm-orchestrator`, `helm-planner`, `helm-reviewer`, `helm-security`, `helm-protocol`) → `opencode-go/mimo-v2.5-pro`
+- **Worker agents** (`helm-build`, `helm-backend`, `helm-frontend`, `helm-agent-runtime`, `helm-tester`, `helm-docs`, `helm-git`) → `opencode-go/deepseek-v4-flash`
+- **UI Reviewer** (`helm-ui-reviewer`) → `opencode-go/kimi-k2.6`
+- **Local fallback** (`helm-tester` fallback, private/local work) → `local/qwen3.6-27b-autoround`
+
+- No app source files changed.

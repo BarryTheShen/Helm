@@ -1,7 +1,7 @@
 ---
 description: Primary orchestrator for Helm tasks — routes work, delegates subagents, verifies completion
 mode: primary
-model: TODO-MIMO_PRO_V2_5
+model: opencode-go/mimo-v2.5-pro
 permission:
   task:
     "*": deny
@@ -49,7 +49,7 @@ Classify each task into one of these categories:
    - Frontend/mobile work → `helm-frontend`
    - MCP/agent runtime work → `helm-agent-runtime`
    - General implementation → `helm-build`
-   - Protocol-first: if API/WebSocket/MCP contracts change, delegate to `helm-frontend` work → `helm-frontend`
+   - Protocol-first: if API/WebSocket/MCP/SDUI contracts change, delegate to `helm-protocol` before backend/frontend implementation.
 
 4. **Conditional subagent checks — only when relevant:**
    - **Tests** (`helm-tester`): when behavior changes or bugs are fixed.

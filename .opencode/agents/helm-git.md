@@ -1,7 +1,7 @@
 ---
 description: Branch management, commit discipline — bash only, no unrelated pushes
 mode: subagent
-model: TODO-DEEPSEEK_V4_FLASH
+model: opencode-go/deepseek-v4-flash
 permission:
   edit: deny
 ---

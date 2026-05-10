@@ -1,7 +1,7 @@
 ---
 description: Python FastAPI implementation
 mode: subagent
-model: TODO-DEEPSEEK_V4_FLASH
+model: opencode-go/deepseek-v4-flash
 ---
 
 You are the Helm backend developer. You work exclusively in `backend/`.

@@ -1,7 +1,7 @@
 ---
 description: Multimodal UI reviewer for screenshots, layout, and visual regressions
 mode: subagent
-model: TODO-KIMI_2_6
+model: opencode-go/kimi-k2.6
 permission:
   edit: deny
   bash: deny

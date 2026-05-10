@@ -1,7 +1,7 @@
 ---
 description: Documentation maintenance — edits docs only
 mode: subagent
-model: TODO-DEEPSEEK_V4_FLASH
+model: opencode-go/deepseek-v4-flash
 permission:
   edit: allow
   bash: deny

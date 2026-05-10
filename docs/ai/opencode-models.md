@@ -1,11 +1,14 @@
 # OpenCode Model Policy
 
-This document defines Helm's local-first model policy for OpenCode. The goal is to avoid silently defaulting to paid providers.
+This document defines Helm's model routing strategy for OpenCode. OpenCode Go is the primary daily model source; local Qwen remains as fallback/private/local.
 
 ## 1. Project Policy
 
-- **Default path:** Local model first for all agent roles.
-- **Optional backup:** OpenCode Go or GitHub Copilot if Barry has already connected them personally.
+- **Primary model source:** OpenCode Go (user-managed provider credentials).
+- **Worker default:** DeepSeek V4 Flash via OpenCode Go.
+- **Reasoning/default:** MiMo V2.5 Pro via OpenCode Go.
+- **Multimodal:** Kimi K2.6 via OpenCode Go.
+- **Local fallback:** Qwen3.6 27B for private/local/cost-sensitive work.
 - **No Claude fallback** in this repo's default guidance.
 - **No OpenRouter default** — cost is too high for routine agent work.
 - **No provider secrets** committed to the repo.
@@ -18,7 +21,7 @@ This document defines Helm's local-first model policy for OpenCode. The goal is 
 | Host | `192.168.110.26:8000` |
 | Protocol | OpenAI-compatible (`/v1`) |
 | Base URL | `http://192.168.110.26:8000/v1` |
-| Verified | 2026-05-08 — `curl http://192.168.110.26:8000/v1/models` returns the model list |
+| Role | Fallback/private/local — not the primary default for every role |
 
 If the endpoint is unreachable from the dev machine, it is expected (network-dependent) but the configuration should not break — the agent will fall back to whatever the user has configured.
 
@@ -26,38 +29,34 @@ If the endpoint is unreachable from the dev machine, it is expected (network-dep
 
 Three model tiers route work by role:
 
-| Tier | Model | Roles |
-|------|-------|-------|
-| **Reasoning** | MiMo Pro V2.5 | orchestrator, planner, reviewer, security, protocol |
-| **Worker** | DeepSeek V4 Flash | build, backend, frontend, agent-runtime, tester, docs, git |
-| **Multimodal** | Kimi 2.6 | ui-reviewer (screenshots, visual regressions) |
-| **Local fallback** | local Qwen3.6 27B | tester fallback, private/local work, cost-sensitive tasks |
-
-Paid providers should never be silently selected by repo config.
+| Tier | Model ID | Roles |
+|------|----------|-------|
+| **Reasoning** | `opencode-go/mimo-v2.5-pro` | orchestrator, planner, reviewer, security, protocol |
+| **Worker** | `opencode-go/deepseek-v4-flash` | build, backend, frontend, agent-runtime, tester, docs, git |
+| **Multimodal** | `opencode-go/kimi-k2.6` | ui-reviewer (screenshots, visual regressions) |
+| **Local fallback** | `local/qwen3.6-27b-autoround` | tester fallback, private/local work, cost-sensitive tasks |
 
 ## 4. Agent-to-Model Mapping
 
-| Agent | Model Tier | Model |
-|-------|-----------|-------|
-| `helm-orchestrator` | Reasoning | MiMo Pro V2.5 |
-| `helm-planner` | Reasoning | MiMo Pro V2.5 |
-| `helm-reviewer` | Reasoning | MiMo Pro V2.5 |
-| `helm-security` | Reasoning | MiMo Pro V2.5 |
-| `helm-protocol` | Reasoning | MiMo Pro V2.5 |
-| `helm-ui-reviewer` | Multimodal | Kimi 2.6 |
-| `helm-build` | Worker | DeepSeek V4 Flash |
-| `helm-backend` | Worker | DeepSeek V4 Flash |
-| `helm-frontend` | Worker | DeepSeek V4 Flash |
-| `helm-agent-runtime` | Worker | DeepSeek V4 Flash |
-| `helm-tester` | Worker | DeepSeek V4 Flash (fallback: local Qwen3.6 27B) |
-| `helm-docs` | Worker | DeepSeek V4 Flash |
-| `helm-git` | Worker | DeepSeek V4 Flash |
-
-**TODO:** Exact model IDs must be filled after running `opencode models`. The agent files currently contain `TODO-MIMO_PRO_V2_5`, `TODO-DEEPSEEK_V4_FLASH`, and `TODO-KIMI_2_6` placeholders. Barry must replace with actual IDs.
+| Agent | Model Tier | Model ID |
+|-------|-----------|----------|
+| `helm-orchestrator` | Reasoning | `opencode-go/mimo-v2.5-pro` |
+| `helm-planner` | Reasoning | `opencode-go/mimo-v2.5-pro` |
+| `helm-reviewer` | Reasoning | `opencode-go/mimo-v2.5-pro` |
+| `helm-security` | Reasoning | `opencode-go/mimo-v2.5-pro` |
+| `helm-protocol` | Reasoning | `opencode-go/mimo-v2.5-pro` |
+| `helm-ui-reviewer` | Multimodal | `opencode-go/kimi-k2.6` |
+| `helm-build` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-backend` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-frontend` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-agent-runtime` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-tester` | Worker | `opencode-go/deepseek-v4-flash` (fallback: `local/qwen3.6-27b-autoround`) |
+| `helm-docs` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-git` | Worker | `opencode-go/deepseek-v4-flash` |
 
 ## 5. Optional Providers
 
-- **OpenCode Go** — User-managed optional backup. Barry handles `/connect` and login personally.
+- **OpenCode Go** — Primary daily model source. Barry handles `/connect` and login personally.
 - **GitHub Copilot** — User-managed optional backup. Use only if Barry already has a Copilot connection.
 
 Do not add `/connect` walkthroughs, account setup steps, or Claude fallback setup to repo docs. These are personal setup tasks Barry will handle.
@@ -67,21 +66,21 @@ Do not add `/connect` walkthroughs, account setup steps, or Claude fallback setu
 Set these in your local OpenCode provider config (not in the repo). The examples below use placeholder values:
 
 ```bash
-# Local model (default)
+# Local model (fallback)
 OPENCODE_LOCAL_BASE_URL=http://192.168.110.26:8000/v1
 OPENCODE_LOCAL_MODEL=qwen3.6-27b-autoround
 
 # Per-role routing (if your OpenCode version supports it)
-OPENCODE_MODEL_PRIMARY=local/qwen3.6-27b-autoround
-OPENCODE_MODEL_WORKER=local/qwen3.6-27b-autoround
-OPENCODE_MODEL_PLANNER=local/qwen3.6-27b-autoround
-OPENCODE_MODEL_MINI=local/qwen3.6-27b-autoround
+OPENCODE_MODEL_PRIMARY=opencode-go/mimo-v2.5-pro
+OPENCODE_MODEL_WORKER=opencode-go/deepseek-v4-flash
+OPENCODE_MODEL_PLANNER=opencode-go/mimo-v2.5-pro
+OPENCODE_MODEL_MINI=opencode-go/deepseek-v4-flash
 ```
 
 If the local server requires an API key, use a placeholder like `local-dev-key` — not a real secret.
 
 ## 7. Config Policy
 
-- `opencode.jsonc` should not hardcode expensive Anthropic/OpenRouter models.
-- If safe provider config syntax is unclear for a given OpenCode version, prefer docs-only guidance over broken config.
+- `opencode.jsonc` keeps `"model": "local/qwen3.6-27b-autoround"` as the safe fallback.
+- Per-agent model routing lives in `.opencode/agents/*.md` — each agent declares its `model:` in frontmatter.
 - Do not add unverified provider config to `opencode.jsonc`.

@@ -1,10 +1,9 @@
 // OpenCode project-local config for Helm
 // Official schema: https://opencode.ai/config.json
 //
-// Model and provider setup should be configured via:
-//   opencode providers (global credentials)
-//   -m <provider/model> (per-session override)
-// Per-agent model routing is intentionally not configured in this repo yet; model/provider selection is user-managed.
+// Per-agent model routing lives in `.opencode/agents/*.md`.
+// Provider credentials and model availability are user-managed.
+// Local Qwen remains available as a fallback/private model.
 
 {
   "$schema": "https://opencode.ai/config.json",
