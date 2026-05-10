@@ -370,6 +370,7 @@ export function WorkflowsPage() {
               {workflows.map((wf) => (
                 <div
                   key={wf.id}
+                  data-testid="workflow-item"
                   className="p-4 hover:bg-gray-50 cursor-pointer flex items-start justify-between group"
                   onClick={() => loadWorkflow(wf.id)}
                 >

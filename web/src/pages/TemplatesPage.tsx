@@ -168,7 +168,7 @@ export function TemplatesPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {templates.map(t => (
-            <div key={t.id} className="bg-white p-5 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+            <div key={t.id} data-testid="template-card" className="bg-white p-5 rounded-lg shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-2">
                 <div className="font-semibold">{t.name}</div>
                 <div className="flex items-center gap-1">

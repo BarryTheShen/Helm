@@ -1,7 +1,7 @@
 export const WorkflowsPage = {
   heading: 'h1:text-is("Workflows")',
   workflowList: 'div:has-text("Your Workflows")',
-  workflowListItems: '.divide-y > div.cursor-pointer',
+  workflowListItems: '[data-testid="workflow-item"]',
   btnNewWorkflow: 'button:has-text("New Workflow")',
   btnImportN8n: 'button:has-text("Import n8n")',
   btnSave: 'button:has-text("Save")',
@@ -20,7 +20,7 @@ export const WorkflowsPage = {
   addNodeCondition: 'button:has-text("+ Condition")',
   addNodeSwitch: 'button:has-text("+ Switch")',
   addNodeLoop: 'button:has-text("+ Loop")',
-  nodeInspector: '.bg-white:has-text("Delete")',
+  nodeInspector: '[data-testid="node-inspector"]',
   emptyState: 'text=Select a workflow or create a new one',
   deleteBtn: 'button:has-text("Delete")',
   noWorkflowsMsg: 'text=No workflows yet. Create one to get started.',

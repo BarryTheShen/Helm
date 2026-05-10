@@ -299,7 +299,7 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
   );
 
   return (
-    <div className="w-80 bg-white border-l flex flex-col z-30">
+    <div data-testid="node-inspector" className="w-80 bg-white border-l flex flex-col z-30">
       <div className="p-4 border-b flex items-center justify-between bg-white">
         <h2 className="font-semibold text-gray-900">Node Inspector</h2>
         <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">

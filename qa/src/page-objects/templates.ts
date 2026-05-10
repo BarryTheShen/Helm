@@ -4,7 +4,7 @@ export const TemplatesPage = {
   btnOpenEditor: 'button:has-text("Open Editor")',
   searchInput: 'input[placeholder="Search templates..."]',
   categoryFilter: 'select:has(option:has-text("All categories"))',
-  templateCards: '.bg-white.p-5.rounded-lg',
+  templateCards: '[data-testid="template-card"]',
   btnPreview: 'button[title="Preview"]',
   btnApply: 'button[title="Apply to module"]',
   btnDelete: 'button[title="Delete"]',

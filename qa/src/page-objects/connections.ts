@@ -14,7 +14,7 @@ export const ConnectionsPage = {
   deleteConfirmModal: 'text=Confirm Delete',
   deleteConfirmBtn: 'button:has-text("Delete")',
   deleteCancelBtn: 'button:has-text("Cancel")',
-  connectionTable: 'table.w-full',
+  connectionTable: '[data-testid="connection-table"]',
   providerBadge: '.rounded-full.text-xs.font-medium',
   emptyState: 'text=No connections yet',
   customTypeModalHeading: 'text=Add Connection Type',

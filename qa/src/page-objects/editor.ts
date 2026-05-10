@@ -19,7 +19,7 @@ export const EditorPage = {
   // Added: row item in structure tree (matches data-testid on row elements)
   rowInTree: '[data-testid="row-in-tree"]',
   // Added: toggle switch button (used for Show Divider)
-  toggleSwitch: 'button.relative.w-9.h-5',
+  toggleSwitch: '[data-testid="toggle-switch"]',
   // Added: add row button (exact text match to avoid matching preset buttons)
   addRowByText: 'button:text-is("Add Row")',
   // Added: divider color label in inspector
