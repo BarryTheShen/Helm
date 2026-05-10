@@ -50,6 +50,8 @@ type EditorStoreState = {
   toggleLandscape: () => void;
   setSelection: (selection: EditorSelection | null) => void;
   addRow: (cellCount?: number, index?: number, props?: Partial<EditorRow>) => void;
+  addDividerRow: (index?: number) => void;
+  addSpacerRow: (index?: number) => void;
   deleteRow: (rowId: string) => void;
   duplicateRow: (rowId: string) => void;
   moveRow: (fromIndex: number, toIndex: number) => void;
@@ -183,7 +185,30 @@ function validateCellWidths(cells: EditorCell[]): boolean {
   return true;
 }
 
-function createEmptyRow(cellCount = 1): EditorRow {
+function createEmptyRow(cellCount = 1, type?: EditorRow['type']): EditorRow {
+  // Divider and spacer rows don't need cells
+  if (type === 'divider') {
+    return {
+      id: createEditorId('row'),
+      type: 'divider',
+      height: 'auto',
+      cells: [],
+      dividerColor: '#E0E0E0',
+      dividerThickness: 1,
+      dividerMargin: 8,
+    };
+  }
+
+  if (type === 'spacer') {
+    return {
+      id: createEditorId('row'),
+      type: 'spacer',
+      height: 'auto',
+      cells: [],
+      spacerHeight: 24,
+    };
+  }
+
   const normalizedCount = Math.max(1, Math.trunc(cellCount) || 1);
 
   return {
@@ -222,8 +247,39 @@ function normalizeRow(value: unknown): EditorRow {
   const record = isRecord(value) ? cloneValue(value as Record<string, unknown>) : {};
   const rawCells = Array.isArray(record.cells) ? record.cells : [];
   const normalizedCells = rawCells.map((cell) => normalizeCell(cell));
-  const { bgColor: _bgColor, backgroundColor: _backgroundColor, cells: _cells, id, height, ...rest } = record;
+  const { bgColor: _bgColor, backgroundColor: _backgroundColor, cells: _cells, id, height, type: _type, ...rest } = record;
   const backgroundColor = getCanonicalRowBackgroundColor(record);
+  const rowType: EditorRow['type'] = typeof _type === 'string' && ['content', 'divider', 'spacer'].includes(_type)
+    ? _type as EditorRow['type']
+    : undefined;
+
+  // Divider rows don't need cells
+  if (rowType === 'divider') {
+    return {
+      ...rest,
+      ...(backgroundColor !== undefined ? { backgroundColor } : {}),
+      id: typeof id === 'string' && id.length > 0 ? id : createEditorId('row'),
+      type: 'divider',
+      height: normalizeRowHeight(height),
+      cells: [],
+      dividerColor: rest.dividerColor as string | undefined ?? '#E0E0E0',
+      dividerThickness: rest.dividerThickness as number | undefined ?? 1,
+      dividerMargin: rest.dividerMargin as number | undefined ?? 8,
+    };
+  }
+
+  // Spacer rows don't need cells
+  if (rowType === 'spacer') {
+    return {
+      ...rest,
+      ...(backgroundColor !== undefined ? { backgroundColor } : {}),
+      id: typeof id === 'string' && id.length > 0 ? id : createEditorId('row'),
+      type: 'spacer',
+      height: normalizeRowHeight(height),
+      cells: [],
+      spacerHeight: rest.spacerHeight as number | undefined ?? 24,
+    };
+  }
 
   return {
     ...rest,
@@ -273,10 +329,13 @@ function serializeCellForRuntime(cell: EditorCell): EditorCell {
 function serializeRowForRuntime(row: EditorRow): EditorRow {
   const clonedRow = cloneValue(row);
   const backgroundColor = getCanonicalRowBackgroundColor(clonedRow);
-  const { bgColor: _bgColor, backgroundColor: _backgroundColor, cells: _cells, ...rest } = clonedRow;
+  const { bgColor: _bgColor, backgroundColor: _backgroundColor, cells: _cells, type: _type, ...rest } = clonedRow;
+
+  const rowType = _type ?? 'content';
 
   return {
     ...rest,
+    ...(rowType !== 'content' ? { type: rowType } : {}),
     ...(backgroundColor !== undefined ? { backgroundColor } : {}),
     cells: row.cells.map((cell) => serializeCellForRuntime(cell)),
   };
@@ -512,6 +571,40 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
       console.log(`[EditorStore] addRow() — inserted at index ${insertIndex}, ${cellCount} cells`);
 
       return commitRows(state, nextRows);
+    });
+  },
+
+  addDividerRow: (index) => {
+    set((state) => {
+      const nextRows = [...state.rows];
+      const insertIndex = typeof index === 'number'
+        ? Math.max(0, Math.min(index, nextRows.length))
+        : nextRows.length;
+
+      const newRow = createEmptyRow(0, 'divider');
+      nextRows.splice(insertIndex, 0, newRow);
+      console.log(`[EditorStore] addDividerRow() — inserted at index ${insertIndex}`);
+
+      return commitRows(state, nextRows, {
+        selection: { type: 'row', rowId: newRow.id },
+      });
+    });
+  },
+
+  addSpacerRow: (index) => {
+    set((state) => {
+      const nextRows = [...state.rows];
+      const insertIndex = typeof index === 'number'
+        ? Math.max(0, Math.min(index, nextRows.length))
+        : nextRows.length;
+
+      const newRow = createEmptyRow(0, 'spacer');
+      nextRows.splice(insertIndex, 0, newRow);
+      console.log(`[EditorStore] addSpacerRow() — inserted at index ${insertIndex}`);
+
+      return commitRows(state, nextRows, {
+        selection: { type: 'row', rowId: newRow.id },
+      });
     });
   },
 

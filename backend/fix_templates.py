@@ -111,9 +111,27 @@ def fix_chat(screen: dict) -> dict:
     for row in s.get("rows", []):
         cells = row.get("cells", [])
 
-        # Issue 32: Remove standalone Divider rows
+        # Issue 32: Convert standalone Divider rows to row-level divider type
+        # (rows with a single cell containing a Divider)
+        if len(cells) == 1 and cells[0].get("content", {}).get("type") in ("Divider", "divider"):
+            content = cells[0].get("content", {})
+            props = content.get("props", {})
+            row["type"] = "divider"
+            row["cells"] = []
+            row["dividerThickness"] = props.get("thickness", 1)
+            if "color" in props:
+                row["dividerColor"] = props["color"]
+            if "indent" in props:
+                row["dividerMargin"] = props["indent"]
+            elif "margin" in props:
+                row["dividerMargin"] = props["margin"]
+            rows.append(row)
+            continue
+
+        # Skip if any cell is a Divider (non-standalone — shouldn't happen, but safety)
         if any(c.get("content", {}).get("type") in ("Divider", "divider")
                for c in cells):
+            rows.append(row)
             continue
 
         # Issue 34: Remove InputBar row (ChatModule is self-contained)

@@ -154,18 +154,11 @@
       ]
     },
     {
+      "type": "divider",
       "id": "row-divider-1",
-      "cells": [
-        {
-          "id": "cell-div-1",
-          "width": "auto",
-          "content": {
-            "type": "Divider",
-            "id": "div-1",
-            "props": { "direction": "horizontal", "thickness": 1, "color": "border", "indent": 16 }
-          }
-        }
-      ]
+      "cells": [],
+      "dividerThickness": 1,
+      "dividerMargin": 8
     },
     {
       "id": "row-schedule-stats",

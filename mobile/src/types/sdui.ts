@@ -289,10 +289,15 @@ export interface SDUICell {
 
 export type SDUIRowHeight = 'auto' | number;
 
+/** Row type: 'content' renders cells, 'divider' renders a horizontal rule, 'spacer' renders empty space */
+export type SDUIRowType = 'content' | 'divider' | 'spacer';
+
 /** A single row containing one or more cells laid out horizontally */
 export interface SDUIRow {
   id: string;
-  /** Cells within this row */
+  /** Row type. Defaults to 'content' when absent. */
+  type?: SDUIRowType;
+  /** Cells within this row (used when type is 'content') */
   cells: SDUICell[];
   /** Row-level layout variants for responsive breakpoints */
   compact?: { hidden?: boolean; stack?: boolean };
@@ -312,6 +317,14 @@ export interface SDUIRow {
   paddingLeft?: number | string;
   /** Gap between cells */
   gap?: number;
+  /** Divider row: horizontal line color (default: theme divider) */
+  dividerColor?: string;
+  /** Divider row: horizontal line thickness in px (default: 1) */
+  dividerThickness?: number;
+  /** Divider row: vertical margin around the line in px (default: 8) */
+  dividerMargin?: number;
+  /** Spacer row: height in px (default: 24) */
+  spacerHeight?: number;
 }
 
 /**

@@ -610,7 +610,7 @@ function FieldRenderer({ field, value, onChange, screenComponents, testId }: {
     case 'toggle':
       return (
         <button
-          data-testid={testId}
+          data-testid={testId || 'toggle-switch'}
           onClick={() => onChange(!value)}
           className={`relative w-9 h-5 rounded-full transition-colors ${value ? 'bg-blue-600' : 'bg-gray-300'}`}
         >
@@ -715,6 +715,8 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
     }
   };
 
+  const rowType = row.type ?? 'content';
+
   return (
     <div className="p-3 space-y-4">
       <div className="flex items-center gap-2 text-gray-600">
@@ -722,143 +724,259 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
         <span className="text-xs font-semibold uppercase tracking-wider">Row {rowIdx + 1}</span>
       </div>
 
-      {/* Cell count */}
+      {/* Row Type Selector */}
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">Cells</label>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => row.cells.length > 1 && setCellCount(rowId, row.cells.length - 1)}
-            disabled={row.cells.length <= 1}
-            className="p-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <Minus size={12} />
-          </button>
-          <span className="text-sm font-medium w-8 text-center">{row.cells.length}</span>
-          <button
-            onClick={() => setCellCount(rowId, row.cells.length + 1)}
-            className="p-1 rounded border border-gray-200 hover:bg-gray-50"
-          >
-            <Plus size={12} />
-          </button>
-        </div>
-        <div className="text-[10px] text-gray-300 mt-1">No maximum limit. Minimum width enforced per cell.</div>
-      </div>
-
-      {/* Row height */}
-      <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">Height</label>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Row Type</label>
         <div className="flex gap-1.5">
-          <button
-            onClick={() => updateRowHeight(rowId, 'auto')}
-            className={`px-2 py-1 text-xs rounded border transition-colors ${
-              row.height === 'auto' ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
-            }`}
-          >
-            Auto
-          </button>
-          <input
-            type="number"
-            value={typeof row.height === 'number' ? row.height : ''}
-            onChange={e => {
-              const val = e.target.value;
-              if (val) {
-                const numVal = Number(val);
-                // Enforce minimum row height
-                updateRowHeight(rowId, Math.max(MIN_ROW_HEIGHT, numVal));
-              } else {
-                updateRowHeight(rowId, 'auto');
-              }
-            }}
-            onBlur={() => {
-              // Safety net: clamp to minimum on blur in case value bypassed onChange
-              if (typeof row.height === 'number' && row.height < MIN_ROW_HEIGHT) {
-                updateRowHeight(rowId, MIN_ROW_HEIGHT);
-              }
-            }}
-            min={MIN_ROW_HEIGHT}
-            step={1}
-            placeholder="px"
-            className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none w-20"
-          />
-        </div>
-        <div className="text-[10px] text-gray-400 mt-1">Minimum 48px enforced. Auto adjusts to content.</div>
-      </div>
-
-      {/* Cell widths */}
-      <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">Cell Widths</label>
-        <div className="space-y-1.5">
-          {row.cells.map((cell, cellIdx) => {
-            const isPercentage = typeof cell.width === 'string' && cell.width.endsWith('%');
-            const isAuto = cell.width === 'auto';
-            const unit = isPercentage ? '%' : 'flex';
-            const numericValue = isAuto
-              ? ''
-              : isPercentage
-                ? parseFloat(String(cell.width))
-                : getOptionalNumberInputValue(cell.width);
-
+          {(['content', 'divider', 'spacer'] as const).map((t) => {
             return (
-              <div key={cell.id} className="flex items-center gap-1.5">
-                <span className="text-[10px] text-gray-400 w-12">Cell {cellIdx + 1}</span>
-                <button
-                  onClick={() => updateCellWidth(rowId, cellIdx, 'auto')}
-                  className={`px-2 py-1 text-xs rounded border transition-colors ${
-                    isAuto ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  Auto
-                </button>
-                <input
-                  type="number"
-                  value={numericValue}
-                  onChange={e => handleCellWidthChange(cellIdx, e.target.value, unit)}
-                  step={unit === '%' ? 1 : 0.25}
-                  min={unit === '%' ? 5 : 0.25}
-                  placeholder={unit === '%' ? '%' : 'flex'}
-                  disabled={isAuto}
-                  className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
-                />
-                <div className="flex border border-gray-200 rounded overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const currentValue = isAuto ? 1 : (typeof cell.width === 'number' ? cell.width : parseFloat(String(cell.width)) || 1);
-                      updateCellWidth(rowId, cellIdx, currentValue);
-                    }}
-                    className={`px-1.5 py-1 text-[10px] font-medium transition-colors ${
-                      !isPercentage && !isAuto
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    flex
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const currentValue = isAuto ? 50 : (typeof cell.width === 'number' ? cell.width * 10 : parseFloat(String(cell.width)) || 50);
-                      updateCellWidth(rowId, cellIdx, `${Math.max(5, Math.min(100, currentValue))}%`);
-                    }}
-                    className={`px-1.5 py-1 text-[10px] font-medium transition-colors ${
-                      isPercentage
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    %
-                  </button>
-                </div>
-              </div>
+              <button
+                key={t}
+                onClick={() => updateRowProps(rowId, { type: t === 'content' ? undefined : t })}
+                className={`flex-1 px-2 py-1 text-xs rounded border transition-colors capitalize ${
+                  rowType === t ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                {t}
+              </button>
             );
           })}
         </div>
-        <div className="text-[10px] text-gray-400 mt-1">
-          <strong>Auto:</strong> Equal distribution. <strong>Flex:</strong> Relative weights. <strong>%:</strong> Fixed percentage (5-100%, min 60px enforced).
-        </div>
       </div>
 
-      {/* Background color */}
+      {/* Row type-specific properties */}
+      {rowType === 'divider' && (
+        <>
+          {/* Divider Color */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Color</label>
+            <div className="flex gap-1.5 items-center">
+              <input
+                type="color"
+                value={row.dividerColor ?? '#E0E0E0'}
+                onChange={e => updateRowProps(rowId, { dividerColor: e.target.value })}
+                className="w-7 h-7 rounded border border-gray-200 cursor-pointer"
+              />
+              <input
+                type="text"
+                value={row.dividerColor ?? '#E0E0E0'}
+                onChange={e => updateRowProps(rowId, { dividerColor: e.target.value })}
+                className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md outline-none font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Divider Thickness */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Thickness (px)</label>
+            <input
+              type="number"
+              value={getOptionalNumberInputValue(row.dividerThickness)}
+              min={1}
+              max={8}
+              onChange={e => updateRowProps(rowId, { dividerThickness: parseOptionalNumberInput(e.target.value, 1) })}
+              placeholder="1"
+              className="w-full px-2 py-1 text-xs border border-gray-200 rounded-md outline-none"
+            />
+          </div>
+
+          {/* Divider Margin */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Margin (px)</label>
+            <input
+              type="number"
+              value={getOptionalNumberInputValue(row.dividerMargin)}
+              min={0}
+              onChange={e => updateRowProps(rowId, { dividerMargin: parseOptionalNumberInput(e.target.value, 0) })}
+              placeholder="8"
+              className="w-full px-2 py-1 text-xs border border-gray-200 rounded-md outline-none"
+            />
+          </div>
+        </>
+      )}
+
+      {rowType === 'spacer' && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Spacer Height (px)</label>
+          <input
+            type="number"
+            value={getOptionalNumberInputValue(row.spacerHeight)}
+            min={8}
+            onChange={e => updateRowProps(rowId, { spacerHeight: parseOptionalNumberInput(e.target.value, 8) })}
+            placeholder="24"
+            className="w-full px-2 py-1 text-xs border border-gray-200 rounded-md outline-none"
+          />
+          <div className="text-[10px] text-gray-400 mt-1">Minimum 8px. Default 24px.</div>
+        </div>
+      )}
+
+      {/* Content-type only properties */}
+      {rowType === 'content' && (
+        <>
+          {/* Cell count */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Cells</label>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => row.cells.length > 1 && setCellCount(rowId, row.cells.length - 1)}
+                disabled={row.cells.length <= 1}
+                className="p-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <Minus size={12} />
+              </button>
+              <span className="text-sm font-medium w-8 text-center">{row.cells.length}</span>
+              <button
+                onClick={() => setCellCount(rowId, row.cells.length + 1)}
+                className="p-1 rounded border border-gray-200 hover:bg-gray-50"
+              >
+                <Plus size={12} />
+              </button>
+            </div>
+            <div className="text-[10px] text-gray-300 mt-1">No maximum limit. Minimum width enforced per cell.</div>
+          </div>
+
+          {/* Row height */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Height</label>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => updateRowHeight(rowId, 'auto')}
+                className={`px-2 py-1 text-xs rounded border transition-colors ${
+                  row.height === 'auto' ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                Auto
+              </button>
+              <input
+                type="number"
+                value={typeof row.height === 'number' ? row.height : ''}
+                onChange={e => {
+                  const val = e.target.value;
+                  if (val) {
+                    const numVal = Number(val);
+                    // Enforce minimum row height
+                    updateRowHeight(rowId, Math.max(MIN_ROW_HEIGHT, numVal));
+                  } else {
+                    updateRowHeight(rowId, 'auto');
+                  }
+                }}
+                onBlur={() => {
+                  // Safety net: clamp to minimum on blur in case value bypassed onChange
+                  if (typeof row.height === 'number' && row.height < MIN_ROW_HEIGHT) {
+                    updateRowHeight(rowId, MIN_ROW_HEIGHT);
+                  }
+                }}
+                min={MIN_ROW_HEIGHT}
+                step={1}
+                placeholder="px"
+                className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none w-20"
+              />
+            </div>
+            <div className="text-[10px] text-gray-400 mt-1">Minimum 48px enforced. Auto adjusts to content.</div>
+          </div>
+
+          {/* Cell widths */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Cell Widths</label>
+            <div className="space-y-1.5">
+              {row.cells.map((cell, cellIdx) => {
+                const isPercentage = typeof cell.width === 'string' && cell.width.endsWith('%');
+                const isAuto = cell.width === 'auto';
+                const unit = isPercentage ? '%' : 'flex';
+                const numericValue = isAuto
+                  ? ''
+                  : isPercentage
+                    ? parseFloat(String(cell.width))
+                    : getOptionalNumberInputValue(cell.width);
+
+                return (
+                  <div key={cell.id} className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 w-12">Cell {cellIdx + 1}</span>
+                    <button
+                      onClick={() => updateCellWidth(rowId, cellIdx, 'auto')}
+                      className={`px-2 py-1 text-xs rounded border transition-colors ${
+                        isAuto ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      Auto
+                    </button>
+                    <input
+                      type="number"
+                      value={numericValue}
+                      onChange={e => handleCellWidthChange(cellIdx, e.target.value, unit)}
+                      step={unit === '%' ? 1 : 0.25}
+                      min={unit === '%' ? 5 : 0.25}
+                      placeholder={unit === '%' ? '%' : 'flex'}
+                      disabled={isAuto}
+                      className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
+                    />
+                    <div className="flex border border-gray-200 rounded overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentValue = isAuto ? 1 : (typeof cell.width === 'number' ? cell.width : parseFloat(String(cell.width)) || 1);
+                          updateCellWidth(rowId, cellIdx, currentValue);
+                        }}
+                        className={`px-1.5 py-1 text-[10px] font-medium transition-colors ${
+                          !isPercentage && !isAuto
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        flex
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentValue = isAuto ? 50 : (typeof cell.width === 'number' ? cell.width * 10 : parseFloat(String(cell.width)) || 50);
+                          updateCellWidth(rowId, cellIdx, `${Math.max(5, Math.min(100, currentValue))}%`);
+                        }}
+                        className={`px-1.5 py-1 text-[10px] font-medium transition-colors ${
+                          isPercentage
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        %
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="text-[10px] text-gray-400 mt-1">
+              <strong>Auto:</strong> Equal distribution. <strong>Flex:</strong> Relative weights. <strong>%:</strong> Fixed percentage (5-100%, min 60px enforced).
+            </div>
+          </div>
+
+          {/* Gap */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Gap (px)</label>
+            <input
+              type="number"
+              value={getOptionalNumberInputValue(row.gap)}
+              min={0}
+              onChange={e => updateRowProps(rowId, { gap: parseOptionalNumberInput(e.target.value, 0) })}
+              placeholder="4"
+              className="w-full px-2 py-1 text-xs border border-gray-200 rounded-md outline-none"
+            />
+            <div className="text-[10px] text-gray-400 mt-1">Space between cells. Default is 4px.</div>
+          </div>
+
+          {/* Scrollable */}
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-gray-500">Scrollable (H)</label>
+              <button onClick={() => updateRowProps(rowId, { scrollable: !isScrollable })} data-testid="toggle-switch" className={`relative w-9 h-5 rounded-full transition-colors ${isScrollable ? 'bg-blue-600' : 'bg-gray-300'}`}>
+                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isScrollable ? 'left-[18px]' : 'left-0.5'}`} />
+              </button>
+            </div>
+            <div className="text-[10px] text-gray-400 mt-1">Enable horizontal scrolling for cells. When off, cells wrap within row width.</div>
+          </div>
+        </>
+      )}
+
+      {/* Background color (all row types) */}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Background</label>
         <div className="flex gap-1.5 items-center">
@@ -877,7 +995,7 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
         </div>
       </div>
 
-      {/* Padding */}
+      {/* Padding (all row types) */}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Padding (px)</label>
         <div className="space-y-2">
@@ -910,98 +1028,6 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
         </div>
         <div className="text-[10px] text-gray-400 mt-1">Padding creates inner spacing. Leave side values blank to use uniform padding.</div>
       </div>
-
-      {/* Gap */}
-      <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">Gap (px)</label>
-        <input
-          type="number"
-          value={getOptionalNumberInputValue(row.gap)}
-          min={0}
-          onChange={e => updateRowProps(rowId, { gap: parseOptionalNumberInput(e.target.value, 0) })}
-          placeholder="4"
-          className="w-full px-2 py-1 text-xs border border-gray-200 rounded-md outline-none"
-        />
-        <div className="text-[10px] text-gray-400 mt-1">Space between cells. Default is 4px.</div>
-      </div>
-
-      {/* Scrollable */}
-      <div>
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-medium text-gray-500">Scrollable (H)</label>
-          <button onClick={() => updateRowProps(rowId, { scrollable: !isScrollable })} className={`relative w-9 h-5 rounded-full transition-colors ${isScrollable ? 'bg-blue-600' : 'bg-gray-300'}`}>
-            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isScrollable ? 'left-[18px]' : 'left-0.5'}`} />
-          </button>
-        </div>
-        <div className="text-[10px] text-gray-400 mt-1">Enable horizontal scrolling for cells. When off, cells wrap within row width.</div>
-      </div>
-
-      {/* Bottom Divider */}
-      <div>
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-medium text-gray-500">Show Divider</label>
-          <button
-            data-testid="toggle-show-divider"
-            onClick={() => updateRowProps(rowId, { showDivider: !(row.showDivider ?? false) })}
-            className={`relative w-9 h-5 rounded-full transition-colors ${row.showDivider ? 'bg-blue-600' : 'bg-gray-300'}`}
-          >
-            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${row.showDivider ? 'left-[18px]' : 'left-0.5'}`} />
-          </button>
-        </div>
-        <div className="text-[10px] text-gray-400 mt-1">Show a horizontal divider line below this row.</div>
-      </div>
-
-      {/* Divider Color */}
-      {row.showDivider && (
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Divider Color</label>
-          <div className="flex gap-1.5 items-center">
-            <input
-              type="color"
-              value={row.dividerColor ?? '#E0E0E0'}
-              onChange={e => updateRowProps(rowId, { dividerColor: e.target.value })}
-              className="w-7 h-7 rounded border border-gray-200 cursor-pointer"
-            />
-            <input
-              type="text"
-              value={row.dividerColor ?? '#E0E0E0'}
-              onChange={e => updateRowProps(rowId, { dividerColor: e.target.value })}
-              className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md outline-none font-mono"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Divider Thickness */}
-      {row.showDivider && (
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Divider Thickness (px)</label>
-          <input
-            type="number"
-            value={getOptionalNumberInputValue(row.dividerThickness)}
-            min={1}
-            max={8}
-            onChange={e => updateRowProps(rowId, { dividerThickness: parseOptionalNumberInput(e.target.value, 1) })}
-            placeholder="1"
-            className="w-full px-2 py-1 text-xs border border-gray-200 rounded-md outline-none"
-          />
-        </div>
-      )}
-
-      {/* Divider Margin */}
-      {row.showDivider && (
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Divider Margin (px)</label>
-          <input
-            type="number"
-            value={getOptionalNumberInputValue(row.dividerMargin)}
-            min={0}
-            onChange={e => updateRowProps(rowId, { dividerMargin: parseOptionalNumberInput(e.target.value, 0) })}
-            placeholder="8"
-            className="w-full px-2 py-1 text-xs border border-gray-200 rounded-md outline-none"
-          />
-        </div>
-      )}
 
       {/* Row ID */}
       <div>

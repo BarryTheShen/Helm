@@ -29,6 +29,7 @@ export interface EditorCell {
 
 export type EditorRowHeight = 'auto' | number;
 export type EditorRowPaddingValue = number | string;
+export type EditorRowType = 'content' | 'divider' | 'spacer';
 
 export interface EditorRowVisualProps {
   bgColor?: string;
@@ -53,6 +54,8 @@ export type EditorRowPaddingKey = 'paddingTop' | 'paddingBottom' | 'paddingLeft'
 export interface EditorRow extends EditorRowVisualProps {
   id: string;
   height: EditorRowHeight;
+  type?: EditorRowType;
+  spacerHeight?: number;
   cells: EditorCell[];
   [key: string]: unknown;
 }

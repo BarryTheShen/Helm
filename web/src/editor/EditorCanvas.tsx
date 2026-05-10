@@ -758,14 +758,15 @@ function resolveRowHeight(rowHeight: EditorRowHeight, previewHeight?: number): E
 
 function getRowContainerStyle(row: EditorRow, previewHeight?: number): CSSProperties {
   const resolvedHeight = resolveRowHeight(row.height, previewHeight);
+  const rowMinHeight = getRowMinHeight(row);
   const style: CSSProperties = {
-    minHeight: typeof resolvedHeight === 'number' ? Math.max(MIN_ROW_HEIGHT, resolvedHeight) : MIN_ROW_HEIGHT,
+    minHeight: typeof resolvedHeight === 'number' ? Math.max(rowMinHeight, resolvedHeight) : rowMinHeight,
     display: 'flex',
     flexDirection: 'column',
   };
 
   if (typeof resolvedHeight === 'number') {
-    style.height = Math.max(MIN_ROW_HEIGHT, resolvedHeight);
+    style.height = Math.max(rowMinHeight, resolvedHeight);
   }
 
   const backgroundColor = row.backgroundColor ?? row.bgColor;
@@ -792,6 +793,28 @@ function resolveSpacingValue(value: unknown): number | undefined {
 }
 
 function getRowContentStyle(row: EditorRow): CSSProperties {
+  const rowType = row.type ?? 'content';
+
+  // Divider and spacer rows don't use flex cell layout
+  if (rowType === 'divider') {
+    return {
+      display: 'flex',
+      flex: '1 1 auto',
+      alignItems: 'center',
+      paddingTop: resolveSpacingValue(row.paddingTop) ?? 0,
+      paddingBottom: resolveSpacingValue(row.paddingBottom) ?? 0,
+      paddingRight: resolveSpacingValue(row.paddingRight) ?? 0,
+      paddingLeft: resolveSpacingValue(row.paddingLeft) ?? 0,
+    };
+  }
+
+  if (rowType === 'spacer') {
+    return {
+      display: 'flex',
+      flex: '1 1 auto',
+    };
+  }
+
   const uniformPadding = resolveSpacingValue(row.padding);
 
   const style: CSSProperties = {
@@ -820,6 +843,20 @@ function getRowContentStyle(row: EditorRow): CSSProperties {
   }
 
   return style;
+}
+
+function getRowMinHeight(row: EditorRow): number {
+  const rowType = row.type ?? 'content';
+
+  if (rowType === 'divider') {
+    return 32; // Compact height for divider rows
+  }
+
+  if (rowType === 'spacer') {
+    return Math.max(8, typeof row.spacerHeight === 'number' ? row.spacerHeight : 24);
+  }
+
+  return MIN_ROW_HEIGHT;
 }
 
 function getNumericCellWidth(width: EditorCell['width']): number {
@@ -1188,92 +1225,121 @@ function SortableRow({
 
         {/* Cells container */}
         <div className="flex min-h-[48px] flex-1 items-stretch" style={getRowContentStyle(row)}>
-          {row.cells.map((cell, cellIdx) => {
-            const displayedCellWidths = row.cells.map((entry, index) => getDisplayedCellWidth(row.id, index, entry.width));
-            const totalWidth = displayedCellWidths.reduce<number>((sum, width) => sum + getNumericCellWidth(width), 0);
-            const displayedWidth = displayedCellWidths[cellIdx] ?? cell.width;
-            const adjacentDisplayedWidth = displayedCellWidths[cellIdx + 1] ?? row.cells[cellIdx + 1]?.width ?? 1;
-            const componentInfo = cell.content ? getComponentDefinition(cell.content.type) : undefined;
-            const isReadOnlyRuntimeComponent = componentInfo?.readOnly === true;
+          {(() => {
+            const rowType = row.type ?? 'content';
 
-            return (
-              <div
-                key={cell.id}
-                className={`relative rounded transition-all p-2 flex flex-col ${
-                  isCellSelected(row.id, cellIdx)
-                    ? 'ring-2 ring-blue-400 bg-blue-50/50'
-                    : cell.content ? 'bg-white shadow-sm' : 'bg-gray-50 border border-dashed border-gray-300'
-                }`}
-                style={getCellStyle(row, displayedWidth, totalWidth)}
-              >
-                {cell.content ? (
-                  <div
-                    className="cursor-pointer relative group/cell flex-1 flex flex-col min-h-0"
-                    onClick={(e) => handleComponentClick(row.id, cellIdx, e)}
-                  >
-                    {/* Delete cell button - top-right corner */}
-                    <button
-                      className="absolute -right-1.5 -top-1.5 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover/cell:opacity-100 transition-opacity z-30 hover:bg-red-600 shadow-md"
-                      onClick={(e) => { e.stopPropagation(); removeComponent(row.id, cellIdx); }}
-                      title="Delete component"
-                    >
-                      <X size={10} />
-                    </button>
-
-                    {/* Floating toolbar */}
-                    <div className="absolute -top-6 left-0 right-0 flex items-center gap-0.5 justify-center opacity-0 group-hover/cell:opacity-100 transition-opacity z-20">
-                      <button
-                        className={`p-1 bg-white border border-gray-200 rounded shadow-sm text-[9px] ${
-                          isReadOnlyRuntimeComponent
-                            ? 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            : 'text-gray-500 hover:text-blue-600 hover:border-blue-300'
-                        }`}
-                        onClick={(e) => handleComponentClick(row.id, cellIdx, e)}
-                        title={isReadOnlyRuntimeComponent ? 'Inspect' : 'Edit'}
-                      >
-                        {isReadOnlyRuntimeComponent ? <Eye size={9} /> : <Edit2 size={9} />}
-                      </button>
-                      <button
-                        className="p-1 bg-white border border-gray-200 rounded shadow-sm text-gray-500 hover:text-blue-600 hover:border-blue-300 text-[9px]"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelection({ type: 'component', rowId: row.id, cellIndex: cellIdx });
-                          copySelection();
-                        }}
-                        title="Copy"
-                      >
-                        <Copy size={9} />
-                      </button>
-                    </div>
-
-                    {/* Component preview */}
-                    <div className="pointer-events-none overflow-hidden flex-1 min-h-0">
-                      <ComponentPreview component={cell.content} />
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    className="flex items-center justify-center flex-1 min-h-[40px] cursor-pointer hover:bg-blue-50 hover:border-blue-300 rounded transition-colors"
-                    onClick={(e) => handleEmptyCellClick(row.id, cellIdx, e)}
-                  >
-                    <Plus size={16} className="text-gray-300" />
-                  </div>
-                )}
-
-                {/* Cell resize handle (between cells, not on last) */}
-                {cellIdx < row.cells.length - 1 && (
-                  <CellResizeHandle
-                    rowId={row.id}
-                    cellIndex={cellIdx}
-                    leftWidth={getNumericCellWidth(displayedWidth)}
-                    rightWidth={getNumericCellWidth(adjacentDisplayedWidth)}
-                    onPreview={handleCellResizePreview}
-                    onCommit={handleCellResizeCommit}
+            if (rowType === 'divider') {
+              return (
+                <div className="flex-1 px-3">
+                  <DividerPreview
+                    color={row.dividerColor}
+                    thickness={row.dividerThickness}
+                    margin={0}
                   />
-                )}
-              </div>
-            );
-          })}
+                </div>
+              );
+            }
+
+            if (rowType === 'spacer') {
+              const spacerHeight = Math.max(8, typeof row.spacerHeight === 'number' ? row.spacerHeight : 24);
+              return (
+                <div
+                  className="flex-1 flex items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50 text-[10px] uppercase tracking-wide text-gray-400 mx-3"
+                  style={{ minHeight: spacerHeight }}
+                >
+                  Spacer {spacerHeight}px
+                </div>
+              );
+            }
+
+            // content type — render cells normally
+            return row.cells.map((cell, cellIdx) => {
+              const displayedCellWidths = row.cells.map((entry, index) => getDisplayedCellWidth(row.id, index, entry.width));
+              const totalWidth = displayedCellWidths.reduce<number>((sum, width) => sum + getNumericCellWidth(width), 0);
+              const displayedWidth = displayedCellWidths[cellIdx] ?? cell.width;
+              const adjacentDisplayedWidth = displayedCellWidths[cellIdx + 1] ?? row.cells[cellIdx + 1]?.width ?? 1;
+              const componentInfo = cell.content ? getComponentDefinition(cell.content.type) : undefined;
+              const isReadOnlyRuntimeComponent = componentInfo?.readOnly === true;
+
+              return (
+                <div
+                  key={cell.id}
+                  className={`relative rounded transition-all p-2 flex flex-col ${
+                    isCellSelected(row.id, cellIdx)
+                      ? 'ring-2 ring-blue-400 bg-blue-50/50'
+                      : cell.content ? 'bg-white shadow-sm' : 'bg-gray-50 border border-dashed border-gray-300'
+                  }`}
+                  style={getCellStyle(row, displayedWidth, totalWidth)}
+                >
+                  {cell.content ? (
+                    <div
+                      className="cursor-pointer relative group/cell flex-1 flex flex-col min-h-0"
+                      onClick={(e) => handleComponentClick(row.id, cellIdx, e)}
+                    >
+                      {/* Delete cell button - top-right corner */}
+                      <button
+                        className="absolute -right-1.5 -top-1.5 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover/cell:opacity-100 transition-opacity z-30 hover:bg-red-600 shadow-md"
+                        onClick={(e) => { e.stopPropagation(); removeComponent(row.id, cellIdx); }}
+                        title="Delete component"
+                      >
+                        <X size={10} />
+                      </button>
+
+                      {/* Floating toolbar */}
+                      <div className="absolute -top-6 left-0 right-0 flex items-center gap-0.5 justify-center opacity-0 group-hover/cell:opacity-100 transition-opacity z-20">
+                        <button
+                          className={`p-1 bg-white border border-gray-200 rounded shadow-sm text-[9px] ${
+                            isReadOnlyRuntimeComponent
+                              ? 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                              : 'text-gray-500 hover:text-blue-600 hover:border-blue-300'
+                          }`}
+                          onClick={(e) => handleComponentClick(row.id, cellIdx, e)}
+                          title={isReadOnlyRuntimeComponent ? 'Inspect' : 'Edit'}
+                        >
+                          {isReadOnlyRuntimeComponent ? <Eye size={9} /> : <Edit2 size={9} />}
+                        </button>
+                        <button
+                          className="p-1 bg-white border border-gray-200 rounded shadow-sm text-gray-500 hover:text-blue-600 hover:border-blue-300 text-[9px]"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelection({ type: 'component', rowId: row.id, cellIndex: cellIdx });
+                            copySelection();
+                          }}
+                          title="Copy"
+                        >
+                          <Copy size={9} />
+                        </button>
+                      </div>
+
+                      {/* Component preview */}
+                      <div className="pointer-events-none overflow-hidden flex-1 min-h-0">
+                        <ComponentPreview component={cell.content} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      className="flex items-center justify-center flex-1 min-h-[40px] cursor-pointer hover:bg-blue-50 hover:border-blue-300 rounded transition-colors"
+                      onClick={(e) => handleEmptyCellClick(row.id, cellIdx, e)}
+                    >
+                      <Plus size={16} className="text-gray-300" />
+                    </div>
+                  )}
+
+                  {/* Cell resize handle (between cells, not on last) */}
+                  {cellIdx < row.cells.length - 1 && (
+                    <CellResizeHandle
+                      rowId={row.id}
+                      cellIndex={cellIdx}
+                      leftWidth={getNumericCellWidth(displayedWidth)}
+                      rightWidth={getNumericCellWidth(adjacentDisplayedWidth)}
+                      onPreview={handleCellResizePreview}
+                      onCommit={handleCellResizeCommit}
+                    />
+                  )}
+                </div>
+              );
+            });
+          })()}
         </div>
 
         <RowHeightResizeHandle

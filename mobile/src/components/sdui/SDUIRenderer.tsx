@@ -227,6 +227,25 @@ function RowRenderer({
   const bpConfig = breakpoint === 'compact' ? row.compact : row.regular;
   if (bpConfig?.hidden) return null;
 
+  // ── Divider row type ──────────────────────────────────────
+  if (row.type === 'divider') {
+    return (
+      <View
+        style={{
+          height: row.dividerThickness ?? 1,
+          backgroundColor: row.dividerColor ?? colors.divider,
+          marginVertical: row.dividerMargin ?? 8,
+        }}
+      />
+    );
+  }
+
+  // ── Spacer row type ───────────────────────────────────────
+  if (row.type === 'spacer') {
+    return <View style={{ height: row.spacerHeight ?? 24 }} />;
+  }
+
+  // ── Content row type (default) ────────────────────────────
   // Skip malformed rows without cells
   if (!row.cells || !Array.isArray(row.cells) || row.cells.length === 0) return null;
 
