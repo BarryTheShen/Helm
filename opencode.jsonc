@@ -12,5 +12,25 @@
     "AGENTS.md",
     "docs/ai/*.md"
   ],
-  "default_agent": "helm-orchestrator"
+  "default_agent": "helm-orchestrator",
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": [
+        "/home/barry/.nvm/versions/node/v24.13.0/bin/node",
+        "/home/barry/.nvm/versions/node/v24.13.0/lib/node_modules/@playwright/mcp/cli.js",
+        "--headless",
+        "--ignore-https-errors",
+        "--viewport-size=1920x1080",
+        "--caps=core,vision,devtools",
+        "--isolated"
+      ],
+      "enabled": true
+    },
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "enabled": true
+    }
+  }
 }
