@@ -10,7 +10,7 @@ There is exactly one canonical loop:
 session init → context artifact → plan ↔ plan critic until approved → implementation → QA + review → live test → docs → helm-git
 ```
 
-The sequence stays the same for all tasks. The depth of each step varies:
+The sequence stays the same for all tasks. The depth of each step varies — this is depth calibration, not separate workflow variants:
 
 | Task size | session | context | plan/critic | implementation | QA/review | live test | docs | git |
 |-----------|---------|---------|-------------|----------------|-----------|-----------|------|-----|
@@ -19,7 +19,7 @@ The sequence stays the same for all tasks. The depth of each step varies:
 | Medium feature | archive old, init new | read docs + affected files | plan → critic (1-2 rounds) | domain specialist | test layer | if UI changed | if API/arch changed | helm-git |
 | Large feature | archive old, init new | deep doc reading + code exploration | plan ↔ critic (up to 3 rounds) | multi-layer in order | full suite | browser verification | full docs update | helm-git |
 
-The same loop. The same sequence. Never skip steps out of order — just make each step as shallow or deep as the task requires.
+The same loop. The same sequence. Never skip steps out of order — just make each step as shallow or deep as the task requires. There are no separate lite/heavy/super-heavy workflow variants; only one canonical loop.
 
 ## Step Details
 

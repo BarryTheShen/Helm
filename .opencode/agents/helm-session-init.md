@@ -41,10 +41,11 @@ You manage the `.helm-sessions/current/` session workspace. You create, archive,
 ### If orchestrator says "new task" or "reset":
 1. Check if `.helm-sessions/current/` exists and contains files.
 2. If it has files:
-   - Generate a timestamp slug: `YYYY-MM-DD-HHMMSS-<short-slug>`
-   - Create archive dir: `.helm-sessions/archive/<timestamp>-<slug>/`
-   - Move all contents: `mv .helm-sessions/current/* .helm-sessions/archive/<timestamp>-<slug>/`
-3. Create fresh `.helm-sessions/current/` directory (it may already exist and be empty).
+   - Derive a safe slug from the task description: lowercase, alphanumeric, hyphens only, max 20 chars.
+   - Build archive path: `.helm-sessions/archive/YYYY-MM-DD-HHMMSS-TASKSLUG/`
+     where `YYYY-MM-DD-HHMMSS` is the current timestamp and `TASKSLUG` is the safe slug.
+   - Move all contents: `mv .helm-sessions/current/* .helm-sessions/archive/YYYY-MM-DD-HHMMSS-TASKSLUG/`
+3. Ensure `.helm-sessions/current/` exists and is empty (recreate if needed).
 4. Create `task.md` with the task description and date.
 5. Create `context-index.md` (empty or with initial doc references).
 
@@ -75,7 +76,7 @@ Return a structured summary of what was done and the current session state:
 - verification-report.md: [exists/not yet created]
 
 ### Archived (if new task)
-Previous session moved to: .helm-sessions/archive/<timestamp>-<slug>/
+Previous session moved to: `.helm-sessions/archive/YYYY-MM-DD-HHMMSS-TASKSLUG/`
 ```
 
 ## Escalation / handoff rules
