@@ -17,12 +17,12 @@
     "playwright": {
       "type": "local",
       "command": [
-        "/home/barry/.nvm/versions/node/v24.13.0/bin/node",
-        "/home/barry/.nvm/versions/node/v24.13.0/lib/node_modules/@playwright/mcp/cli.js",
+        "/home/barry/.local/share/mise/installs/node/lts/bin/node",
+        "/home/barry/.local/share/mise/installs/node/lts/lib/node_modules/@playwright/mcp/cli.js",
         "--headless",
         "--ignore-https-errors",
         "--viewport-size=1920x1080",
-        "--caps=core,vision,devtools",
+        "--caps=vision,devtools",
         "--isolated"
       ],
       "enabled": true
