@@ -75,7 +75,7 @@ See `docs/ai/workflows.md` for full detail on the canonical loop and how it scal
 ### Session Init / Reset
 
 Before every new task, the session is initialized via `helm-session-init`:
-- Stale `.helm-sessions/current/` is archived to `.helm-sessions/archive/<timestamp>-<slug>/`
+- Stale `.helm-sessions/current/` is archived to `.helm-sessions/archive/YYYY-MM-DD-HHMMSS-task-slug/`
 - Fresh `task.md`, `context-index.md`, and workspace artifacts are created
 - On continuation, existing context is summarized and reused
 

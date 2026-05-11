@@ -63,7 +63,7 @@ The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/
 
 #### `helm-session-init`
 - **Purpose:** Manage `.helm-sessions/current/` lifecycle — archive stale sessions, initialize fresh artifacts.
-- **On new task:** Move `.helm-sessions/current/` to `.helm-sessions/archive/<timestamp>-<slug>/`, create fresh workspace with `task.md` and `context-index.md`.
+- **On new task:** Move `.helm-sessions/current/` to `.helm-sessions/archive/YYYY-MM-DD-HHMMSS-task-slug/`, create fresh workspace with `task.md` and `context-index.md`.
 - **On continuation:** Report existing session state, do not reset.
 - **Artifacts:** Creates `task.md`, `context-index.md` on init. `current-plan.md`, `critic-report.md`, `verification-report.md` created conditionally as the loop progresses.
 

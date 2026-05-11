@@ -25,7 +25,7 @@ The same loop. The same sequence. Never skip steps out of order — just make ea
 
 ### 1. Session Init
 
-Delegated to `helm-session-init`. On a new task, this archives the previous `.helm-sessions/current/` to `.helm-sessions/archive/<timestamp>-<slug>/` and creates a fresh workspace. On a continuation, it reports what exists.
+Delegated to `helm-session-init`. On a new task, this archives the previous `.helm-sessions/current/` to `.helm-sessions/archive/YYYY-MM-DD-HHMMSS-task-slug/` and creates a fresh workspace. On a continuation, it reports what exists.
 
 Artifacts created:
 - `.helm-sessions/current/task.md` — task description
