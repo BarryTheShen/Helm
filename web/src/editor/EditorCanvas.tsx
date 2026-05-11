@@ -19,6 +19,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useEditorStore } from './useEditorStore';
 import { getComponentDefinition } from './types';
 import type { EditorCell, EditorComponent, EditorRow, EditorRowHeight } from './types';
+import { assertRegisteredComponentType } from './typeGuards';
 
 import { ComponentPicker } from './ComponentPicker';
 import { Plus, GripVertical, X, Edit2, Eye, Copy, Trash2, GripHorizontal } from 'lucide-react';
@@ -742,6 +743,9 @@ const PREVIEW_RENDERERS: Record<string, (props: any) => JSX.Element> = {
 };
 
 function ComponentPreview({ component }: { component: EditorComponent }) {
+  // Warn if the type is not in the registry (type guard — does not crash)
+  assertRegisteredComponentType(component.type);
+
   const Renderer = PREVIEW_RENDERERS[component.type];
   if (Renderer) {
     return <Renderer {...component.props} children={component.children} />;

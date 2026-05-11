@@ -31,6 +31,7 @@ import type {
 import { isSDUIPage } from '@/types/sdui';
 import { colors, spacing, typography } from '@/theme/colors';
 import { resolveComponent } from '@/renderer/componentRegistry';
+import { assertValidComponentType } from '@/utils/typeGuards';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import { resolveIconName } from '@/components/atomic/SDUIIcon';
 import { useVariableContext } from '@/hooks/useVariableContext';
@@ -373,6 +374,9 @@ function V2ComponentRenderer({
 
   // Resolve {{expressions}} in string props
   const props = resolveProps(rawProps, variableContext);
+
+  // Warn if the type is not in the registry (type guard — does not crash)
+  assertValidComponentType(component.type);
 
   // Try V2 registry first
   const Comp = resolveComponent(component.type);

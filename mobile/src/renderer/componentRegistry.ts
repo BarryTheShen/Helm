@@ -80,7 +80,11 @@ for (const key of Object.keys(registry)) {
 /** Look up a component by its SDUI type string (case-insensitive). Returns null if not found. */
 export function resolveComponent(type: string): ComponentType<any> | null {
   // Try exact match first, then fall back to case-insensitive lookup
-  return registry[type] ?? registry[lowercaseIndex[type.toLowerCase()]] ?? null;
+  const resolved = registry[type] ?? registry[lowercaseIndex[type.toLowerCase()]] ?? null;
+  if (!resolved) {
+    console.warn(`[SDUI] resolveComponent: unknown type "${type}". Valid types: ${Object.keys(registry).join(', ')}`);
+  }
+  return resolved;
 }
 
 /** Register a new component type at runtime (for plugins/extensions). */
@@ -93,3 +97,6 @@ export function registerComponent(type: string, component: ComponentType<any>) {
 export function getRegisteredTypes(): string[] {
   return Object.keys(registry);
 }
+
+/** The raw registry map — used by type guard utilities. */
+export const COMPONENT_MAP: Record<string, ComponentType<any>> = registry;
