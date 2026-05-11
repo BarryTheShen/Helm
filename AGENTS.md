@@ -62,7 +62,31 @@ Helm is a self-hosted AI super app — a React Native (Expo) mobile frontend tha
 
 ## Default OpenCode Orchestration
 
+OpenCode is the default AI tool for Helm. The canonical development loop is:
+
+```
+session init → context artifact → plan ↔ plan critic until approved → implementation → QA + review → live test → docs → git commit
+```
+
+See `docs/ai/workflows.md` for full detail on the canonical loop and how it scales internally.
+
 `helm-orchestrator` is the default primary agent (set in `opencode.jsonc`). Barry does not manually route every step — the orchestrator classifies the task, delegates subagents conditionally, verifies, reviews, documents when needed, and reports completion. Slash commands are optional shortcuts for when Barry already knows the scope.
+
+### Session Init / Reset
+
+Before every new task, the session is initialized via `helm-session-init`:
+- Stale `.helm-sessions/current/` is archived to `.helm-sessions/archive/<timestamp>-<slug>/`
+- Fresh `task.md`, `context-index.md`, and workspace artifacts are created
+- On continuation, existing context is summarized and reused
+
+### Plan Critic / Explorer
+
+There is no separate broad-explorer agent. `helm-plan-critic` is a combined targeted explorer + critic:
+- Reads the draft plan, then explores only the exact files/symbols needed to verify assumptions
+- Challenges file existence, imports, dependencies, ordering, cross-layer sync, and edge cases
+- Returns APPROVED or specific objections with evidence
+- Read limit: max 8 source files per invocation
+- Leaf node: cannot spawn subagents
 
 ## Task Routing
 
@@ -79,19 +103,6 @@ Helm is a self-hosted AI super app — a React Native (Expo) mobile frontend tha
 | Auth / security | `docs/codebase-explanation/backend.md` | `backend/app/utils/security.py` |
 | Test | `docs/codebase-explanation/qa.md` | `backend/tests/` or `qa/src/` |
 | Docs-only | Relevant `docs/codebase-explanation/` file | `docs/` |
-
----
-
-## Task-Size Workflow
-
-Match the workflow to the task size. See `docs/ai/workflows.md` for detail.
-
-| Size | Workflow |
-|------|----------|
-| Small edit (docs, config, single-file fix) | Edit → relevant check → self-review |
-| Bug fix | Reproduce → diagnose → fix → verify → regression test if useful |
-| Medium feature | Plan → implement → test → review |
-| Large feature | Research → plan → plan critic → implement → test → review → docs |
 
 ---
 

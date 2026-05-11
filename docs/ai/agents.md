@@ -18,25 +18,27 @@ These are the active Claude Code sub-agents defined in `.claude/agents/`. They a
 | `tester` | sonnet | pytest-asyncio test writing |
 | `live-tester` | sonnet | Playwright functional verification |
 | `ui-reviewer` | sonnet | Visual quality review |
-| `reviewer` | sonnet | Code quality gate — now includes feature-validator checklist |
+| `reviewer` | sonnet | Code quality gate |
 | `feature-critic` | sonnet | Large-feature checklist only, not a default agent |
 | `docs-updater` | sonnet | Living documentation maintenance — conditional |
 
-Copilot-compatible agent definitions live in `.github/agents/` (18 files). These are tool-specific and not portable.
+These are **not portable** to OpenCode. They remain for Claude Code sessions.
 
-## Target OpenCode Agent Roster
+## OpenCode Agent Roster
 
-The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/` (agents, commands), following official OpenCode docs. We borrowed patterns from `fmflurry/settings-opencode`, not blindly copying it.
+The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/` (agents, commands), following official OpenCode docs.
 
-**Default agent:** `helm-orchestrator` (primary agent, set in `opencode.jsonc`). Barry does not manually route every step — the orchestrator classifies the task, delegates subagents conditionally, verifies, reviews, documents when needed, and reports completion.
+**Default agent:** `helm-orchestrator` (primary agent, set in `opencode.jsonc`). The orchestrator classifies the task, delegates subagents conditionally, verifies, reviews, documents when needed, and reports completion.
 
-**Subagent delegation:** The orchestrator uses `permission.task` in its frontmatter to control which subagents it can invoke. `allow` means automatic delegation; `ask` means the orchestrator must get user approval before delegating.
+### Agent Roster
 
 | Agent | Type | Can edit? | Can run tests? | Can commit/push? | Main responsibility | Explicitly does NOT do |
 |-------|------|-----------|----------------|------------------|--------------------|-----------------------|
-| `helm-orchestrator` | primary | No | No | No | Classify tasks, delegate subagents, verify completion, report | Read source, write code, fix bugs, review code, run tests |
+| `helm-orchestrator` | primary | No | No | No | Classify tasks, delegate subagents, verify completion, report | Read source, write code, run tests, call MCP tools directly, explore codebase |
+| `helm-session-init` | subagent | Session artifacts only | No | No | Session workspace lifecycle — archive, reset, initialize | Edit app source, run tests, commit |
+| `helm-planner` | subagent | Session artifacts only | No | No | Produces plans, invokes plan-critic | Edit app source, broadly explore codebase, run tests, spawn agents other than plan-critic |
+| `helm-plan-critic` | subagent | Session artifacts only | No | No | Targeted explorer + plan critic — verifies plan assumptions | Broad exploration (>8 files), edit source, run tests, spawn subagents (leaf node) |
 | `helm-build` | subagent | Yes (backend, frontend, mobile, config) | Yes | No | General implementation worker, routine fixes | Commit, edit docs/agent-prompts, blindly apply specialist suggestions |
-| `helm-planner` | subagent | No | No | No | Read-oriented implementation planning | Edit files, run commands, implement anything |
 | `helm-backend` | subagent | Yes (backend/ only) | Yes | No | Backend implementation (FastAPI, models, schemas, services) | Edit frontend/mobile/docs, commit, add secrets |
 | `helm-frontend` | subagent | Yes (mobile/, web/ only) | Yes | No | Frontend implementation (React Native, web admin) | Edit backend/docs, commit, add secrets |
 | `helm-protocol` | subagent | Default: No. Yes if explicitly asked | No | No | API/WS/MCP/SDUI contract alignment | Implement unrelated behavior, edit application logic |
@@ -47,6 +49,38 @@ The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/
 | `helm-docs` | subagent | Yes (docs/, README, AGENTS, CLAUDE) | No | No | Documentation maintenance | Edit app source, run app tests, commit |
 | `helm-security` | subagent | Default: No. Narrow fix if asked | No | No | Security audit, secrets detection | Add credentials, add paid providers, fix issues by default |
 | `helm-git` | subagent | No | No | Yes (with approval) | Branch management, commit, push | Edit source files, force push, push to main |
+
+### Agent Details
+
+#### `helm-orchestrator`
+- **Mode:** primary
+- **Model:** MiMo V2.5 Pro
+- **Permissions:** All read/edit/bash/glob/grep/lsp/webfetch/websearch/external_directory denied. Only task delegation allowed.
+- **Task delegation:** May delegate to all subagents. `helm-security` and `helm-git` require user approval.
+- **Cannot:** Read source, edit files, run bash, run tests, call Context7/Playwright directly, explore the codebase.
+
+#### `helm-session-init`
+- **Purpose:** Manage `.helm-sessions/current/` lifecycle — archive stale sessions, initialize fresh artifacts.
+- **On new task:** Move `.helm-sessions/current/` to `.helm-sessions/archive/<timestamp>-<slug>/`, create fresh workspace with `task.md` and `context-index.md`.
+- **On continuation:** Report existing session state, do not reset.
+- **Artifacts:** Creates `task.md`, `context-index.md` on init. `current-plan.md`, `critic-report.md`, `verification-report.md` created conditionally as the loop progresses.
+
+#### `helm-planner`
+- **Purpose:** Read documentation, produce focused implementation plans, delegate verification to `helm-plan-critic`.
+- **Delegate only to:** `helm-plan-critic`. Cannot delegate to any other agent.
+- **Process:** Draft plan → write `current-plan.md` → invoke critic → revise based on objections → max 3 rounds → mark APPROVED or UNRESOLVED.
+
+#### `helm-plan-critic` (combined targeted explorer + critic)
+- **Purpose:** Verify plan assumptions by reading only the exact files/symbols needed. Challenges file existence, imports, dependencies, ordering, cross-layer sync, and edge cases.
+- **Read limit:** Max 8 source files per invocation.
+- **Output:** Writes findings to `critic-report.md`. Returns APPROVED or specific objections with evidence.
+- **Leaf node:** Cannot spawn subagents. No broad exploration.
+
+#### `helm-build` / `helm-backend` / `helm-frontend` / `helm-agent-runtime`
+Implementation agents. Each owns its domain. See [workflows.md](workflows.md) for routing table.
+
+#### `helm-tester` / `helm-reviewer` / `helm-ui-reviewer` / `helm-security`
+Advisory specialists. Produce findings, do not fix by default.
 
 ### Handoff Model
 
@@ -60,23 +94,59 @@ Specialist agents (tester, reviewer, security, ui-reviewer) are **advisory by de
 5. Tester verifies the fix (if behavior changed)
 6. Reviewer checks quality (if the change is risky)
 
-**Key rules:**
+### Depth Policy
+
+The OpenCode agent hierarchy has three layers:
+
+```
+Layer 0: helm-orchestrator (primary)
+  │
+  ├── Layer 1: helm-session-init, helm-planner, helm-build, helm-backend,
+  │            helm-frontend, helm-protocol, helm-agent-runtime,
+  │            helm-tester, helm-reviewer, helm-ui-reviewer,
+  │            helm-docs, helm-security, helm-git
+  │
+  └── Layer 1: helm-planner
+        └── Layer 2: helm-plan-critic (LEAF — no subagents)
+```
+
+Rules:
+- Orchestrator delegates to depth-1 agents.
+- Planner may delegate only to plan-critic.
+- Plan-critic is a leaf node — cannot spawn any subagents.
+- All other depth-1 agents are leaf nodes for execution.
+- There is no separate broad-explorer agent. Plan-critic does targeted exploration only.
+- If future evidence proves a separate broad-explorer is needed, add it then. Not now.
+
+### Key Rules
+
 - Tester does NOT fix application code by default
 - Reviewer does NOT fix by default
 - Security does NOT fix by default
 - Git does NOT modify app code
 - Only implementation agents (build, backend, frontend, agent-runtime) edit application source
+- Planner does NOT broadly explore the codebase — it delegates to plan-critic
+- Plan-critic reads MAX 8 source files per invocation
+- Orchestrator does NOT read, edit, bash, glob, grep, or call MCP tools directly
 
 The OpenCode config uses `AGENTS.md` (portable instructions), `opencode.jsonc` (project settings), and `.opencode/` (agents, commands).
 
-## Orchestration Principles (Claude Code)
+## Model Routing
 
-- **Delegate, don't do.** For complex tasks, use sub-agents. Your context window is finite.
-- **Series, not parallel.** Invoke one agent at a time.
-- **Autonomy over micro-management.** Give agents tasks, not file-level instructions.
-- **PARTIAL RESULT continuation.** When a sub-agent returns partial results, re-invoke with remaining items.
-- **Memory first, files second.** Check mem0 before reading source.
-
-## Session Context
-
-`docs/codebase-explanation/` holds the living technical documentation. Read the relevant file(s) before any work. The AI-TECHNICAL-REFERENCE.md is the entry point.
+| Agent | Model Tier | Model ID |
+|-------|-----------|----------|
+| `helm-orchestrator` | Reasoning | `opencode-go/mimo-v2.5-pro` |
+| `helm-planner` | Reasoning | `opencode-go/mimo-v2.5-pro` |
+| `helm-plan-critic` | Reasoning | `opencode-go/mimo-v2.5-pro` |
+| `helm-reviewer` | Reasoning | `opencode-go/mimo-v2.5-pro` |
+| `helm-security` | Reasoning | `opencode-go/mimo-v2.5-pro` |
+| `helm-protocol` | Reasoning | `opencode-go/mimo-v2.5-pro` |
+| `helm-ui-reviewer` | Multimodal | `opencode-go/kimi-k2.6` |
+| `helm-session-init` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-build` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-backend` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-frontend` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-agent-runtime` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-tester` | Worker | `opencode-go/deepseek-v4-flash` (fallback: `local/qwen3.6-27b-autoround`) |
+| `helm-docs` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-git` | Worker | `opencode-go/deepseek-v4-flash` |

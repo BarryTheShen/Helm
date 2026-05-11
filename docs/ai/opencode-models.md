@@ -31,8 +31,8 @@ Three model tiers route work by role:
 
 | Tier | Model ID | Roles |
 |------|----------|-------|
-| **Reasoning** | `opencode-go/mimo-v2.5-pro` | orchestrator, planner, reviewer, security, protocol |
-| **Worker** | `opencode-go/deepseek-v4-flash` | build, backend, frontend, agent-runtime, tester, docs, git |
+| **Reasoning** | `opencode-go/mimo-v2.5-pro` | orchestrator, planner, plan-critic, reviewer, security, protocol |
+| **Worker** | `opencode-go/deepseek-v4-flash` | session-init, build, backend, frontend, agent-runtime, tester, docs, git |
 | **Multimodal** | `opencode-go/kimi-k2.6` | ui-reviewer (screenshots, visual regressions) |
 | **Local fallback** | `local/qwen3.6-27b-autoround` | tester fallback, private/local work, cost-sensitive tasks |
 
@@ -42,10 +42,12 @@ Three model tiers route work by role:
 |-------|-----------|----------|
 | `helm-orchestrator` | Reasoning | `opencode-go/mimo-v2.5-pro` |
 | `helm-planner` | Reasoning | `opencode-go/mimo-v2.5-pro` |
+| `helm-plan-critic` | Reasoning | `opencode-go/mimo-v2.5-pro` |
 | `helm-reviewer` | Reasoning | `opencode-go/mimo-v2.5-pro` |
 | `helm-security` | Reasoning | `opencode-go/mimo-v2.5-pro` |
 | `helm-protocol` | Reasoning | `opencode-go/mimo-v2.5-pro` |
 | `helm-ui-reviewer` | Multimodal | `opencode-go/kimi-k2.6` |
+| `helm-session-init` | Worker | `opencode-go/deepseek-v4-flash` |
 | `helm-build` | Worker | `opencode-go/deepseek-v4-flash` |
 | `helm-backend` | Worker | `opencode-go/deepseek-v4-flash` |
 | `helm-frontend` | Worker | `opencode-go/deepseek-v4-flash` |
@@ -53,6 +55,8 @@ Three model tiers route work by role:
 | `helm-tester` | Worker | `opencode-go/deepseek-v4-flash` (fallback: `local/qwen3.6-27b-autoround`) |
 | `helm-docs` | Worker | `opencode-go/deepseek-v4-flash` |
 | `helm-git` | Worker | `opencode-go/deepseek-v4-flash` |
+
+Note: `helm-plan-critic` uses expensive reasoning (`mimo-v2.5-pro`) but only for **targeted** critique (max 8 files per invocation), not broad scanning. This keeps cost proportional.
 
 ## 5. Optional Providers
 

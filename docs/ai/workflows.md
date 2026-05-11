@@ -1,89 +1,105 @@
 # Development Workflow
 
-`helm-orchestrator` executes workflows by default. Barry does not need to manually choose each step — the orchestrator classifies the task, chooses the smallest sufficient workflow, delegates subagents conditionally, and reports completion.
+`helm-orchestrator` executes the canonical loop by default. The same loop scales internally — each step does the minimum needed for the task.
 
-There is no mandatory mega-loop — the workflow scales with the task. The large feature pipeline is **exceptional**, reserved for cross-layer features that touch multiple modules. The orchestrator should not run the large-feature workflow unless the task actually needs it.
+## Canonical Loop
 
-## Task-Size Workflows
+There is exactly one canonical loop:
 
-### Small Edit (docs, config, single-file fix)
+```
+session init → context artifact → plan ↔ plan critic until approved → implementation → QA + review → live test → docs → git commit
+```
 
-1. Understand the change needed.
-2. Make the edit.
-3. Run the relevant check for the layer touched (see `docs/ai/verification.md`).
-4. Self-review: does it address the issue? Any obvious regressions?
+The sequence stays the same for all tasks. The depth of each step varies:
 
-**Commands:** `/helm-docs` (if docs-only), or edit directly with self-review.
+| Task size | session | context | plan/critic | implementation | QA/review | live test | docs | git |
+|-----------|---------|---------|-------------|----------------|-----------|-----------|------|-----|
+| Small edit | archive old, init new | minimal | skip | direct edit | skip | skip | skip | commit |
+| Bug fix | archive old, init new | read relevant area | skip (tester diagnoses) | targeted fix | run failing test | conditional | if behavior changed | commit |
+| Medium feature | archive old, init new | read docs + affected files | plan → critic (1-2 rounds) | domain specialist | test layer | if UI changed | if API/arch changed | commit |
+| Large feature | archive old, init new | deep doc reading + code exploration | plan ↔ critic (up to 3 rounds) | multi-layer in order | full suite | browser verification | full docs update | commit |
 
-### Bug Fix
+The same loop. The same sequence. Never skip steps out of order — just make each step as shallow or deep as the task requires.
 
-1. **Reproduce** — Write a failing test or minimal reproduction. If you can't reproduce it, try harder.
-2. **Diagnose** — Trace execution path. Read error messages. Compare against working cases.
-3. **Fix** — Minimal change addressing root cause. No surface-level patches.
-4. **Verify** — Run reproduction + relevant test suite.
-5. **Prevent** — Add a regression test if useful.
+## Step Details
 
-If the approach is wrong, revert. If verification reveals a small localized mistake, fix it once. Do not stack blind patches.
+### 1. Session Init
 
-**Command:** `/helm-bug`
+Delegated to `helm-session-init`. On a new task, this archives the previous `.helm-sessions/current/` to `.helm-sessions/archive/<timestamp>-<slug>/` and creates a fresh workspace. On a continuation, it reports what exists.
 
-### Medium Feature (new endpoint, component, page)
+Artifacts created:
+- `.helm-sessions/current/task.md` — task description
+- `.helm-sessions/current/context-index.md` — doc references, key files, decisions
+- `.helm-sessions/current/current-plan.md` — only when planning begins
+- `.helm-sessions/current/critic-report.md` — only when critique begins
+- `.helm-sessions/current/verification-report.md` — only when verification begins
 
-1. **Plan** — Brief plan of affected files and changes via `/helm-plan`.
-2. **Implement** — Use `/helm-api` (backend), `/helm-ui` (frontend), or `/helm-mcp` (agent tools).
-3. **Test** — Relevant tests for the layer changed. Use `helm-tester` agent for coverage.
-4. **Review** — Run `/helm-review` to check quality and completeness.
-5. **Docs** — Update docs only if behavior, API, or architecture changes. Use `/helm-docs`.
+### 2. Context Artifact
 
-**Commands:** `/helm-plan` → `/helm-api` or `/helm-ui` → `helm-tester` (agent) → `/helm-review`
+The orchestrator or implementation agent reads relevant `docs/codebase-explanation/` files. The `context-index.md` is updated with file paths, doc references, and architectural decisions.
 
-### Large Feature (cross-layer, multiple modules) — EXCEPTIONAL
+### 3. Plan ↔ Plan Critic Until Approved
 
-This pipeline is reserved for features that span multiple layers (backend + frontend + mobile), introduce new architecture, or have significant compliance/security requirements. Do not use this for routine work.
+Delegated to `helm-planner`, which may delegate to `helm-plan-critic`.
 
-1. **Research** — Read relevant docs, understand existing patterns. Use `/helm-plan` for due diligence.
-2. **Plan** — Detailed plan with affected files, dependency order.
-3. **Plan Critic** — Challenge assumptions against the actual codebase. Re-read the plan with fresh eyes: wrong assumptions? Missing dependencies? Unconsidered edge cases?
-4. **Implement** — Build in dependency order. Use `/helm-api`, `/helm-ui`, `/helm-mcp` as needed.
-5. **Protocol Check** — If API/WebSocket/MCP contracts change, use `/helm-api` protocol-first guidance (or `helm-protocol` agent) BEFORE implementing the frontend side.
-6. **Test** — Full test suite for all layers touched.
-7. **Live-Test** — If UI is visibly changed, run Playwright/browser verification. This is **conditional** — not every feature needs a browser.
-8. **QA Discovery** — Run the QA suite to check for drift (see QA Discovery System below).
-9. **Review** — Run `/helm-review`. Additionally, check against the large-feature checklist below.
-10. **Docs** — Update architecture docs, API contracts, living docs.
+1. Planner reads documentation and produces a draft plan → writes to `current-plan.md`.
+2. Planner invokes `helm-plan-critic` — a combined targeted explorer + critic that verifies each claim by reading only the exact files/symbols needed.
+3. Critic writes findings to `critic-report.md` and returns APPROVED or specific objections.
+4. Planner revises the plan for each objection and re-invokes the critic.
+5. Max 3 rounds unless Barry explicitly asks for more.
+6. If unresolved concerns remain after 3 rounds, the planner stops and reports them — it does not force a weak plan.
 
-**Large-Feature Checklist** (replaces the legacy `feature-critic` and `feature-validator` agents):
+Small edits and simple bug fixes skip this step entirely.
 
-- [ ] Does this match the blueprint spec requirements? Check `docs/Agentic AI Super App — Project Hub/Blueprint — Production Spec Documents/`.
-- [ ] Is the feature complete from a user's perspective? All happy paths work?
-- [ ] Are edge cases handled: auth failures, network errors, empty states?
-- [ ] Does the UI match the intended design on both web and mobile?
-- [ ] Are all API contracts consistent between backend and frontend?
-- [ ] Has the feature been tested in a real browser/device, not just unit tests?
+### 4. Implementation
 
-## Code Review Self-Check
+The appropriate domain specialist (or `helm-build` for cross-layer work) implements the plan. Changes are made in dependency order. Each commit is one logical change.
 
-Use this for medium and small tasks. The large-feature checklist above supersedes it for large features.
+Protocol-first rule: if API/WebSocket/MCP/SDUI contracts change, delegate to `helm-protocol` BEFORE implementing the frontend side.
 
-- [ ] Does this address the root cause, not a symptom?
-- [ ] Could this break downstream dependencies?
-- [ ] Are there tests covering the change?
-- [ ] Is the code readable without comments?
-- [ ] Any duplicated logic to extract?
-- [ ] Are error cases handled?
-- [ ] Does it follow existing patterns?
+### 5. QA + Review
 
-## Verification Modes
+Conditional — run only what the task warrants:
+- **Backend code changed**: `cd backend && pytest -q`
+- **Web code changed**: `cd web && npm run lint` (build if types changed)
+- **Mobile code changed**: `cd mobile && npx expo start` smoke check
+- **New test coverage needed**: delegate to `helm-tester`
+- **Code quality review**: delegate to `helm-reviewer` for medium/large/risky changes
+- **Security review**: delegate to `helm-security` (requires user approval)
+- **QA suite**: `cd qa && npm run test:backend` for API changes; `cd qa && npm run test:e2e` for visible UI changes (triage stale selectors)
 
-These are **conditional**, not always-on. Invoke only when the work warrants them:
+### 6. Live Test
 
-| Mode | When |
-|------|------|
-| `helm-tester` (agent) | Any feature needing new test coverage |
-| `/helm-review` | Medium and large features; or when second eyes are needed |
-| `helm-protocol` (agent) | When API/WS/MCP/SDUI contracts change — run BEFORE frontend implementation |
-| UI live-test | Only when the UI is visibly changed — start dev server, verify in browser |
-| QA discovery | Before/after medium+ changes, PR readiness, drift detection — see below |
+Only when UI is visibly changed. Start dev server and verify in a real browser or simulator. Do not skip for visual changes — check the golden path and edge cases.
+
+### 7. Docs
+
+Only when behavior, API contracts, architecture, or commands have changed. Delegate to `helm-docs`.
+
+### 8. Git Commit
+
+Delegate to `helm-git` (requires user approval via `ask`).
+
+- Atomic commits — one logical change per commit
+- Imperative mood: `"Add calendar endpoint"` not `"Added calendar endpoint"`
+- Never commit failing tests or broken builds
+- Never commit directly to `main`
+
+## Failure Handling Inside the Loop
+
+When QA, live-test, or review finds an issue within the loop:
+
+1. **Reproduce** the error — write a failing test or minimal reproduction. If you can't reproduce it, try harder.
+2. **Diagnose** — trace execution path, read error messages. Identify the root cause, not the symptom.
+3. **Fix** — minimal change addressing root cause. No surface-level patches.
+4. **Verify** — run reproduction + relevant test suite.
+
+**Revert discipline:**
+- If the approach is wrong, revert the fix completely.
+- If verification reveals a small localized mistake, fix it once — do not stack blind patches.
+- If a fix does not work, revert that fix and try another root-cause-based approach.
+
+The failure handling is inside the loop. Reproduce → diagnose → fix → verify, then continue the loop from where it was interrupted.
 
 ## Agent Handoff Model
 
@@ -112,12 +128,20 @@ Specialist agents are advisory by default. They produce findings — the orchest
 | `helm-frontend` | **Yes** (mobile/, web/) | Frontend specialist. Edits frontend files when invoked for implementation. |
 | `helm-agent-runtime` | **Yes** (agent/, mcp/) | Agent runtime specialist. Edits agent/MCP files when invoked. |
 
+### Depth Policy
+
+- Orchestrator delegates to depth-1 agents (session-init, planner, build, backend, frontend, tester, etc.)
+- Planner may delegate only to plan-critic
+- Plan-critic is a leaf node — cannot spawn any subagents
+- All domain specialists (build, backend, frontend, agent-runtime) are leaf nodes for execution
+
 ### Anti-patterns
 
 - **Tester fixing code:** The tester must NOT become a general implementation agent. If tests fail, it diagnoses and hands back.
 - **Reviewer applying patches:** The reviewer must NOT edit files. It reports findings; the orchestrator delegates fixes.
 - **Security adding credentials:** The security agent must NOT add secrets or provider defaults.
 - **Orchestrator doing groundwork:** The orchestrator must NOT read source files, write code, or run tests. It delegates.
+- **Planner broad-exploring:** The planner should not broadly explore the codebase itself. It delegates verification to plan-critic.
 
 ## QA Discovery System
 
@@ -132,7 +156,6 @@ The `qa/` directory contains an automatic bug discovery and test suite built on 
 ### When to Use
 
 - **Before/after medium or large changes** to backend or UI — run discovery to catch drift.
-- **When checking for drift** in endpoints, routes, action registry, components, or templates.
 - **During final PR readiness** — run the appropriate project to verify.
 - **Not for tiny docs-only edits** — skip QA for documentation or configuration changes.
 
@@ -153,16 +176,12 @@ The `qa/` directory contains an automatic bug discovery and test suite built on 
 
 ## Legacy: Full Claude Code Mega-Loop
 
-The original 16-agent pipeline (Requirements → Due Diligence → Plan → Plan-Critic → Implement → Tester → Live-Test → Feature-Validator → Reviewer → Feature-Critic → Docs-Updater) is **no longer the default**. It was Claude Code-specific and ran all agents regardless of task size. The workflows above replace it with conditional, task-sized pipelines.
+The original 16-agent pipeline (Requirements → Due Diligence → Plan → Plan-Critic → Implement → Tester → Live-Test → Feature-Validator → Reviewer → Feature-Critic → Docs-Updater) is **legacy**. It was Claude Code-specific and ran all agents regardless of task size. The single canonical loop above replaces it.
 
 The legacy agent definitions remain in `.claude/agents/` for Claude Code sessions. They are not portable to OpenCode.
 
-## Commit Discipline
+## MCP Guidance
 
-- Atomic commits — one logical change per commit
-- Imperative mood: `"Add calendar endpoint"` not `"Added calendar endpoint"`
-- Run `cd backend && pytest -q` before committing backend changes
-- Run `cd web && npm run lint` before committing web changes
-- Never commit failing tests or broken builds
-- Never commit to `main` directly
-- Ship with `/helm-ship`
+- **Context7** (MCP): Allowed for docs/library lookup by planner, docs, or critic if needed. NOT called by orchestrator.
+- **Playwright** (MCP): Allowed for tester, ui-reviewer, and live verification. NOT called by orchestrator.
+- Keep API keys and env values out of the repo. They are user-managed.
