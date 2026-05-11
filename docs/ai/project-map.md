@@ -1,6 +1,6 @@
 # Project Map
 
-Current state of the Helm codebase. Updated 2026-05-07.
+Current state of the Helm codebase. Updated 2026-05-11.
 
 ## File Counts (Verified)
 
@@ -56,13 +56,14 @@ Helm/
 │   └── tests/                 # 23 test files
 ├── mobile/                    # React Native (Expo) app
 │   ├── app/                   # Expo Router screens
-│   └── src/                   # Components, stores, services, hooks
+│   └── src/                   # Components, stores, services, hooks, utils
 ├── web/                       # Web admin panel (Vite + React)
 │   └── src/
 │       ├── pages/             # Admin pages
 │       ├── editor/            # 3-panel SDUI editor
 │       ├── stores/            # Zustand stores
-│       └── lib/               # API client, utils
+│       ├── lib/               # API client, utils
+│       └── editor/            # 3-panel SDUI editor + typeGuards.ts
 ├── qa/                        # Playwright QA test suite
 └── docs/
     ├── ai/                    # AI agent workflows (this directory)

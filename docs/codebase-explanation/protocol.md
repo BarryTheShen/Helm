@@ -1,6 +1,6 @@
 # Protocol — Communication Layer
 
-> Last updated: 2026-05-03
+> Last updated: 2026-05-11
 
 ## Tier 1: TLDR
 
@@ -219,7 +219,9 @@ Mounted at `/mcp` on the FastAPI app. Uses FastMCP (Streamable HTTP). All reques
 
 Persisted V2 payloads are row-first. `rows` is the required shape discriminator; `schema_version`, `module_id`, and `title` may be omitted on stored payloads and added later by editor/runtime layers. New authored content should still use PascalCase V2 types, but server validation also permits preserved lowercase legacy runtime component types so existing live screens can round-trip.
 
-**V2 component types (PascalCase):** `Text`, `Markdown`, `Button`, `Image`, `TextInput`, `Icon`, `Divider`, `Container`, `CalendarModule`, `ChatModule`, `NotesModule`, `InputBar`
+**V2 component types (PascalCase):** `Text`, `Markdown`, `Button`, `Image`, `TextInput`, `Icon`, `Container`, `CalendarModule`, `ChatModule`, `NotesModule`, `InputBar`
+
+> **Note:** `Divider` was removed as a standalone cell component per Architecture Decisions Session 9. It is now a row-level property. The type is preserved for backward compatibility in the backend type map and legacy registry entries, but new screens should not use it as a cell component.
 
 **V2 cell `width`:** numeric weight for flex proportion in standard rows, or fixed card-rail width scaling in scrollable rows; `"auto"` behaves like natural/fill width in non-scrollable rows
 
@@ -230,7 +232,7 @@ Persisted V2 payloads are row-first. `rows` is the required shape discriminator;
 
 **V2 spacing notes:**
 - Rows may use `paddingTop`, `paddingBottom`, `paddingLeft`, and `paddingRight`; runtimes fall back to `padding` when a side-specific value is omitted
-- `Divider` may include both `indent` and `margin`
+- ~~`Divider`~~ may include both `indent` and `margin` — **Deprecated**, Divider is now a row-level property
 
 **V2 action types:** `navigate`, `api_call`, `server_action`, `dismiss`, `copy_text`, `open_url`
 

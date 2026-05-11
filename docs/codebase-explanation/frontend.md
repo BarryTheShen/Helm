@@ -1,6 +1,6 @@
 # Frontend — React Native (Expo) Mobile App + Web Admin
 
-> Last updated: 2026-05-03
+> Last updated: 2026-05-11
 
 ## Tier 1: TLDR
 
@@ -279,7 +279,9 @@ Rendered by `SDUIScreenRenderer` → `SDUIRenderer` (single component) in `src/c
 Persisted V2 screens are row-first. The mobile type guard only requires `rows`; `schema_version`, `module_id`, and `title` are optional on stored payloads.
 
 Component types (PascalCase — registered in `src/renderer/componentRegistry.ts`):
-`Text`, `Markdown`, `Button`, `Image`, `TextInput`, `Icon`, `Divider`, `Container`, `CalendarModule`, `ChatModule`, `NotesModule`, `InputBar`, `Badge`, `Stat`, `List`, `Alert`
+`Text`, `Markdown`, `Button`, `Image`, `TextInput`, `Icon`, `Container`, `CalendarModule`, `ChatModule`, `NotesModule`, `InputBar`, `Badge`, `Stat`, `List`, `Alert`
+
+> **Divider removed as standalone component** — `Divider` was removed from the component registry per Architecture Decisions Session 9 and Feature Feedback 2. Divider is now a row-level property (`showDivider: true` or `type: 'divider'` on rows), not a cell component. The backend validation whitelist still permits legacy `divider` type for backward compatibility with existing screens.
 
 Rendered by `SDUIPageRenderer` → `RowRenderer` → `CellRenderer` → `V2ComponentRenderer`.
 
@@ -324,7 +326,7 @@ Detects format via `isSDUIPage()` type guard and dispatches to `SDUIPageRenderer
 | `SDUIImage` | `src, alt?, width?, height?, aspectRatio?, borderRadius?, onPress?, placeholder?('blur'\|'skeleton'\|'none')` |
 | `SDUITextInput` | `value?, onChangeText?, placeholder?, multiline?, maxLines?, secureTextEntry?, keyboardType?, editable?` |
 | `SDUIIcon` | `name` (Feather name → emoji/unicode map, ~40 icons), `size?, color?, onPress?` |
-| `SDUIDivider` | `direction?('horizontal'\|'vertical'), thickness?, color?, indent?, margin?` |
+| ~~`SDUIDivider`~~ | ~~`direction?('horizontal'\|'vertical'), thickness?, color?, indent?, margin?`~~ | **Removed** — Divider is now a row property, not a cell component. |
 
 ### V2 Structural (`src/components/structural/`)
 
@@ -412,6 +414,17 @@ Persisted rows-first payloads may omit page wrapper metadata; `isSDUIPage(payloa
 **`SDUIPayload`** = `SDUIScreen | SDUIPage`
 
 **`isSDUIPage(payload)`** — type guard
+
+### Type Guard Utilities
+
+Type guard files provide runtime validation of component types, warning on unknown types without crashing:
+
+| File | Location | Function | Purpose |
+|------|----------|----------|---------|
+| `typeGuards.ts` (mobile) | `mobile/src/utils/typeGuards.ts` | `isKnownComponentType()`, `assertValidComponentType()` | Checks against `COMPONENT_MAP`; logs `console.warn` for unknown types |
+| `typeGuards.ts` (web) | `web/src/editor/typeGuards.ts` | `isRegisteredComponentType()`, `assertRegisteredComponentType()` | Checks against `COMPONENT_REGISTRY`; logs `console.warn` for unregistered types |
+
+Used by `EditorCanvas.tsx` (web) and `SDUIRenderer.tsx` (mobile) to surface unknown component types during development without crashing in production.
 
 ### `src/types/api.ts`
 ```ts

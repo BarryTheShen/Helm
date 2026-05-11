@@ -1,6 +1,6 @@
 # QA Test Suite (`qa/`)
 
-> Last updated: 2026-05-07
+> Last updated: 2026-05-11
 
 ## Tier 1: TLDR
 
@@ -75,8 +75,14 @@ Scans the live backend + source files and writes `qa/src/discovered.json`:
 | Web routes | Regex scan of `web/src/App.tsx` for `path="..."` |
 | Actions | Regex scan of `backend/app/services/action_registry.py` for `registry.register("...")` |
 | Mobile components | `fs.readdirSync()` of `mobile/src/components/{sdui,atomic,composite,structural,common}` |
+| Validation whitelist | Regex scan of `backend/app/mcp/tools.py` for `_VALID_V2_COMPONENT_TYPES` and `_LEGACY_V2_TYPE_MAP` |
+| Mobile component registry | Regex scan of `mobile/src/renderer/componentRegistry.ts` for registry keys |
+| Web registry | Regex scan of `web/src/editor/types.ts` for `COMPONENT_REGISTRY` and `READ_ONLY_RUNTIME_COMPONENTS` |
+| Web schemas | Regex scan of `web/src/editor/componentSchemas.ts` for `COMPONENT_SCHEMAS` keys |
+| Web preview renderers | Regex scan of `web/src/editor/EditorCanvas.tsx` for `PREVIEW_RENDERERS` keys |
+| Local template types | Regex scan of `web/src/editor/templateLibrary.ts` for `createCell()` type arguments |
 
-Output includes a `summary` section with counts.
+Output includes a `summary` section with counts for all sources.
 
 ### Path Resolution (`utils.ts`)
 
@@ -107,7 +113,7 @@ Most test files use `qaPath()` instead of `__dirname` for file path resolution (
 | `qa/package.json` | ESM package, scripts: `test`, `test:backend`, `test:e2e`; deps: `@playwright/test`, `execa` |
 | `qa/src/globalSetup.cjs` | Auto-starts backend + Vite, handles auth setup, runs discovery |
 | `qa/src/globalTeardown.cjs` | Kills auto-started servers |
-| `qa/src/discover.cjs` | Scans backend routes, actions, components, templates |
+| `qa/src/discover.cjs` | Scans backend routes, actions, components, templates, validation whitelist, mobile/web registry types, web schemas, preview renderers, local template types |
 | `qa/src/fixtures.ts` | Extended test fixture with `login()` via `addInitScript` |
 | `qa/src/utils.ts` | `qaPath()` for ESM-safe path resolution |
 | `qa/run.sh` | Convenience script: installs deps, runs backend pytest, then Playwright |
@@ -137,7 +143,10 @@ Most test files use `qaPath()` instead of `__dirname` for file path resolution (
 | File | Project | What it tests |
 |------|---------|---------------|
 | `api-auth.spec.ts` | backend-only | Login success/fail, auth header requirements |
+| `api-crud.spec.ts` | backend-only | CRUD operations for core entities |
 | `api-endpoints.spec.ts` | backend-only | All discovered endpoints return non-500 status |
+| `api-sdui-validation.spec.ts` | backend-only | SDUI payload validation endpoint |
+| `api-template-crud.spec.ts` | backend-only | Template CRUD with component type validation |
 | `component-picker.spec.ts` | e2e | `getAuthorableComponents()` returns valid set, no duplicates, all in `COMPONENT_REGISTRY` |
 | `editor.spec.ts` | e2e | Editor component addition, structure tree updates, canvas rendering |
 | `editor-sequence.spec.ts` | e2e | Multi-action sequences: add row, add component, save, reload |
@@ -145,12 +154,15 @@ Most test files use `qaPath()` instead of `__dirname` for file path resolution (
 | `editor-ux.spec.ts` | e2e | Drag handle positioning (outside canvas), divider row property toggle |
 | `editor-variables.spec.ts` | e2e | Variable pill cursor positioning, markdown rendering in preview |
 | `edge-case-data.spec.ts` | e2e | Normalization with empty strings, long text, unicode, null props, negative numbers |
+| `logs.spec.ts` | e2e | Logs page rendering and filtering |
 | `normalization.spec.ts` | e2e | `normalizeComponentForEditor()` idempotency, `getEditorPersistenceValidationError()` catches incomplete actions, `serializeComponentForRuntime()` completeness |
 | `pages.spec.ts` | e2e | All 8 admin pages load without crashing, save doesn't redirect to login, module switching updates canvas |
-| `schema-reconciliation.spec.ts` | e2e | Web `COMPONENT_REGISTRY` types aligned with backend component registry (with known drift list), action dedup check |
+| `schema-reconciliation.spec.ts` | e2e | 7 cross-registry sync tests: web/backend registry alignment, `COMPONENT_REGISTRY`↔`COMPONENT_SCHEMAS` sync, `COMPONENT_REGISTRY`↔`PREVIEW_RENDERERS` sync, backend validation whitelist↔mobile registry sync, removed types check, action dedup check, 4-way registry consistency (validation/DB/mobile/web) |
 | `security.spec.ts` | e2e | Unauthenticated redirect, wrong credentials error, logout isolation |
+| `settings.spec.ts` | e2e | Settings page load and update |
 | `template-quality.spec.ts` | e2e | All templates use valid component types and action references |
 | `templates.spec.ts` | e2e | Templates page loads, no Unknown components, Home/Chat template specific checks |
+| `variables.spec.ts` | e2e | Variables page CRUD operations |
 | `workflow.spec.ts` | e2e | Workflow node dropdown persistence, condition typing, action node connection handles |
 
 ---
@@ -254,8 +266,10 @@ This runs `pytest` on the backend first, then the Playwright suite. Results go t
 
 ## Current State
 
-- **16 test files** across 2 projects
+- **22 test files** across 2 projects (5 backend-only, 17 e2e)
 - Run `cd qa && npx playwright test` for current counts
+- Schema reconciliation: **7 cross-registry sync tests** covering web↔backend alignment, COMPONENT_REGISTRY↔COMPONENT_SCHEMAS, COMPONENT_REGISTRY↔PREVIEW_RENDERERS, backend validation whitelist↔mobile registry, removed types, action dedup, and 4-way registry consistency (validation/DB/mobile/web)
+- **12 discovery scanners** — scans endpoints, components, templates, routes, actions, mobile components, validation whitelist, mobile registry, web registry, web schemas, preview renderers, and local template types
 - Schema reconciliation correctly detects planted bugs (verified with TodoList test)
 - API auth tests fixed (ESM path resolution via `qaPath()`)
 - Security tests use isolated browser context to avoid contaminating shared auth state

@@ -1,7 +1,7 @@
 # Backend — Python FastAPI Server
 
-> Last updated: 2026-05-03
-> Last audit: 2026-05-03 — ✅ All systems operational (27 test files, 338 tests passing)
+> Last updated: 2026-05-11
+> Last audit: 2026-05-11 — ✅ All systems operational (26 test files, 338+ tests passing)
 
 ## Tier 1: TLDR
 
@@ -128,7 +128,9 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | `articles` | id, user_id (FK), title, source, url, summary_markdown, content_markdown, image_url, published_at |
 | `devices.assigned_app_id` | FK → apps.id (added to existing devices table) |
 
-**Component validation sync (FF3 gap fix):** `Empty` and `Divider` are now fully synchronized across all three layers — backend `_VALID_V2_COMPONENT_TYPES` + `_LEGACY_V2_TYPE_MAP` (`mcp/tools.py`), component seed (`component_seed.py`), and web editor `COMPONENT_REGISTRY` + `COMPONENT_SCHEMAS`. Empty and Divider can round-trip from LLM generation through server validation to editor property inspection without errors.
+**Divider removed as standalone component:** `Divider` is no longer a standalone cell component per Architecture Decisions Session 9 and Feature Feedback 2. It has been removed from the web editor's `COMPONENT_REGISTRY` and the backend `_VALID_V2_COMPONENT_TYPES` (`mcp/tools.py`). Divider is now a row-level property. The legacy `divider` type remains in `_LEGACY_V2_TYPE_MAP` and `_SDUI_PROPS_FIELDS` for backward compatibility with existing screens, but new screens should use row-level dividers instead.
+
+**Component validation sync (FF3 gap fix):** `Empty` is fully synchronized across all three layers — backend `_VALID_V2_COMPONENT_TYPES` + `_LEGACY_V2_TYPE_MAP` (`mcp/tools.py`), component seed (`component_seed.py`), and web editor `COMPONENT_REGISTRY` + `COMPONENT_SCHEMAS`. Empty can round-trip from LLM generation through server validation to editor property inspection without errors.
 
 **`module_states` key naming conventions:**
 | Key | Content |
@@ -558,6 +560,8 @@ Seeds the `component_registry` table on startup with default components. Only in
 
 **Composite components (6):** `calendar`, `form`, `todo`, `article_card`, `calendar_module`, `chat_module`, `notes_module`, `input_bar`
 
+> **Note:** `divider` is preserved in the DB seed for backward compatibility with existing screens, but is deprecated as a standalone component.
+
 **New in Session 9:**
 - `rich_text_renderer` — renders markdown/rich text with theme support
 - `todo` — interactive todo list with add/toggle/delete actions
@@ -695,6 +699,7 @@ All tool logic is here; shared between the Agent Proxy (internal) and MCP Server
 ### Template Seed
 - 5 new production templates (Calendar, Chat, News, Weather, Tasks)
 - Templates now use new components and actions
+- Seed data `screen_json` validated against `validate_sdui_screen_payload()` on startup — validation errors logged as warnings so seed bugs are caught early
 
 ---
 
@@ -709,3 +714,22 @@ Added `date.today` (YYYY-MM-DD) and `date.now` (ISO 8601 timestamp) to the varia
 ### Template Validation Fixes
 - Home template Calendar variant changed from `"agenda"` to `"month"` (mobile only supports month view)
 - ArticleCard preview field names aligned to `"description"` (matching template seed, not `"summary"`)
+
+---
+
+## Session 11 Changes (2026-05-11)
+
+### Divider Removed as Standalone Component
+- `Divider` removed from `_VALID_V2_COMPONENT_TYPES` in `mcp/tools.py`
+- Legacy `divider` type preserved in `_LEGACY_V2_TYPE_MAP`, `_SDUI_PROPS_FIELDS`, and `component_seed.py` for backward compatibility with existing screens
+- Web editor `COMPONENT_REGISTRY` no longer includes `Divider` as an authorable type
+- Mobile `componentRegistry.ts` no longer exports `Divider`
+
+### Template CRUD Validates Component Types
+- `_prepare_template_screen_or_422()` in `routers/templates.py` validates all SDUI component types (including nested `Container` children) before creating or updating templates
+- Returns HTTP 422 with a clear message listing invalid types found
+- Called by POST/PUT template endpoints
+
+### Template Seed Startup Validation
+- `seed_templates()` in `services/template_seed.py` now validates all seed `screen_json` payloads against `validate_sdui_screen_payload()` at startup
+- Previously invalid seed data would only surface at runtime; now caught during app initialization
