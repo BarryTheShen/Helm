@@ -57,7 +57,11 @@ For each claim in the plan, explore only the exact files/symbols to verify:
 ### 5. Unhandled edge cases
 - Auth failures, network errors, empty states, validation gaps?
 
-### 6. Cross-layer sync gaps
+### 6. Missing verification
+- Does the plan specify how to verify each change? Unit tests, integration tests, manual checks?
+- Are verification commands included for each affected layer?
+
+### 7. Cross-layer sync gaps
 - Backend endpoint created but no frontend client update?
 - Schema changed but no migration?
 - MCP tool added but not in agent_proxy or server.py?

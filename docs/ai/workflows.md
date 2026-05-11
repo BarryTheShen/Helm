@@ -7,17 +7,17 @@
 There is exactly one canonical loop:
 
 ```
-session init → context artifact → plan ↔ plan critic until approved → implementation → QA + review → live test → docs → git commit
+session init → context artifact → plan ↔ plan critic until approved → implementation → QA + review → live test → docs → helm-git
 ```
 
 The sequence stays the same for all tasks. The depth of each step varies:
 
 | Task size | session | context | plan/critic | implementation | QA/review | live test | docs | git |
 |-----------|---------|---------|-------------|----------------|-----------|-----------|------|-----|
-| Small edit | archive old, init new | minimal | skip | direct edit | skip | skip | skip | commit |
-| Bug fix | archive old, init new | read relevant area | skip (tester diagnoses) | targeted fix | run failing test | conditional | if behavior changed | commit |
-| Medium feature | archive old, init new | read docs + affected files | plan → critic (1-2 rounds) | domain specialist | test layer | if UI changed | if API/arch changed | commit |
-| Large feature | archive old, init new | deep doc reading + code exploration | plan ↔ critic (up to 3 rounds) | multi-layer in order | full suite | browser verification | full docs update | commit |
+| Small edit | archive old, init new | minimal | skip | direct edit | skip | skip | skip | helm-git |
+| Bug fix | archive old, init new | read relevant area | skip (tester diagnoses) | targeted fix | run failing test | conditional | if behavior changed | helm-git |
+| Medium feature | archive old, init new | read docs + affected files | plan → critic (1-2 rounds) | domain specialist | test layer | if UI changed | if API/arch changed | helm-git |
+| Large feature | archive old, init new | deep doc reading + code exploration | plan ↔ critic (up to 3 rounds) | multi-layer in order | full suite | browser verification | full docs update | helm-git |
 
 The same loop. The same sequence. Never skip steps out of order — just make each step as shallow or deep as the task requires.
 
@@ -76,9 +76,11 @@ Only when UI is visibly changed. Start dev server and verify in a real browser o
 
 Only when behavior, API contracts, architecture, or commands have changed. Delegate to `helm-docs`.
 
-### 8. Git Commit
+### 8. helm-git
 
-Delegate to `helm-git` (requires user approval via `ask`).
+Delegate to `helm-git` (requires user approval via `ask`). `helm-git` is the canonical final stage — it handles branch safety, diff review, verification, commit, and push.
+
+`/helm-ship` may remain as an optional shortcut command for when Barry already knows the work is ready, but the canonical pipeline documentation refers to `helm-git`.
 
 - Atomic commits — one logical change per commit
 - Imperative mood: `"Add calendar endpoint"` not `"Added calendar endpoint"`

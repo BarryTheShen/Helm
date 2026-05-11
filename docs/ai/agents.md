@@ -30,6 +30,8 @@ The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/
 
 **Default agent:** `helm-orchestrator` (primary agent, set in `opencode.jsonc`). The orchestrator classifies the task, delegates subagents conditionally, verifies, reviews, documents when needed, and reports completion.
 
+**Final git stage:** `helm-git` is the canonical agent for branch safety, diff review, commit, and push. `/helm-ship` remains as an optional shortcut command but is not the canonical reference.
+
 ### Agent Roster
 
 | Agent | Type | Can edit? | Can run tests? | Can commit/push? | Main responsibility | Explicitly does NOT do |

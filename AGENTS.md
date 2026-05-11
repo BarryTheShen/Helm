@@ -65,7 +65,7 @@ Helm is a self-hosted AI super app — a React Native (Expo) mobile frontend tha
 OpenCode is the default AI tool for Helm. The canonical development loop is:
 
 ```
-session init → context artifact → plan ↔ plan critic until approved → implementation → QA + review → live test → docs → git commit
+session init → context artifact → plan ↔ plan critic until approved → implementation → QA + review → live test → docs → helm-git
 ```
 
 See `docs/ai/workflows.md` for full detail on the canonical loop and how it scales internally.
@@ -78,6 +78,11 @@ Before every new task, the session is initialized via `helm-session-init`:
 - Stale `.helm-sessions/current/` is archived to `.helm-sessions/archive/<timestamp>-<slug>/`
 - Fresh `task.md`, `context-index.md`, and workspace artifacts are created
 - On continuation, existing context is summarized and reused
+
+### Final Git Stage: helm-git
+
+`helm-git` is the canonical final stage for branch safety, diff review, commit, and push.
+`/helm-ship` may remain as an optional shortcut command, but the canonical workflow calls `helm-git` directly.
 
 ### Plan Critic / Explorer
 

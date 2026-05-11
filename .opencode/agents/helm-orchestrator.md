@@ -8,6 +8,9 @@ permission:
   bash: deny
   glob: deny
   grep: deny
+  lsp: deny
+  webfetch: deny
+  websearch: deny
   external_directory: deny
   task:
     "*": deny
@@ -36,7 +39,7 @@ Barry gives you a task. You decide the workflow, delegate subagents, verify resu
 The canonical workflow is:
 
 ```
-session init → context artifact → plan ↔ plan critic until approved → implementation → QA + review → live test → docs → git commit
+session init → context artifact → plan ↔ plan critic until approved → implementation → QA + review → live test → docs → helm-git
 ```
 
 This same loop scales internally:
