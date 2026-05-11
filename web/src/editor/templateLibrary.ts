@@ -56,7 +56,16 @@ export const LOCAL_SCREEN_TEMPLATES: LocalTemplateDefinition[] = [
           createCell('Text', { content: '12 Events', fontSize: 18, fontWeight: 'semibold' }),
           createCell('Text', { content: '5 Notes', fontSize: 18, fontWeight: 'semibold' }),
         ]),
-        createRow([createCell('Divider', {})]),
+        // Divider as row-level separator (not a standalone component)
+        {
+          id: nextSeedId('tpl-row'),
+          type: 'divider',
+          height: 'auto',
+          cells: [],
+          dividerColor: '#E0E0E0',
+          dividerThickness: 1,
+          dividerMargin: 8,
+        },
         createRow([
           createCell('Button', {
             label: 'Open Calendar',

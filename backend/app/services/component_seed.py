@@ -101,19 +101,6 @@ INITIAL_COMPONENTS = [
         "default_props": {"name": "star", "size": 24, "color": "#000000"},
     },
     {
-        "type": "divider",
-        "tier": "atomic",
-        "name": "Divider",
-        "icon": "➖",
-        "description": "Horizontal line separator",
-        "props_schema": {
-            "color": {"type": "string", "default": "#E0E0E0"},
-            "thickness": {"type": "number", "default": 1},
-            "margin": {"type": "number", "default": 8},
-        },
-        "default_props": {"color": "#E0E0E0", "thickness": 1, "margin": 8},
-    },
-    {
         "type": "CalendarModule",
         "tier": "hardcoded",
         "name": "Calendar Module",

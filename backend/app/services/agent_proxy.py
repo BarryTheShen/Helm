@@ -60,7 +60,7 @@ DEFAULT_SYSTEM_PROMPT = (
     "Row-first V2: { rows: [ { id, cells: [ { id, content: <Component> } ] } ] }\n"
     "Every Component has: type (required), id, props.\n\n"
     "Valid component types (PascalCase only):\n"
-    "  Atomic:     Text, Markdown, Button, Image, TextInput, Icon, Divider\n"
+    "  Atomic:     Text, Markdown, Button, Image, TextInput, Icon\n"
     "  Structural: Container (only type that may nest via 'children')\n"
     "  Composite:  CalendarModule, ChatModule, NotesModule, InputBar\n"
     "  Widgets:    Badge, Stat, List, Alert, Todo, RichText, ArticleCard\n\n"
@@ -778,7 +778,7 @@ def _get_tool_definitions() -> list[dict]:
                     "The frontend re-renders instantly via WebSocket. "
                     "Use the row-first contract: screen.rows[] -> row.cells[] -> cell.content. "
                     "Every cell.content MUST include a 'type' field — typeless content renders as a red 'Invalid component' box on the phone. "
-                    "Valid V2 component types (PascalCase): Text, Markdown, Button, Image, TextInput, Icon, Divider, Container, "
+                    "Valid V2 component types (PascalCase): Text, Markdown, Button, Image, TextInput, Icon, Container, "
                     "CalendarModule, ChatModule, NotesModule, InputBar, Badge, Stat, List, Alert, Todo, RichText, ArticleCard. "
                     "Stored payloads may omit metadata like schema_version, module_id, and title. "
                     "Legacy sections payloads are still accepted for backward compatibility, but new tool calls should send row-first screens. "
@@ -818,7 +818,7 @@ def _get_tool_definitions() -> list[dict]:
                                                                             "type": "string",
                                                                             "enum": [
                                                                                 "Text", "Markdown", "Button", "Image",
-                                                                                "TextInput", "Icon", "Divider", "Container",
+                                                                                "TextInput", "Icon", "Container",
                                                                                 "CalendarModule", "ChatModule", "NotesModule", "InputBar",
                                                                                 "Badge", "Stat", "List", "Alert",
                                                                                 "Todo", "RichText", "ArticleCard",

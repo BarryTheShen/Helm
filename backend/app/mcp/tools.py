@@ -374,7 +374,7 @@ _SDUI_STRUCTURAL_KEYS = {'type', 'id', 'children', 'props'}
 # causes valid LLM output to be rejected here (or invalid output to pass).
 _VALID_V2_COMPONENT_TYPES: frozenset[str] = frozenset({
     "Text", "Markdown", "Button", "Image", "TextInput",
-    "Icon", "Divider", "Container",
+    "Icon", "Container",
     "CalendarModule", "ChatModule", "NotesModule", "InputBar",
     "Badge", "Stat", "List", "Alert",
     "Todo", "RichText", "ArticleCard", "Empty",
@@ -394,7 +394,6 @@ _LEGACY_V2_TYPE_MAP: dict[str, str] = {
     "textinput": "TextInput",
     "text_input": "TextInput",
     "icon": "Icon",
-    "divider": "Divider",
     "container": "Container",
     "inputbar": "InputBar",
     "input_bar": "InputBar",
