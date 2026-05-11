@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.template import SDUITemplate
+from app.services.sdui_state import validate_sdui_screen_payload
 
 _SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000"
 
@@ -259,6 +260,25 @@ async def seed_templates(db: AsyncSession, replace: bool = False) -> None:
     count = (await db.execute(
         select(func.count()).select_from(SDUITemplate)
     )).scalar_one()
+
+    # ── Startup validation of seed data ────────────────────────────────────
+    # Validate component types in every seed template's screen_json at startup
+    # so that seed data bugs are caught early rather than at runtime.
+    for data in SEED_TEMPLATES:
+        screen_json = data.get("screen_json", {})
+        if not isinstance(screen_json, dict):
+            logger.warning(
+                f"Seed template '{data.get('name', 'unknown')}' has non-dict "
+                f"screen_json (type={type(screen_json).__name__})"
+            )
+            continue
+        _, errors = validate_sdui_screen_payload(screen_json)
+        if errors:
+            logger.warning(
+                f"Seed template '{data.get('name', 'unknown')}' has screen_json "
+                f"validation errors (may cause runtime issues):\n"
+                + "\n".join(f"  - {e}" for e in errors)
+            )
 
     if count > 0:
         if not replace:

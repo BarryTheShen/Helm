@@ -21,7 +21,7 @@ from app.schemas.templates import (
 from app.services.audit import log_audit
 from app.services.sdui_state import (
     draft_screen_key,
-    prepare_sdui_screen_for_storage,
+    validate_sdui_screen_payload,
     send_draft_update,
 )
 
@@ -31,11 +31,25 @@ VALID_CATEGORIES = {"dashboard", "planner", "tracker", "form", "custom"}
 
 
 def _prepare_template_screen_or_422(screen_json: dict, module_id: str) -> dict:
-    """Normalize template SDUI payloads using the shared module save contract."""
-    try:
-        return prepare_sdui_screen_for_storage(screen_json, module_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    """Normalize and validate a template SDUI payload.
+
+    Validates all component types against the registered V2 component set
+    (including nested Container children). Returns 422 with a clear message
+    listing any invalid types found.
+    """
+    normalized_screen, errors = validate_sdui_screen_payload(screen_json)
+    if errors:
+        error_detail = "\n".join(f"  - {e}" for e in errors)
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"SDUI template validation failed for module '{module_id}':\n"
+                f"{error_detail}\n"
+                "Provide a valid row-first screen with registered V2 component types."
+            ),
+        )
+    assert normalized_screen is not None
+    return normalized_screen
 
 
 async def _record_screen_history(
@@ -171,7 +185,14 @@ async def update_template(
 
     update_data = body.model_dump(exclude_unset=True)
     if "screen_json" in update_data:
-        update_data["screen_json"] = _prepare_template_screen_or_422(update_data["screen_json"], template_id)
+        raw_screen = update_data["screen_json"]
+        # Check the original payload (before normalization adds empty sections/rows)
+        if "rows" not in raw_screen and "sections" not in raw_screen:
+            raise HTTPException(
+                status_code=422,
+                detail="screen_json must contain either a row-first 'rows' array or a legacy 'sections' array.",
+            )
+        update_data["screen_json"] = _prepare_template_screen_or_422(raw_screen, template_id)
 
     for key, value in update_data.items():
         setattr(template, key, value)
