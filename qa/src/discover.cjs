@@ -184,6 +184,91 @@ function discoverPreviewRenderers() {
   return keys;
 }
 
+/**
+ * Extract all component type strings from a V2 screen JSON (row-based).
+ * Walks cells[].content recursively and returns unique type values.
+ * Row-level types (row.type) are NOT included — they are layout hints,
+ * not component types.
+ */
+function extractComponentTypesFromScreen(screen) {
+  if (!screen || typeof screen !== 'object') return [];
+  const types = new Set();
+  const rows = screen.rows;
+  if (!Array.isArray(rows)) return [];
+
+  function walkContent(content) {
+    if (!content || typeof content !== 'object') return;
+    if (typeof content.type === 'string' && content.type.length > 0) {
+      types.add(content.type);
+    }
+    // Recurse into children
+    const children = content.children;
+    if (Array.isArray(children)) {
+      for (const child of children) walkContent(child);
+    }
+    // Recurse into props.children (SDUI V2 Container pattern)
+    const props = content.props;
+    if (props && typeof props === 'object' && Array.isArray(props.children)) {
+      for (const child of props.children) walkContent(child);
+    }
+  }
+
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const cells = row.cells;
+    if (!Array.isArray(cells)) continue;
+    for (const cell of cells) {
+      if (!cell || typeof cell !== 'object') continue;
+      walkContent(cell.content);
+    }
+  }
+
+  return [...types];
+}
+
+async function discoverModuleStates(token) {
+  // 1. Get all available module IDs
+  const modulesResp = await fetchJSON(`${BACKEND_BASE}/api/modules`, token);
+  if (modulesResp._error) return {};
+  const moduleIds = (modulesResp.modules || []).map(m => m.id);
+
+  // 2. Fetch live SDUI screen for each module
+  const result = {};
+  for (const moduleId of moduleIds) {
+    const resp = await fetchJSON(`${BACKEND_BASE}/api/sdui/${moduleId}`, token);
+    if (resp._error || resp.screen === null || resp.screen === undefined) {
+      result[moduleId] = { has_screen: false, types: [], hasDivider: false };
+      continue;
+    }
+    const types = extractComponentTypesFromScreen(resp.screen);
+    result[moduleId] = {
+      has_screen: true,
+      types,
+      hasDivider: types.some(t => t === 'Divider' || t === 'divider'),
+    };
+  }
+
+  // 3. Also check draft states
+  for (const moduleId of moduleIds) {
+    const resp = await fetchJSON(`${BACKEND_BASE}/api/sdui/${moduleId}/draft`, token);
+    if (resp._error || !resp.has_draft || resp.screen === null) {
+      continue; // No draft for this module
+    }
+    const types = extractComponentTypesFromScreen(resp.screen);
+    if (types.length > 0) {
+      if (!result[moduleId]) {
+        result[moduleId] = { has_screen: false, types: [], hasDivider: false };
+      }
+      result[moduleId].draft_types = types;
+      if (types.some(t => t === 'Divider' || t === 'divider')) {
+        result[moduleId].hasDivider = true;
+      }
+    }
+  }
+
+  return result;
+}
+
 function discoverLocalTemplates() {
   const filePath = path.join(ROOT, 'web', 'src', 'editor', 'templateLibrary.ts');
   if (!fs.existsSync(filePath)) return [];
@@ -198,7 +283,7 @@ function discoverLocalTemplates() {
 async function discover(token) {
   console.log('QA Discovery — scanning project...');
 
-  const [endpoints, components, templates, routes, actions, mobile, validationWhitelist, mobileRegistry, webRegistry, webSchemas, webPreview, localTemplates] = await Promise.all([
+  const [endpoints, components, templates, routes, actions, mobile, validationWhitelist, mobileRegistry, webRegistry, webSchemas, webPreview, localTemplates, moduleStates] = await Promise.all([
     discoverEndpoints(token),
     discoverComponents(token),
     discoverTemplates(token),
@@ -211,6 +296,7 @@ async function discover(token) {
     Promise.resolve(discoverWebSchemas()),
     Promise.resolve(discoverPreviewRenderers()),
     Promise.resolve(discoverLocalTemplates()),
+    discoverModuleStates(token),
   ]);
 
   const output = {
@@ -228,6 +314,7 @@ async function discover(token) {
     web_schema_types: webSchemas,
     web_preview_types: webPreview,
     local_template_types: localTemplates,
+    module_state_types: moduleStates,
     summary: {
       total_endpoints: endpoints.length,
       total_routes: routes.length,
@@ -242,6 +329,9 @@ async function discover(token) {
       web_schema_types: webSchemas.length,
       web_preview_types: webPreview.length,
       local_template_types: localTemplates.length,
+      module_states_with_screens: Object.values(moduleStates).filter(s => s.has_screen).length,
+      module_states_with_drafts: Object.values(moduleStates).filter(s => s.draft_types).length,
+      module_states_with_divider: Object.values(moduleStates).filter(s => s.hasDivider).length,
     },
   };
 
@@ -261,6 +351,9 @@ async function discover(token) {
   console.log(`  Web schema types: ${output.summary.web_schema_types}`);
   console.log(`  Web preview types: ${output.summary.web_preview_types}`);
   console.log(`  Local template types: ${output.summary.local_template_types}`);
+  console.log(`  Module states with screens: ${output.summary.module_states_with_screens}`);
+  console.log(`  Module states with drafts: ${output.summary.module_states_with_drafts}`);
+  console.log(`  Module states with Divider: ${output.summary.module_states_with_divider}`);
 }
 
 module.exports = { discover };

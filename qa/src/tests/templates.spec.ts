@@ -3,6 +3,51 @@ import { TemplatesPage } from '../page-objects/templates';
 import { EditorPage } from '../page-objects/editor';
 
 /**
+ * Helper: extract all component type strings from a V2 screen JSON.
+ * Walks cells[].content recursively and returns unique type values.
+ * Row-level types (row.type) are NOT included.
+ */
+function collectModuleStateTypes(screen: unknown): string[] {
+  if (!screen || typeof screen !== 'object') return [];
+  const types = new Set<string>();
+  const rows = (screen as Record<string, unknown>).rows;
+  if (!Array.isArray(rows)) return [];
+
+  function walkContent(content: unknown): void {
+    if (!content || typeof content !== 'object') return;
+    const comp = content as Record<string, unknown>;
+    if (typeof comp.type === 'string' && comp.type.length > 0) {
+      types.add(comp.type);
+    }
+    // Recurse into children
+    const children = comp.children;
+    if (Array.isArray(children)) {
+      for (const child of children) walkContent(child);
+    }
+    // Recurse into props.children (SDUI V2 Container pattern)
+    const props = comp.props;
+    if (props && typeof props === 'object') {
+      const propsChildren = (props as Record<string, unknown>).children;
+      if (Array.isArray(propsChildren)) {
+        for (const child of propsChildren) walkContent(child);
+      }
+    }
+  }
+
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const cells = (row as Record<string, unknown>).cells;
+    if (!Array.isArray(cells)) continue;
+    for (const cell of cells) {
+      if (!cell || typeof cell !== 'object') continue;
+      walkContent((cell as Record<string, unknown>).content);
+    }
+  }
+
+  return [...types];
+}
+
+/**
  * Helper: apply the current template by selecting the first available module
  * and clicking "Apply as Draft". If no modules exist, just close the modal.
  */
@@ -115,12 +160,48 @@ test('Home template: calendar uses compact variant, no Container component', asy
   }
 });
 
-test('Chat template: no standalone Divider component', async ({ page, login }) => {
+test('Chat template: no standalone Divider component', async ({ page, login, request }) => {
   await login();
+
+  // Navigate to templates page first (needed to access localStorage)
   await page.goto('/templates');
   await expect(page.locator(TemplatesPage.templateCards).first()).toBeVisible();
 
-  // Find the Chat template card by its title text
+  // ── Step 1: Check existing Chat module state before applying template ──
+  // Get the auth token from localStorage (page must be loaded first)
+  const token = await page.evaluate(() => window.localStorage.getItem('admin_token'));
+  const authHeaders = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  // Check live screen (uses baseURL which proxies to backend)
+  const liveResp = await request.get('/api/sdui/chat', { headers: authHeaders });
+  if (liveResp.ok()) {
+    const liveData = await liveResp.json();
+    if (liveData.screen) {
+      const liveTypes = collectModuleStateTypes(liveData.screen);
+      const liveDivider = liveTypes.filter(t => t === 'Divider');
+      expect(
+        liveDivider,
+        `Chat module live state should not contain Divider components. Found: ${liveDivider.join(', ')}`
+      ).toEqual([]);
+    }
+  }
+
+  // Check draft screen
+  const draftResp = await request.get('/api/sdui/chat/draft', { headers: authHeaders });
+  if (draftResp.ok()) {
+    const draftData = await draftResp.json();
+    if (draftData.has_draft && draftData.screen) {
+      const draftTypes = collectModuleStateTypes(draftData.screen);
+      const draftDivider = draftTypes.filter(t => t === 'Divider');
+      expect(
+        draftDivider,
+        `Chat module draft state should not contain Divider components. Found: ${draftDivider.join(', ')}`
+      ).toEqual([]);
+    }
+  }
+
+  // ── Step 2: Apply the Chat template ──
+  // Note: we're already on the templates page, find the Chat template card
   const chatCard = page.locator(TemplatesPage.templateCards).filter({ hasText: 'Chat' });
   await expect(chatCard.first()).toBeVisible();
 

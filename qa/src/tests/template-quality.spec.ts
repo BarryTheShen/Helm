@@ -413,6 +413,69 @@ test.describe('Template Quality', () => {
     ).toEqual([]);
   });
 
+  test('active module states do not use deprecated component types', async () => {
+    const discovered = JSON.parse(fs.readFileSync(qaPath('src/discovered.json'), 'utf-8'));
+    const moduleStateTypes = discovered.module_state_types || {};
+
+    const entries = Object.entries(moduleStateTypes) as [string, {
+      has_screen: boolean;
+      types: string[];
+      draft_types?: string[];
+      hasDivider: boolean;
+    }][];
+
+    const modulesWithScreens = entries.filter(([, v]) => v.has_screen || v.draft_types);
+    if (modulesWithScreens.length === 0) {
+      console.log('No module states with screens found in discovered.json — skipping');
+      return;
+    }
+
+    // Deprecated component-level types that should only appear as row-level properties
+    const deprecatedTypes = ['Divider'];
+
+    const violations: string[] = [];
+
+    for (const [moduleId, state] of modulesWithScreens) {
+      // Check live screen types
+      if (state.has_screen && Array.isArray(state.types)) {
+        for (const typeName of state.types) {
+          if (deprecatedTypes.includes(typeName)) {
+            violations.push(
+              `Module "${moduleId}" live screen uses deprecated component type "${typeName}". `
+              + `Use row-level type "divider" instead.`
+            );
+          }
+        }
+      }
+
+      // Check draft types
+      if (Array.isArray(state.draft_types)) {
+        for (const typeName of state.draft_types) {
+          if (deprecatedTypes.includes(typeName)) {
+            violations.push(
+              `Module "${moduleId}" draft screen uses deprecated component type "${typeName}". `
+              + `Use row-level type "divider" instead.`
+            );
+          }
+        }
+      }
+    }
+
+    if (violations.length > 0) {
+      console.log('DEPRECATED COMPONENT TYPES FOUND IN MODULE STATES:');
+      for (const v of violations) {
+        console.log(`  ❌ ${v}`);
+      }
+    }
+
+    expect(
+      violations.length,
+      violations.length > 0
+        ? `Deprecated component types in module states:\n${violations.join('\n')}`
+        : 'No deprecated component types found in active module states',
+    ).toBe(0);
+  });
+
   test('backend validation whitelist types exist in web component registry', async () => {
     const vw = (JSON.parse(fs.readFileSync(qaPath('src/discovered.json'), 'utf-8')).validation_whitelist || {});
     const backendTypes = Array.isArray(vw.types) ? vw.types : [];
