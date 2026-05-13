@@ -70,7 +70,9 @@ session init → context artifact → plan ↔ plan critic until approved → im
 
 See `docs/ai/workflows.md` for full detail on the canonical loop and how it scales internally.
 
-`helm-orchestrator` is the default primary agent (set in `opencode.jsonc`). Barry does not manually route every step — the orchestrator classifies the task, delegates subagents conditionally, verifies, reviews, documents when needed, and reports completion. Slash commands are optional shortcuts for when Barry already knows the scope.
+`helm-orchestrator` is the default primary agent (set in `opencode.jsonc`). Barry does not manually route every step — the orchestrator classifies the task, delegates subagents conditionally, verifies, reviews, documents when needed, and reports completion. The orchestrator is autonomous by default and only asks Barry for genuine blockers.
+
+Slash commands are optional shortcuts for when Barry already knows the scope.
 
 ### Session Init / Reset
 

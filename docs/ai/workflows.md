@@ -40,16 +40,19 @@ The orchestrator or implementation agent reads relevant `docs/codebase-explanati
 
 ### 3. Plan ↔ Plan Critic Until Approved
 
-Delegated to `helm-planner`, which may delegate to `helm-plan-critic`.
+Delegated to `helm-planner`, which MUST delegate to `helm-plan-critic` for medium/large/risky plans.
 
 1. Planner reads documentation and produces a draft plan → writes to `current-plan.md`.
 2. Planner invokes `helm-plan-critic` — a combined targeted explorer + critic that verifies each claim by reading only the exact files/symbols needed.
 3. Critic writes findings to `critic-report.md` and returns APPROVED or specific objections.
 4. Planner revises the plan for each objection and re-invokes the critic.
-5. Max 3 rounds unless Barry explicitly asks for more.
-6. If unresolved concerns remain after 3 rounds, the planner stops and reports them — it does not force a weak plan.
+5. Max 2 rounds by default; 3rd round only if critic found concrete blocking issue.
+6. If unresolved concerns remain after the limit, the planner stops and reports them — it does not force a weak plan. Mark UNRESOLVED.
+7. Planner must include a "Scope control" section with in/out of scope, simplest path, and critic status.
 
-Small edits and simple bug fixes skip this step entirely.
+Small edits and simple bug fixes skip this step entirely. Tiny docs/config/single-file changes may also skip, but the planner must state the reason explicitly: "Critic skipped: small/single-file change."
+
+For risky bug fixes, cross-layer changes, protocol/API changes, security-sensitive changes, or any plan touching more than one layer, critic is MANDATORY.
 
 ### 4. Implementation
 
@@ -106,6 +109,24 @@ The failure handling is inside the loop. Reproduce → diagnose → fix → veri
 ## Agent Handoff Model
 
 Specialist agents are advisory by default. They produce findings — the orchestrator decides what to act on.
+
+### Orchestrator Autonomy
+
+The orchestrator is autonomous by default. It does NOT stop to ask Barry routine questions:
+
+- It decides which agent to delegate to next without asking.
+- It continues after subagents return without asking "should I continue?"
+- It runs verification automatically when needed.
+- It delegates to docs agent automatically when behavior/API/commands changed.
+- It delegates to git agent at the end automatically.
+
+The orchestrator only asks Barry when:
+- The requested behavior is genuinely ambiguous.
+- The change requires product/design judgment.
+- Subagents found destructive/risky actions (data loss, schema migration with data loss, auth changes).
+- Repo/docs directly contradict each other.
+
+When asking is unavoidable, the orchestrator asks ONE compact question with a recommended default.
 
 ### Standard Handoff Flow
 

@@ -5,6 +5,7 @@ model: opencode-go/deepseek-v4-flash
 permission:
   edit: allow
   bash: deny
+  task: deny
 ---
 
 ## Purpose
@@ -41,6 +42,10 @@ Return:
 - Documentation files changed and what changed
 - Any stale references found and corrected
 - Any discrepancies discovered (e.g., docs say X but code does Y)
+
+## Reasoning effort
+
+Use the highest reasoning effort available. Think carefully before acting. Do not guess. Diagnose root causes before proposing or applying fixes. Keep the final action minimal and proportional to the task.
 
 ## Escalation / handoff rules
 - If you discover behavior that contradicts documentation, flag it for the orchestrator.

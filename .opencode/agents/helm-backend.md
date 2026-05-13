@@ -2,6 +2,8 @@
 description: Python FastAPI implementation
 mode: subagent
 model: opencode-go/deepseek-v4-flash
+permission:
+  task: deny
 ---
 
 ## Purpose
@@ -40,6 +42,10 @@ Return a summary of:
 - Backend files changed and what changed
 - Tests run and results
 - Any contract changes that affect frontend (flag for helm-protocol or helm-frontend)
+
+## Reasoning effort
+
+Use the highest reasoning effort available. Think carefully before acting. Do not guess. Diagnose root causes before proposing or applying fixes. Keep the final action minimal and proportional to the task.
 
 ## Escalation / handoff rules
 - If the change affects API contracts (schemas, endpoints, WebSocket messages), flag it for the orchestrator — do not silently modify frontend files.

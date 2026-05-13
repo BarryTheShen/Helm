@@ -5,6 +5,7 @@ model: opencode-go/kimi-k2.6
 permission:
   edit: deny
   bash: deny
+  task: deny
 ---
 
 ## Purpose
@@ -38,6 +39,10 @@ Return findings separated into:
 - **Polish suggestions:** improvements that are not blocking
 
 Each finding: component/file reference, visual description, severity, suggested fix (in prose only).
+
+## Reasoning effort
+
+Use the highest reasoning effort available. Think carefully before acting. Do not guess. Diagnose root causes before proposing or applying fixes. Keep the final action minimal and proportional to the task.
 
 ## Escalation / handoff rules
 - If no screenshot/visual evidence exists, recommend the orchestrator provide it.

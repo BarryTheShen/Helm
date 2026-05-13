@@ -70,3 +70,6 @@ backend/.pytest_*.txt
 .omc/
 **/.omc/
 **/subagent-tracking.json
+
+# QA environment
+qa/.qa-env.json

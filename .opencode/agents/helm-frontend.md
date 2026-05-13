@@ -2,6 +2,8 @@
 description: React Native + Web admin implementation
 mode: subagent
 model: opencode-go/deepseek-v4-flash
+permission:
+  task: deny
 ---
 
 ## Purpose
@@ -39,6 +41,10 @@ Return a summary of:
 - Frontend files changed and what changed
 - Verification run and results
 - Any API contract dependencies (flag for helm-backend or helm-protocol)
+
+## Reasoning effort
+
+Use the highest reasoning effort available. Think carefully before acting. Do not guess. Diagnose root causes before proposing or applying fixes. Keep the final action minimal and proportional to the task.
 
 ## Escalation / handoff rules
 - If the change requires new API endpoints or schema changes, flag it for the orchestrator — do not silently modify backend files.

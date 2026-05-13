@@ -1,7 +1,10 @@
 ---
 description: API/WS/MCP contract definitions
 mode: subagent
-model: opencode-go/mimo-v2.5-pro
+model: opencode-go/deepseek-v4-pro
+permission:
+  edit: deny
+  task: deny
 ---
 
 ## Purpose
@@ -38,6 +41,10 @@ Return:
 - Contract changes identified (what changed, which files on each side)
 - Required coordinated edits (backend schema → frontend types)
 - Risks if changes are not synchronized
+
+## Reasoning effort
+
+Use the highest reasoning effort available. Think carefully before acting. Do not guess. Diagnose root causes before proposing or applying fixes. Keep the final action minimal and proportional to the task.
 
 ## Escalation / handoff rules
 - If the task is purely implementation (no contract alignment needed), recommend the orchestrator use helm-backend or helm-frontend directly.

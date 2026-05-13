@@ -2,6 +2,8 @@
 description: PydanticAI + MCP implementation
 mode: subagent
 model: opencode-go/deepseek-v4-flash
+permission:
+  task: deny
 ---
 
 ## Purpose
@@ -39,6 +41,10 @@ Return:
 - Files changed and what changed
 - Three-file sync status (all three in sync? which ones need updating?)
 - Tests run and results
+
+## Reasoning effort
+
+Use the highest reasoning effort available. Think carefully before acting. Do not guess. Diagnose root causes before proposing or applying fixes. Keep the final action minimal and proportional to the task.
 
 ## Escalation / handoff rules
 - If the change affects API contracts visible to frontend, flag for the orchestrator.

@@ -162,7 +162,8 @@ Rewrote `opencode.jsonc` to match official OpenCode v1.14 config format. Updated
 
 ### Model Mapping
 
-- **Orchestrator/Reasoning agents** (`helm-orchestrator`, `helm-planner`, `helm-reviewer`, `helm-security`, `helm-protocol`) → `opencode-go/mimo-v2.5-pro`
+- **Orchestrator** (`helm-orchestrator`) → `opencode-go/deepseek-v4-flash`
+- **Reasoning agents** (`helm-planner`, `helm-reviewer`, `helm-security`, `helm-protocol`) → `opencode-go/deepseek-v4-pro`
 - **Worker agents** (`helm-build`, `helm-backend`, `helm-frontend`, `helm-agent-runtime`, `helm-tester`, `helm-docs`, `helm-git`) → `opencode-go/deepseek-v4-flash`
 - **UI Reviewer** (`helm-ui-reviewer`) → `opencode-go/kimi-k2.6`
 - **Local fallback** (`helm-tester` fallback, private/local work) → `local/qwen3.6-27b-autoround`
@@ -207,3 +208,35 @@ Rewrote `opencode.jsonc` to match official OpenCode v1.14 config format. Updated
 - `opencode.jsonc` — no config changes needed
 - Application source code — out of scope
 - `.opencode/` frontmatter (model, mode, permission) — preserved as-is
+
+## 2026-05-13: Refine OpenCode Agent Stack
+
+### What Changed
+
+- **Model routing:** Replaced all `opencode-go/mimo-v2.5-pro` references with `opencode-go/deepseek-v4-flash` (orchestrator) or `opencode-go/deepseek-v4-pro` (planner, plan-critic, reviewer, security, protocol).
+- **Reasoning effort:** Added `## Reasoning effort` prompt-level instructions to all 15 agent files — orchestrator uses maximum effort; reasoning agents use high effort with root-cause focus; worker agents use high effort with minimal/proportional action.
+- **Orchestrator autonomy:** Added `## Autonomy / ask-less policy` section — orchestrator makes reasonable defaults, asks only for genuine blockers.
+- **Planner → critic mandatory:** Added `## Plan Critic Invocation Rules` and `## Scope Control` — critic is mandatory for medium/large/risky plans. Max 2 rounds by default, 3rd only for concrete blockers. Small edits may skip with explicit reason.
+- **Plan-critic focus:** Added `## Focus` section — targeted only, max 8 source files, outputs APPROVED or CHANGES_REQUIRED.
+- **Session-init permissions:** Locked to `.helm-sessions/` only with specific bash command allowlist. Added `task: deny`.
+- **Git safety:** Added `## Safety rules` section with explicit "never push to main" / "never force push" rules.
+- **Permission hardening:** Added `task: deny` to all leaf-node agents (13 agents). Only `helm-orchestrator` and `helm-planner` retain task delegation permissions.
+- **Docs updates:** `docs/ai/opencode-models.md` rewritten to DeepSeek-first model policy. `docs/ai/agents.md` updated with model routing, reasoning effort policy, orchestrator autonomy. `docs/ai/workflows.md` updated with mandatory critic rules, ask-less policy, and max 2-round critic limit.
+- `opencode.jsonc` model changed from `local/qwen3.6-27b-autoround` to `opencode-go/deepseek-v4-flash`.
+
+### Why
+
+- MiMo V2.5 Pro showed runtime looping and overcomplication in Helm's agent context.
+- Reasoning effort needed standardization — each agent now has explicit guidance.
+- Orchestrator was asking too many routine questions, slowing the loop.
+- Planner → critic delegation was optional when it should be mandatory for medium/large work.
+- Session-init had overly broad permissions (external_directory: allow).
+- Git agent had safety rules in forbidden actions only, not in the prompt body.
+- Several agents lacked `task: deny`, allowing potential unauthorized delegation.
+
+### What was NOT changed
+
+- MCP config (Playwright, Context7) in `opencode.jsonc` — untouched.
+- Application source code — out of scope.
+- Command files (`.opencode/commands/*.md`) — no changes needed.
+- `.claude/` files — legacy Claude Code config, left alone.

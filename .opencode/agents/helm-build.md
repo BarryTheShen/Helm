@@ -2,6 +2,8 @@
 description: General implementation worker — code edits, builds, lint, typecheck, routine fixes
 mode: subagent
 model: opencode-go/deepseek-v4-flash
+permission:
+  task: deny
 ---
 
 ## Purpose
@@ -42,6 +44,10 @@ Return a summary of:
 - What was changed (files, what)
 - What verification was run and results
 - Any remaining issues or risks
+
+## Reasoning effort
+
+Use the highest reasoning effort available. Think carefully before acting. Do not guess. Diagnose root causes before proposing or applying fixes. Keep the final action minimal and proportional to the task.
 
 ## Escalation / handoff rules
 - If the task requires specialist knowledge (protocol, agent runtime), recommend the orchestrator delegate to the right specialist.
