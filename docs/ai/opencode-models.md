@@ -5,8 +5,9 @@ This document defines Helm's model routing strategy for OpenCode. DeepSeek is th
 ## 1. Project Policy
 
 - **Primary model source:** OpenCode Go (user-managed provider credentials).
-- **Default worker/orchestrator model:** DeepSeek V4 Flash via OpenCode Go.
-- **Reasoning/planning/review/security model:** DeepSeek V4 Pro via OpenCode Go.
+- **Primary/orchestrator model:** DeepSeek V4 Pro via OpenCode Go.
+- **Reasoning/planning/review/security/protocol model:** DeepSeek V4 Pro via OpenCode Go.
+- **Worker model:** DeepSeek V4 Flash via OpenCode Go (session-init, build, backend, frontend, agent-runtime, tester, docs, git).
 - **Visual/UI:** Qwen3.6 Plus via OpenCode Go.
 - **Local fallback:** Qwen3.6 27B (optional — too slow to be default for routine work).
 - **MiMo:** No longer used as default. Was removed due to runtime looping and overcomplication in Helm.
@@ -28,19 +29,20 @@ If the endpoint is unreachable from the dev machine, it is expected (network-dep
 
 ## 3. Model Tier Strategy
 
-Four model tiers route work by role:
+Five model tiers route work by role:
 
 | Tier | Model ID | Roles |
 |------|----------|-------|
-| **Default** | `opencode-go/deepseek-v4-flash` | orchestrator, session-init, build, backend, frontend, agent-runtime, tester, docs, git |
+| **Primary** | `opencode-go/deepseek-v4-pro` | orchestrator |
+| **Worker** | `opencode-go/deepseek-v4-flash` | session-init, build, backend, frontend, agent-runtime, tester, docs, git |
 | **Reasoning** | `opencode-go/deepseek-v4-pro` | planner, plan-critic, reviewer, security, protocol |
 | **Visual/UI** | `opencode-go/qwen3.6-plus` | ui-reviewer (screenshots, visual regressions, exhaustive page sweep, live visual testing) |
 | **Local fallback** | `local/qwen3.6-27b-autoround` | tester fallback, private/local work, cost-sensitive tasks |
 
 ### Why two DeepSeek variants?
 
-- **DeepSeek V4 Flash** is the fast default — used for the orchestrator (which delegates but doesn't reason deeply about code) and all worker agents (which implement, test, document, and commit).
-- **DeepSeek V4 Pro** is the reasoning variant — used for planner, plan-critic, reviewer, security, and protocol agents, which need deeper analysis and verification before reaching conclusions.
+- **DeepSeek V4 Pro** is the primary orchestrator and reasoning model — used for the orchestrator (which classifies, routes, and makes delegation decisions) and all reasoning agents (planner, plan-critic, reviewer, security, protocol).
+- **DeepSeek V4 Flash** is the fast worker model — used for session-init, build, backend, frontend, agent-runtime, tester, docs, and git agents, which implement, test, document, and commit.
 
 ### Why MiMo was removed
 
@@ -54,21 +56,21 @@ Kimi K2.6 was initially configured as the multimodal model for UI review. It was
 
 | Agent | Model Tier | Model ID |
 |-------|-----------|----------|
-| `helm-orchestrator` | Default | `opencode-go/deepseek-v4-flash` |
-| `helm-session-init` | Default | `opencode-go/deepseek-v4-flash` |
+| `helm-orchestrator` | Primary | `opencode-go/deepseek-v4-pro` |
+| `helm-session-init` | Worker | `opencode-go/deepseek-v4-flash` |
 | `helm-planner` | Reasoning | `opencode-go/deepseek-v4-pro` |
 | `helm-plan-critic` | Reasoning | `opencode-go/deepseek-v4-pro` |
 | `helm-reviewer` | Reasoning | `opencode-go/deepseek-v4-pro` |
 | `helm-security` | Reasoning | `opencode-go/deepseek-v4-pro` |
 | `helm-protocol` | Reasoning | `opencode-go/deepseek-v4-pro` |
 | `helm-ui-reviewer` | Visual/UI | `opencode-go/qwen3.6-plus` |
-| `helm-build` | Default | `opencode-go/deepseek-v4-flash` |
-| `helm-backend` | Default | `opencode-go/deepseek-v4-flash` |
-| `helm-frontend` | Default | `opencode-go/deepseek-v4-flash` |
-| `helm-agent-runtime` | Default | `opencode-go/deepseek-v4-flash` |
-| `helm-tester` | Default | `opencode-go/deepseek-v4-flash` (fallback: `local/qwen3.6-27b-autoround`) |
-| `helm-docs` | Default | `opencode-go/deepseek-v4-flash` |
-| `helm-git` | Default | `opencode-go/deepseek-v4-flash` |
+| `helm-build` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-backend` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-frontend` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-agent-runtime` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-tester` | Worker | `opencode-go/deepseek-v4-flash` (fallback: `local/qwen3.6-27b-autoround`) |
+| `helm-docs` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-git` | Worker | `opencode-go/deepseek-v4-flash` |
 
 Note: `helm-plan-critic` uses the reasoning model (`deepseek-v4-pro`) but only for **targeted** critique (max 8 files per invocation), not broad scanning. This keeps cost proportional.
 
@@ -101,7 +103,7 @@ OPENCODE_LOCAL_BASE_URL=http://192.168.110.26:8000/v1
 OPENCODE_LOCAL_MODEL=qwen3.6-27b-autoround
 
 # Per-role routing (if your OpenCode version supports it)
-OPENCODE_MODEL_PRIMARY=opencode-go/deepseek-v4-flash
+OPENCODE_MODEL_PRIMARY=opencode-go/deepseek-v4-pro
 OPENCODE_MODEL_WORKER=opencode-go/deepseek-v4-flash
 OPENCODE_MODEL_REASONING=opencode-go/deepseek-v4-pro
 OPENCODE_MODEL_MINI=opencode-go/deepseek-v4-flash
@@ -111,6 +113,6 @@ If the local server requires an API key, use a placeholder like `local-dev-key` 
 
 ## 8. Config Policy
 
-- `opencode.jsonc` keeps `"model": "opencode-go/deepseek-v4-flash"` as the safe default.
+- `opencode.jsonc` keeps `"model": "opencode-go/deepseek-v4-pro"` as the safe default.
 - Per-agent model routing lives in `.opencode/agents/*.md` — each agent declares its `model:` in frontmatter.
 - Do not add unverified provider config to `opencode.jsonc`.

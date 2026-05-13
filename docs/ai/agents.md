@@ -56,7 +56,7 @@ The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/
 
 #### `helm-orchestrator`
 - **Mode:** primary
-- **Model:** DeepSeek V4 Flash (default fast worker)
+- **Model:** DeepSeek V4 Pro (primary reasoning)
 - **Permissions:** All read/edit/bash/glob/grep/lsp/webfetch/websearch/external_directory denied. Only task delegation allowed.
 - **Task delegation:** May delegate to all subagents. `helm-security` and `helm-git` require user approval.
 - **Cannot:** Read source, edit files, run bash, run tests, call Context7/Playwright directly, explore the codebase.
@@ -157,7 +157,7 @@ See [workflows.md](workflows.md) for the full exhaustive page sweep policy.
 
 | Agent | Model Tier | Model ID |
 |-------|-----------|----------|
-| `helm-orchestrator` | Default | `opencode-go/deepseek-v4-flash` |
+| `helm-orchestrator` | Primary | `opencode-go/deepseek-v4-pro` |
 | `helm-planner` | Reasoning | `opencode-go/deepseek-v4-pro` |
 | `helm-plan-critic` | Reasoning | `opencode-go/deepseek-v4-pro` |
 | `helm-reviewer` | Reasoning | `opencode-go/deepseek-v4-pro` |

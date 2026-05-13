@@ -1,7 +1,7 @@
 ---
 description: Primary orchestrator — classifies tasks, delegates to subagents, never reads or edits source
 mode: primary
-model: opencode-go/deepseek-v4-flash
+model: opencode-go/deepseek-v4-pro
 permission:
   read: deny
   edit: deny
