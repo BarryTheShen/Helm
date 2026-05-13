@@ -30,19 +30,19 @@ cd web && npm run build
 cd qa && npx playwright test --project e2e
 
 # Conditional — if React components/hooks changed
-cd web && npx -y react-doctor@latest . --diff origin/modernize/import-libraries --offline --json
+npx -y react-doctor@latest web --diff origin/modernize/import-libraries --offline --json
 ```
-
-### Mobile Code Changed
-
-```bash
-# Smoke check — start dev server
-cd mobile && npx expo start
-
-# Conditional — simulator/device check for UI behavior changes
-
-# Conditional — if React Native components/hooks changed
-cd mobile && npx -y react-doctor@latest . --diff origin/modernize/import-libraries --offline --json
+ 
+ ### Mobile Code Changed
+ 
+ ```bash
+ # Smoke check — start dev server
+ cd mobile && npx expo start
+ 
+ # Conditional — simulator/device check for UI behavior changes
+ 
+ # Conditional — if React Native components/hooks changed
+ npx -y react-doctor@latest mobile --diff origin/modernize/import-libraries --offline --json
 ```
 
 ### MCP Tool Changed

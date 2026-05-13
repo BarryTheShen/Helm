@@ -66,10 +66,22 @@ You manage the `.helm-sessions/current/` session workspace. You create, archive,
 |------|-------------|----------|
 | `task.md` | Always on new task | Task description, date, classification |
 | `context-index.md` | Always on new task | Doc references, key files, decisions |
-| `requirements-checklist.md` | When planning begins (helm-planner, for feature-level tasks) | Requirements coverage checklist |
+| `requirements-checklist.md` | Session init (stub for every task). Populated by helm-planner for feature-level tasks | Requirements coverage checklist |
 | `current-plan.md` | Only when planning begins (orchestrator delegates to planner) | Implementation plan |
 | `critic-report.md` | Only when critique begins (plan-critic agent) | Critic findings |
 | `verification-report.md` | Only when verification begins (tester/reviewer) | Test results, review findings |
+
+### Requirements Checklist Stub
+
+When initializing a new session, `helm-session-init` creates `.helm-sessions/current/requirements-checklist.md` with this template:
+
+```
+# Requirements Checklist
+
+Status: Not populated yet.  
+Owner: helm-planner.  
+Notes: Populate for feature-level tasks from the user request, relevant Feature Feedback docs, AGENTS.md, docs/ai workflows, and blueprint specs.
+```
 
 ## Output format
 Return a structured summary of what was done and the current session state:

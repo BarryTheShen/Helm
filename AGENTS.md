@@ -124,7 +124,7 @@ Run verification proportional to the layers you touched:
 | Backend code | `cd backend && pytest -q` |
 | Web admin | `cd web && npm run lint` (build if types changed); conditional: `cd qa && npx playwright test --project e2e` if UI behavior changed |
 | Mobile | `cd mobile && npx expo start` smoke check |
-| React components/hooks | `npx -y react-doctor@latest . --diff origin/modernize/import-libraries --offline --json` | Conditional — if React/RN components changed |
+| React components/hooks | `npx -y react-doctor@latest . --diff origin/modernize/import-libraries --offline --json` — Conditional, if React/RN components changed |
 | Docs/config only | Path/link sanity, no hardcoded secrets |
 | Multi-layer | Relevant checks for each layer changed |
 

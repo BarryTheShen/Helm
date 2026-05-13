@@ -52,7 +52,7 @@ Write a focused plan. The plan must include:
 - Dependency order (step N must be implementable before step N+1)
 - Risks and edge cases
 - Verification commands for each layer
-- **Requirements coverage** — for feature-level tasks, list requirements derived from the user request, relevant Feature Feedback docs, AGENTS.md, and blueprint specs. Write a compact checklist to `.helm-sessions/current/requirements-checklist.md`.
+- **Requirements coverage** — for feature-level tasks, populate `.helm-sessions/current/requirements-checklist.md` (a stub already exists from session-init). Derive requirements from the user request, relevant Feature Feedback docs, AGENTS.md, and blueprint specs.
 
 Do NOT do broad exploration. Work from documentation. If the plan references specific files or symbols, note them — the critic will verify they exist.
 
@@ -116,7 +116,7 @@ Every plan must include a "Scope control" section with:
 
 ## Output format
 
-When applicable, include the path to `requirements-checklist.md` (for feature-level tasks).
+When applicable, include the path to `.helm-sessions/current/requirements-checklist.md` (for feature-level tasks).
 
 ```markdown
 ## Plan: [Task Name]

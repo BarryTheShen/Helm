@@ -140,8 +140,7 @@ The OpenCode config uses `AGENTS.md` (portable instructions), `opencode.jsonc` (
 
 ### helm-tester vs helm-ui-reviewer
 
-- **helm-tester**: Runs automated tests, browser checks, Playwright/e2e, simulator/smoke checks. Diagnoses test failures. Does NOT fix application code.
-- **helm-react-doctor**: helm-tester also runs React Doctor diagnostics on React/React Native component changes — detecting hook rule violations, stale closures, missing dependencies, and render issues. React Doctor complements (does not replace) the existing QA suite.
+- **helm-tester**: Runs automated tests, browser checks, Playwright/e2e, simulator/smoke checks. Diagnoses test failures. Does NOT fix application code. Also runs React Doctor diagnostics on React/React Native component changes — detecting hook rule violations, stale closures, missing dependencies, and render issues. React Doctor complements (does not replace) the existing QA suite.
 - **helm-ui-reviewer**: Inspects visual quality, UX consistency, screenshots/browser state, interaction flows, layout, polish. Performs exhaustive page sweep when requested.
 - For UI-visible work, both may run:
   - `helm-tester` for automated e2e/smoke/live checks.
