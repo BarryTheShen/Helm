@@ -292,6 +292,58 @@ test.describe('Schema Reconciliation', () => {
     ).toEqual([]);
   });
 
+  // ── Step 1.5 — Canonical types match all registries ────────────────────
+  test('canonical types match all registries', () => {
+    const canonical = JSON.parse(fs.readFileSync(qaPath('src/canonical-types.json'), 'utf-8'));
+    const discovered = JSON.parse(fs.readFileSync(qaPath('src/discovered.json'), 'utf-8'));
+
+    const canonicalTypes = new Set(canonical.v2_component_types);
+    const moduleAliases = new Set(canonical.module_aliases || []);
+    const readOnlyTypes = new Set(canonical.read_only_runtime_types || []);
+
+    // Check each registry for types not in the canonical list (unexpected extras).
+    // Each registry has its own set of allowed types:
+    //   - validation_whitelist: only v2_component_types
+    //   - mobile_registry: v2_component_types + module_aliases
+    //   - web_registry: v2_component_types + read_only_runtime_types
+    const registries = [
+      { name: 'mobile_registry_types', types: (discovered.mobile_registry_types || []), allowed: new Set([...canonicalTypes, ...moduleAliases]) },
+      { name: 'validation_whitelist.types', types: (discovered.validation_whitelist?.types || []), allowed: canonicalTypes },
+      { name: 'web_registry_types.all', types: (discovered.web_registry_types?.all || []), allowed: new Set([...canonicalTypes, ...readOnlyTypes]) },
+    ];
+
+    let allExtra: string[] = [];
+    for (const reg of registries) {
+      const extra = reg.types.filter(t => !reg.allowed.has(t));
+      if (extra.length > 0) {
+        test.info().annotations.push({
+          type: 'info',
+          description: `${reg.name} has ${extra.length} type(s) not in allowed set: ${extra.join(', ')}`,
+        });
+        allExtra = allExtra.concat(extra.map(t => `${t} (in ${reg.name})`));
+      }
+    }
+
+    // Also check for canonical types missing from each registry (informational)
+    for (const reg of registries) {
+      const regSet = new Set(reg.types);
+      const missing = canonical.v2_component_types.filter(t => !regSet.has(t));
+      if (missing.length > 0) {
+        test.info().annotations.push({
+          type: 'info',
+          description: `Canonical type(s) missing from ${reg.name}: ${missing.join(', ')}`,
+        });
+      }
+    }
+
+    expect(
+      allExtra,
+      allExtra.length > 0
+        ? `Unexpected type(s) found in registries that are not in allowed set: ${allExtra.join(', ')}`
+        : 'All registries contain only allowed types',
+    ).toEqual([]);
+  });
+
   // ── Existing: validation/DB/mobile/web registry consistency ────────────
   // (updated: console.log → test.info())
   test('validation whitelist, DB seed, mobile registry, and web registry are consistent', async () => {

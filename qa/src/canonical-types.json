@@ -1,0 +1,36 @@
+{
+  "version": 2,
+  "description": "Single source of truth for SDUI component types. QA discovery checks all registries against this.",
+  "v2_component_types": [
+    "Text", "Markdown", "Button", "Image", "TextInput", "Icon",
+    "Empty", "Container",
+    "CalendarModule", "ChatModule", "NotesModule", "InputBar",
+    "Badge", "Stat", "List", "Alert",
+    "Todo", "RichText", "ArticleCard"
+  ],
+  "module_aliases": [
+    "TodoModule",
+    "ArticleCardModule",
+    "RichTextRenderer",
+    "article_card",
+    "rich_text_renderer",
+    "todo"
+  ],
+  "read_only_runtime_types": [
+    "RichTextRenderer",
+    "icon_button",
+    "spacer",
+    "card",
+    "list",
+    "form",
+    "list_item",
+    "alert",
+    "badge",
+    "stat",
+    "stats_row",
+    "progress"
+  ],
+  "valid_row_types": ["content"],
+  "deprecated_row_types": ["divider", "spacer"],
+  "notes": "v2_component_types are the canonical SDUI cell content types. module_aliases are PascalCase module aliases and snake_case variants valid in mobile registry. read_only_runtime_types are legacy/read-only types in web registry for backward compatibility."
+}

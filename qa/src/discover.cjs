@@ -233,15 +233,19 @@ function extractComponentTypesFromScreen(screen) {
  * - hasShowDivider:  whether any row has showDivider: true (correct pattern)
  */
 function extractRowDividerPatterns(screen) {
-  if (!screen || typeof screen !== 'object') return { hasDividerRows: false, hasShowDivider: false };
+  if (!screen || typeof screen !== 'object') return { hasDividerRows: false, hasShowDivider: false, rowTypesInUse: [] };
   const rows = screen.rows;
-  if (!Array.isArray(rows)) return { hasDividerRows: false, hasShowDivider: false };
+  if (!Array.isArray(rows)) return { hasDividerRows: false, hasShowDivider: false, rowTypesInUse: [] };
 
   let hasDividerRows = false;
   let hasShowDivider = false;
+  const rowTypes = new Set();
 
   for (const row of rows) {
     if (!row || typeof row !== 'object') continue;
+    if (row.type) {
+      rowTypes.add(row.type);
+    }
     if (row.type === 'divider') {
       hasDividerRows = true;
     }
@@ -250,7 +254,7 @@ function extractRowDividerPatterns(screen) {
     }
   }
 
-  return { hasDividerRows, hasShowDivider };
+  return { hasDividerRows, hasShowDivider, rowTypesInUse: [...rowTypes] };
 }
 
 async function discoverModuleStates(token) {
@@ -261,20 +265,23 @@ async function discoverModuleStates(token) {
 
   // 2. Fetch live SDUI screen for each module
   const result = {};
+  const allRowTypes = new Set();
   for (const moduleId of moduleIds) {
     const resp = await fetchJSON(`${BACKEND_BASE}/api/sdui/${moduleId}`, token);
     if (resp._error || resp.screen === null || resp.screen === undefined) {
-      result[moduleId] = { has_screen: false, types: [], hasDivider: false, hasDividerRows: false, hasShowDivider: false };
+      result[moduleId] = { has_screen: false, types: [], hasDivider: false, hasDividerRows: false, hasShowDivider: false, rowTypesInUse: [] };
       continue;
     }
     const types = extractComponentTypesFromScreen(resp.screen);
     const dividerPatterns = extractRowDividerPatterns(resp.screen);
+    for (const rt of dividerPatterns.rowTypesInUse) allRowTypes.add(rt);
     result[moduleId] = {
       has_screen: true,
       types,
       hasDivider: types.some(t => t === 'Divider' || t === 'divider'),
       hasDividerRows: dividerPatterns.hasDividerRows,
       hasShowDivider: dividerPatterns.hasShowDivider,
+      rowTypesInUse: dividerPatterns.rowTypesInUse,
     };
   }
 
@@ -286,9 +293,10 @@ async function discoverModuleStates(token) {
     }
     const types = extractComponentTypesFromScreen(resp.screen);
     const dividerPatterns = extractRowDividerPatterns(resp.screen);
+    for (const rt of dividerPatterns.rowTypesInUse) allRowTypes.add(rt);
     if (types.length > 0 || dividerPatterns.hasDividerRows || dividerPatterns.hasShowDivider) {
       if (!result[moduleId]) {
-        result[moduleId] = { has_screen: false, types: [], hasDivider: false, hasDividerRows: false, hasShowDivider: false };
+        result[moduleId] = { has_screen: false, types: [], hasDivider: false, hasDividerRows: false, hasShowDivider: false, rowTypesInUse: [] };
       }
       result[moduleId].draft_types = types;
       if (types.some(t => t === 'Divider' || t === 'divider')) {
@@ -300,9 +308,14 @@ async function discoverModuleStates(token) {
       if (dividerPatterns.hasShowDivider) {
         result[moduleId].hasShowDivider = true;
       }
+      if (dividerPatterns.rowTypesInUse.length > 0) {
+        const merged = new Set([...(result[moduleId].rowTypesInUse || []), ...dividerPatterns.rowTypesInUse]);
+        result[moduleId].rowTypesInUse = [...merged];
+      }
     }
   }
 
+  result._aggregate_row_types = [...allRowTypes];
   return result;
 }
 
@@ -315,6 +328,63 @@ function discoverLocalTemplates() {
     types.add(m[1]);
   }
   return [...types].sort();
+}
+
+function discoverCanonicalTypes() {
+  const filePath = path.join(__dirname, 'canonical-types.json');
+  if (!fs.existsSync(filePath)) {
+    return { _error: 'canonical-types.json not found — run discovery after creating it' };
+  }
+  return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+}
+
+/**
+ * Compare canonical types against each discovered registry.
+ * Returns a report with issues grouped by registry and severity.
+ */
+function computeDriftReport(canonical, discovered) {
+  if (!canonical || canonical._error) {
+    return { issues: [{ registry: 'canonical', severity: 'error', message: 'Canonical types not available' }], issue_count: 1 };
+  }
+
+  const canonicalTypes = new Set(canonical.v2_component_types || []);
+  const canonicalRowTypes = new Set(canonical.valid_row_types || []);
+  const deprecatedRowTypes = new Set(canonical.deprecated_row_types || []);
+
+  const issues = [];
+
+  // --- Compare v2_component_types against each registry ---
+  const checks = [
+    { registry: 'mobile_registry_types', types: discovered.mobile_registry_types || [] },
+    { registry: 'validation_whitelist.types', types: discovered.validation_whitelist?.types || [] },
+    { registry: 'web_registry_types.all', types: discovered.web_registry_types?.all || [] },
+  ];
+
+  for (const { registry, types } of checks) {
+    const registrySet = new Set(types);
+    const missing = canonical.v2_component_types.filter(t => !registrySet.has(t));
+    const extra = types.filter(t => !canonicalTypes.has(t));
+    if (missing.length > 0) {
+      issues.push({ registry, severity: 'missing', types: missing, message: `${missing.length} canonical type(s) missing from ${registry}` });
+    }
+    if (extra.length > 0) {
+      issues.push({ registry, severity: 'extra', types: extra, message: `${extra.length} unexpected type(s) in ${registry} not in canonical list` });
+    }
+  }
+
+  // --- Check row types ---
+  const moduleStates = discovered.module_state_types || {};
+  const aggregateRowTypes = moduleStates._aggregate_row_types || [];
+  const deprecatedInUse = aggregateRowTypes.filter(rt => deprecatedRowTypes.has(rt));
+  const invalidRowTypes = aggregateRowTypes.filter(rt => !canonicalRowTypes.has(rt) && !deprecatedRowTypes.has(rt));
+  if (deprecatedInUse.length > 0) {
+    issues.push({ registry: 'module_screens', severity: 'deprecated', types: deprecatedInUse, message: `Deprecated row type(s) still in use on live screens: ${deprecatedInUse.join(', ')}` });
+  }
+  if (invalidRowTypes.length > 0) {
+    issues.push({ registry: 'module_screens', severity: 'invalid', types: invalidRowTypes, message: `Unknown row type(s) found on screens: ${invalidRowTypes.join(', ')}` });
+  }
+
+  return { issues, issue_count: issues.length };
 }
 
 async function discover(token) {
@@ -336,6 +406,14 @@ async function discover(token) {
     discoverModuleStates(token),
   ]);
 
+  const canonical = discoverCanonicalTypes();
+  const driftReport = computeDriftReport(canonical, {
+    mobile_registry_types: mobileRegistry,
+    validation_whitelist: validationWhitelist,
+    web_registry_types: webRegistry,
+    module_state_types: moduleStates,
+  });
+
   const output = {
     generated_at: new Date().toISOString(),
     backend_url: BACKEND_BASE,
@@ -352,6 +430,8 @@ async function discover(token) {
     web_preview_types: webPreview,
     local_template_types: localTemplates,
     module_state_types: moduleStates,
+    canonical_types: canonical,
+    drift_report: driftReport,
     summary: {
       total_endpoints: endpoints.length,
       total_routes: routes.length,
@@ -371,6 +451,7 @@ async function discover(token) {
       module_states_with_divider: Object.values(moduleStates).filter(s => s.hasDivider).length,
       module_states_with_divider_rows: Object.values(moduleStates).filter(s => s.hasDividerRows).length,
       module_states_with_show_divider: Object.values(moduleStates).filter(s => s.hasShowDivider).length,
+      drift_issue_count: driftReport.issue_count,
     },
   };
 
@@ -395,6 +476,14 @@ async function discover(token) {
   console.log(`  Module states with Divider: ${output.summary.module_states_with_divider}`);
   console.log(`  Module states with divider rows: ${output.summary.module_states_with_divider_rows}`);
   console.log(`  Module states with showDivider: ${output.summary.module_states_with_show_divider}`);
+  if (driftReport.issue_count > 0) {
+    console.log(`\nDRIFT REPORT: ${driftReport.issue_count} issue(s) found`);
+    for (const issue of driftReport.issues) {
+      console.log(`  [${issue.severity}] ${issue.registry}: ${issue.message}`);
+    }
+  } else {
+    console.log('\nDRIFT REPORT: NO DRIFT DETECTED');
+  }
 }
 
 module.exports = { discover };
