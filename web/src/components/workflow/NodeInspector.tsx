@@ -1,6 +1,6 @@
 import { X, Trash2 } from 'lucide-react';
 import type { Node } from 'reactflow';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface NodeInspectorProps {
   node: Node;

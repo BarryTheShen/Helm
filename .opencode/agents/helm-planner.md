@@ -5,7 +5,7 @@ model: opencode-go/deepseek-v4-pro
 permission:
   edit:
     "*": deny
-    ".helm-sessions/current/": allow
+    ".helm-sessions/current/**": allow
   bash: deny
   task:
     "*": deny

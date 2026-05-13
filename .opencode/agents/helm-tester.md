@@ -62,6 +62,17 @@ Live testing is a mode of helm-tester, not a separate agent. When invoked for li
 - Classify stale selector failures separately from app regressions.
 - Do not fix application code — hand findings back to the orchestrator.
 
+## Evidence Gathering
+
+helm-tester gathers browser/live evidence:
+- Screenshots via Playwright MCP or browser tools
+- Console logs (errors, warnings)
+- Network request/response data (4xx/5xx, malformed responses)
+- Playwright/e2e test output
+- Simulator/smoke check results
+
+helm-tester does NOT classify UI/UX issues — it gathers raw evidence and reports it. Classification (blocking/major/minor/polish) of UI/UX issues is done by helm-ui-reviewer after reviewing the evidence.
+
 ## Reasoning effort
 
 Use the highest reasoning effort available. Think carefully before acting. Do not guess. Diagnose root causes before proposing or applying fixes. Keep the final action minimal and proportional to the task.

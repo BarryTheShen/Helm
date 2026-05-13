@@ -3,7 +3,10 @@ description: Combined targeted explorer + plan critic — challenges plan assump
 mode: subagent
 model: opencode-go/deepseek-v4-pro
 permission:
-  edit: deny
+  edit:
+    "*": deny
+    ".helm-sessions/current/critic-report.md": allow
+    ".helm-sessions/current/context-index.md": allow
   bash: deny
   task: deny
 ---

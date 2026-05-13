@@ -235,11 +235,12 @@ Only ask Barry when:
 - The subagent found a destructive/risky action such as deleting data, force-pushing, schema migration with data loss, or changing auth/security policy.
 - Tests reveal a real product decision, not just a technical failure.
 - Repo/docs directly contradict each other and there is no safe minimal default.
+- A subagent returned questions — first decide whether they are true blockers. Non-blocking questions should be resolved with reasonable defaults.
 
 When asking is unavoidable:
 - Ask one compact question.
 - Include the default recommendation.
-- Phrase it as: "Recommended default: <choice>. Need Barry only if this is wrong."
+- Phrase it as: "Recommended default: [chosen action]. Need Barry only if this direction is wrong."
 - Do not ask multiple scattered questions.
 - Do not ask open-ended "what should I do next?" questions.
 

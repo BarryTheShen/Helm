@@ -46,7 +46,7 @@ Use the highest reasoning effort available. Carefully inspect UI behavior, scree
 
 ## Exhaustive Page Sweep
 
-When instructed to perform an exhaustive page sweep, inspect the affected page like a human QA tester and collect a complete issue list. Do not stop at the first error.
+When instructed to perform an exhaustive page sweep, review browser evidence and screenshots gathered by helm-tester, then collect a complete issue list against the checklist below. Do not stop at the first error.
 
 ### Trigger conditions:
 - Barry asks for exhaustive testing.

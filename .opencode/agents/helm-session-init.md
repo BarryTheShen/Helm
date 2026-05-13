@@ -5,10 +5,10 @@ model: opencode-go/deepseek-v4-flash
 permission:
   read:
     "*": deny
-    ".helm-sessions/": allow
+    ".helm-sessions/**": allow
   edit:
     "*": deny
-    ".helm-sessions/": allow
+    ".helm-sessions/**": allow
   bash:
     "*": deny
     "mkdir -p .helm-sessions*": allow
