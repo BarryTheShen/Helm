@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { SDUIPreview } from './SDUIPreview';

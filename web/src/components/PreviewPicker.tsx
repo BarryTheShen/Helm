@@ -2,13 +2,12 @@ import { useState } from 'react';
 import { Monitor, Smartphone, X } from 'lucide-react';
 
 interface PreviewPickerProps {
-  appId: string;
   onSelectBrowser: () => void;
   onSelectDevice: () => void;
   onClose: () => void;
 }
 
-export function PreviewPicker({ appId, onSelectBrowser, onSelectDevice, onClose }: PreviewPickerProps) {
+export function PreviewPicker({ onSelectBrowser, onSelectDevice, onClose }: PreviewPickerProps) {
   const [hoveredOption, setHoveredOption] = useState<'browser' | 'device' | null>(null);
 
   return (

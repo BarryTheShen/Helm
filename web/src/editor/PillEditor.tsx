@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -157,6 +158,23 @@ export function PillEditor({
     },
   });
 
+  const handleClosePicker = () => {
+    setPickerState({
+      isOpen: false,
+      filter: '',
+    });
+
+    // Remove trailing @ if picker was closed without selection
+    if (editor) {
+      const { state } = editor;
+      const { from } = state.selection;
+      const textBefore = state.doc.textBetween(Math.max(0, from - 1), from);
+      if (textBefore === '@') {
+        editor.commands.deleteRange({ from: from - 1, to: from });
+      }
+    }
+  };
+
   // Handle @ key to open picker
   useEffect(() => {
     if (!editor) return;
@@ -257,23 +275,6 @@ export function PillEditor({
       .run();
 
     handleClosePicker();
-  };
-
-  const handleClosePicker = () => {
-    setPickerState({
-      isOpen: false,
-      filter: '',
-    });
-
-    // Remove trailing @ if picker was closed without selection
-    if (editor) {
-      const { state } = editor;
-      const { from } = state.selection;
-      const textBefore = state.doc.textBetween(Math.max(0, from - 1), from);
-      if (textBefore === '@') {
-        editor.commands.deleteRange({ from: from - 1, to: from });
-      }
-    }
   };
 
   // Sync external value changes

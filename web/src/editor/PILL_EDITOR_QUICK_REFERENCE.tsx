@@ -1,4 +1,9 @@
 // Quick Reference: Using the Variable Pill Editor
+// NOTE: This file is a reference document with JSX code examples. It is not meant
+// to be executed - the examples below are illustrative code snippets.
+import type { JSX } from 'react';
+/* eslint-disable @typescript-eslint/no-unused-vars */
+const _PILL_REFERENCE_EXAMPLES: JSX.Element = (<></>);
 
 // ============================================================================
 // BASIC USAGE

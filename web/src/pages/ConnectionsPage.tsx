@@ -70,7 +70,7 @@ const providerBadge: Record<string, string> = {
   custom: 'bg-gray-100 text-gray-700',
 };
 
-const getCustomBadgeClass = (value: string) => `bg-teal-100 text-teal-700`;
+const getCustomBadgeClass = () => `bg-teal-100 text-teal-700`;
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -137,6 +137,7 @@ export function ConnectionsPage() {
       .finally(() => setLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadConnections(); }, []);
 
   // Combine built-in and custom providers

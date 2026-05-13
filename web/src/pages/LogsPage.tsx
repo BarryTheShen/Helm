@@ -85,13 +85,16 @@ export function LogsPage() {
     }).finally(() => setAuditLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (activeTab === 'sessions') loadSessions(); }, [sessionsPage]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (activeTab === 'audit') { setAuditPage(0); loadAudit(0); } }, [filter, dateFrom, dateTo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (activeTab === 'audit') loadAudit(); }, [auditPage]);
-
   useEffect(() => {
-    if (activeTab === 'sessions') loadSessions();
-    else loadAudit();
+    if (activeTab === 'sessions') loadSessions();  
+    else loadAudit();  
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const revoke = async (id: string) => {

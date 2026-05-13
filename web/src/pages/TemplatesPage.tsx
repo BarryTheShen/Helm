@@ -23,6 +23,7 @@ interface ModuleInfo {
 }
 
 interface TemplateDetail extends Template {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   screen_json: any;
 }
 

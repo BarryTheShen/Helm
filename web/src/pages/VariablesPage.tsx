@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { api, type Variable, type VariableCreate, type VariableUpdate, type DataSource, type DataSourceCreate, type DataSourceSchema } from '../lib/api';
+import { api, type Variable, type VariableCreate, type DataSource, type DataSourceCreate, type DataSourceSchema } from '../lib/api';
 import { Plus, Trash2, Pencil, X, Eye } from 'lucide-react';
 
 type Tab = 'variables' | 'data-sources';
@@ -81,6 +81,7 @@ function VariablesTab() {
     }).catch(e => toast.error(e.message)).finally(() => setLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadVariables(); }, []);
 
   const handleCreate = createForm.handleSubmit(async (values) => {
@@ -347,6 +348,7 @@ function DataSourcesTab() {
     }).catch(e => toast.error(e.message)).finally(() => setLoading(false));
   };
 
+   
   useEffect(() => { loadSources(); }, []);
 
   const createSource = async () => {

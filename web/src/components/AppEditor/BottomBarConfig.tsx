@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { DndContext, DragOverlay, closestCenter } from '@dnd-kit/core';
-import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import { DndContext, closestCenter } from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, X } from 'lucide-react';
@@ -71,10 +71,8 @@ function SortableSlot({ slot, index, onRemove }: SortableSlotProps) {
 
 export function BottomBarConfig({
   slots,
-  availableModules,
   onUpdateSlots,
   onRemoveSlot,
-  isDragging,
   onDragStart,
   onDragEnd,
 }: BottomBarConfigProps) {
@@ -84,7 +82,7 @@ export function BottomBarConfig({
 
   const slotIds = useMemo(() => sortedSlots.map(s => s.module_instance_id), [sortedSlots]);
 
-  const handleDragStart = (event: DragStartEvent) => {
+  const handleDragStart = () => {
     onDragStart();
   };
 

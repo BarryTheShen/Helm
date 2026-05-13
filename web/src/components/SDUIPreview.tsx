@@ -1,4 +1,5 @@
-import { type CSSProperties } from 'react';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { type CSSProperties, createElement } from 'react';
 import ReactMarkdown from 'react-markdown';
 import * as LucideIcons from 'lucide-react';
 
@@ -133,7 +134,7 @@ function IconPreview({ name, size, color }: any) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center' }}>
       {IconComponent ? (
-        <IconComponent size={size || 24} color={color || '#000'} />
+        createElement(IconComponent, { size: size || 24, color: color || '#000' })
       ) : (
         <span style={{ fontSize: size || 24, color: color || '#000' }}>⭐</span>
       )}

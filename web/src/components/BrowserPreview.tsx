@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from 'react';
 import { X, Smartphone } from 'lucide-react';
 import { usePreviewStore } from '../stores/usePreviewStore';

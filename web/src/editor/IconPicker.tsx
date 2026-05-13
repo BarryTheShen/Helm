@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, createElement } from 'react';
 import * as LucideIcons from 'lucide-react';
 
 const COMMON_ICONS = [
@@ -17,11 +17,13 @@ interface IconPickerProps {
 }
 
 // Convert kebab-case to PascalCase for Lucide icon lookup
-function getIconComponent(iconName: string) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getIconComponent(iconName: string): any {
   const pascalCase = iconName
     .split('-')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join('');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (LucideIcons as any)[pascalCase] || null;
 }
 
@@ -48,8 +50,15 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
   );
 
   const SelectedIcon = value ? getIconComponent(value) : null;
-  const SearchIcon = getIconComponent('search');
-  const XIcon = getIconComponent('x');
+  const iconSearch = getIconComponent('search');
+  const iconX = getIconComponent('x');
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderIcon = (icon: any, size: number, className?: string) => {
+    if (!icon) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return createElement(icon as any, { size, className: className || '' });
+  };
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -60,18 +69,18 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
           className="flex-1 px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-left flex items-center justify-between"
         >
           <span className="flex items-center gap-1.5">
-            {SelectedIcon && <SelectedIcon size={14} className="text-gray-600" />}
+            {renderIcon(SelectedIcon, 14, 'text-gray-600')}
             <span className="truncate">{value || 'Select icon...'}</span>
           </span>
-          {SearchIcon && <SearchIcon size={12} className="text-gray-400 ml-1 shrink-0" />}
+          {renderIcon(iconSearch, 12, 'text-gray-400 ml-1 shrink-0')}
         </button>
-        {value && XIcon && (
+        {value && iconX && (
           <button
             type="button"
             onClick={() => onChange('')}
             className="px-2 py-1.5 border border-gray-200 rounded-md hover:bg-gray-50"
           >
-            <XIcon size={12} />
+            {renderIcon(iconX, 12)}
           </button>
         )}
       </div>
@@ -80,7 +89,7 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
         <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-64 overflow-hidden flex flex-col">
           <div className="p-2 border-b border-gray-100">
             <div className="relative">
-              {SearchIcon && <SearchIcon size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />}
+              {renderIcon(iconSearch, 12, 'absolute left-2 top-1/2 -translate-y-1/2 text-gray-400')}
               <input
                 type="text"
                 value={searchQuery}
@@ -109,7 +118,7 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
                         value === icon ? 'bg-blue-100 text-blue-700' : 'text-gray-700'
                       }`}
                     >
-                      {IconComponent && <IconComponent size={14} />}
+                      {renderIcon(IconComponent, 14)}
                       <span>{icon}</span>
                     </button>
                   );

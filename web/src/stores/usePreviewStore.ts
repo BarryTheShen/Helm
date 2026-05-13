@@ -4,11 +4,16 @@ export interface PreviewAppConfig {
   id: string;
   name: string;
   icon: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   theme: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   design_tokens: Record<string, any>;
   dark_mode: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   bottom_bar_config: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   launchpad_config: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   screens?: Record<string, any>; // SDUI screen data
 }
 

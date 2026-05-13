@@ -90,7 +90,7 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
   const [contextMenu, setContextMenu] = useState<{ moduleInstance: SDUIModule; x: number; y: number } | null>(null);
   const [renameModal, setRenameModal] = useState<{ moduleId: string; currentName: string } | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ moduleId: string; moduleName: string } | null>(null);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const selectedModuleId = searchParams.get('module_instance_id');

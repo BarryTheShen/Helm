@@ -1,5 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import type { CSSProperties, JSX } from 'react';
 import {
   DndContext,
@@ -13,7 +13,6 @@ import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
-  horizontalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useEditorStore } from './useEditorStore';
@@ -22,7 +21,7 @@ import type { EditorCell, EditorComponent, EditorRow, EditorRowHeight } from './
 import { assertRegisteredComponentType } from './typeGuards';
 
 import { ComponentPicker } from './ComponentPicker';
-import { Plus, GripVertical, X, Edit2, Eye, Copy, Trash2, GripHorizontal } from 'lucide-react';
+import { Plus, GripVertical, X, Edit2, Eye, Copy } from 'lucide-react';
 import { resolveVariables } from './variableResolver';
 import ReactMarkdown from 'react-markdown';
 
@@ -1019,9 +1018,9 @@ function RowDragHandle({
   testId,
 }: {
   isDragging: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   attributes: Record<string, any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   listeners: Record<string, any> | undefined;
   testId?: string;
 }) {

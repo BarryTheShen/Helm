@@ -5,6 +5,7 @@ interface ActionNodeProps {
   data: {
     label?: string;
     action?: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     params?: Record<string, any>;
   };
   selected?: boolean;

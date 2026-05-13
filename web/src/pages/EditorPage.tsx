@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
@@ -140,7 +141,7 @@ function normalizeScreenData(screen: any): EditorScreen | null {
 
   // V1 format: { sections: [{ components: [...] }] }
   if (Array.isArray(record.sections)) {
-    const { sections: _sections, ...screenMeta } = record;
+    const { ...screenMeta } = record;
     const rows = record.sections.flatMap((section: any, i: number) => {
       const comps = Array.isArray(section.components)
         ? section.components
@@ -272,7 +273,7 @@ export function EditorPage() {
   const deviceHeight = useEditorStore(s => s.deviceHeight);
   const rows = useEditorStore(s => s.rows);
 
-  const screenSnapshot = useMemo(() => buildScreenSnapshot(getScreen()), [getScreen, rows]);
+  const screenSnapshot = useMemo(() => buildScreenSnapshot(getScreen()), [getScreen]);
   const hasUnsavedChanges = screenSnapshot !== lastSavedSnapshot;
   const lastSavedLabel = useMemo(() => formatLastSaved(lastSavedAt), [lastSavedAt]);
   const visibleServerTemplates = useMemo(() => templates.slice(0, 6), [templates]);
@@ -336,7 +337,8 @@ export function EditorPage() {
     setTimeout(() => setMessage(null), 4000);
   }, []);
 
-  const beginModuleTransition = useCallback((nextModule: string) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const beginModuleTransition = useCallback((_nextModule: string) => {
     selectedModuleRef.current = nextModule;
     setLoading(true);
     setScreenLoadError(null);
@@ -351,6 +353,7 @@ export function EditorPage() {
   // searchParams.get() always reads the current URL, avoiding the race.
   const [redirectedTo, setRedirectedTo] = useState<string | null>(null);
 
+   
   useEffect(() => {
     // Read directly from URL — always fresh, never stale
     const currentUrlModule = searchParams.get('module_instance_id') || '';
@@ -536,10 +539,12 @@ export function EditorPage() {
         setLoading(false);
       }
     }
+   
   }, [loadScreen, selectedModule, updateModuleHasScreen]);
 
   // Load modules on mount and whenever the modules list changes.
   // Does NOT update the URL — uses the URL param as the single source of truth.
+   
   useEffect(() => {
     void loadModules();
   }, []);

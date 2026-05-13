@@ -8,11 +8,6 @@ interface RenameModuleModalProps {
   onSuccess: () => void;
 }
 
-interface AffectedApp {
-  id: string;
-  name: string;
-}
-
 export function RenameModuleModal({ moduleId, currentName, onClose, onSuccess }: RenameModuleModalProps) {
   const [newName, setNewName] = useState(currentName);
   const [saving, setSaving] = useState(false);

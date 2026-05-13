@@ -126,8 +126,10 @@ export function StructureTree({ moduleLabel = 'Current Module' }: StructureTreeP
   const [addRowRect, setAddRowRect] = useState({ top: 0, left: 0, bottom: 0 });
 
   // Auto-expand all rows on initial load
+   
   useEffect(() => {
     setExpandedRows(new Set(rows.map(r => r.id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows.map(r => r.id).join('|')]);
 
   const toggleExpand = (rowId: string) => {
@@ -168,7 +170,7 @@ export function StructureTree({ moduleLabel = 'Current Module' }: StructureTreeP
             <AddRowPopover
               onAdd={(n, preset) => {
                 if (preset) {
-                  const { cellCount, height, props, ...rest } = preset;
+                  const { cellCount, height, props } = preset;
                   addRow(cellCount, undefined, { height: height || 'auto', ...props });
                 } else {
                   addRow(n);

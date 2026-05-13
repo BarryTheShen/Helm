@@ -1,26 +1,23 @@
 import { useState, useEffect } from 'react';
-import { Smartphone, Plus, Save, Trash2, ChevronDown, Eye } from 'lucide-react';
+import { Smartphone, Plus, Save, ChevronDown, Eye } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAppEditorStore } from '../stores/useAppEditorStore';
 import { usePreviewStore } from '../stores/usePreviewStore';
 import { BottomBarConfig } from '../components/AppEditor/BottomBarConfig';
 import { PreviewPicker } from '../components/PreviewPicker';
 import { BrowserPreview } from '../components/BrowserPreview';
-import type { App, ModuleInstance, BottomBarSlot } from '../stores/useAppEditorStore';
+import type { ModuleInstance, BottomBarSlot } from '../stores/useAppEditorStore';
 
 export function AppEditorPage() {
   const {
     currentAppId,
     apps,
-    selectedModuleId,
     isDragging,
     setCurrentApp,
     setApps,
     setSelectedModule,
     setIsDragging,
     updateApp,
-    addApp,
-    removeApp,
   } = useAppEditorStore();
 
   const [loading, setLoading] = useState(true);
@@ -62,6 +59,7 @@ export function AppEditorPage() {
     };
 
     void loadApps();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load available modules
@@ -80,6 +78,7 @@ export function AppEditorPage() {
     };
 
     void loadModules();
+   
   }, []);
 
   const handleUpdateBottomBar = (slots: BottomBarSlot[]) => {

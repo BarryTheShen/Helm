@@ -1,10 +1,11 @@
 import { X, Trash2 } from 'lucide-react';
 import type { Node } from 'reactflow';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 interface NodeInspectorProps {
   node: Node;
   onClose: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onUpdate: (nodeId: string, data: any) => void;
   onDelete: () => void;
 }
@@ -54,9 +55,11 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
 
   // Sync local state when node changes (but not on every render)
   useEffect(() => {
-    setLocalData(node.data);
+    setLocalData(node.data);  
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.id]); // Only reset when switching to a different node
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateData = (updates: any) => {
     setLocalData((prev) => {
       const newData = { ...prev, ...updates };
@@ -66,15 +69,7 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
     });
   };
 
-  const updateParams = (key: string, value: any) => {
-    setLocalData((prev) => {
-      const params = prev.params || {};
-      const newData = { ...prev, params: { ...params, [key]: value } };
-      setTimeout(() => onUpdate(node.id, newData), 0);
-      return newData;
-    });
-  };
-
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateConfig = (key: string, value: any) => {
     setLocalData((prev) => {
       const config = prev.config || {};

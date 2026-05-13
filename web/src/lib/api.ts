@@ -52,8 +52,10 @@ export interface Workflow {
   id: string;
   name: string;
   description: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   graph: Record<string, any>;
   trigger_type: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   trigger_config: Record<string, any>;
   enabled: boolean;
   created_at: string;
@@ -62,23 +64,29 @@ export interface Workflow {
 export interface WorkflowCreate {
   name: string;
   description?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   graph?: Record<string, any>;
   trigger_type: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   trigger_config?: Record<string, any>;
 }
 export interface WorkflowUpdate {
   name?: string;
   description?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   graph?: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   trigger_config?: Record<string, any>;
   enabled?: boolean;
 }
 export interface WorkflowExecuteResponse {
   execution_id: string;
   status: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   result: any;
 }
 export interface N8nImportResponse {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   workflow: Record<string, any>;
   warnings: string[];
 }
@@ -351,9 +359,11 @@ class ApiClient {
   deleteWorkflow(id: string) {
     return this.del<void>(`/api/workflows/${id}`);
   }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   executeWorkflow(id: string, input?: Record<string, any>) {
     return this.post<WorkflowExecuteResponse>(`/api/workflows/${id}/execute`, input || {});
   }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   importN8nWorkflow(n8nJson: Record<string, any>) {
     return this.post<N8nImportResponse>('/api/workflows/import/n8n', n8nJson);
   }
@@ -376,22 +386,31 @@ class ApiClient {
   }
 
   // --- Apps ---
+   
   getApps(params?: PaginationParams) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.get<PaginatedResponse<any>>(`/api/apps${this.buildQuery(params)}`);
   }
   getApp(id: string) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.get<any>(`/api/apps/${id}`);
   }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   createApp(data: any) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.post<any>('/api/apps', data);
   }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   updateApp(id: string, data: any) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.put<any>(`/api/apps/${id}`, data);
   }
   deleteApp(id: string) {
     return this.del<void>(`/api/apps/${id}`);
   }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   updateAppBottomBar(id: string, bottomBarConfig: any[]) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.put<any>(`/api/apps/${id}/bottom-bar`, { bottom_bar_config: bottomBarConfig });
   }
 }

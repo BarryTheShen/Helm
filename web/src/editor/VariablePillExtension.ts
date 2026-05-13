@@ -71,7 +71,7 @@ export const VariablePill = Node.create({
     return {
       insertVariablePill:
         (attributes: VariablePillAttributes) =>
-        ({ commands, state, chain }) => {
+        ({ state, chain }) => {
           const { from } = state.selection;
 
           // Insert the pill with a trailing space and position cursor after

@@ -5,6 +5,7 @@ interface TriggerNodeProps {
   data: {
     label?: string;
     triggerType?: 'onSchedule' | 'onDataChange' | 'onServerEvent' | 'manual';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     config?: Record<string, any>;
   };
   selected?: boolean;

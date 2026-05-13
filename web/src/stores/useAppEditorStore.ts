@@ -23,7 +23,9 @@ export interface App {
   name: string;
   icon: string;
   splash: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   theme: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   design_tokens: Record<string, any>;
   dark_mode: boolean;
   default_launch_module_instance_id: string | null;

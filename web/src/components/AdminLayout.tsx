@@ -41,7 +41,6 @@ export function AdminLayout() {
 
   const requiresWideViewport = WIDE_VIEWPORT_PAGES.some(p => location.pathname.startsWith(p));
   const isEditorActive = location.pathname.startsWith('/editor');
-  const isAppEditorActive = location.pathname.startsWith('/app-editor');
 
   return (
     <div className="flex h-screen">
