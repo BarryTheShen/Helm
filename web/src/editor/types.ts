@@ -29,7 +29,9 @@ export interface EditorCell {
 
 export type EditorRowHeight = 'auto' | number;
 export type EditorRowPaddingValue = number | string;
-export type EditorRowType = 'content' | 'divider' | 'spacer';
+/** @deprecated Legacy row types. New rows should only be 'content'. */
+export type DeprecatedRowType = 'divider' | 'spacer';
+export type EditorRowType = 'content' | DeprecatedRowType;
 
 export interface EditorRowVisualProps {
   bgColor?: string;
@@ -55,6 +57,7 @@ export interface EditorRow extends EditorRowVisualProps {
   id: string;
   height: EditorRowHeight;
   type?: EditorRowType;
+  /** @deprecated Spacer row type removed. Kept for reading existing saved screens. */
   spacerHeight?: number;
   cells: EditorCell[];
   [key: string]: unknown;

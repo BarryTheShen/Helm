@@ -7,17 +7,15 @@ import type { ActionRule, EditorComponent, EditorRowPaddingKey } from './types';
 import { Settings, Rows3, Box, Minus, Plus } from 'lucide-react';
 import { RuleBuilder } from './RuleBuilder';
 import { api } from '../lib/api';
-import type { DataSource, Workflow } from '../lib/api';
+import type { DataSource } from '../lib/api';
 import { VariableInput } from './VariableInput';
-import { IconPicker } from './IconPicker';
-import { ActionParamsEditor } from './ActionParamsEditor';
 
 const INTERACTIVE_COMPONENTS = new Set(['Button', 'TextInput', 'InputBar']);
 
 const ROW_PADDING_FIELDS: Array<{ key: EditorRowPaddingKey; label: string }> = [
   { key: 'paddingTop', label: 'Top' },
-  { key: 'paddingBottom', label: 'Bottom' },
   { key: 'paddingLeft', label: 'Left' },
+  { key: 'paddingBottom', label: 'Bottom' },
   { key: 'paddingRight', label: 'Right' },
 ];
 
@@ -724,92 +722,6 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
         <span className="text-xs font-semibold uppercase tracking-wider">Row {rowIdx + 1}</span>
       </div>
 
-      {/* Row Type Selector */}
-      <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">Row Type</label>
-        <div className="flex gap-1.5">
-          {(['content', 'divider', 'spacer'] as const).map((t) => {
-            return (
-              <button
-                key={t}
-                onClick={() => updateRowProps(rowId, { type: t === 'content' ? undefined : t })}
-                className={`flex-1 px-2 py-1 text-xs rounded border transition-colors capitalize ${
-                  rowType === t ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                {t}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Row type-specific properties */}
-      {rowType === 'divider' && (
-        <>
-          {/* Divider Color */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Color</label>
-            <div className="flex gap-1.5 items-center">
-              <input
-                type="color"
-                value={row.dividerColor ?? '#E0E0E0'}
-                onChange={e => updateRowProps(rowId, { dividerColor: e.target.value })}
-                className="w-7 h-7 rounded border border-gray-200 cursor-pointer"
-              />
-              <input
-                type="text"
-                value={row.dividerColor ?? '#E0E0E0'}
-                onChange={e => updateRowProps(rowId, { dividerColor: e.target.value })}
-                className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md outline-none font-mono"
-              />
-            </div>
-          </div>
-
-          {/* Divider Thickness */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Thickness (px)</label>
-            <input
-              type="number"
-              value={getOptionalNumberInputValue(row.dividerThickness)}
-              min={1}
-              max={8}
-              onChange={e => updateRowProps(rowId, { dividerThickness: parseOptionalNumberInput(e.target.value, 1) })}
-              placeholder="1"
-              className="w-full px-2 py-1 text-xs border border-gray-200 rounded-md outline-none"
-            />
-          </div>
-
-          {/* Divider Margin */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Margin (px)</label>
-            <input
-              type="number"
-              value={getOptionalNumberInputValue(row.dividerMargin)}
-              min={0}
-              onChange={e => updateRowProps(rowId, { dividerMargin: parseOptionalNumberInput(e.target.value, 0) })}
-              placeholder="8"
-              className="w-full px-2 py-1 text-xs border border-gray-200 rounded-md outline-none"
-            />
-          </div>
-        </>
-      )}
-
-      {rowType === 'spacer' && (
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Spacer Height (px)</label>
-          <input
-            type="number"
-            value={getOptionalNumberInputValue(row.spacerHeight)}
-            min={8}
-            onChange={e => updateRowProps(rowId, { spacerHeight: parseOptionalNumberInput(e.target.value, 8) })}
-            placeholder="24"
-            className="w-full px-2 py-1 text-xs border border-gray-200 rounded-md outline-none"
-          />
-          <div className="text-[10px] text-gray-400 mt-1">Minimum 8px. Default 24px.</div>
-        </div>
-      )}
-
       {/* Content-type only properties */}
       {rowType === 'content' && (
         <>
@@ -1079,28 +991,28 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Padding (px)</label>
         <div className="space-y-2">
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-gray-400 w-8">All</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-400 w-10">All</span>
             <input
               type="number"
               value={getOptionalNumberInputValue(row.padding)}
               min={0}
               onChange={e => handleUniformPaddingChange(e.target.value)}
               placeholder="Uniform"
-              className="flex-1 px-1.5 py-1 text-xs border border-gray-200 rounded-md outline-none"
+              className="flex-1 min-w-0 px-1.5 py-1 text-xs border border-gray-200 rounded-md outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
-          <div className="grid grid-cols-2 gap-1">
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
             {ROW_PADDING_FIELDS.map(({ key, label }) => (
-              <div key={key} className="flex items-center gap-1">
-                <span className="text-[10px] text-gray-400 w-8">{label}</span>
+              <div key={key} className="flex items-center gap-2">
+                <span className="text-[10px] text-gray-400 w-10">{label}</span>
                 <input
                   type="number"
                   value={getOptionalNumberInputValue(row[key])}
                   min={0}
                   onChange={e => handlePaddingChange(key, parseOptionalNumberInput(e.target.value, 0))}
                   placeholder={uniformPadding === undefined ? '' : String(uniformPadding)}
-                  className="flex-1 px-1.5 py-1 text-xs border border-gray-200 rounded-md outline-none"
+                  className="flex-1 min-w-0 px-1.5 py-1 text-xs border border-gray-200 rounded-md outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>
             ))}

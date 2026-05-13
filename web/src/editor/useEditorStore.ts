@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { create } from 'zustand';
 
 import { getDefaultProps } from './componentSchemas';
@@ -50,8 +52,7 @@ type EditorStoreState = {
   toggleLandscape: () => void;
   setSelection: (selection: EditorSelection | null) => void;
   addRow: (cellCount?: number, index?: number, props?: Partial<EditorRow>) => void;
-  addDividerRow: (index?: number) => void;
-  addSpacerRow: (index?: number) => void;
+
   deleteRow: (rowId: string) => void;
   duplicateRow: (rowId: string) => void;
   moveRow: (fromIndex: number, toIndex: number) => void;
@@ -185,30 +186,7 @@ function validateCellWidths(cells: EditorCell[]): boolean {
   return true;
 }
 
-function createEmptyRow(cellCount = 1, type?: EditorRow['type']): EditorRow {
-  // Divider and spacer rows don't need cells
-  if (type === 'divider') {
-    return {
-      id: createEditorId('row'),
-      type: 'divider',
-      height: 'auto',
-      cells: [],
-      dividerColor: '#E0E0E0',
-      dividerThickness: 1,
-      dividerMargin: 8,
-    };
-  }
-
-  if (type === 'spacer') {
-    return {
-      id: createEditorId('row'),
-      type: 'spacer',
-      height: 'auto',
-      cells: [],
-      spacerHeight: 24,
-    };
-  }
-
+function createEmptyRow(cellCount = 1, _type?: EditorRow['type']): EditorRow {
   const normalizedCount = Math.max(1, Math.trunc(cellCount) || 1);
 
   return {
@@ -571,40 +549,6 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
       console.log(`[EditorStore] addRow() — inserted at index ${insertIndex}, ${cellCount} cells`);
 
       return commitRows(state, nextRows);
-    });
-  },
-
-  addDividerRow: (index) => {
-    set((state) => {
-      const nextRows = [...state.rows];
-      const insertIndex = typeof index === 'number'
-        ? Math.max(0, Math.min(index, nextRows.length))
-        : nextRows.length;
-
-      const newRow = createEmptyRow(0, 'divider');
-      nextRows.splice(insertIndex, 0, newRow);
-      console.log(`[EditorStore] addDividerRow() — inserted at index ${insertIndex}`);
-
-      return commitRows(state, nextRows, {
-        selection: { type: 'row', rowId: newRow.id },
-      });
-    });
-  },
-
-  addSpacerRow: (index) => {
-    set((state) => {
-      const nextRows = [...state.rows];
-      const insertIndex = typeof index === 'number'
-        ? Math.max(0, Math.min(index, nextRows.length))
-        : nextRows.length;
-
-      const newRow = createEmptyRow(0, 'spacer');
-      nextRows.splice(insertIndex, 0, newRow);
-      console.log(`[EditorStore] addSpacerRow() — inserted at index ${insertIndex}`);
-
-      return commitRows(state, nextRows, {
-        selection: { type: 'row', rowId: newRow.id },
-      });
     });
   },
 

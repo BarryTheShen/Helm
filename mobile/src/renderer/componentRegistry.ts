@@ -14,7 +14,6 @@ import { SDUIButton } from '@/components/atomic/SDUIButton';
 import { SDUIImage } from '@/components/atomic/SDUIImage';
 import { SDUITextInput } from '@/components/atomic/SDUITextInput';
 import { SDUIIcon } from '@/components/atomic/SDUIIcon';
-import { SDUIDivider } from '@/components/atomic/SDUIDivider';
 
 // Tier 1 — Structural
 import { SDUIContainer } from '@/components/structural/SDUIContainer';
@@ -47,7 +46,6 @@ const registry: Record<string, ComponentType<any>> = {
   Image: SDUIImage,
   TextInput: SDUITextInput,
   Icon: SDUIIcon,
-  Divider: SDUIDivider,
   Container: SDUIContainer,
   Empty: SDUIEmpty,
   CalendarModule: CalendarModule,
