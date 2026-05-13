@@ -25,7 +25,7 @@ interface ArticleParams {
 }
 
 export default function ArticleScreen() {
-  const params = useLocalSearchParams<ArticleParams>();
+  const params = useLocalSearchParams() as unknown as ArticleParams;
   const { title, content, imageUrl, source, publishedAt } = params;
 
   const formatDate = (isoDate: string) => {

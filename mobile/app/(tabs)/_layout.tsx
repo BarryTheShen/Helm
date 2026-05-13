@@ -118,7 +118,7 @@ export default function TabsLayout() {
   const bottomBarMap = new Map<string, number>();
   if (appConfig?.bottom_bar_config) {
     appConfig.bottom_bar_config.forEach((module) => {
-      bottomBarMap.set(module.module_type, module.slot_position);
+      bottomBarMap.set(module.module_type, module.slot_position ?? 0);
     });
   }
 

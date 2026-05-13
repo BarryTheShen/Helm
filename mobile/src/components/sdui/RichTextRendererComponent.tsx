@@ -48,7 +48,7 @@ export function RichTextRendererComponent({
     const md = MarkdownIt({ typographer: true, linkify: true });
 
     // Add video embed rule for YouTube/Vimeo/iframe
-    md.inline.ruler.before('link', 'video', (state, silent) => {
+    md.inline.ruler.before('link', 'video', (state: any, silent: any) => {
       const pos = state.pos;
       const max = state.posMax;
 
@@ -215,8 +215,8 @@ export function RichTextRendererComponent({
     s: { textDecorationLine: 'line-through' as const, color: themeStyle.text },
     paragraph: { marginVertical: 2, color: themeStyle.text },
     link: { color: themeStyle.link, textDecorationLine: 'underline' as const },
-    image: { width: '100%', height: 200, borderRadius: 8, marginVertical: 8 },
-    table: { borderWidth: 1, borderColor: themeStyle.border, borderRadius: 8, marginVertical: 8, overflow: 'hidden' },
+    image: { width: '100%' as const, height: 200, borderRadius: 8, marginVertical: 8 },
+    table: { borderWidth: 1, borderColor: themeStyle.border, borderRadius: 8, marginVertical: 8, overflow: 'hidden' as const },
     tableRow: { flexDirection: 'row' as const, borderBottomWidth: 1, borderBottomColor: themeStyle.border },
     tableCell: { flex: 1, padding: 8, borderRightWidth: 1, borderRightColor: themeStyle.border },
     tableCellText: { fontSize: 14, color: themeStyle.text },

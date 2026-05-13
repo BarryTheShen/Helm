@@ -16,6 +16,6 @@ interface SDUIRichTextRendererProps {
   theme?: 'light' | 'dark';
 }
 
-export function SDUIRichTextRenderer({ content, _theme }: SDUIRichTextRendererProps) {
+export function SDUIRichTextRenderer({ content, theme: _theme }: SDUIRichTextRendererProps) {
   return <SDUIMarkdown content={content || ''} />;
 }

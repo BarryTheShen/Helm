@@ -206,12 +206,12 @@ export function useSDUIScreen(moduleId: string): SDUIScreenState {
       }
 
       const isLatestRequest = requestId === requestIdRef.current;
-      applyLiveScreen((screenData.screen as SDUIPayload) ?? null, screenData.version, {
+      applyLiveScreen((screenData.screen as unknown as SDUIPayload) ?? null, screenData.version, {
         startedVersion: startedLiveVersion,
         isLatestIfVersionMissing: isLatestRequest,
       });
       applyDraftScreen(
-        draftData.has_draft ? ((draftData.screen as SDUIPayload) ?? null) : null,
+        draftData.has_draft ? ((draftData.screen as unknown as SDUIPayload) ?? null) : null,
         draftData.version,
         {
           startedVersion: startedDraftVersion,

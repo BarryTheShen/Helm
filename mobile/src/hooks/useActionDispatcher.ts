@@ -52,7 +52,7 @@ export function useActionDispatcher(): ActionDispatcher {
   const componentStateStore = useComponentStateStore();
 
   // Keep a ref to the latest dispatch for use in async composite actions
-  const dispatchRef = useRef<ActionDispatcher>();
+  const dispatchRef = useRef<ActionDispatcher>(null!);
 
   const dispatch = useCallback(
     (action: SDUIAction) => {

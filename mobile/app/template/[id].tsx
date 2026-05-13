@@ -61,7 +61,7 @@ export default function TemplateDetailScreen() {
         },
         {
           text: 'Apply',
-          onPress: async (moduleId) => {
+          onPress: async (moduleId: string | undefined) => {
             if (!moduleId || !moduleId.trim()) {
               Alert.alert('Error', 'Module ID is required');
               return;

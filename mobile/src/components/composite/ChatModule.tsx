@@ -31,10 +31,10 @@ export function ChatModule({ threadId, dataBinding, onDataRefresh, showHistory =
     if (!showHistory || !token || !serverUrl) return;
 
     const api = new ApiClient(serverUrl, token, logout);
-    api.getChatHistory(10, 0)
+    api.getChatHistory()
       .then((response) => {
         // Reverse to show chronological order (oldest first)
-        setMessages([...response.messages].reverse());
+        setMessages([...response].reverse());
       })
       .catch((err) => {
         console.error('Failed to load chat history:', err);
@@ -52,9 +52,9 @@ export function ChatModule({ threadId, dataBinding, onDataRefresh, showHistory =
     // Also refresh chat history if enabled
     if (showHistory && token && serverUrl) {
       const api = new ApiClient(serverUrl, token, logout);
-      api.getChatHistory(10, 0)
+      api.getChatHistory()
         .then((response) => {
-          setMessages([...response.messages].reverse());
+          setMessages([...response].reverse());
         })
         .catch(() => {});
     }
