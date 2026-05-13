@@ -226,6 +226,33 @@ function extractComponentTypesFromScreen(screen) {
   return [...types];
 }
 
+/**
+ * Analyze row-level divider patterns in a V2 screen JSON.
+ * Returns info about:
+ * - hasDividerRows: whether any row has type: 'divider' (deprecated pattern)
+ * - hasShowDivider:  whether any row has showDivider: true (correct pattern)
+ */
+function extractRowDividerPatterns(screen) {
+  if (!screen || typeof screen !== 'object') return { hasDividerRows: false, hasShowDivider: false };
+  const rows = screen.rows;
+  if (!Array.isArray(rows)) return { hasDividerRows: false, hasShowDivider: false };
+
+  let hasDividerRows = false;
+  let hasShowDivider = false;
+
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    if (row.type === 'divider') {
+      hasDividerRows = true;
+    }
+    if (row.showDivider === true) {
+      hasShowDivider = true;
+    }
+  }
+
+  return { hasDividerRows, hasShowDivider };
+}
+
 async function discoverModuleStates(token) {
   // 1. Get all available module IDs
   const modulesResp = await fetchJSON(`${BACKEND_BASE}/api/modules`, token);
@@ -237,14 +264,17 @@ async function discoverModuleStates(token) {
   for (const moduleId of moduleIds) {
     const resp = await fetchJSON(`${BACKEND_BASE}/api/sdui/${moduleId}`, token);
     if (resp._error || resp.screen === null || resp.screen === undefined) {
-      result[moduleId] = { has_screen: false, types: [], hasDivider: false };
+      result[moduleId] = { has_screen: false, types: [], hasDivider: false, hasDividerRows: false, hasShowDivider: false };
       continue;
     }
     const types = extractComponentTypesFromScreen(resp.screen);
+    const dividerPatterns = extractRowDividerPatterns(resp.screen);
     result[moduleId] = {
       has_screen: true,
       types,
       hasDivider: types.some(t => t === 'Divider' || t === 'divider'),
+      hasDividerRows: dividerPatterns.hasDividerRows,
+      hasShowDivider: dividerPatterns.hasShowDivider,
     };
   }
 
@@ -255,13 +285,20 @@ async function discoverModuleStates(token) {
       continue; // No draft for this module
     }
     const types = extractComponentTypesFromScreen(resp.screen);
-    if (types.length > 0) {
+    const dividerPatterns = extractRowDividerPatterns(resp.screen);
+    if (types.length > 0 || dividerPatterns.hasDividerRows || dividerPatterns.hasShowDivider) {
       if (!result[moduleId]) {
-        result[moduleId] = { has_screen: false, types: [], hasDivider: false };
+        result[moduleId] = { has_screen: false, types: [], hasDivider: false, hasDividerRows: false, hasShowDivider: false };
       }
       result[moduleId].draft_types = types;
       if (types.some(t => t === 'Divider' || t === 'divider')) {
         result[moduleId].hasDivider = true;
+      }
+      if (dividerPatterns.hasDividerRows) {
+        result[moduleId].hasDividerRows = true;
+      }
+      if (dividerPatterns.hasShowDivider) {
+        result[moduleId].hasShowDivider = true;
       }
     }
   }
@@ -332,6 +369,8 @@ async function discover(token) {
       module_states_with_screens: Object.values(moduleStates).filter(s => s.has_screen).length,
       module_states_with_drafts: Object.values(moduleStates).filter(s => s.draft_types).length,
       module_states_with_divider: Object.values(moduleStates).filter(s => s.hasDivider).length,
+      module_states_with_divider_rows: Object.values(moduleStates).filter(s => s.hasDividerRows).length,
+      module_states_with_show_divider: Object.values(moduleStates).filter(s => s.hasShowDivider).length,
     },
   };
 
@@ -354,6 +393,8 @@ async function discover(token) {
   console.log(`  Module states with screens: ${output.summary.module_states_with_screens}`);
   console.log(`  Module states with drafts: ${output.summary.module_states_with_drafts}`);
   console.log(`  Module states with Divider: ${output.summary.module_states_with_divider}`);
+  console.log(`  Module states with divider rows: ${output.summary.module_states_with_divider_rows}`);
+  console.log(`  Module states with showDivider: ${output.summary.module_states_with_show_divider}`);
 }
 
 module.exports = { discover };

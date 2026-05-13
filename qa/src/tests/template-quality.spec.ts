@@ -402,8 +402,9 @@ test.describe('Template Quality', () => {
       hasDividerInTemplates.push('(local template library uses createCell(\'Divider\', ...))');
     }
 
-    // The row-level divider at templateLibrary.ts:62 is correct — it uses row.type = 'divider',
-    // NOT a standalone component. This test only catches component-level Divider usage.
+    // Note: row.type = 'divider' is also a deprecated pattern — it is caught by the
+    // "active module states do not use deprecated component types" test via hasDividerRows.
+    // The correct approach is showDivider: true on content rows.
 
     expect(
       hasDividerInTemplates,
@@ -422,6 +423,8 @@ test.describe('Template Quality', () => {
       types: string[];
       draft_types?: string[];
       hasDivider: boolean;
+      hasDividerRows: boolean;
+      hasShowDivider: boolean;
     }][];
 
     const modulesWithScreens = entries.filter(([, v]) => v.has_screen || v.draft_types);
@@ -430,34 +433,48 @@ test.describe('Template Quality', () => {
       return;
     }
 
-    // Deprecated component-level types that should only appear as row-level properties
+    // Deprecated component-level types that should use showDivider instead
     const deprecatedTypes = ['Divider'];
 
     const violations: string[] = [];
+    const showDividerModules: string[] = [];
 
     for (const [moduleId, state] of modulesWithScreens) {
-      // Check live screen types
+      // Check live screen types for deprecated component-level Divider
       if (state.has_screen && Array.isArray(state.types)) {
         for (const typeName of state.types) {
           if (deprecatedTypes.includes(typeName)) {
             violations.push(
               `Module "${moduleId}" live screen uses deprecated component type "${typeName}". `
-              + `Use row-level type "divider" instead.`
+              + `Use showDivider: true on content rows instead.`
             );
           }
         }
       }
 
-      // Check draft types
+      // Check draft types for deprecated component-level Divider
       if (Array.isArray(state.draft_types)) {
         for (const typeName of state.draft_types) {
           if (deprecatedTypes.includes(typeName)) {
             violations.push(
               `Module "${moduleId}" draft screen uses deprecated component type "${typeName}". `
-              + `Use row-level type "divider" instead.`
+              + `Use showDivider: true on content rows instead.`
             );
           }
         }
+      }
+
+      // Check for deprecated dedicated divider rows (type: 'divider')
+      if (state.hasDividerRows) {
+        violations.push(
+          `Module "${moduleId}" uses deprecated row-level divider (type: 'divider'). `
+          + `Use showDivider: true on content rows instead.`
+        );
+      }
+
+      // Track modules correctly using showDivider
+      if (state.hasShowDivider) {
+        showDividerModules.push(moduleId);
       }
     }
 
@@ -466,6 +483,9 @@ test.describe('Template Quality', () => {
       for (const v of violations) {
         console.log(`  ❌ ${v}`);
       }
+    }
+    if (showDividerModules.length > 0) {
+      console.log(`Modules correctly using showDivider: ${showDividerModules.join(', ')}`);
     }
 
     expect(

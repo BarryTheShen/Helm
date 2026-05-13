@@ -221,7 +221,8 @@ test.describe('Schema Reconciliation', () => {
     const entries = parseRegistryEntries(typesSrc, 'COMPONENT_REGISTRY');
 
     // These types were explicitly removed per architecture decisions
-    // (standalone Divider → replaced by row-level dividers)
+    // (standalone Divider → showDivider: true on content rows; row-level
+    // type: 'divider' is also deprecated)
     const removedTypes = ['Divider'];
 
     for (const removed of removedTypes) {
