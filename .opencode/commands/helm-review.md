@@ -46,6 +46,6 @@ This combines the previous `reviewer` and `feature-validator` responsibilities.
 - **helm-reviewer**: Code quality and architecture review. Read-only. Returns findings grouped by severity.
 - **helm-security** (optional): Security audit. Read-only. Returns security findings.
 - **helm-tester** (optional): Run tests to verify current state. Returns test results.
-- **helm-ui-reviewer** (optional): Visual review if UI changed. Read-only.
+- **helm-ui-reviewer** (automatic if UI changed): Visual review, layout consistency, exhaustive page sweep. Read-only.
 
 All findings are ADVISORY. The orchestrator or primary agent decides what to fix, then delegates fixes to the appropriate implementation agent.

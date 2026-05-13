@@ -7,7 +7,7 @@ This document defines Helm's model routing strategy for OpenCode. DeepSeek is th
 - **Primary model source:** OpenCode Go (user-managed provider credentials).
 - **Default worker/orchestrator model:** DeepSeek V4 Flash via OpenCode Go.
 - **Reasoning/planning/review/security model:** DeepSeek V4 Pro via OpenCode Go.
-- **Multimodal:** Kimi K2.6 via OpenCode Go.
+- **Visual/UI:** Qwen3.6 Plus via OpenCode Go.
 - **Local fallback:** Qwen3.6 27B (optional — too slow to be default for routine work).
 - **MiMo:** No longer used as default. Was removed due to runtime looping and overcomplication in Helm.
 - **No Claude fallback** in this repo's default guidance.
@@ -28,13 +28,13 @@ If the endpoint is unreachable from the dev machine, it is expected (network-dep
 
 ## 3. Model Tier Strategy
 
-Three model tiers route work by role:
+Four model tiers route work by role:
 
 | Tier | Model ID | Roles |
 |------|----------|-------|
 | **Default** | `opencode-go/deepseek-v4-flash` | orchestrator, session-init, build, backend, frontend, agent-runtime, tester, docs, git |
 | **Reasoning** | `opencode-go/deepseek-v4-pro` | planner, plan-critic, reviewer, security, protocol |
-| **Multimodal** | `opencode-go/kimi-k2.6` | ui-reviewer (screenshots, visual regressions) |
+| **Visual/UI** | `opencode-go/qwen3.6-plus` | ui-reviewer (screenshots, visual regressions, exhaustive page sweep, live visual testing) |
 | **Local fallback** | `local/qwen3.6-27b-autoround` | tester fallback, private/local work, cost-sensitive tasks |
 
 ### Why two DeepSeek variants?
@@ -45,6 +45,10 @@ Three model tiers route work by role:
 ### Why MiMo was removed
 
 MiMo V2.5 Pro was initially configured as the reasoning model. In practice it showed runtime looping behavior and a tendency to overcomplicate tasks in Helm's agent context. DeepSeek V4 Pro provides comparable reasoning quality without these issues.
+
+### Why Kimi K2.6 was replaced for UI review
+
+Kimi K2.6 was initially configured as the multimodal model for UI review. It was replaced with Qwen3.6 Plus because Kimi K2.6 is too expensive for routine UI review. Qwen3.6 Plus provides sufficient visual reasoning capability at lower cost, making frequent UI review sustainable.
 
 ## 4. Agent-to-Model Mapping
 
@@ -57,7 +61,7 @@ MiMo V2.5 Pro was initially configured as the reasoning model. In practice it sh
 | `helm-reviewer` | Reasoning | `opencode-go/deepseek-v4-pro` |
 | `helm-security` | Reasoning | `opencode-go/deepseek-v4-pro` |
 | `helm-protocol` | Reasoning | `opencode-go/deepseek-v4-pro` |
-| `helm-ui-reviewer` | Multimodal | `opencode-go/kimi-k2.6` |
+| `helm-ui-reviewer` | Visual/UI | `opencode-go/qwen3.6-plus` |
 | `helm-build` | Default | `opencode-go/deepseek-v4-flash` |
 | `helm-backend` | Default | `opencode-go/deepseek-v4-flash` |
 | `helm-frontend` | Default | `opencode-go/deepseek-v4-flash` |

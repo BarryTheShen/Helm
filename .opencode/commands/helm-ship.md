@@ -21,7 +21,7 @@ Ship the following work: $ARGUMENTS
    - MCP changes: sync check across `tools.py`, `agent_proxy.py`, `server.py`
 5. **Conditional QA checks** — not mandatory for every change:
    - API/schema changes: `cd qa && npm run test:backend`
-   - Visible web UI changes: `cd qa && npm run test:e2e` (triage stale selector failures)
+   - Visible web UI changes: `cd qa && npm run test:e2e` (triage stale selector failures); also consider visual/UX review via `helm-ui-reviewer`
    - Large feature PR readiness: `cd qa && npm test` or `cd qa && bash run.sh`
    - Docs/config only: skip QA
 6. **Scan for secrets:** `git diff | grep -iE "api.key|secret|password|token" | grep -v ".env"`

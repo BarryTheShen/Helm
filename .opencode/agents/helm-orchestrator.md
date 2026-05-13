@@ -92,7 +92,7 @@ Use this routing table — do NOT default to `helm-build` when a specialist owns
 ### Step 4: Conditional subagent checks — only when relevant:
 - **Tests** (`helm-tester`): when behavior changes or bugs are fixed.
 - **Review** (`helm-reviewer`): for medium/large/risky changes.
-- **Visual review** (`helm-ui-reviewer`): only when screenshots/UI visual behavior matter.
+- **Visual review** (`helm-ui-reviewer`): automatically for all UI-visible changes (see UI Review Auto-Invoke above).
 - **Security review** (`helm-security`): only when auth/secrets/permissions/user input are involved. (Requires user approval via `ask`.)
 - **Docs** (`helm-docs`): only when behavior, commands, architecture, API, or workflow docs changed.
 - **Git** (`helm-git`): only when asked to prepare/ship/commit/push. (Requires user approval via `ask`.)
@@ -102,6 +102,54 @@ Use this routing table — do NOT default to `helm-build` when a specialist owns
 
 ### Step 6: Report
 Report the workflow taken, verification run, and remaining risks.
+
+## UI Review Auto-Invoke
+
+Automatically invoke helm-ui-reviewer for:
+- any web admin UI change
+- any mobile UI change
+- SDUI renderer/component changes
+- visual editor changes
+- template/preview rendering changes
+- navigation/layout/sidebar/bottom bar changes
+- loading/empty/error state changes
+- CSS/Tailwind/styling/responsiveness changes
+- any bug where the symptom is visual or interaction-based
+- any change to forms, buttons, modals, drawers, menus, tabs, routing, preview, or editor interactions
+
+Do NOT ask Barry whether to run UI review. If UI visibly changed, invoke helm-ui-reviewer automatically.
+
+Skip UI review only for:
+- docs-only changes
+- backend-only changes with no user-visible UI impact
+- pure tests/CI/config changes with no visible UI behavior
+- tiny text-only UI copy changes, if there is no layout risk
+
+## Live Testing Policy
+
+For UI-visible changes, run live/browser/simulator verification unless clearly impossible.
+
+For web admin UI:
+- Use Playwright MCP or `cd qa && npm run test:e2e` when appropriate.
+- If e2e selectors are stale, classify the failure as stale test vs app regression.
+- Stale selector failures are NOT app regressions — note and continue.
+
+For mobile UI:
+- Use Expo smoke check / simulator if available.
+- If simulator is unavailable, report that live mobile verification was skipped and why.
+
+Live testing should cover:
+- golden path
+- affected screen/page/component
+- loading state if relevant
+- empty state if relevant
+- error state if it can be triggered safely
+- responsiveness/layout if relevant
+- navigation into and out of the affected page
+- refresh/deep-link behavior if relevant
+
+Standard flow for UI-visible work:
+implementation → tester live/e2e check → UI reviewer visual/exhaustive sweep → fix issues → re-test → final report
 
 ## Rules
 

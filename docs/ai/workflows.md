@@ -69,11 +69,20 @@ Conditional — run only what the task warrants:
 - **New test coverage needed**: delegate to `helm-tester`
 - **Code quality review**: delegate to `helm-reviewer` for medium/large/risky changes
 - **Security review**: delegate to `helm-security` (requires user approval)
+- **UI/visual review**: delegate to `helm-ui-reviewer` for all UI-visible changes — this is no longer rare, it runs automatically for any UI change.
 - **QA suite**: `cd qa && npm run test:backend` for API changes; `cd qa && npm run test:e2e` for visible UI changes (triage stale selectors)
+
+For UI-visible changes, the standard QA flow is:
+1. `helm-tester` runs automated/live e2e checks.
+2. `helm-ui-reviewer` performs visual/UX review and exhaustive page sweep for substantial UI pages.
+3. Issues found are handed back to the implementation agent.
+4. Re-test after fixes.
 
 ### 6. Live Test
 
 Only when UI is visibly changed. Start dev server and verify in a real browser or simulator. Do not skip for visual changes — check the golden path and edge cases.
+
+Live testing is handled by `helm-tester` (automated e2e/smoke checks) and complemented by `helm-ui-reviewer` (visual/UX review and exhaustive page sweep).
 
 ### 7. Docs
 
@@ -144,7 +153,7 @@ When asking is unavoidable, the orchestrator asks ONE compact question with a re
 | `helm-tester` | **No** | Runs tests, diagnoses failures, recommends fixes. Hands implementation back to build/backend/frontend. |
 | `helm-reviewer` | **No** | Reviews code, reports findings grouped by severity. Suggests patches in prose only. |
 | `helm-security` | **No** | Audits for secrets/auth/injection issues. Reports findings. |
-| `helm-ui-reviewer` | **No** | Reviews screenshots/layout. Reports blocking vs polish issues. |
+| `helm-ui-reviewer` | **No** | Reviews screenshots/layout, UX consistency, exhaustive page sweep. Reports blocking vs polish issues. |
 | `helm-git` | **No** | Handles branch/commit/push. Does not modify source files. |
 | `helm-build` | **Yes** | General implementation worker. Applies fixes after reading specialist findings. |
 | `helm-backend` | **Yes** (backend/) | Backend specialist. Edits backend files when invoked for implementation. |
@@ -196,6 +205,46 @@ The `qa/` directory contains an automatic bug discovery and test suite built on 
 - E2e tests have **known stale selectors** — a failure may mean the selector needs updating, not that the app is broken.
 - The discovery script requires a running backend (`localhost:8000`) to fetch the OpenAPI spec and component registry.
 - Backend pytest must pass before running the full QA pipeline.
+
+## Exhaustive Page Sweep
+
+Exhaustive page sweep is a mode/workflow, not a separate agent. It is the fallback/complement to automated QA for significant UI testing.
+
+### Trigger conditions:
+- Barry asks for exhaustive testing.
+- A UI-visible page changed significantly.
+- The affected page is a central page (dashboard, editor, preview, templates, workflows, auth, settings, module builder).
+- Automated QA is unavailable, stale, flaky, or too narrow.
+- A bug report says "this page has problems" or "find all errors on this page."
+- Before shipping a UI-heavy feature.
+
+### What it covers:
+- Load the affected page from a clean state.
+- Check browser console errors and warnings, network failures, 4xx/5xx responses.
+- Verify initial render does not crash.
+- Check loading, empty, and error states.
+- Click every visible primary and safe secondary action.
+- Open and close modals, drawers, dropdowns, popovers, tabs, accordions, sidebars, and menus.
+- Test form validation (required fields, invalid values, empty submission).
+- Test navigation links and back/forward/refresh behavior.
+- Test responsive layout at desktop, tablet, and mobile widths.
+- Check for overflowing text, broken alignment, invisible buttons, duplicate scrollbars, clipped content.
+- Check keyboard basics: tab order, Enter/Escape, focus visibility.
+- Check auth/permission boundaries and data persistence after save/refresh.
+- Check that preview/rendered output matches source state.
+- Check that no destructive action is performed without confirmation.
+
+### Who runs it:
+- `helm-ui-reviewer` for visual/UX inspection.
+- `helm-tester` for browser/test execution.
+- Both are complementary — they are NOT merged roles.
+
+### Output format:
+Issues are classified by severity:
+- **Blocking:** page crash, data loss, save broken, auth/security issue, primary user flow impossible.
+- **Major:** important interaction broken, incorrect data shown, layout makes feature hard to use.
+- **Minor:** visual polish, small alignment issue, non-blocking copy/spacing problem.
+- **Stale QA:** automated test failure caused by outdated selector/test assumption rather than app regression.
 
 ## Legacy: Full Claude Code Mega-Loop
 

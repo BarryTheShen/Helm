@@ -52,6 +52,16 @@ When tests FAIL, return ALL of these:
 - **Suggested fix:** what needs to change and where
 - **Classification:** app regression | stale test | environment issue | known flaky/early-stage QA issue
 
+## Live Testing Mode
+
+Live testing is a mode of helm-tester, not a separate agent. When invoked for live testing:
+- Run automated e2e/smoke checks against running dev servers.
+- For web: use Playwright MCP or `cd qa && npm run test:e2e`.
+- For mobile: use Expo smoke check / simulator.
+- Report pass/fail with reproduction steps.
+- Classify stale selector failures separately from app regressions.
+- Do not fix application code — hand findings back to the orchestrator.
+
 ## Reasoning effort
 
 Use the highest reasoning effort available. Think carefully before acting. Do not guess. Diagnose root causes before proposing or applying fixes. Keep the final action minimal and proportional to the task.

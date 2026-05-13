@@ -47,7 +47,7 @@ The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/
 | `helm-agent-runtime` | subagent | Yes (agent/, backend/app/mcp/) | Yes | No | PydanticAI, MCP tools, agent proxy | Alter secrets, add paid providers, edit frontend |
 | `helm-tester` | subagent | Test files only (if explicitly asked) | Yes | No | Run tests, diagnose failures, recommend fixes | Fix application code, auto-fix loops, edit source |
 | `helm-reviewer` | subagent | No | No | No | Code quality and architecture review | Edit files, fix issues, run tests, apply patches |
-| `helm-ui-reviewer` | subagent | No | No | No | Visual/screenshot review, layout consistency | Edit files, run commands, fix UI issues |
+| `helm-ui-reviewer` | subagent | No | No | No | Visual/UX review, layout consistency, exhaustive page sweep. Runs for all UI-visible changes. | Edit files, run commands, fix UI issues |
 | `helm-docs` | subagent | Yes (docs/, README, AGENTS, CLAUDE) | No | No | Documentation maintenance | Edit app source, run app tests, commit |
 | `helm-security` | subagent | Default: No. Narrow fix if asked | No | No | Security audit, secrets detection | Add credentials, add paid providers, fix issues by default |
 | `helm-git` | subagent | No | No | Yes (with approval) | Branch management, commit, push | Edit source files, force push, push to main |
@@ -134,6 +134,25 @@ Rules:
 
 The OpenCode config uses `AGENTS.md` (portable instructions), `opencode.jsonc` (project settings), and `.opencode/` (agents, commands).
 
+### helm-tester vs helm-ui-reviewer
+
+- **helm-tester**: Runs automated tests, browser checks, Playwright/e2e, simulator/smoke checks. Diagnoses test failures. Does NOT fix application code.
+- **helm-ui-reviewer**: Inspects visual quality, UX consistency, screenshots/browser state, interaction flows, layout, polish. Performs exhaustive page sweep when requested.
+- For UI-visible work, both may run:
+  - `helm-tester` for automated e2e/smoke/live checks.
+  - `helm-ui-reviewer` for visual/UX review and exhaustive page sweep.
+- These roles are NOT merged. They are complementary.
+
+### Exhaustive Page Sweep
+
+Exhaustive page sweep is a mode/workflow, not a separate agent. It is the fallback/complement to automated QA:
+- **When triggered:** For significant UI pages, central pages (dashboard, editor, preview), when QA is unavailable/stale/flaky, or when Barry requests exhaustive testing.
+- **Who runs it:** `helm-ui-reviewer` for visual/UX inspection and `helm-tester` for browser/test execution.
+- **What it covers:** Load states, empty/error states, console errors, network failures, all interactions, form validation, navigation, responsive layout, keyboard basics, auth boundaries, data persistence.
+- **Output:** Blocking/major/minor issues with reproduction steps and severity classification.
+
+See [workflows.md](workflows.md) for the full exhaustive page sweep policy.
+
 ## Model Routing
 
 | Agent | Model Tier | Model ID |
@@ -144,7 +163,7 @@ The OpenCode config uses `AGENTS.md` (portable instructions), `opencode.jsonc` (
 | `helm-reviewer` | Reasoning | `opencode-go/deepseek-v4-pro` |
 | `helm-security` | Reasoning | `opencode-go/deepseek-v4-pro` |
 | `helm-protocol` | Reasoning | `opencode-go/deepseek-v4-pro` |
-| `helm-ui-reviewer` | Multimodal | `opencode-go/kimi-k2.6` |
+| `helm-ui-reviewer` | Visual/UI | `opencode-go/qwen3.6-plus` |
 | `helm-session-init` | Worker | `opencode-go/deepseek-v4-flash` |
 | `helm-build` | Worker | `opencode-go/deepseek-v4-flash` |
 | `helm-backend` | Worker | `opencode-go/deepseek-v4-flash` |

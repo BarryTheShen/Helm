@@ -23,7 +23,22 @@ Work on the following UI change: $ARGUMENTS
 
 ### Visual Review
 
-For visual/screenshot review, delegate to `helm-ui-reviewer`. It is a multimodal agent that reviews screenshots, layout, and visual regressions.
+For visual/screenshot review, delegate to `helm-ui-reviewer`. It is a visual/UI review specialist that reviews screenshots, layout, visual regressions, and performs exhaustive page sweeps for substantial UI pages.
+
+UI review runs automatically for all UI-visible changes — it is no longer rare. The standard flow is:
+1. Implementation → tester live/e2e check → UI reviewer visual/exhaustive sweep → fix issues → re-test.
+
+### Exhaustive Page Sweep
+
+For significant UI pages (dashboard, editor, preview, templates, etc.), `helm-ui-reviewer` performs an exhaustive page sweep covering:
+- Console errors, network failures, 4xx/5xx responses
+- Loading, empty, and error states
+- All interactions (buttons, modals, drawers, dropdowns, tabs, menus, forms)
+- Navigation, back/forward/refresh behavior
+- Responsive layout at multiple widths
+- Keyboard basics, auth boundaries, data persistence
+
+See `docs/ai/workflows.md` for the full exhaustive page sweep policy.
 
 ## Rules
 
@@ -35,8 +50,8 @@ For visual/screenshot review, delegate to `helm-ui-reviewer`. It is a multimodal
 ## Agent roles in this workflow
 - **helm-frontend**: Owns implementation. Edits mobile/web files.
 - **helm-protocol** (optional): Advises if API contracts are affected. Read-only unless explicitly asked.
-- **helm-ui-reviewer** (optional): Visual review of screenshots/layout. Read-only.
-- **helm-tester** (optional): Runs tests after implementation. Returns results — does NOT fix.
+- **helm-ui-reviewer** (automatic for UI changes): Visual review, exhaustive page sweep, layout consistency. Read-only.
+- **helm-tester** (optional): Runs automated e2e/live checks after implementation. Returns results — does NOT fix.
 - **helm-reviewer** (optional): Reviews code quality. Read-only.
 
 Implementation agent owns edits. Specialist agents advise and verify.
