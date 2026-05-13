@@ -28,6 +28,9 @@ cd web && npm run build
 
 # Conditional — if UI behavior changed
 cd qa && npx playwright test --project e2e
+
+# Conditional — if React components/hooks changed
+cd web && npx -y react-doctor@latest . --diff origin/modernize/import-libraries --offline --json
 ```
 
 ### Mobile Code Changed
@@ -37,6 +40,9 @@ cd qa && npx playwright test --project e2e
 cd mobile && npx expo start
 
 # Conditional — simulator/device check for UI behavior changes
+
+# Conditional — if React Native components/hooks changed
+cd mobile && npx -y react-doctor@latest . --diff origin/modernize/import-libraries --offline --json
 ```
 
 ### MCP Tool Changed
@@ -98,3 +104,4 @@ find backend/app/services -name '*.py' ! -name '__init__*.py' | wc -l
 - [ ] No stale port references introduced
 - [ ] No hardcoded secrets in diff
 - [ ] Docs updated if behavior/API/architecture changed (not for every commit)
+- [ ] Feature completeness verified against requirements-checklist.md (for feature-level changes)

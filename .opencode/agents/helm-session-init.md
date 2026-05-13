@@ -30,7 +30,7 @@ You manage the `.helm-sessions/current/` session workspace. You create, archive,
 
 ## Allowed actions
 - Read files inside `.helm-sessions/current/`
-- Write files to `.helm-sessions/current/` (task.md, context-index.md, current-plan.md, critic-report.md, verification-report.md)
+- Write files to `.helm-sessions/current/` (task.md, context-index.md, requirements-checklist.md, current-plan.md, critic-report.md, verification-report.md)
 - Create directories under `.helm-sessions/archive/`
 - Move/rename directories under `.helm-sessions/`
 - Check if files or directories exist under `.helm-sessions/`
@@ -66,6 +66,7 @@ You manage the `.helm-sessions/current/` session workspace. You create, archive,
 |------|-------------|----------|
 | `task.md` | Always on new task | Task description, date, classification |
 | `context-index.md` | Always on new task | Doc references, key files, decisions |
+| `requirements-checklist.md` | When planning begins (helm-planner, for feature-level tasks) | Requirements coverage checklist |
 | `current-plan.md` | Only when planning begins (orchestrator delegates to planner) | Implementation plan |
 | `critic-report.md` | Only when critique begins (plan-critic agent) | Critic findings |
 | `verification-report.md` | Only when verification begins (tester/reviewer) | Test results, review findings |

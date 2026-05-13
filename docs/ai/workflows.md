@@ -54,6 +54,8 @@ Small edits and simple bug fixes skip this step entirely. Tiny docs/config/singl
 
 For risky bug fixes, cross-layer changes, protocol/API changes, security-sensitive changes, or any plan touching more than one layer, critic is MANDATORY.
 
+For features with blueprint specs, the planner must derive a requirements checklist from the user request, relevant feature feedback docs, and blueprint specs. The plan-critic must verify the plan against this checklist.
+
 ### 4. Implementation
 
 The appropriate domain specialist (or `helm-build` for cross-layer work) implements the plan. Changes are made in dependency order. Each commit is one logical change.
@@ -71,6 +73,8 @@ Conditional — run only what the task warrants:
 - **Security review**: delegate to `helm-security` (requires user approval)
 - **UI/visual review**: delegate to `helm-ui-reviewer` for all UI-visible changes — this is no longer rare, it runs automatically for any UI change.
 - **QA suite**: `cd qa && npm run test:backend` for API changes; `cd qa && npm run test:e2e` for visible UI changes (triage stale selectors)
+- **React components/hooks changed** — run React Doctor diagnostics (see verification.md)
+- **Feature-level change** — verify implementation against `requirements-checklist.md`
 
 For UI-visible changes, the standard QA flow is:
 1. `helm-tester` runs automated/live e2e checks.
@@ -103,6 +107,7 @@ Delegate to `helm-git` (requires user approval via `ask`). `helm-git` is the can
 
 When QA, live-test, or review finds an issue within the loop:
 
+0. **Check requirements-checklist** — is the expected behavior actually specified?
 1. **Reproduce** the error — write a failing test or minimal reproduction. If you can't reproduce it, try harder.
 2. **Diagnose** — trace execution path, read error messages. Identify the root cause, not the symptom.
 3. **Fix** — minimal change addressing root cause. No surface-level patches.

@@ -45,8 +45,8 @@ The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/
 | `helm-frontend` | subagent | Yes (mobile/, web/ only) | Yes | No | Frontend implementation (React Native, web admin) | Edit backend/docs, commit, add secrets |
 | `helm-protocol` | subagent | Default: No. Yes if explicitly asked | No | No | API/WS/MCP/SDUI contract alignment | Implement unrelated behavior, edit application logic |
 | `helm-agent-runtime` | subagent | Yes (agent/, backend/app/mcp/) | Yes | No | PydanticAI, MCP tools, agent proxy | Alter secrets, add paid providers, edit frontend |
-| `helm-tester` | subagent | Test files only (if explicitly asked) | Yes | No | Run tests, diagnose failures, recommend fixes | Fix application code, auto-fix loops, edit source |
-| `helm-reviewer` | subagent | No | No | No | Code quality and architecture review | Edit files, fix issues, run tests, apply patches |
+| `helm-tester` | subagent | Test files only (if explicitly asked) | Yes | No | Run tests, diagnose failures, run React Doctor diagnostics on React component issues, recommend fixes | Fix application code, auto-fix loops, edit source |
+| `helm-reviewer` | subagent | No | No | No | Code quality, architecture review, feature-completeness verification against requirements-checklist | Edit files, fix issues, run tests, apply patches |
 | `helm-ui-reviewer` | subagent | No | No | No | Visual/UX review, layout consistency, exhaustive page sweep. Runs for all UI-visible changes. | Edit files, run commands, fix UI issues |
 | `helm-docs` | subagent | Yes (docs/, README, AGENTS, CLAUDE) | No | No | Documentation maintenance | Edit app source, run app tests, commit |
 | `helm-security` | subagent | Default: No. Narrow fix if asked | No | No | Security audit, secrets detection | Add credentials, add paid providers, fix issues by default |
@@ -84,6 +84,10 @@ Implementation agents. Each owns its domain. See [workflows.md](workflows.md) fo
 
 #### `helm-tester` / `helm-reviewer` / `helm-ui-reviewer` / `helm-security`
 Advisory specialists. Produce findings, do not fix by default.
+
+##### `helm-reviewer`
+- **Purpose:** Code quality and architecture review. Verifies implementation completeness against `requirements-checklist.md` — classifies each requirement as PASS, FAIL, PARTIAL, or NOT TESTED. Tests passing is not enough if product requirements are missing.
+- **Default:** Read-only. Reports findings grouped by severity. Does not apply fixes.
 
 ### Handoff Model
 
@@ -137,6 +141,7 @@ The OpenCode config uses `AGENTS.md` (portable instructions), `opencode.jsonc` (
 ### helm-tester vs helm-ui-reviewer
 
 - **helm-tester**: Runs automated tests, browser checks, Playwright/e2e, simulator/smoke checks. Diagnoses test failures. Does NOT fix application code.
+- **helm-react-doctor**: helm-tester also runs React Doctor diagnostics on React/React Native component changes — detecting hook rule violations, stale closures, missing dependencies, and render issues. React Doctor complements (does not replace) the existing QA suite.
 - **helm-ui-reviewer**: Inspects visual quality, UX consistency, screenshots/browser state, interaction flows, layout, polish. Performs exhaustive page sweep when requested.
 - For UI-visible work, both may run:
   - `helm-tester` for automated e2e/smoke/live checks.

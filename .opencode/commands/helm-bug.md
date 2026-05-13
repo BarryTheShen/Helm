@@ -13,10 +13,10 @@ Fix the following bug: $ARGUMENTS
 
 **Agent assignments:** The `helm-build` (or `helm-backend`/`helm-frontend`/`helm-agent-runtime`) agent applies the fix. `helm-tester` is used for reproduction and diagnosis, but must NOT fix the bug directly. After the fix, `helm-tester` verifies the fix.
 
-1. **REPRODUCE** — Write a failing test or create a minimal reproduction. If you can't reproduce it, try harder.
-2. **DIAGNOSE** — Read error messages, check logs, trace execution. Identify the root cause, not the symptom.
+1. **REPRODUCE** — Write a failing test or create a minimal reproduction. If you can't reproduce it, try harder. Check `.helm-sessions/current/requirements-checklist.md` if available — is the bug a deviation from specified behavior?
+2. **DIAGNOSE** — Read error messages, check logs, trace execution. Identify the root cause, not the symptom. For React/React Native bugs: run `npx -y react-doctor@latest . --diff origin/modernize/import-libraries --offline --json` to detect stale closures, hook order violations, missing deps, or other React-specific root causes.
 3. **FIX** — Change only what needs to change. Address the root cause. No patches.
-4. **VERIFY** — Run the reproduction. Run the relevant test suite per `docs/ai/verification.md`. No regressions.
+4. **VERIFY** — Run the reproduction. Run the relevant test suite per `docs/ai/verification.md`. No regressions. For React fixes: run React Doctor again to confirm no new pattern violations were introduced.
 5. If the approach is wrong, revert. If verification reveals a small localized mistake, fix it once. Do not stack blind patches.
 
 ## Rules

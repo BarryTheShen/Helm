@@ -22,12 +22,15 @@ Ship the following work: $ARGUMENTS
 5. **Conditional QA checks** — not mandatory for every change:
    - API/schema changes: `cd qa && npm run test:backend`
    - Visible web UI changes: `cd qa && npm run test:e2e` (triage stale selector failures); also consider visual/UX review via `helm-ui-reviewer`
+   - React/UI diff: `npx -y react-doctor@latest . --diff origin/modernize/import-libraries --offline --json` for hook rule violations, stale closures, render issues
    - Large feature PR readiness: `cd qa && npm test` or `cd qa && bash run.sh`
    - Docs/config only: skip QA
 6. **Scan for secrets:** `git diff | grep -iE "api.key|secret|password|token" | grep -v ".env"`
-7. **Stage** reviewed files only.
-8. **Commit** with type prefix.
-9. **Push** to current branch.
+7. **Reviewer gate:** Require helm-reviewer PASS on feature-completeness matrix, or explicit accepted warnings documented in the session.
+8. **React Doctor gate (React/UI changes):** Require React Doctor result (health score + diagnostic summary), or documented skip reason (e.g., no React components changed, pure CSS change).
+9. **Stage** reviewed files only.
+10. **Commit** with type prefix.
+11. **Push** to current branch.
 
 > **WARNING:** The commands below are examples — determine the actual file list and branch name. Do not run placeholders literally.
 

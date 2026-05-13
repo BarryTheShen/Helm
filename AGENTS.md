@@ -70,6 +70,8 @@ session init → context artifact → plan ↔ plan critic until approved → im
 
 See `docs/ai/workflows.md` for full detail on the canonical loop and how it scales internally.
 
+For features with blueprint specs, a `requirements-checklist.md` artifact tracks completeness. The reviewer compares implementation against it.
+
 `helm-orchestrator` is the default primary agent (set in `opencode.jsonc`). Barry does not manually route every step — the orchestrator classifies the task, delegates subagents conditionally, verifies, reviews, documents when needed, and reports completion. The orchestrator is autonomous by default and only asks Barry for genuine blockers.
 
 Slash commands are optional shortcuts for when Barry already knows the scope.
@@ -122,6 +124,7 @@ Run verification proportional to the layers you touched:
 | Backend code | `cd backend && pytest -q` |
 | Web admin | `cd web && npm run lint` (build if types changed); conditional: `cd qa && npx playwright test --project e2e` if UI behavior changed |
 | Mobile | `cd mobile && npx expo start` smoke check |
+| React components/hooks | `npx -y react-doctor@latest . --diff origin/modernize/import-libraries --offline --json` | Conditional — if React/RN components changed |
 | Docs/config only | Path/link sanity, no hardcoded secrets |
 | Multi-layer | Relevant checks for each layer changed |
 

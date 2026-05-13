@@ -19,6 +19,7 @@ Work on the following UI change: $ARGUMENTS
 ### Conditional Verification
 
 - **UI visibly changed?** Start the dev server and test in a real browser/simulator. Check the golden path and edge cases. Visual correctness matters — don't just check that TypeScript compiles. When web UI behavior changed, also run `cd qa && npm run test:e2e` (note: e2e has known stale selectors — triage failures).
+- **React components changed?** Run `npx -y react-doctor@latest . --diff origin/modernize/import-libraries --offline --json` to check for hook rule violations, stale closures, and render issues.
 - **UI not visibly changed** (e.g., internal refactor, type-only change)? Run `cd web && npm run lint` — no browser needed.
 
 ### Visual Review
@@ -53,5 +54,6 @@ See `docs/ai/workflows.md` for the full exhaustive page sweep policy.
 - **helm-ui-reviewer** (automatic for UI changes): Visual review, exhaustive page sweep, layout consistency. Read-only.
 - **helm-tester** (optional): Runs automated e2e/live checks after implementation. Returns results — does NOT fix.
 - **helm-reviewer** (optional): Reviews code quality. Read-only.
+- For features with blueprint specs, ensure `.helm-sessions/current/requirements-checklist.md` is populated and reviewed.
 
 Implementation agent owns edits. Specialist agents advise and verify.

@@ -92,6 +92,10 @@ For each claim in the plan, explore only the exact files/symbols to verify:
 - Schema changed but no migration?
 - MCP tool added but not in agent_proxy or server.py?
 
+### 8. Feature completeness against requirements-checklist.md
+- Does the plan address every requirement listed in `requirements-checklist.md`?
+- Are there gaps or unspecified behavior?
+
 ## Output format
 
 ### If objections found — write to critic-report.md AND return to planner:
