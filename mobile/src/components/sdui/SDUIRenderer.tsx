@@ -256,6 +256,12 @@ function RowRenderer({
   const paddingStyle = getRowPaddingStyle(row);
   const heightStyle = getRowHeightStyle(row);
 
+  const dividerStyle = row.showDivider ? {
+    borderBottomWidth: row.dividerThickness ?? 1,
+    borderBottomColor: row.dividerColor ?? '#E0E0E0',
+    paddingBottom: row.dividerMargin ?? 0,
+  } : {};
+
   const cellElements = row.cells.map((cell, ci) => (
     <CellRenderer
       key={cell.id ?? `cell-${ci}`}
@@ -290,6 +296,7 @@ function RowRenderer({
         },
         row.backgroundColor ? { backgroundColor: row.backgroundColor } : null,
         paddingStyle,
+        dividerStyle,
       ]}
     >
       {cellElements}

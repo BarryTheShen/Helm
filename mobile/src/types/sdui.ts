@@ -317,6 +317,8 @@ export interface SDUIRow {
   paddingLeft?: number | string;
   /** Gap between cells */
   gap?: number;
+  /** Whether to show a bottom border on this content row */
+  showDivider?: boolean;
   /** Divider row: horizontal line color (default: theme divider) */
   dividerColor?: string;
   /** Divider row: horizontal line thickness in px (default: 1) */
