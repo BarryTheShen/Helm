@@ -3,21 +3,14 @@ import { useEditorStore, MIN_ROW_HEIGHT } from './useEditorStore';
 import { COMPONENT_SCHEMAS, ACTION_TYPES } from './componentSchemas';
 import type { ActionSchema, FieldSchema } from './componentSchemas';
 import { getActionPropName, getComponentDefinition } from './types';
-import type { ActionRule, EditorComponent, EditorRowPaddingKey } from './types';
+import type { ActionRule, EditorComponent } from './types';
 import { Settings, Rows3, Box, Minus, Plus } from 'lucide-react';
 import { RuleBuilder } from './RuleBuilder';
 import { api } from '../lib/api';
 import type { DataSource } from '../lib/api';
 import { VariableInput } from './VariableInput';
 
-const INTERACTIVE_COMPONENTS = new Set(['Button', 'TextInput', 'InputBar']);
-
-const ROW_PADDING_FIELDS: Array<{ key: EditorRowPaddingKey; label: string }> = [
-  { key: 'paddingTop', label: 'Top' },
-  { key: 'paddingLeft', label: 'Left' },
-  { key: 'paddingBottom', label: 'Bottom' },
-  { key: 'paddingRight', label: 'Right' },
-];
+const INTERACTIVE_COMPONENTS = new Set(['Button', 'InputBar']);
 
 const INPUT_BAR_AUTHORABLE_ACTION_TYPES = new Set(['none', 'send_to_agent', 'server_action']);
 
@@ -688,28 +681,12 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
   if (!row) return null;
 
   const rowIdx = rows.indexOf(row);
-  const rowBackground = row.backgroundColor ?? row.bgColor ?? '#ffffff';
   const isScrollable = row.scrollable ?? false;
-  const uniformPadding = coerceOptionalNumberValue(row.padding);
 
-  const handlePaddingChange = (key: EditorRowPaddingKey, value: number | undefined) => {
-    const nextPadding = { [key]: value } as Partial<Record<EditorRowPaddingKey, number | undefined>>;
-    updateRowProps(rowId, nextPadding);
-  };
-
-  const handleUniformPaddingChange = (value: string) => {
-    updateRowProps(rowId, { padding: parseOptionalNumberInput(value, 0) });
-  };
-
-  const handleCellWidthChange = (cellIndex: number, value: string, unit: 'px' | '%' | 'flex') => {
-    if (unit === '%') {
-      const parsed = parseFloat(value);
-      if (!isNaN(parsed) && parsed > 0) {
-        updateCellWidth(rowId, cellIndex, `${parsed}%`);
-      }
-    } else {
-      const nextWidth = parseOptionalNumberInput(value, 0.25);
-      updateCellWidth(rowId, cellIndex, nextWidth === undefined ? 'auto' : nextWidth);
+  const handleCellWidthChange = (cellIndex: number, value: string) => {
+    const parsed = parseFloat(value);
+    if (!isNaN(parsed) && parsed > 0) {
+      updateCellWidth(rowId, cellIndex, `${Math.max(5, Math.min(100, parsed))}%`);
     }
   };
 
@@ -787,19 +764,18 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
             <div className="text-[10px] text-gray-400 mt-1">Minimum 48px enforced. Auto adjusts to content.</div>
           </div>
 
-          {/* Cell widths */}
+          {/* Cell widths — percentage-based only */}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Cell Widths</label>
             <div className="space-y-1.5">
               {row.cells.map((cell, cellIdx) => {
                 const isPercentage = typeof cell.width === 'string' && cell.width.endsWith('%');
                 const isAuto = cell.width === 'auto';
-                const unit = isPercentage ? '%' : 'flex';
                 const numericValue = isAuto
                   ? ''
                   : isPercentage
                     ? parseFloat(String(cell.width))
-                    : getOptionalNumberInputValue(cell.width);
+                    : '';
 
                 return (
                   <div key={cell.id} className="flex items-center gap-1.5">
@@ -815,64 +791,30 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
                     <input
                       type="number"
                       value={numericValue}
-                      onChange={e => handleCellWidthChange(cellIdx, e.target.value, unit)}
-                      step={unit === '%' ? 1 : 0.25}
-                      min={unit === '%' ? 5 : 0.25}
-                      placeholder={unit === '%' ? '%' : 'flex'}
+                      onChange={e => handleCellWidthChange(cellIdx, e.target.value)}
+                      step={1}
+                      min={5}
+                      placeholder="%"
                       disabled={isAuto}
                       className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
                     />
-                    <div className="flex border border-gray-200 rounded overflow-hidden">
+                    <span className="text-[10px] text-gray-400 w-4">%</span>
+                    {isPercentage && (
                       <button
                         type="button"
-                        onClick={() => {
-                          const currentValue = isAuto ? 1 : (typeof cell.width === 'number' ? cell.width : parseFloat(String(cell.width)) || 1);
-                          updateCellWidth(rowId, cellIdx, currentValue);
-                        }}
-                        className={`px-1.5 py-1 text-[10px] font-medium transition-colors ${
-                          !isPercentage && !isAuto
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-white text-gray-700 hover:bg-gray-50'
-                        }`}
+                        onClick={() => updateCellWidth(rowId, cellIdx, 'auto')}
+                        className="px-1 py-1 text-[10px] text-red-400 hover:text-red-600"
                       >
-                        flex
+                        ×
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const currentValue = isAuto ? 50 : (typeof cell.width === 'number' ? cell.width * 10 : parseFloat(String(cell.width)) || 50);
-                          updateCellWidth(rowId, cellIdx, `${Math.max(5, Math.min(100, currentValue))}%`);
-                        }}
-                        className={`px-1.5 py-1 text-[10px] font-medium transition-colors ${
-                          isPercentage
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-white text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        %
-                      </button>
-                    </div>
+                    )}
                   </div>
                 );
               })}
             </div>
             <div className="text-[10px] text-gray-400 mt-1">
-              <strong>Auto:</strong> Equal distribution. <strong>Flex:</strong> Relative weights. <strong>%:</strong> Fixed percentage (5-100%, min 60px enforced).
+              <strong>Auto:</strong> Equal distribution of remaining space. <strong>%:</strong> Fixed percentage (5-100%).
             </div>
-          </div>
-
-          {/* Gap */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Gap (px)</label>
-            <input
-              type="number"
-              value={getOptionalNumberInputValue(row.gap)}
-              min={0}
-              onChange={e => updateRowProps(rowId, { gap: parseOptionalNumberInput(e.target.value, 0) })}
-              placeholder="4"
-              className="w-full px-2 py-1 text-xs border border-gray-200 rounded-md outline-none"
-            />
-            <div className="text-[10px] text-gray-400 mt-1">Space between cells. Default is 4px.</div>
           </div>
 
           {/* Scrollable */}
@@ -883,7 +825,7 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
                 <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isScrollable ? 'left-[18px]' : 'left-0.5'}`} />
               </button>
             </div>
-            <div className="text-[10px] text-gray-400 mt-1">Enable horizontal scrolling for cells. When off, cells wrap within row width.</div>
+            <div className="text-[10px] text-gray-400 mt-1">Enable horizontal scrolling for cells.</div>
           </div>
 
           {/* Show bottom divider */}
@@ -967,59 +909,6 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
           </div>
         </>
       )}
-
-      {/* Background color (all row types) */}
-      <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">Background</label>
-        <div className="flex gap-1.5 items-center">
-          <input
-            type="color"
-            value={rowBackground}
-            onChange={e => updateRowProps(rowId, { backgroundColor: e.target.value, bgColor: e.target.value })}
-            className="w-7 h-7 rounded border border-gray-200 cursor-pointer"
-          />
-          <input
-            type="text"
-            value={rowBackground}
-            onChange={e => updateRowProps(rowId, { backgroundColor: e.target.value, bgColor: e.target.value })}
-            className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md outline-none font-mono"
-          />
-        </div>
-      </div>
-
-      {/* Padding (all row types) */}
-      <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">Padding (px)</label>
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-gray-400 w-10">All</span>
-            <input
-              type="number"
-              value={getOptionalNumberInputValue(row.padding)}
-              min={0}
-              onChange={e => handleUniformPaddingChange(e.target.value)}
-              placeholder="Uniform"
-              className="flex-1 min-w-0 px-1.5 py-1 text-xs border border-gray-200 rounded-md outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
-            {ROW_PADDING_FIELDS.map(({ key, label }) => (
-              <div key={key} className="flex items-center gap-2">
-                <span className="text-[10px] text-gray-400 w-10">{label}</span>
-                <input
-                  type="number"
-                  value={getOptionalNumberInputValue(row[key])}
-                  min={0}
-                  onChange={e => handlePaddingChange(key, parseOptionalNumberInput(e.target.value, 0))}
-                  placeholder={uniformPadding === undefined ? '' : String(uniformPadding)}
-                  className="flex-1 min-w-0 px-1.5 py-1 text-xs border border-gray-200 rounded-md outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="text-[10px] text-gray-400 mt-1">Padding creates inner spacing. Leave side values blank to use uniform padding.</div>
-      </div>
 
       {/* Row ID */}
       <div>

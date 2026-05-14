@@ -16,7 +16,6 @@ const ALL_TRIGGER_OPTIONS: Array<{ value: ActionRule['trigger']; label: string }
 
 const COMPONENT_TRIGGER_MAP: Record<string, ActionRule['trigger'][]> = {
   Button: ['onPress'],
-  TextInput: ['onSubmit'],
   InputBar: ['onSend'],
 };
 

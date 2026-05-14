@@ -70,7 +70,7 @@ export const ACTION_TYPES: ActionSchema[] = [
 
 export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
   Text: [
-    { key: 'content', label: 'Content', type: 'text', defaultValue: 'Text' },
+    { key: 'content', label: 'Content', type: 'textarea', defaultValue: '# Heading\n\nParagraph text' },
     { key: 'variant', label: 'Variant', type: 'select', defaultValue: 'body', options: [
       { label: 'Heading', value: 'heading' },
       { label: 'Body', value: 'body' },
@@ -86,9 +86,6 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
     ] },
     { key: 'bold', label: 'Bold', type: 'toggle', defaultValue: false },
     { key: 'italic', label: 'Italic', type: 'toggle', defaultValue: false },
-  ],
-  Markdown: [
-    { key: 'content', label: 'Content', type: 'textarea', defaultValue: '# Heading\n\nParagraph text' },
   ],
   Button: [
     {
@@ -110,33 +107,10 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
   ],
   Image: [
     { key: 'src', label: 'Image URL', type: 'text', defaultValue: 'https://via.placeholder.com/300x200' },
-    { key: 'alt', label: 'Alt Text', type: 'text', defaultValue: '' },
-    { key: 'width', label: 'Width', type: 'text', defaultValue: '100%' },
-    { key: 'height', label: 'Height', type: 'number', defaultValue: 200 },
-    { key: 'aspectRatio', label: 'Aspect Ratio', type: 'number', defaultValue: 1.7777777778 },
-    { key: 'borderRadius', label: 'Border Radius', type: 'number', defaultValue: 0 },
-    { key: 'resizeMode', label: 'Resize Mode', type: 'select', defaultValue: 'contain', options: [
-      { label: 'Cover', value: 'cover' },
-      { label: 'Contain', value: 'contain' },
-      { label: 'Stretch', value: 'stretch' },
-      { label: 'Center', value: 'center' },
+    { key: 'fitMode', label: 'Fit Mode', type: 'select', defaultValue: 'fitWidth', options: [
+      { label: 'Fit Width', value: 'fitWidth' },
+      { label: 'Fit Height', value: 'fitHeight' },
     ] },
-  ],
-  TextInput: [
-    { key: 'value', label: 'Default Value', type: 'text', defaultValue: '' },
-    { key: 'placeholder', label: 'Placeholder', type: 'text', defaultValue: 'Enter text...' },
-    { key: 'multiline', label: 'Multiline', type: 'toggle', defaultValue: false },
-    { key: 'maxLines', label: 'Max Lines', type: 'number', defaultValue: 3 },
-    { key: 'secureTextEntry', label: 'Secure Entry', type: 'toggle', defaultValue: false },
-    { key: 'keyboardType', label: 'Keyboard Type', type: 'select', defaultValue: 'default', options: [
-      { label: 'Default', value: 'default' },
-      { label: 'Email', value: 'email-address' },
-      { label: 'Numeric', value: 'numeric' },
-      { label: 'Phone', value: 'phone-pad' },
-      { label: 'URL', value: 'url' },
-    ] },
-    { key: 'editable', label: 'Editable', type: 'toggle', defaultValue: true },
-    { key: 'onSubmit', label: 'On Submit Action', type: 'text', placeholder: '{"type":"server_action","function":"submit_form"}', defaultValue: '' },
   ],
   Icon: [
     { key: 'name', label: 'Icon', type: 'icon-picker', defaultValue: 'star' },
@@ -180,12 +154,25 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
       label: 'View Type',
       type: 'select',
       options: [
-        { value: 'month', label: 'Month (implemented)' },
-        { value: 'week', label: 'Week (planned)' },
-        { value: 'day', label: 'Day (planned)' },
-        { value: 'agenda', label: 'Agenda (planned)' }
+        { value: 'month', label: 'Month' },
+        { value: 'week', label: 'Week' },
+        { value: 'day', label: 'Day' },
+        { value: 'eventList', label: 'Event List' },
+        { value: 'compact', label: 'Compact' },
       ],
       defaultValue: 'month'
+    },
+    {
+      key: 'title',
+      label: 'Title (optional)',
+      type: 'text',
+      defaultValue: ''
+    },
+    {
+      key: 'maxEvents',
+      label: 'Max Events (Event List/Compact)',
+      type: 'number',
+      defaultValue: 10
     },
     {
       key: 'dataBinding',
@@ -201,12 +188,25 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
       label: 'View Type',
       type: 'select',
       options: [
-        { value: 'month', label: 'Month (implemented)' },
-        { value: 'week', label: 'Week (planned)' },
-        { value: 'day', label: 'Day (planned)' },
-        { value: 'agenda', label: 'Agenda (planned)' }
+        { value: 'month', label: 'Month' },
+        { value: 'week', label: 'Week' },
+        { value: 'day', label: 'Day' },
+        { value: 'eventList', label: 'Event List' },
+        { value: 'compact', label: 'Compact' },
       ],
       defaultValue: 'month'
+    },
+    {
+      key: 'title',
+      label: 'Title (optional)',
+      type: 'text',
+      defaultValue: ''
+    },
+    {
+      key: 'maxEvents',
+      label: 'Max Events (Event List/Compact)',
+      type: 'number',
+      defaultValue: 10
     },
     {
       key: 'dataBinding',
@@ -219,6 +219,17 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
   Todo: [
     { key: 'items', label: 'Items (JSON)', type: 'textarea', placeholder: '[{"id":"1","text":"Task 1","completed":false}]', defaultValue: '[]' },
     { key: 'placeholder', label: 'Placeholder', type: 'text', defaultValue: 'Add a new task...' },
+    {
+      key: 'dataBinding',
+      label: 'Data Binding (JSON)',
+      type: 'textarea',
+      placeholder: '{"dataSourceId":"todos","refreshInterval":60000}',
+      defaultValue: ''
+    },
+  ],
+  TodoModule: [
+    { key: 'title', label: 'Title', type: 'text', defaultValue: 'Tasks' },
+    { key: 'maxItems', label: 'Max Items', type: 'number', defaultValue: 10 },
     {
       key: 'dataBinding',
       label: 'Data Binding (JSON)',
@@ -248,6 +259,17 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'publishedAt', label: 'Published At', type: 'text', placeholder: '2026-04-17T10:00:00Z', defaultValue: '2026-04-17T00:00:00Z' },
     { key: 'source', label: 'Source', type: 'text', placeholder: 'Source name', defaultValue: 'Source' },
   ],
+  ArticleCardModule: [
+    { key: 'title', label: 'Title', type: 'text', defaultValue: 'Articles' },
+    { key: 'maxItems', label: 'Max Items', type: 'number', defaultValue: 10 },
+    {
+      key: 'dataBinding',
+      label: 'Data Binding (JSON)',
+      type: 'textarea',
+      placeholder: '{"dataSourceId":"articles","refreshInterval":60000}',
+      defaultValue: ''
+    },
+  ],
   ChatModule: [
     { key: 'threadId', label: 'Thread ID', type: 'text', placeholder: 'Optional conversation thread ID' },
   ],
@@ -272,11 +294,7 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
     { key: 'placeholder', label: 'Placeholder', type: 'text', defaultValue: 'Type a message...' },
     { key: 'maxLines', label: 'Max Lines', type: 'number', defaultValue: 6 },
   ],
-  Empty: [
-    { key: 'gap', label: 'Gap', type: 'number', defaultValue: 8 },
-    { key: 'padding', label: 'Padding', type: 'number', defaultValue: 0 },
-    { key: 'backgroundColor', label: 'Background', type: 'color', defaultValue: '#FFFFFF' },
-  ],
+  Empty: [],
 };
 
 export function getDefaultProps(componentType: string): Record<string, unknown> {

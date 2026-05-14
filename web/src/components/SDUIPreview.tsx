@@ -142,21 +142,6 @@ function IconPreview({ name, size, color }: any) {
   );
 }
 
-function TextInputPreview({ placeholder, multiline, value, secureTextEntry }: any) {
-  const rawValue = value === undefined || value === null ? '' : String(value);
-  const displayValue = secureTextEntry && rawValue ? '*'.repeat(Math.max(rawValue.length, 4)) : rawValue;
-
-  return (
-    <div>
-      {multiline ? (
-        <textarea value={displayValue} placeholder={placeholder || 'Enter text...'} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" rows={3} readOnly />
-      ) : (
-        <input type="text" value={displayValue} placeholder={placeholder || 'Enter text...'} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" readOnly />
-      )}
-    </div>
-  );
-}
-
 function CalendarPreview() {
   return (
     <div className="bg-white rounded-lg border p-3">
@@ -267,8 +252,6 @@ const PREVIEW_RENDERERS: Record<string, (props: any) => React.JSX.Element> = {
   button: ButtonPreview,
   Image: ImagePreview,
   image: ImagePreview,
-  TextInput: TextInputPreview,
-  textinput: TextInputPreview,
   Icon: IconPreview,
   icon: IconPreview,
   Divider: DividerPreview,

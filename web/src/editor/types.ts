@@ -21,6 +21,8 @@ export interface EditorComponent {
 
 export interface EditorCell {
   id: string;
+  /** Cell width: 'auto' for equal distribution, percentage string like '50%' for fixed width.
+   *  @deprecated Numeric flex weights are deprecated in Phase 2 — use percentage strings or 'auto'. */
   width: number | string;
   content: EditorComponent | null;
   rules?: ActionRule[];
@@ -34,14 +36,22 @@ export type DeprecatedRowType = 'divider' | 'spacer';
 export type EditorRowType = 'content' | DeprecatedRowType;
 
 export interface EditorRowVisualProps {
+  /** @deprecated Background colors on rows are removed in Phase 2. Use component-level backgrounds instead. */
   bgColor?: string;
+  /** @deprecated Background colors on rows are removed in Phase 2. Use component-level backgrounds instead. */
   backgroundColor?: string;
+  /** @deprecated Row padding is removed in Phase 2. Use cell-level padding instead. */
   paddingTop?: EditorRowPaddingValue;
+  /** @deprecated Row padding is removed in Phase 2. Use cell-level padding instead. */
   paddingBottom?: EditorRowPaddingValue;
+  /** @deprecated Row padding is removed in Phase 2. Use cell-level padding instead. */
   paddingLeft?: EditorRowPaddingValue;
+  /** @deprecated Row padding is removed in Phase 2. Use cell-level padding instead. */
   paddingRight?: EditorRowPaddingValue;
+  /** @deprecated Row padding is removed in Phase 2. Use cell-level padding instead. */
   padding?: EditorRowPaddingValue;
   scrollable?: boolean;
+  /** @deprecated Row gap is removed in Phase 2. Use cell-level margins instead. */
   gap?: number;
   showDivider?: boolean;
   dividerColor?: string;
@@ -215,11 +225,9 @@ const READ_ONLY_RUNTIME_COMPONENTS: ComponentDefinition[] = [
 
 export const COMPONENT_REGISTRY: ComponentDefinition[] = [
   // Atomic Components
-  { type: 'Text', displayName: 'Text', icon: '📝', category: 'atomic', description: 'Text content with styling' },
-  { type: 'Markdown', displayName: 'Markdown', icon: '📄', category: 'atomic', description: 'Rich markdown content' },
+  { type: 'Text', displayName: 'Text', icon: '📝', category: 'atomic', description: 'Rich text and markdown content' },
   { type: 'Button', displayName: 'Button', icon: '🔘', category: 'atomic', description: 'Interactive button with actions' },
   { type: 'Image', displayName: 'Image', icon: '🖼️', category: 'atomic', description: 'Display an image' },
-  { type: 'TextInput', displayName: 'Text Input', icon: '✏️', category: 'atomic', description: 'User text input field' },
   { type: 'Icon', displayName: 'Icon', icon: '⭐', category: 'atomic', description: 'Display an icon' },
   // Structural
   { type: 'Empty', displayName: 'Empty', icon: '📦', category: 'structural', description: 'Container for vertical stacking of components' },
@@ -230,7 +238,9 @@ export const COMPONENT_REGISTRY: ComponentDefinition[] = [
   { type: 'NotesModule', displayName: 'Notes', icon: '📓', category: 'composite', description: 'Notes editor' },
   { type: 'InputBar', displayName: 'Input Bar', icon: '💬', category: 'composite', description: 'Message input bar with send' },
   { type: 'Todo', displayName: 'Todo', icon: '✅', category: 'composite', description: 'Todo list with checkboxes' },
+  { type: 'TodoModule', displayName: 'Todo Module', icon: '✅', category: 'composite', description: 'Todo module with data binding support' },
   { type: 'ArticleCard', displayName: 'Article Card', icon: '📰', category: 'composite', description: 'Article preview card' },
+  { type: 'ArticleCardModule', displayName: 'Article Card Module', icon: '📰', category: 'composite', description: 'Article card module with data binding support' },
   { type: 'RichTextRenderer', displayName: 'Rich Text Renderer', icon: '📝', category: 'composite', description: 'Rich text markdown renderer' },
   { type: 'RichText', displayName: 'Rich Text', icon: '📝', category: 'composite', description: 'Rich text markdown renderer (alias)' },
   ...READ_ONLY_RUNTIME_COMPONENTS,
@@ -261,16 +271,15 @@ export interface RowPreset {
 }
 
 export const COMPONENT_PRESETS: ComponentPreset[] = [
-  { name: 'Heading', type: 'Text', props: { content: 'Heading', variant: 'heading' }, icon: '📰' },
-  { name: 'Body Text', type: 'Text', props: { content: 'Body text', variant: 'body' }, icon: '📝' },
+  { name: 'Heading', type: 'Text', props: { content: '## Heading', variant: 'heading' }, icon: '📰' },
+  { name: 'Body Text', type: 'Text', props: { content: 'Body text with **bold** support', variant: 'body' }, icon: '📝' },
   { name: 'Caption', type: 'Text', props: { content: 'Caption text', variant: 'caption' }, icon: '🏷️' },
   { name: 'Primary Button', type: 'Button', props: { label: 'Button', variant: 'primary' }, icon: '🔵' },
   { name: 'Secondary Button', type: 'Button', props: { label: 'Button', variant: 'secondary' }, icon: '⚪' },
   { name: 'Icon Button', type: 'Button', props: { icon: 'star', variant: 'icon' }, icon: '⭐' },
-  { name: 'Text Input', type: 'TextInput', props: { placeholder: 'Enter text...' }, icon: '✏️' },
-  { name: 'Image', type: 'Image', props: { src: 'https://via.placeholder.com/300x200', aspectRatio: 1.5 }, icon: '🖼️' },
+  { name: 'Image', type: 'Image', props: { src: 'https://via.placeholder.com/300x200', fitMode: 'fitWidth' }, icon: '🖼️' },
   { name: 'Icon', type: 'Icon', props: { name: 'star', size: 24, color: '#000000' }, icon: '⭐' },
-  { name: 'Empty Container', type: 'Empty', props: { gap: 8, padding: 0 }, icon: '📦' },
+  { name: 'Empty Container', type: 'Empty', props: {} },
 ];
 
 export const ROW_PRESETS: RowPreset[] = [
@@ -285,7 +294,6 @@ export type ActionPropName = 'onPress' | 'onSubmit' | 'onSend';
 const ACTION_PROP_MAP = {
   Button: 'onPress',
   Image: 'onPress',
-  TextInput: 'onSubmit',
   InputBar: 'onSend',
 } as const satisfies Partial<Record<string, ActionPropName>>;
 
@@ -304,7 +312,7 @@ const LEGACY_TYPE_MAP: Record<string, string> = {
   title: 'Text',
   subtitle: 'Text',
   sectiontitle: 'Text',
-  markdown: 'Markdown',
+  markdown: 'Text',
   button: 'Button',
   submit: 'Button',
   submitbutton: 'Button',
@@ -316,26 +324,6 @@ const LEGACY_TYPE_MAP: Record<string, string> = {
   toggle: 'Button',
   image: 'Image',
   heroimage: 'Image',
-  textinput: 'TextInput',
-  textfield: 'TextInput',
-  input: 'TextInput',
-  formfield: 'TextInput',
-  forminput: 'TextInput',
-  emailinput: 'TextInput',
-  emailfield: 'TextInput',
-  passwordinput: 'TextInput',
-  passwordfield: 'TextInput',
-  numberinput: 'TextInput',
-  numericinput: 'TextInput',
-  phoneinput: 'TextInput',
-  telinput: 'TextInput',
-  searchinput: 'TextInput',
-  dateinput: 'TextInput',
-  timeinput: 'TextInput',
-  textarea: 'TextInput',
-  select: 'TextInput',
-  dropdown: 'TextInput',
-  combobox: 'TextInput',
   icon: 'Icon',
   container: 'Container',
   form: 'form',
@@ -355,12 +343,6 @@ const STRUCTURAL_COMPONENT_KEYS = new Set(['type', 'id', 'props', 'children', 'c
 const HEADING_LEGACY_TYPE_KEYS = new Set(['heading', 'header', 'title', 'subtitle', 'sectiontitle']);
 const CAPTION_LEGACY_TYPE_KEYS = new Set(['caption', 'label', 'helpertext']);
 const CHECKABLE_LEGACY_TYPE_KEYS = new Set(['checkbox', 'radio', 'switch', 'toggle']);
-const SELECT_LIKE_LEGACY_TYPE_KEYS = new Set(['select', 'dropdown', 'combobox']);
-const MULTILINE_INPUT_LEGACY_TYPE_KEYS = new Set(['textarea']);
-const EMAIL_INPUT_LEGACY_TYPE_KEYS = new Set(['emailinput', 'emailfield']);
-const PASSWORD_INPUT_LEGACY_TYPE_KEYS = new Set(['passwordinput', 'passwordfield']);
-const PHONE_INPUT_LEGACY_TYPE_KEYS = new Set(['phoneinput', 'telinput']);
-const NUMERIC_INPUT_LEGACY_TYPE_KEYS = new Set(['numberinput', 'numericinput']);
 const FORM_CONTAINER_LEGACY_TYPE_KEYS = new Set(['fieldset', 'formsection']);
 
 let editorIdCounter = 0;
@@ -400,48 +382,6 @@ function getStringProp(record: Record<string, unknown>, keys: string[]): string 
   }
 
   return undefined;
-}
-
-function getNumberProp(record: Record<string, unknown>, keys: string[]): number | undefined {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value;
-    }
-  }
-
-  return undefined;
-}
-
-function summarizeLegacyOptions(options: unknown): string | undefined {
-  if (isNonEmptyString(options)) {
-    return options;
-  }
-
-  if (!Array.isArray(options)) {
-    return undefined;
-  }
-
-  const labels = options
-    .map((option) => {
-      if (isNonEmptyString(option)) {
-        return option;
-      }
-
-      if (isRecord(option)) {
-        return getStringProp(option, ['label', 'title', 'text', 'value', 'name']);
-      }
-
-      return undefined;
-    })
-    .filter((option): option is string => option !== undefined);
-
-  if (labels.length === 0) {
-    return undefined;
-  }
-
-  const preview = labels.slice(0, 3).join(', ');
-  return labels.length > 3 ? `${preview}, ...` : preview;
 }
 
 function getRawComponentType(component: Record<string, unknown>): string | null {
@@ -497,7 +437,7 @@ function buildLegacyFormChildren(props: Record<string, unknown>): unknown[] | un
   const description = getStringProp(props, ['description', 'text', 'content']);
   if (description) {
     return [{
-      type: 'Markdown',
+      type: 'Text',
       props: { content: description },
     }];
   }
@@ -535,8 +475,8 @@ function normalizeCalendarView(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const lower = value.toLowerCase();
   // Known valid variants — pass through as-is (case-insensitive match)
-  if (lower === 'month' || lower === 'week' || lower === 'day' || lower === 'agenda' || lower === 'compact') {
-    return value;
+  if (lower === 'month' || lower === 'week' || lower === 'day' || lower === 'agenda' || lower === 'compact' || lower === 'eventlist') {
+    return value === 'eventlist' ? 'eventList' : value;
   }
   // Legacy threeDay mapping
   if (lower === 'threeday') return 'week';
@@ -841,75 +781,14 @@ export function normalizeComponentPropsForEditor(
       if (typeof normalized.src !== 'string' && typeof normalized.uri === 'string') {
         normalized.src = normalized.uri;
       }
-      if (normalized.aspectRatio === undefined && typeof normalized.aspect_ratio === 'number') {
-        normalized.aspectRatio = normalized.aspect_ratio;
-      }
       delete normalized.uri;
+      delete normalized.alt;
+      delete normalized.width;
+      delete normalized.height;
+      delete normalized.aspectRatio;
       delete normalized.aspect_ratio;
-      normalizeActionProp(normalized, 'onPress', ['action']);
-      break;
-    }
-
-    case 'TextInput': {
-      const placeholder = getStringProp(normalized, ['placeholder', 'label', 'title', 'prompt', 'name']);
-      const inputValue = getStringProp(normalized, ['value', 'defaultValue', 'text', 'content']);
-      const maxLines = getNumberProp(normalized, ['maxLines', 'rows', 'lines']);
-      const optionSummary = summarizeLegacyOptions(normalized.options);
-
-      if (normalized.placeholder === undefined && placeholder !== undefined) {
-        normalized.placeholder = placeholder;
-      }
-
-      if (normalized.value === undefined && inputValue !== undefined) {
-        normalized.value = inputValue;
-      }
-
-      if (normalized.maxLines === undefined && maxLines !== undefined) {
-        normalized.maxLines = maxLines;
-      }
-
-      if (
-        normalized.multiline === undefined
-        && (MULTILINE_INPUT_LEGACY_TYPE_KEYS.has(legacyTypeKey) || (maxLines !== undefined && maxLines > 1))
-      ) {
-        normalized.multiline = true;
-      }
-
-      if (normalized.keyboardType === undefined) {
-        if (EMAIL_INPUT_LEGACY_TYPE_KEYS.has(legacyTypeKey)) {
-          normalized.keyboardType = 'email-address';
-        } else if (PASSWORD_INPUT_LEGACY_TYPE_KEYS.has(legacyTypeKey)) {
-          normalized.keyboardType = 'default';
-        } else if (PHONE_INPUT_LEGACY_TYPE_KEYS.has(legacyTypeKey)) {
-          normalized.keyboardType = 'phone-pad';
-        } else if (NUMERIC_INPUT_LEGACY_TYPE_KEYS.has(legacyTypeKey)) {
-          normalized.keyboardType = 'numeric';
-        }
-      }
-
-      if (normalized.secureTextEntry === undefined && PASSWORD_INPUT_LEGACY_TYPE_KEYS.has(legacyTypeKey)) {
-        normalized.secureTextEntry = true;
-      }
-
-      if (SELECT_LIKE_LEGACY_TYPE_KEYS.has(legacyTypeKey)) {
-        if (normalized.editable === undefined) {
-          normalized.editable = false;
-        }
-
-        if (normalized.placeholder === undefined) {
-          normalized.placeholder = 'Select option';
-        }
-
-        if (normalized.value === undefined && optionSummary !== undefined) {
-          normalized.value = optionSummary;
-        }
-      }
-
-      delete normalized.text;
-      delete normalized.title;
-      delete normalized.rows;
-      delete normalized.lines;
-      normalizeActionProp(normalized, 'onSubmit', ['action', 'onPress']);
+      delete normalized.borderRadius;
+      delete normalized.resizeMode;
       break;
     }
 
@@ -983,17 +862,14 @@ export function serializeComponentPropsForRuntime(
       if (typeof serialized.src !== 'string' && typeof serialized.uri === 'string') {
         serialized.src = serialized.uri;
       }
-      if (serialized.aspectRatio === undefined && typeof serialized.aspect_ratio === 'number') {
-        serialized.aspectRatio = serialized.aspect_ratio;
-      }
       delete serialized.uri;
+      delete serialized.alt;
+      delete serialized.width;
+      delete serialized.height;
+      delete serialized.aspectRatio;
       delete serialized.aspect_ratio;
-      serializeActionProp(serialized, 'onPress', ['action']);
-      break;
-    }
-
-    case 'TextInput': {
-      serializeActionProp(serialized, 'onSubmit', ['action', 'onPress']);
+      delete serialized.borderRadius;
+      delete serialized.resizeMode;
       break;
     }
 

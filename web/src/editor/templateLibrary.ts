@@ -41,71 +41,192 @@ function createRow(cells: EditorCell[], height: EditorRowHeight = 'auto'): Edito
 }
 
 export const LOCAL_SCREEN_TEMPLATES: LocalTemplateDefinition[] = [
+  // ── Personal Dashboard ─────────────────────────────────────────────────
+  // Phase 6.1: Weather + Compact Calendar in 50/50 row
   {
     id: 'starter-dashboard',
-    name: 'Dashboard Landing',
-    description: 'Welcome header, quick stats, and two primary actions.',
+    name: 'Personal Dashboard',
+    description: 'Weather overview with compact calendar, todos, and quick actions.',
     category: 'dashboard',
     kind: 'screen',
     screen: {
       rows: [
+        // Row 1: Greeting
         createRow([
-          createCell('Text', { content: 'Welcome to Helm', fontSize: 24, fontWeight: 'bold' }),
+          createCell('Text', { content: '# Good morning, {{user.name}} 👋', variant: 'heading', fontSize: 24 }),
         ]),
+        // Row 2: Weather (50%) + Compact Calendar (50%)
         createRow([
-          createCell('Text', { content: '12 Events', fontSize: 18, fontWeight: 'semibold' }),
-          createCell('Text', { content: '5 Notes', fontSize: 18, fontWeight: 'semibold' }),
+          createCell('Text', { content: '☀️ 24°C  •  Shanghai', fontSize: 18, fontWeight: 'semibold' }),
+          createCell('CalendarModule', { variant: 'compact', maxEvents: 3 }),
         ]),
-        // Divider as row-level separator (not a standalone component)
-        {
-          id: nextSeedId('tpl-row'),
-          type: 'divider',
-          height: 'auto',
-          cells: [],
-          dividerColor: '#E0E0E0',
-          dividerThickness: 1,
-          dividerMargin: 8,
-        },
+        // Row 3: Todo list with real data binding
+        createRow([
+          createCell('Todo', {
+            dataBinding: { dataSourceId: 'todos', refreshInterval: 60000 },
+            placeholder: 'Add a task...',
+          }),
+        ]),
+        // Row 4: Two action buttons
         createRow([
           createCell('Button', {
-            label: 'Open Calendar',
+            label: '+ New Task',
             variant: 'primary',
             size: 'md',
-            onPress: { type: 'navigate', screen: 'calendar' },
+            onPress: {
+              type: 'server_action',
+              function: 'todos.create',
+              params: { title: 'New task' },
+            },
           }),
           createCell('Button', {
-            label: 'New Note',
+            label: '+ New Note',
             variant: 'secondary',
             size: 'md',
-            onPress: { type: 'send_to_agent', message: 'Create a new note' },
+            onPress: {
+              type: 'server_action',
+              function: 'notes.create',
+              params: { content: '' },
+            },
           }),
         ]),
       ],
     },
   },
+  // ── Daily Planner ──────────────────────────────────────────────────────
+  // Phase 6.1: Container (vertical row) → Calendar (Week) | Todo | Notes
   {
     id: 'starter-planner',
-    name: 'Planner Overview',
-    description: 'Calendar-first screen with a quick-add prompt.',
+    name: 'Daily Planner',
+    description: 'Calendar week view with todo list and notes stacked in a vertical layout.',
+    category: 'planner',
+    kind: 'screen',
+    screen: {
+      rows: [
+        // Row 1: Header with dynamic date
+        createRow([
+          createCell('Text', { content: '# 📋 {{date.today}}', variant: 'heading', align: 'center' }),
+        ]),
+        // Row 2: Vertical container stacking Calendar (Week) | Todo | Notes
+        createRow([
+          {
+            id: nextSeedId('tpl-cell'),
+            width: 1,
+            content: {
+              id: createEditorId('tpl-component'),
+              type: 'Empty',
+              props: {},
+              children: [
+                {
+                  id: createEditorId('tpl-component'),
+                  type: 'CalendarModule',
+                  props: {
+                    variant: 'week',
+                    dataBinding: { dataSourceId: 'calendar_events', refreshInterval: 60000 },
+                  },
+                },
+                {
+                  id: createEditorId('tpl-component'),
+                  type: 'Todo',
+                  props: {
+                    dataBinding: { dataSourceId: 'todos', refreshInterval: 60000 },
+                    placeholder: 'Add a task...',
+                  },
+                },
+                {
+                  id: createEditorId('tpl-component'),
+                  type: 'NotesModule',
+                  props: {
+                    filterDate: '{{date.today}}',
+                    dataBinding: { dataSourceId: 'notes', refreshInterval: 60000 },
+                  },
+                },
+              ],
+            },
+          },
+        ]),
+      ],
+    },
+  },
+  // ── Home Module ────────────────────────────────────────────────────────
+  // Phase 6.1: InputBar + Todo + Article Cards
+  {
+    id: 'starter-home',
+    name: 'Home Module',
+    description: 'Input bar with todo list and article cards for a productivity-focused home screen.',
+    category: 'dashboard',
+    kind: 'screen',
+    screen: {
+      rows: [
+        // Row 1: Header
+        createRow([
+          createCell('Text', { content: '# Home', variant: 'heading' }),
+        ]),
+        // Row 2: Input bar + Todo side by side in an Empty container (vertical)
+        createRow([
+          {
+            id: nextSeedId('tpl-cell'),
+            width: 1,
+            content: {
+              id: createEditorId('tpl-component'),
+              type: 'Empty',
+              props: {},
+              children: [
+                {
+                  id: createEditorId('tpl-component'),
+                  type: 'InputBar',
+                  props: {
+                    placeholder: 'Add a task or note...',
+                    onSend: { type: 'send_to_agent' },
+                  },
+                },
+                {
+                  id: createEditorId('tpl-component'),
+                  type: 'Todo',
+                  props: {
+                    dataBinding: { dataSourceId: 'todos', refreshInterval: 30000 },
+                    placeholder: 'What needs to be done?',
+                  },
+                },
+              ],
+            },
+          },
+        ]),
+        // Row 3: Article card
+        createRow([
+          createCell('ArticleCard', {
+            title: 'Welcome to Your Feed',
+            description: 'Your articles and updates will appear here. Start by adding content sources.',
+            source: 'Helm',
+            publishedAt: '{{date.today}}T00:00:00Z',
+          }),
+        ]),
+      ],
+    },
+  },
+  // ── Calendar Focus ─────────────────────────────────────────────────────
+  // Phase 6.1: Full calendar module (Month variant)
+  {
+    id: 'starter-calendar',
+    name: 'Calendar Focus',
+    description: 'Full month calendar view with events.',
     category: 'planner',
     kind: 'screen',
     screen: {
       rows: [
         createRow([
-          createCell('Text', { content: 'My Calendar', fontSize: 24, fontWeight: 'bold' }),
+          createCell('Text', { content: '# My Calendar', variant: 'heading' }),
         ]),
         createRow([
-          createCell('CalendarModule', { showTimeBlock: true, defaultView: 'month' }),
-        ]),
-        createRow([
-          createCell('InputBar', {
-            placeholder: 'Add a quick event...',
-            onSend: { type: 'send_to_agent' },
+          createCell('CalendarModule', {
+            variant: 'month',
+            dataBinding: { dataSourceId: 'calendar_events', refreshInterval: 60000 },
           }),
         ]),
       ],
     },
   },
+  // ── Assistant Chat ─────────────────────────────────────────────────────
   {
     id: 'starter-chat',
     name: 'Assistant Chat',
@@ -115,7 +236,7 @@ export const LOCAL_SCREEN_TEMPLATES: LocalTemplateDefinition[] = [
     screen: {
       rows: [
         createRow([
-          createCell('Text', { content: 'AI Assistant', fontSize: 24, fontWeight: 'bold' }),
+          createCell('Text', { content: '# AI Assistant', variant: 'heading' }),
         ]),
         createRow([
           createCell('ChatModule', {}),
@@ -129,6 +250,7 @@ export const LOCAL_SCREEN_TEMPLATES: LocalTemplateDefinition[] = [
       ],
     },
   },
+  // ── Notes Workspace ────────────────────────────────────────────────────
   {
     id: 'starter-notes',
     name: 'Notes Workspace',
@@ -138,10 +260,12 @@ export const LOCAL_SCREEN_TEMPLATES: LocalTemplateDefinition[] = [
     screen: {
       rows: [
         createRow([
-          createCell('Text', { content: 'My Notes', fontSize: 24, fontWeight: 'bold' }),
+          createCell('Text', { content: '# My Notes', variant: 'heading' }),
         ]),
         createRow([
-          createCell('NotesModule', {}),
+          createCell('NotesModule', {
+            dataBinding: { dataSourceId: 'notes', refreshInterval: 60000 },
+          }),
         ]),
         createRow([
           createCell('Button', {
@@ -154,6 +278,7 @@ export const LOCAL_SCREEN_TEMPLATES: LocalTemplateDefinition[] = [
       ],
     },
   },
+  // ── Contact Intake ─────────────────────────────────────────────────────
   {
     id: 'starter-form',
     name: 'Contact Intake',
@@ -163,10 +288,10 @@ export const LOCAL_SCREEN_TEMPLATES: LocalTemplateDefinition[] = [
     screen: {
       rows: [
         createRow([
-          createCell('Text', { content: 'Contact Intake', fontSize: 24, fontWeight: 'bold' }),
+          createCell('Text', { content: '# Contact Intake', variant: 'heading' }),
         ]),
         createRow([
-          createCell('Text', { content: 'Share one message and send it directly from the input.', fontSize: 16 }),
+          createCell('Text', { content: 'Share one message and send it directly from the input.', variant: 'body' }),
         ]),
         createRow([
           createCell('InputBar', {
@@ -218,14 +343,14 @@ export const LOCAL_ROW_TEMPLATES: LocalTemplateDefinition[] = [
   {
     id: 'row-content-split',
     name: 'Content Split',
-    description: 'Markdown copy beside an image block.',
+    description: 'Text copy beside an image block.',
     category: 'custom',
     kind: 'row',
     screen: {
       rows: [
         createRow([
-          createCell('Markdown', { content: '## Feature highlight\n\nUse this row for supporting copy.' }, 2),
-          createCell('Image', { src: 'https://via.placeholder.com/320x220', height: 220, borderRadius: 16 }, 1),
+          createCell('Text', { content: '## Feature highlight\n\nUse this row for supporting copy.' }, 2),
+          createCell('Image', { src: 'https://via.placeholder.com/320x200', fitMode: 'fitWidth' }, 1),
         ]),
       ],
     },

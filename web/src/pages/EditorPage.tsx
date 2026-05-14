@@ -7,6 +7,7 @@ import { StructureTree } from '../editor/StructureTree';
 import { EditorCanvas } from '../editor/EditorCanvas';
 import { PropertyInspector } from '../editor/PropertyInspector';
 import { AppPreview } from '../components/AppPreview';
+import { SDUIPreview } from '../components/SDUIPreview';
 import { DEVICE_PRESETS, getEditorPersistenceValidationError } from '../editor/types';
 import type { DevicePreset, EditorComponent, EditorScreen } from '../editor/types';
 import {
@@ -16,8 +17,9 @@ import {
 } from '../editor/templateLibrary';
 import type { LocalTemplateDefinition } from '../editor/templateLibrary';
 import {
-  Save, Rocket, Undo2, Redo2, CheckCircle, XCircle, FileText,
-  RefreshCw, Monitor, RotateCw, ChevronDown, Code, Trash2, Smartphone
+  Save, Rocket, Undo2, Redo2, FileText,
+  RefreshCw, Monitor, RotateCw, ChevronDown, ChevronRight, ChevronUp, Code, Trash2, Smartphone,
+  Camera, History, Eye, Clock, Info, List
 } from 'lucide-react';
 
 interface ModuleInfo {
@@ -229,9 +231,26 @@ export function EditorPage() {
 
   // Create module state - removed (now handled by ModulesTree)
 
-  // Draft state
+  // ── Versioning state (Phase 5) ────────────────────────────────────────────
   const [draftInfo, setDraftInfo] = useState<DraftInfo>({ has_draft: false });
-  const [approvingDraft, setApprovingDraft] = useState(false);
+  const [checkpointing, setCheckpointing] = useState(false);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [versions, setVersions] = useState<{
+    id: string;
+    version_number: number;
+    display_name: string;
+    created_at: string;
+    change_summary: string | null;
+    source: string;
+    custom_name: string | null;
+    default_timestamp_name: string;
+  }[]>([]);
+  const [expandedVersionId, setExpandedVersionId] = useState<string | null>(null);
+  const [versionDetails, setVersionDetails] = useState<Record<string, { rowCount: number; compCount: number; componentTypes: string[] }>>({});
+  const [loadingVersionDetail, setLoadingVersionDetail] = useState(false);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [lastCheckpointId, setLastCheckpointId] = useState<string | null>(null);
 
   // Device preview
   const [selectedPreset, setSelectedPreset] = useState<DevicePreset>(DEVICE_PRESETS[1]); // iPhone 15
@@ -485,6 +504,7 @@ export function EditorPage() {
       setScreenLoadError(null);
       setLastSavedSnapshot(buildScreenSnapshot(useEditorStore.getState().getScreen()));
       setLastSavedAt(null);
+      setLoading(false);
       return;
     }
 
@@ -498,9 +518,18 @@ export function EditorPage() {
 
     try {
       const [screenData, draft] = await Promise.all([
-        api.get<any>(`/api/sdui/${selectedModule}`),
+        api.get<any>(`/api/sdui/${selectedModule}`).catch(() => null),
         api.get<DraftInfo>(`/api/sdui/${selectedModule}/draft`).catch(() => ({ has_draft: false })),
       ]);
+      // If both API calls failed, treat as empty module
+      if (!screenData) {
+        loadScreen(null);
+        setDraftInfo({ has_draft: false });
+        setHasPersistedScreen(false);
+        setLastSavedSnapshot(buildScreenSnapshot(useEditorStore.getState().getScreen()));
+        setLastSavedAt(null);
+        return;
+      }
       console.log(`[Editor] loadSelectedModule() — API success: screen=${!!screenData, draft.has_draft}`, draft);
 
       if (moduleLoadRequestIdRef.current !== requestId) {
@@ -743,71 +772,175 @@ export function EditorPage() {
     }
   }, [canModifySelectedModule, selectedModule, getPersistableScreen, isEffectivelyEmptyScreen, showMsg, markScreenSaved, screenLoadError, updateModuleHasScreen]);
 
-  // Approve/Reject draft
-  const handleApproveDraft = useCallback(async () => {
-    console.log('[Editor] handleApproveDraft() — button pressed for module:', selectedModule);
+  // ── Versioning handlers (Phase 5) ───────────────────────────────────────
+
+  const handleCreateCheckpoint = useCallback(async () => {
+    console.log('[Editor] handleCreateCheckpoint() — button pressed for module:', selectedModule);
     const currentModule = selectedModule;
-    setApprovingDraft(true);
+    if (!currentModule) {
+      showMsg('error', 'No module selected');
+      return;
+    }
+
+    setCheckpointing(true);
     try {
-      const result = await api.post<any>(`/api/sdui/${currentModule}/draft/approve`);
-      console.log(`[Editor] handleApproveDraft() — approve API success, version=${result.version}`);
-      const screenData = await api.get<any>(`/api/sdui/${currentModule}`);
+      // Save draft first
+      const screen = getPersistableScreen();
+      const saveResult = await api.post<any>(`/api/sdui/${currentModule}`, { screen });
 
-      if (selectedModuleRef.current !== currentModule) {
-        console.log('[Editor] handleApproveDraft() — module changed, ignoring stale response');
-        return;
-      }
+      // Create checkpoint
+      const result = await api.post<any>(`/api/modules/${currentModule}/checkpoints`, {
+        change_summary: `Checkpoint from editor`,
+      });
 
-      showMsg('success', `Draft approved! (v${result.version})`);
-      setDraftInfo({ has_draft: false });
-      const normalized = normalizeScreenData(screenData?.screen ?? screenData?.state_json ?? null);
-      const hasLiveScreen = normalized !== null;
-      loadScreen(normalized ?? { rows: [] });
-      setHasPersistedScreen(hasLiveScreen);
-      updateModuleHasScreen(currentModule, hasLiveScreen);
-      markScreenSaved(useEditorStore.getState().getScreen());
+      console.log(`[Editor] handleCreateCheckpoint() — checkpoint created: ${result.id} (v${result.version_number})`);
+
+      if (selectedModuleRef.current !== currentModule) return;
+
+      setLastCheckpointId(result.id);
+      showMsg('success', `Checkpoint v${result.version_number} created — ${result.display_name}`);
+      setDraftInfo({ has_draft: saveResult.draft ?? false });
     } catch (err) {
-      console.error('[Editor] handleApproveDraft() — error:', err instanceof Error ? err.message : err);
-      if (selectedModuleRef.current !== currentModule) {
-        return;
-      }
-
-      showMsg('error', err instanceof Error ? err.message : 'Approve failed');
+      console.error('[Editor] handleCreateCheckpoint() — error:', err instanceof Error ? err.message : err);
+      if (selectedModuleRef.current !== currentModule) return;
+      showMsg('error', err instanceof Error ? err.message : 'Checkpoint failed');
     } finally {
-      setApprovingDraft(false);
+      setCheckpointing(false);
     }
-  }, [selectedModule, showMsg, loadScreen, markScreenSaved, updateModuleHasScreen]);
+  }, [selectedModule, getPersistableScreen, showMsg]);
 
-  const handleRejectDraft = useCallback(async () => {
-    console.log('[Editor] handleRejectDraft() — button pressed for module:', selectedModule);
+  const handleOpenVersionHistory = useCallback(async () => {
+    console.log('[Editor] handleOpenVersionHistory() — opening for module:', selectedModule);
     const currentModule = selectedModule;
-    try {
-      await api.post(`/api/sdui/${currentModule}/draft/reject`);
-      console.log('[Editor] handleRejectDraft() — reject API success');
-      const screenData = await api.get<any>(`/api/sdui/${currentModule}`);
-
-      if (selectedModuleRef.current !== currentModule) {
-        console.log('[Editor] handleRejectDraft() — module changed, ignoring stale response');
-        return;
-      }
-
-      showMsg('info', 'Draft rejected.');
-      setDraftInfo({ has_draft: false });
-      const normalized = normalizeScreenData(screenData?.screen ?? screenData?.state_json ?? null);
-      const hasLiveScreen = normalized !== null;
-      loadScreen(normalized ?? { rows: [] });
-      setHasPersistedScreen(hasLiveScreen);
-      updateModuleHasScreen(currentModule, hasLiveScreen);
-      markScreenSaved(useEditorStore.getState().getScreen());
-    } catch (err) {
-      console.error('[Editor] handleRejectDraft() — error:', err instanceof Error ? err.message : err);
-      if (selectedModuleRef.current !== currentModule) {
-        return;
-      }
-
-      showMsg('error', err instanceof Error ? err.message : 'Reject failed');
+    if (!currentModule) {
+      showMsg('error', 'No module selected');
+      return;
     }
-  }, [selectedModule, showMsg, loadScreen, markScreenSaved, updateModuleHasScreen]);
+
+    setShowVersionHistory(true);
+    setLoadingVersions(true);
+    try {
+      const data = await api.get<{ items: any[]; total: number }>(`/api/modules/${currentModule}/versions`);
+      console.log(`[Editor] handleOpenVersionHistory() — loaded ${data.items.length} versions`);
+      setVersions(data.items || []);
+    } catch (err) {
+      console.error('[Editor] handleOpenVersionHistory() — error:', err instanceof Error ? err.message : err);
+      setVersions([]);
+      showMsg('error', err instanceof Error ? err.message : 'Failed to load versions');
+    } finally {
+      setLoadingVersions(false);
+    }
+  }, [selectedModule, showMsg]);
+
+  const handlePreviewInWeb = useCallback(() => {
+    console.log('[Editor] handlePreviewInWeb() — opening preview for module:', selectedModule);
+    setShowPreviewModal(true);
+  }, [selectedModule, showMsg]);
+
+  const handleRestoreVersion = useCallback(async (versionId: string, versionNumber: number) => {
+    console.log('[Editor] handleRestoreVersion() — restoring version:', versionId);
+    const currentModule = selectedModule;
+    if (!currentModule) return;
+
+    if (!window.confirm(
+      `This will overwrite your current working draft with version ${versionNumber}. Unsaved changes will be lost.\n\nContinue?`
+    )) {
+      console.log('[Editor] handleRestoreVersion() — user cancelled');
+      return;
+    }
+
+    try {
+      await api.post<any>(`/api/modules/${currentModule}/versions/${versionId}/restore-to-draft`);
+      console.log('[Editor] handleRestoreVersion() — restored to draft');
+
+      // Reload the screen
+      const screenData = await api.get<any>(`/api/sdui/${currentModule}`);
+      const normalized = normalizeScreenData(screenData?.screen ?? null);
+      loadScreen(normalized ?? { rows: [] });
+      setDraftInfo({ has_draft: true, version: 1 });
+      showMsg('success', `Version v${versionNumber} restored to working draft`);
+    } catch (err) {
+      console.error('[Editor] handleRestoreVersion() — error:', err instanceof Error ? err.message : err);
+      showMsg('error', err instanceof Error ? err.message : 'Restore failed');
+    }
+  }, [selectedModule, loadScreen, showMsg]);
+
+  const handlePublishVersion = useCallback(async (versionId: string, versionNumber: number) => {
+    console.log('[Editor] handlePublishVersion() — publishing version:', versionId);
+    const currentModule = selectedModule;
+    if (!currentModule) return;
+
+    if (!window.confirm(
+      `This will publish version ${versionNumber} as the live screen. All mobile users will see this version immediately.\n\nContinue?`
+    )) {
+      console.log('[Editor] handlePublishVersion() — user cancelled');
+      return;
+    }
+
+    try {
+      const result = await api.post<any>(`/api/modules/${currentModule}/versions/${versionId}/publish`);
+      console.log('[Editor] handlePublishVersion() — published:', result);
+
+      setDraftInfo({ has_draft: false });
+      showMsg('success', `Version v${versionNumber} published to live!`);
+    } catch (err) {
+      console.error('[Editor] handlePublishVersion() — error:', err instanceof Error ? err.message : err);
+      showMsg('error', err instanceof Error ? err.message : 'Publish failed');
+    }
+  }, [selectedModule, showMsg]);
+
+  const handleToggleVersionDetail = useCallback(async (versionId: string) => {
+    if (expandedVersionId === versionId) {
+      setExpandedVersionId(null);
+      return;
+    }
+
+    setExpandedVersionId(versionId);
+
+    // Fetch detail if not already loaded
+    if (!versionDetails[versionId]) {
+      setLoadingVersionDetail(true);
+      const currentModule = selectedModule;
+      if (!currentModule) {
+        setLoadingVersionDetail(false);
+        return;
+      }
+
+      try {
+        const detail = await api.get<any>(`/api/modules/${currentModule}/versions/${versionId}`);
+        console.log(`[Editor] handleToggleVersionDetail() — loaded detail for version ${versionId}`);
+
+        // Compute summary from sdui_json
+        const sdui = detail.sdui_json || {};
+        const rows = Array.isArray(sdui.rows) ? sdui.rows : [];
+        let compCount = 0;
+        const componentTypes = new Set<string>();
+        for (const row of rows) {
+          if (Array.isArray(row.cells)) {
+            for (const cell of row.cells) {
+              if (cell?.content?.type) {
+                compCount++;
+                componentTypes.add(cell.content.type);
+              }
+            }
+          }
+        }
+
+        setVersionDetails(prev => ({
+          ...prev,
+          [versionId]: {
+            rowCount: rows.length,
+            compCount,
+            componentTypes: Array.from(componentTypes).slice(0, 5),
+          },
+        }));
+      } catch (err) {
+        console.error('[Editor] handleToggleVersionDetail() — error:', err instanceof Error ? err.message : err);
+      } finally {
+        setLoadingVersionDetail(false);
+      }
+    }
+  }, [expandedVersionId, selectedModule, versionDetails]);
 
   // Templates
   const loadTemplates = useCallback(async () => {
@@ -968,7 +1101,7 @@ export function EditorPage() {
     <div className="flex h-full flex-col">
       {/* ── Top Toolbar ─────────────────────────────────────────────── */}
       <div data-testid="toolbar" className="flex items-center justify-between px-3 py-1.5 bg-white border-b border-gray-200 shrink-0">
-        {/* Left: Module info + Draft */}
+        {/* Left: Module info + Versioning controls */}
         <div className="flex items-center gap-2">
           <div className="px-3 py-1 text-sm font-medium text-gray-700">
             {selectedModuleInfo ? (
@@ -982,21 +1115,40 @@ export function EditorPage() {
             )}
           </div>
 
-          {draftInfo.has_draft && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">
-                Draft v{draftInfo.version}
-              </span>
-              <button onClick={handleApproveDraft} disabled={approvingDraft}
-                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors">
-                <CheckCircle size={10} /> Approve
-              </button>
-              <button onClick={handleRejectDraft}
-                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors">
-                <XCircle size={10} /> Reject
-              </button>
-            </div>
+          {/* Saved status indicator */}
+          <span className="text-[10px] px-2 py-0.5 text-gray-400">
+            <Clock size={10} className="inline mr-0.5" />
+            {lastSavedLabel}
+          </span>
+
+          {hasUnsavedChanges && (
+            <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">
+              Unsaved
+            </span>
           )}
+
+          {/* Last checkpoint indicator */}
+          {lastCheckpointId && (
+            <span className="text-[10px] px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">
+              Checkpoint saved
+            </span>
+          )}
+
+          {/* Versioning action buttons */}
+          <button onClick={handleCreateCheckpoint} disabled={checkpointing || !canModifySelectedModule}
+            className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors disabled:opacity-50">
+            <Camera size={10} /> {checkpointing ? '...' : 'Checkpoint'}
+          </button>
+
+          <button onClick={handleOpenVersionHistory}
+            className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors">
+            <History size={10} /> History
+          </button>
+
+          <button onClick={handlePreviewInWeb}
+            className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-purple-100 hover:bg-purple-200 text-purple-700 rounded transition-colors">
+            <Eye size={10} /> Preview
+          </button>
         </div>
 
         {/* Center: Undo/Redo + Device picker */}
@@ -1473,6 +1625,213 @@ export function EditorPage() {
       {/* App Preview Modal */}
       {showAppPreview && (
         <AppPreview onClose={() => setShowAppPreview(false)} />
+      )}
+
+      {/* ── Version History Modal ────────────────────────────────────── */}
+      {showVersionHistory && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-5 w-[640px] max-h-[75vh] overflow-auto">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                <History size={14} />
+                Version History — {selectedModuleInfo?.name || selectedModule}
+              </h3>
+              <button onClick={() => { setShowVersionHistory(false); setExpandedVersionId(null); }} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+            </div>
+
+            {loadingVersions ? (
+              <div className="text-center py-8 text-gray-400 text-sm">Loading versions...</div>
+            ) : versions.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="text-gray-400 text-sm mb-2">No versions yet</div>
+                <div className="text-gray-400 text-xs">Create a checkpoint to save the current state as a version.</div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {versions.map((v) => {
+                  const isExpanded = expandedVersionId === v.id;
+                  const detail = versionDetails[v.id];
+                  const isLoadingDetail = loadingVersionDetail && isExpanded && !detail;
+
+                  return (
+                    <div key={v.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                      {/* Collapsed header */}
+                      <div
+                        className="flex items-center justify-between p-3 hover:bg-gray-50 transition-colors cursor-pointer"
+                        onClick={() => { void handleToggleVersionDetail(v.id); }}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <button className="text-gray-400 hover:text-gray-600 p-0.5">
+                              {isExpanded ? <ChevronUp size={12} /> : <ChevronRight size={12} />}
+                            </button>
+                            <div className="text-sm font-medium text-gray-800">
+                              v{v.version_number} — {v.display_name}
+                            </div>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 capitalize">
+                              {v.source}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-gray-400 mt-0.5 ml-5">
+                            {new Date(v.created_at).toLocaleString()}
+                            {v.change_summary && (
+                              <span className="ml-2 text-gray-500">— {v.change_summary}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0 ml-3" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            data-testid={`btn-restore-v${v.version_number}`}
+                            onClick={() => { void handleRestoreVersion(v.id, v.version_number); setShowVersionHistory(false); }}
+                            className="px-2 py-1 text-[11px] text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            title="Restore to draft"
+                          >
+                            Restore
+                          </button>
+                          <button
+                            data-testid={`btn-publish-v${v.version_number}`}
+                            onClick={() => { void handlePublishVersion(v.id, v.version_number); setShowVersionHistory(false); }}
+                            className="px-2 py-1 text-[11px] text-green-600 hover:bg-green-50 rounded transition-colors"
+                            title="Publish as live"
+                          >
+                            Publish
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Expanded content preview */}
+                      {isExpanded && (
+                        <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 ml-0">
+                          {isLoadingDetail ? (
+                            <div className="text-xs text-gray-400 flex items-center gap-1.5">
+                              <Clock size={10} className="animate-spin" />
+                              Loading version content...
+                            </div>
+                          ) : detail ? (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-3 text-xs text-gray-600">
+                                <span className="flex items-center gap-1">
+                                  <List size={11} />
+                                  {detail.rowCount} row{detail.rowCount !== 1 ? 's' : ''}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <Info size={11} />
+                                  {detail.compCount} component{detail.compCount !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+                              {detail.componentTypes.length > 0 && (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[10px] text-gray-400">Components:</span>
+                                  {detail.componentTypes.map(ct => (
+                                    <span key={ct} className="text-[10px] px-1.5 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600">
+                                      {ct}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-gray-400">No content data available</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Preview Modal ────────────────────────────────────────────── */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-5 w-[560px] max-h-[85vh] overflow-auto">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                <Eye size={14} />
+                Preview — {selectedModuleInfo?.name || selectedModule}
+              </h3>
+              <button onClick={() => { setShowPreviewModal(false); }} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+            </div>
+            <div className="space-y-3">
+              {/* Screen summary */}
+              <div className="flex items-center gap-3 text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+                <span className="flex items-center gap-1">
+                  <List size={11} />
+                  {rows.length} row{rows.length !== 1 ? 's' : ''}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Info size={11} />
+                  {rows.reduce((sum, r) => sum + r.cells.filter(c => c.content !== null).length, 0)} component{rows.reduce((sum, r) => sum + r.cells.filter(c => c.content !== null).length, 0) !== 1 ? 's' : ''}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Clock size={11} />
+                  {lastSavedLabel}
+                </span>
+                {hasUnsavedChanges && (
+                  <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium text-[10px]">
+                    Unsaved
+                  </span>
+                )}
+              </div>
+
+              {/* Component type summary */}
+              {(() => {
+                const componentTypes = Array.from(new Set(
+                  rows.flatMap(r => r.cells.map(c => c.content?.type).filter(Boolean))
+                ));
+                return componentTypes.length > 0 ? (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {componentTypes.slice(0, 8).map(type => (
+                      <span key={type} className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-purple-700">
+                        {type}
+                      </span>
+                    ))}
+                    {componentTypes.length > 8 && (
+                      <span className="text-[10px] text-gray-400">
+                        +{componentTypes.length - 8} more
+                      </span>
+                    )}
+                  </div>
+                ) : null;
+              })()}
+
+              {/* Embedded preview of current screen */}
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="bg-gray-100 px-3 py-1.5 text-[10px] text-gray-500 font-medium border-b border-gray-200 flex items-center gap-1.5">
+                  <Smartphone size={10} />
+                  Screen Preview ({selectedPreset.name} {deviceWidth}x{deviceHeight})
+                </div>
+                {rows.length === 0 ? (
+                  <div className="text-center text-gray-400 py-8 text-sm bg-white">No content to preview</div>
+                ) : (
+                  <div className="bg-white p-2">
+                    <SDUIPreview json={getScreen()} maxWidth={Math.min(deviceWidth, 500)} maxHeight={400} />
+                  </div>
+                )}
+              </div>
+
+              <p className="text-xs text-gray-500">
+                Preview shows how this module will appear on mobile. This is a snapshot of your
+                current working draft — no changes are published.
+              </p>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => {
+                    setShowPreviewModal(false);
+                    setShowAppPreview(true);
+                  }}
+                  className="flex-1 px-3 py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors text-center"
+                >
+                  Full App Preview
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

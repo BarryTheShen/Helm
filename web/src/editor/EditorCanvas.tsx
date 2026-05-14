@@ -33,7 +33,8 @@ const SCROLLABLE_CELL_MIN_WIDTH = 120;
 const MAX_PREVIEW_WIDTH = 960;
 const MAX_PREVIEW_HEIGHT = 1200;
 const MIN_CELL_WIDTH_PERCENT = 5; // Minimum 5% width per cell
-const MIN_CELL_WIDTH_PX = 60; // Minimum cell width in pixels (increased from 40 for better enforcement)
+const MIN_CELL_WIDTH_PX = 60; // Minimum cell width in pixels
+const MIN_CELL_PERCENT_FOR_DRAG = 5; // Minimum percentage for drag resize
 
 // ── Component Preview Renderers ──────────────────────────────────────────────
 
@@ -44,18 +45,35 @@ function TextPreview({ content, variant, fontSize, fontWeight, color, align, bol
       ? { fontSize: 12, fontWeight: '400', lineHeight: 1.4 }
       : { fontSize: 16, fontWeight: '400', lineHeight: 1.5 };
 
-  const resolvedFontSize = typeof fontSize === 'number' ? fontSize : semanticStyle.fontSize;
-  const resolvedFontWeight = (typeof fontWeight === 'string' && fontWeight.length > 0) || typeof fontWeight === 'number'
-    ? String(fontWeight)
-    : bold
-      ? '700'
-      : semanticStyle.fontWeight;
-
   const resolvedContent = resolveVariables(content || 'Text');
 
+  // Simple content (no markdown) — render as plain text with variant styling
+  if (!/[*#_`[\]!>-]/.test(resolvedContent) && !resolvedContent.includes('\n')) {
+    const resolvedFontSize = typeof fontSize === 'number' ? fontSize : semanticStyle.fontSize;
+    const resolvedFontWeight = (typeof fontWeight === 'string' && fontWeight.length > 0) || typeof fontWeight === 'number'
+      ? String(fontWeight)
+      : bold
+        ? '700'
+        : semanticStyle.fontWeight;
+
+    return (
+      <div style={{ fontSize: resolvedFontSize, fontWeight: resolvedFontWeight, fontStyle: italic ? 'italic' : 'normal', lineHeight: semanticStyle.lineHeight, color: color || '#000', textAlign: align || 'left', padding: '4px 0' }}>
+        {resolvedContent}
+      </div>
+    );
+  }
+
+  // Rich content — render through markdown
+  const markdownStyle: React.CSSProperties = {
+    ...semanticStyle,
+    color: color || '#000',
+    textAlign: align || 'left',
+    padding: '4px 0',
+  };
+
   return (
-    <div style={{ fontSize: resolvedFontSize, fontWeight: resolvedFontWeight, fontStyle: italic ? 'italic' : 'normal', lineHeight: semanticStyle.lineHeight, color: color || '#000', textAlign: align || 'left', padding: '4px 0' }}>
-      {resolvedContent}
+    <div style={markdownStyle}>
+      <ReactMarkdown>{resolvedContent}</ReactMarkdown>
     </div>
   );
 }
@@ -81,29 +99,18 @@ function ButtonPreview({ label, variant, size, icon }: any) {
   );
 }
 
-function ImagePreview({ src, height, aspectRatio, borderRadius }: any) {
+function ImagePreview({ src, fitMode }: any) {
+  const objectFit = fitMode === 'fitHeight' ? 'contain' : 'cover';
   return (
     <img
       src={src || 'https://via.placeholder.com/300x200'}
       alt=""
       style={{
         width: '100%',
-        height: height || undefined,
-        aspectRatio: aspectRatio || (height ? undefined : 16 / 9),
-        borderRadius: borderRadius || 0,
-        objectFit: 'cover',
+        height: '100%',
+        objectFit,
       }}
     />
-  );
-}
-
-function MarkdownPreview({ content }: any) {
-  const resolvedContent = resolveVariables(content || '# Heading\n\nParagraph');
-
-  return (
-    <div className="prose prose-sm max-w-none">
-      <ReactMarkdown>{resolvedContent}</ReactMarkdown>
-    </div>
   );
 }
 
@@ -113,21 +120,6 @@ function DividerPreview({ color, thickness, margin }: any) {
 
 function IconPreview({ name, size, color }: any) {
   return <span style={{ fontSize: size || 24, color: color || '#000' }}>⭐ {name || 'star'}</span>;
-}
-
-function TextInputPreview({ placeholder, multiline, value, secureTextEntry }: any) {
-  const rawValue = value === undefined || value === null ? '' : String(value);
-  const displayValue = secureTextEntry && rawValue ? '*'.repeat(Math.max(rawValue.length, 4)) : rawValue;
-
-  return (
-    <div>
-      {multiline ? (
-        <textarea value={displayValue} placeholder={placeholder || 'Enter text...'} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" rows={3} readOnly />
-      ) : (
-        <input type="text" value={displayValue} placeholder={placeholder || 'Enter text...'} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" readOnly />
-      )}
-    </div>
-  );
 }
 
 function CalendarPreview() {
@@ -709,10 +701,9 @@ function EmptyPreview({ gap, padding, backgroundColor, children }: { gap?: numbe
 
 const PREVIEW_RENDERERS: Record<string, (props: any) => JSX.Element> = {
   Text: TextPreview,
-  Markdown: MarkdownPreview,
+  Markdown: TextPreview, // Markdown merged into Text
   Button: ButtonPreview,
   Image: ImagePreview,
-  TextInput: TextInputPreview,
   Icon: IconPreview,
   Divider: DividerPreview,
   Container: ContainerPreview,
@@ -721,8 +712,10 @@ const PREVIEW_RENDERERS: Record<string, (props: any) => JSX.Element> = {
   NotesModule: NotesPreview,
   InputBar: InputBarPreview,
   Todo: TodoPreview,
+  TodoModule: TodoPreview,
   todo: TodoPreview,
   ArticleCard: ArticleCardPreview,
+  ArticleCardModule: ArticleCardPreview,
   article_card: ArticleCardPreview,
   RichTextRenderer: RichTextRendererPreview,
   rich_text_renderer: RichTextRendererPreview,
@@ -772,27 +765,7 @@ function getRowContainerStyle(row: EditorRow, previewHeight?: number): CSSProper
     style.height = Math.max(rowMinHeight, resolvedHeight);
   }
 
-  const backgroundColor = row.backgroundColor ?? row.bgColor;
-  if (backgroundColor) {
-    style.backgroundColor = backgroundColor;
-  }
-
   return style;
-}
-
-function resolveSpacingValue(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === 'string') {
-    const parsed = Number(value.trim());
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return undefined;
 }
 
 function getRowContentStyle(row: EditorRow): CSSProperties {
@@ -804,10 +777,6 @@ function getRowContentStyle(row: EditorRow): CSSProperties {
       display: 'flex',
       flex: '1 1 auto',
       alignItems: 'center',
-      paddingTop: resolveSpacingValue(row.paddingTop) ?? 0,
-      paddingBottom: resolveSpacingValue(row.paddingBottom) ?? 0,
-      paddingRight: resolveSpacingValue(row.paddingRight) ?? 0,
-      paddingLeft: resolveSpacingValue(row.paddingLeft) ?? 0,
     };
   }
 
@@ -818,17 +787,10 @@ function getRowContentStyle(row: EditorRow): CSSProperties {
     };
   }
 
-  const uniformPadding = resolveSpacingValue(row.padding);
-
   const style: CSSProperties = {
     display: 'flex',
     flex: '1 1 auto',
     minHeight: 0,
-    gap: row.gap ?? 4,
-    paddingTop: resolveSpacingValue(row.paddingTop) ?? uniformPadding ?? 0,
-    paddingBottom: resolveSpacingValue(row.paddingBottom) ?? uniformPadding ?? 0,
-    paddingRight: resolveSpacingValue(row.paddingRight) ?? uniformPadding ?? 0,
-    paddingLeft: resolveSpacingValue(row.paddingLeft) ?? uniformPadding ?? 0,
     // Only enable scrolling if explicitly set to true
     overflowX: row.scrollable === true ? 'auto' : 'hidden',
     overflowY: 'hidden',
@@ -895,7 +857,7 @@ function getCellStyle(row: EditorRow, cellWidth: EditorCell['width'], totalWidth
     };
   }
 
-  // Handle percentage widths
+  // Handle percentage widths (preferred in Phase 2)
   if (typeof cellWidth === 'string' && cellWidth.endsWith('%')) {
     const percent = parseFloat(cellWidth);
     const clampedPercent = Math.max(MIN_CELL_WIDTH_PERCENT, Math.min(100, percent));
@@ -907,7 +869,7 @@ function getCellStyle(row: EditorRow, cellWidth: EditorCell['width'], totalWidth
     };
   }
 
-  // Handle numeric flex weights
+  // Handle legacy numeric flex weights (deprecated — convert to percentage)
   const cellPercent = (getNumericCellWidth(cellWidth) / totalWidth) * 100;
   const clampedPercent = Math.max(MIN_CELL_WIDTH_PERCENT, Math.min(100, cellPercent));
 
@@ -928,6 +890,7 @@ function CellResizeHandle({
   rightWidth,
   onPreview,
   onCommit,
+  rowWidthPx,
 }: {
   rowId: string;
   cellIndex: number;
@@ -935,13 +898,14 @@ function CellResizeHandle({
   rightWidth: number;
   onPreview: (rowId: string, cellIndex: number, leftWidth: number, rightWidth: number) => void;
   onCommit: (rowId: string, cellIndex: number, leftWidth: number, rightWidth: number) => void;
+  rowWidthPx: number;
 }) {
   const startXRef = useRef(0);
   const startLeftWidthRef = useRef(1);
   const totalWidthRef = useRef(2);
   const hasMovedRef = useRef(false);
   const nextWidthsRef = useRef({ left: 1, right: 1 });
-  const rafIdRef = useRef<number>();
+  const rafIdRef = useRef<number | undefined>(undefined);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -958,12 +922,16 @@ function CellResizeHandle({
     document.body.style.cursor = 'col-resize';
 
     const handleMouseMove = (ev: MouseEvent) => {
-      const delta = (ev.clientX - startXRef.current) / 100;
-      const minWidth = MIN_CELL_WIDTH_PERCENT / 100; // Convert to decimal (0.05 for 5%)
-      const maxLeft = Math.max(minWidth, totalWidthRef.current - minWidth);
+      // Convert pixel delta to percentage of row width
+      const pxDelta = ev.clientX - startXRef.current;
+      const rowWidth = rowWidthPx || 390; // Fallback to default if 0
+      const pctDelta = (pxDelta / rowWidth) * 100;
+
+      const minPct = MIN_CELL_PERCENT_FOR_DRAG;
+      const maxLeft = Math.max(minPct, totalWidthRef.current - minPct);
       const nextLeft = Math.min(
         maxLeft,
-        Math.max(minWidth, Math.round((startLeftWidthRef.current + delta) * 100) / 100),
+        Math.max(minPct, Math.round((startLeftWidthRef.current + pctDelta) * 100) / 100),
       );
       const nextRight = Math.round((totalWidthRef.current - nextLeft) * 100) / 100;
 
@@ -997,7 +965,7 @@ function CellResizeHandle({
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-  }, [cellIndex, leftWidth, onCommit, onPreview, rightWidth, rowId]);
+  }, [cellIndex, leftWidth, onCommit, onPreview, rightWidth, rowId, rowWidthPx]);
 
   return (
     <div
@@ -1049,9 +1017,11 @@ function RowDragHandle({
 
 function RowHeightResizeHandle({
   rowId,
+  onPreview,
   onCommit,
 }: {
   rowId: string;
+  onPreview: (rowId: string, height: number) => void;
   onCommit: (rowId: string, height: number) => void;
 }) {
   const startYRef = useRef(0);
@@ -1059,7 +1029,6 @@ function RowHeightResizeHandle({
   const nextHeightRef = useRef(MIN_ROW_HEIGHT);
   const hasMovedRef = useRef(false);
   const rowRef = useRef<HTMLDivElement | null>(null);
-  const originalHeightRef = useRef<number | null>(null);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -1072,21 +1041,32 @@ function RowHeightResizeHandle({
     startYRef.current = e.clientY;
     startHeightRef.current = rowElement.getBoundingClientRect().height;
     nextHeightRef.current = Math.max(MIN_ROW_HEIGHT, Math.round(startHeightRef.current));
-    originalHeightRef.current = startHeightRef.current;
     hasMovedRef.current = false;
     document.body.style.cursor = 'row-resize';
 
     const handleMouseMove = (event: MouseEvent) => {
       const delta = event.clientY - startYRef.current;
-      const nextHeight = Math.max(MIN_ROW_HEIGHT, Math.round(startHeightRef.current + delta));
+      const rawHeight = Math.round(startHeightRef.current + delta);
+
+      // Stop drag at minimum — prevent bounce instead of clamping
+      if (rawHeight < MIN_ROW_HEIGHT) {
+        // Snap to minimum and don't move further
+        if (rowRef.current) {
+          rowRef.current.style.height = MIN_ROW_HEIGHT + 'px';
+          rowRef.current.style.minHeight = MIN_ROW_HEIGHT + 'px';
+        }
+        nextHeightRef.current = MIN_ROW_HEIGHT;
+        return;
+      }
 
       hasMovedRef.current = true;
-      nextHeightRef.current = nextHeight;
+      nextHeightRef.current = rawHeight;
+      onPreview(rowId, rawHeight);
 
       // Direct DOM manipulation — no React re-render per frame
       if (rowRef.current) {
-        rowRef.current.style.height = nextHeight + 'px';
-        rowRef.current.style.minHeight = nextHeight + 'px';
+        rowRef.current.style.height = rawHeight + 'px';
+        rowRef.current.style.minHeight = rawHeight + 'px';
       }
     };
 
@@ -1109,7 +1089,7 @@ function RowHeightResizeHandle({
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-  }, [rowId, onCommit]);
+  }, [rowId, onPreview, onCommit]);
 
   return (
     <div
@@ -1166,6 +1146,7 @@ function SortableRow({
   handleCellResizePreview, handleCellResizeCommit,
   handleRowResizePreview, handleRowResizeCommit,
   addRow, deleteRow, setSelection, copySelection, removeComponent,
+  deviceWidth,
 }: {
   row: EditorRow;
   rowIdx: number;
@@ -1184,6 +1165,7 @@ function SortableRow({
   setSelection: (sel: import('./types').Selection | null) => void;
   copySelection: () => void;
   removeComponent: (rowId: string, cellIndex: number) => void;
+  deviceWidth: number;
 }) {
   const { setNodeRef, transform, transition, attributes, listeners, isDragging } = useSortable({ id: row.id });
 
@@ -1217,9 +1199,9 @@ function SortableRow({
         {/* Drag handle */}
         <RowDragHandle testId={`row-drag-handle-${row.id}`} isDragging={isDragging} attributes={attributes} listeners={listeners} />
 
-        {/* Delete row button - top-right outside content area */}
+        {/* Delete row button - top-LEFT outside content area (moved from right to prevent overlap with cell delete) */}
         <button
-          className="absolute -right-2.5 -top-2.5 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-red-600 shadow-md"
+          className="absolute -left-2.5 -top-2.5 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-red-600 shadow-md"
           onClick={(e) => { e.stopPropagation(); deleteRow(row.id); }}
           title="Delete row"
         >
@@ -1337,6 +1319,7 @@ function SortableRow({
                       rightWidth={getNumericCellWidth(adjacentDisplayedWidth)}
                       onPreview={handleCellResizePreview}
                       onCommit={handleCellResizeCommit}
+                      rowWidthPx={deviceWidth}
                     />
                   )}
                 </div>
@@ -1514,6 +1497,7 @@ export function EditorCanvas() {
                     setSelection={setSelection}
                     copySelection={copySelection}
                     removeComponent={removeComponent}
+                    deviceWidth={deviceWidth}
                   />
                 ))}
               </SortableContext>

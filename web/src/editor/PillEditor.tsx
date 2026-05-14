@@ -59,21 +59,30 @@ function parseValueToPillsAndText(value: string): { type: 'text' | 'pill'; conte
 function serializeEditorContent(json: any): string {
   if (!json || !json.content) return '';
 
-  let result = '';
+  const parts: string[] = [];
 
-  function traverse(node: any) {
+  function traverse(node: any): string {
+    let result = '';
     if (node.type === 'text') {
       result += node.text || '';
     } else if (node.type === 'variablePill') {
       const { namespace, key } = node.attrs;
       result += `{{${namespace}.${key}}}`;
     } else if (node.content) {
-      node.content.forEach(traverse);
+      node.content.forEach((child: any) => {
+        result += traverse(child);
+      });
     }
+    return result;
   }
 
-  json.content.forEach(traverse);
-  return result;
+  // Each top-level block (paragraph, heading, etc.) is serialized separately
+  // and joined with \n\n to preserve paragraph breaks in markdown output.
+  for (const block of json.content) {
+    parts.push(traverse(block));
+  }
+
+  return parts.join('\n\n');
 }
 
 export function PillEditor({
@@ -133,27 +142,7 @@ export function PillEditor({
     onCreate: ({ editor }) => {
       // Initialize content from value prop
       if (value) {
-        const parts = parseValueToPillsAndText(value);
-        const content: any[] = [];
-
-        parts.forEach((part) => {
-          if (part.type === 'text') {
-            content.push({
-              type: 'text',
-              text: part.content as string,
-            });
-          } else {
-            content.push({
-              type: 'variablePill',
-              attrs: part.content,
-            });
-          }
-        });
-
-        editor.commands.setContent({
-          type: 'doc',
-          content: [{ type: 'paragraph', content: content.length > 0 ? content : [] }],
-        });
+        editor.commands.setContent(buildContentFromValue(value));
       }
     },
   });
@@ -277,15 +266,13 @@ export function PillEditor({
     handleClosePicker();
   };
 
-  // Sync external value changes
-  useEffect(() => {
-    if (!editor || editor.isFocused) return;
-
-    const currentSerialized = serializeEditorContent(editor.getJSON());
-    if (currentSerialized !== value) {
-      const parts = parseValueToPillsAndText(value);
+  /** Build ProseMirror document content from a value string, splitting on \n\n for paragraphs. */
+  function buildContentFromValue(val: string): any {
+    // Split by blank-line boundaries (one or more blank lines) to create multiple paragraphs
+    const blocks = val.split(/\n{2,}/);
+    const docContent = blocks.map((block) => {
+      const parts = parseValueToPillsAndText(block);
       const content: any[] = [];
-
       parts.forEach((part) => {
         if (part.type === 'text') {
           content.push({
@@ -299,11 +286,25 @@ export function PillEditor({
           });
         }
       });
+      return { type: 'paragraph', content };
+    });
 
+    if (docContent.length === 0) {
+      return [{ type: 'paragraph', content: [] }];
+    }
+    return docContent;
+  }
+
+  // Sync external value changes
+  useEffect(() => {
+    if (!editor || editor.isFocused) return;
+
+    const currentSerialized = serializeEditorContent(editor.getJSON());
+    if (currentSerialized !== value) {
       editor.commands.setContent({
         type: 'doc',
-        content: [{ type: 'paragraph', content: content.length > 0 ? content : [] }],
-      }, { updatesSelection: false });
+        content: buildContentFromValue(value),
+      }, false);
     }
   }, [value, editor]);
 

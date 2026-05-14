@@ -24,7 +24,6 @@ import type {
 
 const HISTORY_LIMIT = 50;
 export const MIN_ROW_HEIGHT = 48; // Minimum row height in pixels
-const MIN_CELL_WIDTH_PERCENT = 5; // Minimum 5% width per cell
 const DEFAULT_DEVICE = DEVICE_PRESETS[1] ?? {
   name: 'Default',
   width: 390,
@@ -151,39 +150,6 @@ function createEmptyCell(): EditorCell {
     width: 'auto',
     content: null,
   };
-}
-
-function validateCellWidths(cells: EditorCell[]): boolean {
-  let totalSetWidth = 0;
-  let autoCount = 0;
-
-  for (const cell of cells) {
-    if (typeof cell.width === 'string' && cell.width.endsWith('%')) {
-      const percent = parseFloat(cell.width);
-      if (isNaN(percent) || percent < MIN_CELL_WIDTH_PERCENT) {
-        return false;
-      }
-      totalSetWidth += percent;
-    } else if (cell.width === 'auto') {
-      autoCount++;
-    }
-  }
-
-  // Rule 1: Total set widths must be < 100%
-  if (totalSetWidth >= 100) {
-    return false;
-  }
-
-  // Rule 2: Auto cells must have enough space (at least MIN_CELL_WIDTH_PERCENT each)
-  if (autoCount > 0) {
-    const availableWidth = 100 - totalSetWidth;
-    const autoWidth = availableWidth / autoCount;
-    if (autoWidth < MIN_CELL_WIDTH_PERCENT) {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 function createEmptyRow(cellCount = 1, _type?: EditorRow['type']): EditorRow {
@@ -711,33 +677,24 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
       }
       console.log(`[EditorStore] updateAdjacentCellWidths() — rowId: ${rowId}, cell: ${cellIndex}, widths: ${leftWidth}/${rightWidth}`);
 
-      const nextLeftWidth = Math.max(0.25, leftWidth);
-      const nextRightWidth = Math.max(0.25, rightWidth);
+      // Convert numeric widths to percentage strings for the new model
+      // The resize handle works with percentages now
+      const toWidthStr = (val: number): string => `${Math.max(5, Math.round(val * 100) / 100)}%`;
+      const nextLeftStr = toWidthStr(leftWidth);
+      const nextRightStr = toWidthStr(rightWidth);
+
       const row = state.rows[rowIndex];
 
-      if (
-        row.cells[cellIndex]?.width === nextLeftWidth &&
-        row.cells[cellIndex + 1]?.width === nextRightWidth
-      ) {
-        return state;
-      }
-
-      // Create updated cells array for validation
+      // Create updated cells array
       const updatedCells = row.cells.map((cell, currentCellIndex) => {
         if (currentCellIndex === cellIndex) {
-          return { ...cell, width: nextLeftWidth };
+          return { ...cell, width: nextLeftStr };
         }
         if (currentCellIndex === cellIndex + 1) {
-          return { ...cell, width: nextRightWidth };
+          return { ...cell, width: nextRightStr };
         }
         return cell;
       });
-
-      // Validate before applying
-      if (!validateCellWidths(updatedCells)) {
-        console.warn('Adjacent width update rejected: violates minimum width constraints');
-        return state;
-      }
 
       const nextRows = state.rows.map((entry, index) =>
         index === rowIndex ? { ...entry, cells: updatedCells } : entry
@@ -757,12 +714,12 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
 
       const normalizedHeight = normalizeRowHeight(height);
       // Enforce minimum row height for numeric values
-      const nextHeight = normalizedHeight === 'auto' ? 'auto' : Math.max(MIN_ROW_HEIGHT, normalizedHeight);
+      const nextHeight: EditorRowHeight = normalizedHeight === 'auto' ? 'auto' : Math.max(MIN_ROW_HEIGHT, normalizedHeight);
       if (state.rows[rowIndex].height === nextHeight) {
         return state;
       }
 
-      const nextRows = state.rows.map((row, index) => index === rowIndex ? { ...row, height: nextHeight } : row);
+      const nextRows: EditorRow[] = state.rows.map((row, index) => index === rowIndex ? { ...row, height: nextHeight } : row);
 
       return commitRows(state, nextRows);
     });
@@ -802,12 +759,6 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
             ...row.cells,
             ...Array.from({ length: nextCount - row.cells.length }, () => createEmptyCell()),
           ];
-
-      // Validate before applying
-      if (!validateCellWidths(nextCells)) {
-        console.warn('[EditorStore] setCellCount() — rejected: would violate minimum width constraints');
-        return state;
-      }
 
       const nextRows = state.rows.map((entry, index) => index === rowIndex ? { ...entry, cells: nextCells } : entry);
 
@@ -868,17 +819,10 @@ export const useEditorStore = create<EditorStoreState>((set, get) => ({
         return state;
       }
 
-      // Create updated cells array for validation
       const row = state.rows[rowIndex];
       const updatedCells = row.cells.map((cell, currentCellIndex) =>
         currentCellIndex === cellIndex ? { ...cell, width: nextWidth } : cell
       );
-
-      // Validate before applying
-      if (!validateCellWidths(updatedCells)) {
-        console.warn('[EditorStore] updateCellWidth() — rejected: violates minimum width constraints');
-        return state;
-      }
 
       const nextRows = state.rows.map((entry, index) =>
         index === rowIndex ? { ...entry, cells: updatedCells } : entry

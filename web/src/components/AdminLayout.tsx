@@ -64,7 +64,7 @@ export function AdminLayout() {
             App Editor
           </NavLink>
 
-          {/* Visual Editor with expandable tree */}
+          {/* Module Editor with expandable tree */}
           <div>
             <button
               onClick={() => setEditorExpanded(!editorExpanded)}
@@ -76,7 +76,7 @@ export function AdminLayout() {
             >
               <div className="flex items-center gap-3">
                 <Paintbrush size={18} />
-                Visual Editor
+                Module Editor
               </div>
               {editorExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </button>
@@ -115,7 +115,7 @@ export function AdminLayout() {
         {requiresWideViewport && (
           // Shown only below 1024px (lg breakpoint) — CSS-driven, always reactive to resize
           <div className="lg:hidden mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 font-medium">
-            The Visual Editor requires a screen at least {MIN_EDITOR_WIDTH}px wide for full functionality.
+            The Module Editor requires a screen at least {MIN_EDITOR_WIDTH}px wide for full functionality.
           </div>
         )}
         <Outlet />
