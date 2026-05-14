@@ -1,7 +1,7 @@
 import uuid
 
 from sqlalchemy import Boolean, ForeignKey, JSON, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
 
@@ -16,3 +16,11 @@ class SDUITemplate(Base, TimestampMixin):
     screen_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # ── Versioning fields (Phase 5) ──────────────────────────────────────────
+    current_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+    # ── Relationships ───────────────────────────────────────────────────────
+    versions: Mapped[list["TemplateVersion"]] = relationship(  # type: ignore[name-defined]  # noqa: F821
+        back_populates="template", cascade="all, delete-orphan"
+    )

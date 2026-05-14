@@ -9,6 +9,7 @@ import { RuleBuilder } from './RuleBuilder';
 import { api } from '../lib/api';
 import type { DataSource } from '../lib/api';
 import { VariableInput } from './VariableInput';
+import { IconPicker } from './IconPicker';
 
 const INTERACTIVE_COMPONENTS = new Set(['Button', 'InputBar']);
 
@@ -639,6 +640,13 @@ function FieldRenderer({ field, value, onChange, screenComponents, testId }: {
             className="flex-1 px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono"
           />
         </div>
+      );
+    case 'icon-picker':
+      return (
+        <IconPicker
+          value={coerceStringValue(value, field.defaultValue ?? 'star')}
+          onChange={onChange}
+        />
       );
     default:
       return null;

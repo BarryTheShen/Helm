@@ -711,7 +711,7 @@ export function EditorPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo, handleSaveDraft]);
 
-  // Push live
+  // Push live — uses versioning system (checkpoint + publish)
   const handlePushLive = useCallback(async () => {
     console.log('[Editor] handlePushLive() — button pressed');
     if (!canModifySelectedModule) {
@@ -732,40 +732,36 @@ export function EditorPage() {
         setPushing(false);
         return;
       }
+
+      // Step 1: Save draft
       const saveResult = await api.post<any>(`/api/sdui/${currentModule}`, { screen });
       console.log(`[Editor] handlePushLive() — save response: draft=${saveResult.draft}`);
-      if (saveResult.draft) {
-        const approveResult = await api.post<any>(`/api/sdui/${currentModule}/draft/approve`);
-        console.log(`[Editor] handlePushLive() — approve response: version=${approveResult.version}`);
 
-        if (selectedModuleRef.current !== currentModule) {
-          console.log('[Editor] handlePushLive() — module changed, ignoring stale response');
-          return;
-        }
+      // Step 2: Create checkpoint via versioning API
+      const checkpointResult = await api.post<any>(`/api/modules/${currentModule}/checkpoints`, {
+        change_summary: `Published from editor`,
+      });
+      console.log(`[Editor] handlePushLive() — checkpoint created: ${checkpointResult.id} (v${checkpointResult.version_number})`);
 
-        const suffix = empty ? ' (empty screen)' : '';
-        showMsg('success', `Pushed live! (v${approveResult.version})${suffix}`);
-        setDraftInfo({ has_draft: false });
-      } else {
-        if (selectedModuleRef.current !== currentModule) {
-          console.log('[Editor] handlePushLive() — module changed, ignoring stale response');
-          return;
-        }
+      if (selectedModuleRef.current !== currentModule) return;
 
-        const suffix = empty ? ' (empty screen)' : '';
-        showMsg('success', `Pushed live!${suffix}`);
-        setDraftInfo({ has_draft: false });
-      }
+      // Step 3: Publish the checkpoint version
+      await api.post<any>(`/api/modules/${currentModule}/versions/${checkpointResult.id}/publish`);
+      console.log(`[Editor] handlePushLive() — published: v${checkpointResult.version_number}`);
 
+      if (selectedModuleRef.current !== currentModule) return;
+
+      const versionNumber = checkpointResult.version_number || '?';
+      const suffix = empty ? ' (empty screen)' : '';
+      showMsg('success', `Published v${versionNumber}${suffix}`);
+      setDraftInfo({ has_draft: false });
       setHasPersistedScreen(true);
       updateModuleHasScreen(currentModule, true);
       markScreenSaved(screen);
+      setLastCheckpointId(checkpointResult.id);
     } catch (err) {
       console.error('[Editor] handlePushLive() — error:', err instanceof Error ? err.message : err);
-      if (selectedModuleRef.current !== currentModule) {
-        return;
-      }
-
+      if (selectedModuleRef.current !== currentModule) return;
       showMsg('error', `Push failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setPushing(false);

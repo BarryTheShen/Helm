@@ -47,3 +47,9 @@ class App(Base, TimestampMixin):
         back_populates="app", cascade="all, delete-orphan"
     )
     devices: Mapped[list["Device"]] = relationship(back_populates="app")  # type: ignore[name-defined]  # noqa: F821
+    working_draft: Mapped["AppWorkingDraft | None"] = relationship(  # type: ignore[name-defined]  # noqa: F821
+        back_populates="app", uselist=False, cascade="all, delete-orphan"
+    )
+    versions: Mapped[list["AppVersion"]] = relationship(  # type: ignore[name-defined]  # noqa: F821
+        back_populates="app", cascade="all, delete-orphan"
+    )

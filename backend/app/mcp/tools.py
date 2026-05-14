@@ -9,13 +9,19 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import AsyncSessionLocal
+from app.models.app import App
+from app.models.app_version import AppVersion
+from app.models.app_working_draft import AppWorkingDraft
 from app.models.calendar_event import CalendarEvent
 from app.models.chat_message import ChatMessage
+from app.models.device import Device
 from app.models.module_instance import ModuleInstance
 from app.models.module_state import ModuleState
 from app.models.module_version import ModuleVersion
 from app.models.module_working_draft import ModuleWorkingDraft
 from app.models.notification import Notification
+from app.models.template import SDUITemplate
+from app.models.template_version import TemplateVersion
 from app.services.sdui_state import (
     SDUI_MODULE_PREFIX as _SDUI_PREFIX,
     count_sdui_screen_layout_items,
@@ -66,6 +72,19 @@ async def execute_tool(name: str, args: dict[str, Any], user_id: str) -> Any:
         "list_module_versions": list_versions,
         "restore_version": restore_version,
         "publish_version": publish_version,
+        "list_apps": list_apps,
+        "get_app": get_app,
+        "create_app": create_app,
+        "publish_app": publish_app,
+        "list_app_versions": list_app_versions,
+        "restore_app_version": restore_app_version,
+        "list_template_versions": list_template_versions,
+        "create_template_checkpoint": create_template_checkpoint,
+        "start_app_preview": start_app_preview,
+        "exit_preview": exit_preview,
+        "get_device_status": get_device_status,
+        "start_device_preview": start_device_preview,
+        "exit_device_preview": exit_device_preview,
     }
     handler = handlers.get(name)
     if handler is None:
@@ -1366,3 +1385,513 @@ async def publish_version(module_id: str, user_id: str, version_id: str | None =
         "published": True,
         "checkpoint_id": version.id,
     }
+
+
+# ── App management MCP tools ────────────────────────────────────────────────
+
+
+async def list_apps(user_id: str) -> dict:
+    """List all apps for the current user."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(App).where(App.user_id == user_id).order_by(App.created_at)
+        )
+        apps = result.scalars().all()
+        return {
+            "apps": [
+                {
+                    "id": a.id,
+                    "name": a.name,
+                    "icon": a.icon,
+                    "modules_count": len(a.module_refs or []),
+                    "devices_count": 0,
+                    "created_at": a.created_at.isoformat() if a.created_at else None,
+                }
+                for a in apps
+            ],
+            "total": len(apps),
+        }
+
+
+async def get_app(app_id: str, user_id: str) -> dict:
+    """Get app detail."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(App).where(App.id == app_id, App.user_id == user_id)
+        )
+        app = result.scalar_one_or_none()
+        if app is None:
+            return {"status": "error", "message": "App not found"}
+        return {
+            "id": app.id,
+            "name": app.name,
+            "icon": app.icon,
+            "theme": app.theme,
+            "design_tokens": app.design_tokens,
+            "dark_mode": app.dark_mode,
+            "default_launch_module_id": app.default_launch_module_id,
+            "bottom_bar_config": app.bottom_bar_config,
+            "launchpad_config": app.launchpad_config,
+        }
+
+
+async def create_app(
+    user_id: str,
+    name: str,
+    icon: str | None = None,
+    theme: dict | None = None,
+) -> dict:
+    """Create a new app."""
+    from uuid import uuid4
+    async with AsyncSessionLocal() as db:
+        app = App(
+            id=str(uuid4()),
+            user_id=user_id,
+            name=name,
+            icon=icon,
+            theme=theme or {},
+        )
+        db.add(app)
+        await db.commit()
+        return {"id": app.id, "name": app.name, "created": True}
+
+
+async def publish_app(user_id: str, app_id: str, version_id: str | None = None) -> dict:
+    """Publish an app version to mobile devices.
+
+    If version_id is provided, publishes that specific version.
+    Otherwise, creates a checkpoint from the working draft and publishes it.
+    """
+    async with AsyncSessionLocal() as db:
+        # Verify app exists
+        result = await db.execute(
+            select(App).where(App.id == app_id, App.user_id == user_id)
+        )
+        app = result.scalar_one_or_none()
+        if app is None:
+            return {"status": "error", "message": "App not found"}
+
+        if version_id:
+            # Publish specific version
+            result = await db.execute(
+                select(AppVersion).where(
+                    AppVersion.id == version_id,
+                    AppVersion.app_id == app_id,
+                    AppVersion.user_id == user_id,
+                )
+            )
+            version = result.scalar_one_or_none()
+            if version is None:
+                return {"status": "error", "message": f"Version {version_id} not found"}
+        else:
+            # Create checkpoint from working draft
+            result = await db.execute(
+                select(AppWorkingDraft).where(AppWorkingDraft.app_id == app_id)
+            )
+            draft = result.scalar_one_or_none()
+            if draft is None or not draft.config_json:
+                return {
+                    "status": "error",
+                    "message": "No working draft found. Save something first or specify a version_id.",
+                }
+
+            # Get next version number
+            result = await db.execute(
+                select(func.max(AppVersion.version_number)).where(
+                    AppVersion.app_id == app_id,
+                )
+            )
+            max_num = result.scalar() or 0
+            version_number = max_num + 1
+            from app.services.version_service import make_timestamp_name
+            timestamp_name = make_timestamp_name()
+            display_name = f"v{version_number} — {timestamp_name}"
+
+            version = AppVersion(
+                id=str(uuid4()),
+                app_id=app_id,
+                user_id=user_id,
+                version_number=version_number,
+                display_name=display_name,
+                default_timestamp_name=timestamp_name,
+                config_json=draft.config_json,
+                resolved_module_versions=[],
+                module_reference_policies=[],
+                source="mcp_publish",
+                validation_status="valid",
+            )
+            db.add(version)
+
+        # Mark as published
+        version.source = "publish"
+        app.current_published_version_id = version.id
+
+        # Update assigned devices
+        result = await db.execute(
+            select(Device).where(Device.assigned_app_id == app_id)
+        )
+        devices = result.scalars().all()
+        device_ids = []
+        for device in devices:
+            device.active_app_version_id = version.id
+            device_ids.append(device.id)
+
+        await db.commit()
+
+    return {
+        "app_id": app_id,
+        "version_id": version.id,
+        "version_number": version.version_number,
+        "display_name": version.display_name,
+        "published": True,
+        "device_count": len(device_ids),
+    }
+
+
+async def list_app_versions(user_id: str, app_id: str, limit: int = 50, offset: int = 0) -> dict:
+    """List all versions for an app, newest first."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(AppVersion)
+            .where(AppVersion.app_id == app_id, AppVersion.user_id == user_id)
+            .order_by(AppVersion.version_number.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        versions = result.scalars().all()
+        return {
+            "versions": [
+                {
+                    "id": v.id,
+                    "version_number": v.version_number,
+                    "display_name": v.display_name,
+                    "custom_name": v.custom_name,
+                    "source": v.source,
+                    "validation_status": v.validation_status,
+                    "created_at": v.created_at.isoformat() if v.created_at else None,
+                }
+                for v in versions
+            ],
+            "total": len(versions),
+            "has_more": (offset + limit) < len(versions),
+        }
+
+
+async def restore_app_version(user_id: str, app_id: str, version_id: str) -> dict:
+    """Restore an app version's config back to the working draft."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(AppVersion).where(
+                AppVersion.id == version_id,
+                AppVersion.app_id == app_id,
+                AppVersion.user_id == user_id,
+            )
+        )
+        version = result.scalar_one_or_none()
+        if version is None:
+            return {"status": "error", "message": f"Version {version_id} not found"}
+
+        # Upsert working draft
+        result = await db.execute(
+            select(AppWorkingDraft).where(AppWorkingDraft.app_id == app_id)
+        )
+        draft = result.scalar_one_or_none()
+        if draft is None:
+            draft = AppWorkingDraft(
+                id=str(uuid4()),
+                app_id=app_id,
+                user_id=user_id,
+                config_json=version.config_json,
+                base_version_id=version.id,
+                validation_status="valid",
+                dirty=False,
+                last_autosaved_at=datetime.now(),
+            )
+            db.add(draft)
+        else:
+            draft.config_json = version.config_json
+            draft.base_version_id = version.id
+            draft.dirty = False
+            draft.validation_status = "valid"
+
+        await db.commit()
+        return {
+            "app_id": app_id,
+            "version_id": version_id,
+            "restored": True,
+            "message": "App version restored to working draft.",
+        }
+
+
+# ── Template versioning MCP tools ────────────────────────────────────────────
+
+
+async def list_template_versions(user_id: str, template_id: str) -> dict:
+    """List all versions for a template, newest first."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(TemplateVersion)
+            .where(
+                TemplateVersion.template_id == template_id,
+                TemplateVersion.user_id == user_id,
+            )
+            .order_by(TemplateVersion.version_number.desc())
+        )
+        versions = result.scalars().all()
+        return {
+            "versions": [
+                {
+                    "id": v.id,
+                    "version_number": v.version_number,
+                    "display_name": v.display_name,
+                    "custom_name": v.custom_name,
+                    "source": v.source,
+                    "created_at": v.created_at.isoformat() if v.created_at else None,
+                }
+                for v in versions
+            ],
+            "total": len(versions),
+        }
+
+
+async def create_template_checkpoint(
+    user_id: str,
+    template_id: str,
+    change_summary: str | None = None,
+) -> dict:
+    """Create a versioned snapshot of the current template."""
+    async with AsyncSessionLocal() as db:
+        template = await db.get(SDUITemplate, template_id)
+        if template is None:
+            return {"status": "error", "message": "Template not found"}
+        if not template.is_public and template.created_by != user_id:
+            return {"status": "error", "message": "Access denied"}
+
+        # Get next version number
+        result = await db.execute(
+            select(func.max(TemplateVersion.version_number)).where(
+                TemplateVersion.template_id == template_id,
+            )
+        )
+        max_num = result.scalar() or 0
+        version_number = max_num + 1
+        from app.services.version_service import make_timestamp_name
+        timestamp_name = make_timestamp_name()
+        display_name = f"v{version_number} — {timestamp_name}"
+
+        version = TemplateVersion(
+            id=str(uuid4()),
+            template_id=template_id,
+            user_id=user_id,
+            version_number=version_number,
+            display_name=display_name,
+            default_timestamp_name=timestamp_name,
+            template_json=template.screen_json,
+            source="manual",
+            change_summary=change_summary,
+            validation_status="valid",
+        )
+        db.add(version)
+        template.current_version_id = version.id
+        await db.commit()
+
+        return {
+            "id": version.id,
+            "template_id": template_id,
+            "version_number": version.version_number,
+            "display_name": version.display_name,
+            "created_at": version.created_at.isoformat() if version.created_at else None,
+            "created": True,
+        }
+
+
+# ── Device/preview MCP tools ────────────────────────────────────────────────
+
+
+async def start_app_preview(
+    user_id: str,
+    app_id: str,
+    target_type: str = "web_admin",
+    device_id: str | None = None,
+) -> dict:
+    """Start a preview session for an app."""
+    from app.models.preview_session import PreviewSession
+    from datetime import datetime, timezone, timedelta
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(App).where(App.id == app_id, App.user_id == user_id)
+        )
+        app = result.scalar_one_or_none()
+        if app is None:
+            return {"status": "error", "message": "App not found"}
+
+        # Get working draft or build from live config
+        draft_result = await db.execute(
+            select(AppWorkingDraft).where(AppWorkingDraft.app_id == app_id)
+        )
+        draft = draft_result.scalar_one_or_none()
+        config = draft.config_json if draft else {
+            "theme": app.theme,
+            "design_tokens": app.design_tokens,
+            "bottom_bar_config": app.bottom_bar_config,
+            "launchpad_config": app.launchpad_config,
+        }
+
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        session = PreviewSession(
+            id=str(uuid4()),
+            user_id=user_id,
+            target_type=target_type,
+            app_id=app_id,
+            device_id=device_id,
+            resolved_config_json=config,
+            status="active",
+            expires_at=expires_at,
+        )
+        db.add(session)
+        await db.commit()
+
+        return {
+            "session_id": session.id,
+            "app_id": app_id,
+            "target_type": target_type,
+            "expires_at": expires_at.isoformat(),
+            "created": True,
+        }
+
+
+async def exit_preview(user_id: str, session_id: str) -> dict:
+    """Exit preview mode for a session."""
+    from app.models.preview_session import PreviewSession
+    from datetime import datetime, timezone
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(PreviewSession).where(
+                PreviewSession.id == session_id,
+                PreviewSession.user_id == user_id,
+            )
+        )
+        session = result.scalar_one_or_none()
+        if session is None:
+            return {"status": "error", "message": "Preview session not found"}
+
+        session.status = "exited"
+        session.exited_at = datetime.now(timezone.utc)
+        await db.commit()
+
+        return {"session_id": session_id, "exited": True}
+
+
+async def get_device_status(user_id: str, device_id: str) -> dict:
+    """Get device status including app version and connection info."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Device).where(Device.id == device_id, Device.user_id == user_id)
+        )
+        device = result.scalar_one_or_none()
+        if device is None:
+            return {"status": "error", "message": "Device not found"}
+
+        return {
+            "id": device.id,
+            "device_name": device.device_name,
+            "assigned_app_id": device.assigned_app_id,
+            "active_app_version_id": device.active_app_version_id,
+            "preview_session_id": device.preview_session_id,
+            "installed_runtime_version": device.installed_runtime_version,
+            "update_status": device.update_status or "up_to_date",
+            "last_seen": device.last_seen.isoformat() if device.last_seen else None,
+        }
+
+
+async def start_device_preview(
+    user_id: str,
+    app_id: str,
+    device_id: str,
+) -> dict:
+    """Start a preview session on a specific device."""
+    from app.models.preview_session import PreviewSession
+    from datetime import datetime, timezone, timedelta
+
+    async with AsyncSessionLocal() as db:
+        # Verify device
+        result = await db.execute(
+            select(Device).where(Device.id == device_id, Device.user_id == user_id)
+        )
+        device = result.scalar_one_or_none()
+        if device is None:
+            return {"status": "error", "message": "Device not found"}
+
+        # Verify app
+        result = await db.execute(
+            select(App).where(App.id == app_id, App.user_id == user_id)
+        )
+        app = result.scalar_one_or_none()
+        if app is None:
+            return {"status": "error", "message": "App not found"}
+
+        # Get working draft
+        draft_result = await db.execute(
+            select(AppWorkingDraft).where(AppWorkingDraft.app_id == app_id)
+        )
+        draft = draft_result.scalar_one_or_none()
+        config = draft.config_json if draft else {
+            "theme": app.theme,
+            "bottom_bar_config": app.bottom_bar_config,
+            "launchpad_config": app.launchpad_config,
+        }
+
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        session = PreviewSession(
+            id=str(uuid4()),
+            user_id=user_id,
+            target_type="mobile_device",
+            app_id=app_id,
+            device_id=device_id,
+            resolved_config_json=config,
+            status="active",
+            expires_at=expires_at,
+        )
+        db.add(session)
+        await db.flush()
+        device.preview_session_id = session.id
+        await db.commit()
+
+        return {
+            "session_id": session.id,
+            "app_id": app_id,
+            "device_id": device_id,
+            "expires_at": expires_at.isoformat(),
+            "created": True,
+        }
+
+
+async def exit_device_preview(user_id: str, device_id: str) -> dict:
+    """Exit preview mode on a device."""
+    from datetime import datetime, timezone
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Device).where(Device.id == device_id, Device.user_id == user_id)
+        )
+        device = result.scalar_one_or_none()
+        if device is None:
+            return {"status": "error", "message": "Device not found"}
+
+        session_id = device.preview_session_id
+        device.preview_session_id = None
+
+        if session_id:
+            from app.models.preview_session import PreviewSession
+            session_result = await db.execute(
+                select(PreviewSession).where(PreviewSession.id == session_id)
+            )
+            session = session_result.scalar_one_or_none()
+            if session is not None:
+                session.status = "exited"
+                session.exited_at = datetime.now(timezone.utc)
+
+        await db.commit()
+        return {"device_id": device_id, "exited": True, "session_id": session_id}

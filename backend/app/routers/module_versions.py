@@ -26,11 +26,14 @@ from app.models.module_state import ModuleState
 from app.models.module_version import ModuleVersion
 from app.models.module_working_draft import ModuleWorkingDraft
 from app.models.preview_session import PreviewSession
+from app.models.app import App
+from app.models.app_module_ref import AppModuleRef
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
 from app.schemas.module_version import (
     ModuleCheckpointCreate,
     ModuleCheckpointOut,
+    ModuleUsageOut,
     ModuleVersionDetailOut,
     ModuleVersionOut,
     ModuleVersionRename,
@@ -696,3 +699,50 @@ async def reject_draft_legacy(
 
     await send_draft_cleared(user_id, module_id)
     return {"module_id": module_id, "rejected": True}
+
+
+# ── Module Usage endpoint ───────────────────────────────────────────────────
+
+
+@router.get("/{module_id}/usage", response_model=ModuleUsageOut)
+async def get_module_usage(
+    module_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get which apps use a given module.
+
+    Returns a list of apps that reference this module_instance_id
+    in their bottom_bar_config or launchpad_config.
+    """
+    # Verify module exists
+    result = await db.execute(
+        select(ModuleInstance).where(
+            ModuleInstance.id == module_id,
+            ModuleInstance.user_id == user_id,
+        )
+    )
+    module = result.scalar_one_or_none()
+    if module is None:
+        raise HTTPException(status_code=404, detail="Module not found")
+
+    # Find apps that reference this module
+    result = await db.execute(
+        select(App).where(App.user_id == user_id)
+    )
+    apps = list(result.scalars().all())
+
+    used_by: list[dict[str, str]] = []
+    for app in apps:
+        # Check bottom_bar_config
+        bb_ids = {
+            item.get("module_instance_id")
+            for item in (app.bottom_bar_config or [])
+            if isinstance(item, dict)
+        }
+        # Check launchpad_config
+        lp_ids = set(app.launchpad_config or [])
+        if module_id in bb_ids or module_id in lp_ids:
+            used_by.append({"app_id": app.id, "app_name": app.name})
+
+    return ModuleUsageOut(module_id=module_id, used_by_apps=used_by)

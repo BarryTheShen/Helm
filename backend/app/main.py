@@ -156,7 +156,7 @@ async def health():
 
 
 # Register routers
-from app.routers import auth, modules, chat, calendar, notifications, agent_config, websocket, workflows, actions, users, sessions, audit, components, templates, admin, variables, data_sources, triggers, connections, module_instances, articles, todos, apps, devices, module_versions, notes  # noqa: E402
+from app.routers import auth, modules, chat, calendar, notifications, agent_config, websocket, workflows, actions, users, sessions, audit, components, templates, admin, variables, data_sources, triggers, connections, module_instances, articles, todos, apps, devices, module_versions, notes, app_versions  # noqa: E402
 from app.routers import settings as settings_router  # noqa: E402
 
 app.include_router(auth.router)
@@ -182,6 +182,7 @@ app.include_router(module_instances.router)
 app.include_router(settings_router.router)
 app.include_router(articles.router)
 app.include_router(apps.router)
+app.include_router(app_versions.router)
 app.include_router(devices.router)
 app.include_router(module_versions.router)
 app.include_router(websocket.router)

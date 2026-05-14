@@ -13,10 +13,12 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useRouter } from 'expo-router';
+import Toast from 'react-native-toast-message';
 import { WebSocketService } from '@/services/websocket';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useAppConfigStore } from '@/stores/appConfigStore';
+import { usePreviewStore } from '@/stores/previewStore';
 
 const WebSocketContext = createContext<WebSocketService | null>(null);
 
@@ -77,7 +79,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    // Handle app config WebSocket events
+    // Handle WebSocket events
+    let lastPublishedVersion: string | null = null;
+
     service.onMessage((message: any) => {
       if (message.type === 'device_app_assigned' && message.device_id === deviceId) {
         // App has been assigned to this device
@@ -91,6 +95,31 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       } else if (message.type === 'app_config_update' && message.config) {
         // App config has been updated
         updateFromWebSocket(message.config);
+      } else if (message.type === 'preview_session_started' && message.session_id) {
+        // Admin started a device preview
+        usePreviewStore.getState().enterPreview(message.session_id);
+      } else if (message.type === 'preview_session_ended') {
+        // Admin ended the preview session
+        usePreviewStore.getState().exitPreview();
+      } else if (message.type === 'app_version_published' && message.version) {
+        // A new app version was published — show a toast and reload config
+        const versionLabel = message.version;
+        if (lastPublishedVersion !== versionLabel) {
+          lastPublishedVersion = versionLabel;
+          Toast.show({
+            type: 'info',
+            text1: `🔄 App updated to v${versionLabel}`,
+            text2: 'Tap to refresh',
+            onPress: () => {
+              if (serverUrl && token && deviceId) {
+                loadAppConfig(serverUrl, token, deviceId).catch((err) =>
+                  console.error('Failed to reload app config after publish:', err)
+                );
+              }
+            },
+            visibilityTime: 5000,
+          });
+        }
       }
     });
 

@@ -1135,4 +1135,132 @@ def _get_tool_definitions() -> list[dict]:
                 },
             },
         },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_apps",
+                "description": "List all apps for the current user with metadata.",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "publish_app",
+                "description": "Publish an app version to all assigned mobile devices. If version_id is provided, publishes that specific version. Otherwise creates a checkpoint from the working draft and publishes it.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_id": {"type": "string", "description": "The app UUID"},
+                        "version_id": {"type": "string", "description": "Optional specific version UUID to publish"},
+                    },
+                    "required": ["app_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_app_versions",
+                "description": "List all versions for an app, newest first.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_id": {"type": "string", "description": "The app UUID"},
+                        "limit": {"type": "integer", "description": "Max versions to return (default 50)"},
+                        "offset": {"type": "integer", "description": "Pagination offset (default 0)"},
+                    },
+                    "required": ["app_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "restore_app_version",
+                "description": "Restore an app version's config back to the working draft for editing.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_id": {"type": "string", "description": "The app UUID"},
+                        "version_id": {"type": "string", "description": "The version UUID to restore from"},
+                    },
+                    "required": ["app_id", "version_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_template_versions",
+                "description": "List all versions for a template, newest first.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "template_id": {"type": "string", "description": "The template UUID"},
+                    },
+                    "required": ["template_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "create_template_checkpoint",
+                "description": "Create a versioned snapshot of the current template.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "template_id": {"type": "string", "description": "The template UUID"},
+                        "change_summary": {"type": "string", "description": "Optional description of what changed"},
+                    },
+                    "required": ["template_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "start_app_preview",
+                "description": "Start a preview session for an app. Creates a time-limited preview using the current working draft config.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_id": {"type": "string", "description": "The app UUID"},
+                        "target_type": {"type": "string", "enum": ["web_admin", "mobile_device"], "description": "Preview target type"},
+                        "device_id": {"type": "string", "description": "Required if target_type is mobile_device"},
+                    },
+                    "required": ["app_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "start_device_preview",
+                "description": "Start a preview session on a specific mobile device. Creates a mobile device preview and marks the device as in preview mode.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_id": {"type": "string", "description": "The app UUID"},
+                        "device_id": {"type": "string", "description": "The device UUID"},
+                    },
+                    "required": ["app_id", "device_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_device_status",
+                "description": "Get detailed status for a device including app version, preview session, and connection info.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "device_id": {"type": "string", "description": "The device UUID"},
+                    },
+                    "required": ["device_id"],
+                },
+            },
+        },
     ]

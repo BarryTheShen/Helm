@@ -1,6 +1,7 @@
 """Pydantic schemas for Device endpoints."""
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -54,3 +55,20 @@ class DeviceConfigResponse(BaseModel):
     default_launch_module_id: str | None
     bottom_bar_config: list
     launchpad_config: list
+
+
+class DeviceStatusOut(BaseModel):
+    """Schema for device status response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    device_name: str
+    platform: str | None = None
+    assigned_app_id: str | None = None
+    active_app_version_id: str | None = None
+    preview_session_id: str | None = None
+    installed_runtime_version: str | None = None
+    connection_status: str = "unknown"
+    update_status: str = "up_to_date"
+    last_seen_at: datetime | None = None

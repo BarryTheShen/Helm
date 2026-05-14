@@ -8,6 +8,7 @@ import { useTabsStore } from '@/stores/tabsStore';
 import { useAppConfigStore } from '@/stores/appConfigStore';
 import { ApiClient } from '@/services/api';
 import { MODULE_TYPE_TO_ROUTE } from '@/constants/moduleRoutes';
+import { PreviewBanner } from '@/components/PreviewBanner';
 
 /**
  * Loads tab visibility and module configs from the server and keeps them in
@@ -171,6 +172,7 @@ export default function TabsLayout() {
 
   return (
     <>
+      <PreviewBanner />
       <TabsConfigSync />
       <Tabs
         screenOptions={{

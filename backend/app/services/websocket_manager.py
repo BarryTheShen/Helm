@@ -102,6 +102,46 @@ class ConnectionManager:
                 self.disconnect(ws, user_id)
                 logger.info(f"WS pruned stale connection: user={user_id}")
 
+    # ── Convenience broadcast helpers for app versioning ──────────────────
+
+    async def send_preview_session_started(
+        self,
+        user_id: str,
+        device_id: str,
+        session_id: str,
+        app_id: str,
+        preview_config: dict | None = None,
+        expires_at: str | None = None,
+    ) -> None:
+        """Notify a user that a device has started a preview session."""
+        await self.send(user_id, {
+            "type": "preview_session_started",
+            "device_id": device_id,
+            "session_id": session_id,
+            "app_id": app_id,
+            "preview_config": preview_config,
+            "expires_at": expires_at,
+        })
+
+    async def send_app_version_published(
+        self,
+        user_id: str,
+        app_id: str,
+        app_version_id: str,
+        version_number: int,
+        display_name: str,
+        published_at: str | None = None,
+    ) -> None:
+        """Notify a user that an app version has been published."""
+        await self.send(user_id, {
+            "type": "app_version_published",
+            "app_id": app_id,
+            "app_version_id": app_version_id,
+            "version_number": version_number,
+            "display_name": display_name,
+            "published_at": published_at,
+        })
+
 
 # Singleton shared across the app
 manager = ConnectionManager()

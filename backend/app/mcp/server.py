@@ -15,27 +15,38 @@ from app.mcp.tools import (
     approve_draft,
     create_event,
     create_checkpoint as tools_create_checkpoint,
+    create_template_checkpoint as tools_create_template_checkpoint,
     delete_all_events,
     delete_event,
     delete_screen,
+    exit_preview,
+    get_app,
     get_chat_history,
+    get_device_status,
     get_draft,
     get_form_data,
     get_screen,
     hide_tab,
+    list_app_versions as tools_list_app_versions,
+    list_apps as tools_list_apps,
     list_screens,
     list_tabs,
+    list_template_versions as tools_list_template_versions,
     list_versions as tools_list_versions,
+    publish_app as tools_publish_app,
     publish_version as tools_publish_version,
     read_all_calendar,
     read_calendar,
     reject_draft,
     rename_tab,
+    restore_app_version as tools_restore_app_version,
     restore_version as tools_restore_version,
     send_chat_message,
     send_notification,
     set_screen,
     show_tab,
+    start_app_preview as tools_start_app_preview,
+    start_device_preview as tools_start_device_preview,
     update_event,
     update_module_state,
 )
@@ -664,6 +675,152 @@ async def helm_list_tabs() -> dict:
     Use this to inspect the current navigation state before making changes.
     """
     return await list_tabs(get_current_user_id())
+
+
+# ── App management tools ────────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def helm_list_apps() -> dict:
+    """List all apps for the current user.
+
+    Returns app metadata (id, name, icon, modules_count, created_at).
+    """
+    return await tools_list_apps(get_current_user_id())
+
+
+@mcp.tool()
+async def helm_get_app(app_id: str) -> dict:
+    """Get detailed info for a specific app by ID.
+
+    Returns app metadata (id, name, icon, description, modules_count, etc.).
+    """
+    return await get_app(app_id, get_current_user_id())
+
+
+@mcp.tool()
+async def helm_publish_app(app_id: str, version_id: str = "") -> dict:
+    """Publish an app version to all assigned mobile devices.
+
+    If version_id is provided, publishes that specific version.
+    If version_id is empty, creates a checkpoint from the working draft and publishes it.
+
+    Args:
+        app_id: The app UUID to publish.
+        version_id: Optional specific version UUID to publish.
+    """
+    return await tools_publish_app(get_current_user_id(), app_id, version_id or None)
+
+
+@mcp.tool()
+async def helm_list_app_versions(app_id: str, limit: int = 50, offset: int = 0) -> dict:
+    """List all versions for an app, newest first.
+
+    Args:
+        app_id: The app UUID.
+        limit: Max versions to return (default 50).
+        offset: Pagination offset (default 0).
+    """
+    return await tools_list_app_versions(get_current_user_id(), app_id, limit=limit, offset=offset)
+
+
+@mcp.tool()
+async def helm_restore_app_version(app_id: str, version_id: str) -> dict:
+    """Restore an app version's config back to the working draft.
+
+    This allows editing a previous app version.
+
+    Args:
+        app_id: The app UUID.
+        version_id: The version UUID to restore from.
+    """
+    return await tools_restore_app_version(get_current_user_id(), app_id, version_id)
+
+
+# ── Template versioning tools ────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def helm_list_template_versions(template_id: str) -> dict:
+    """List all versions for a template, newest first.
+
+    Args:
+        template_id: The template UUID.
+    """
+    return await tools_list_template_versions(get_current_user_id(), template_id)
+
+
+@mcp.tool()
+async def helm_create_template_checkpoint(template_id: str, change_summary: str = "") -> dict:
+    """Create a versioned snapshot of the current template.
+
+    Args:
+        template_id: The template UUID.
+        change_summary: Optional description of what changed.
+    """
+    return await tools_create_template_checkpoint(
+        get_current_user_id(), template_id, change_summary or None,
+    )
+
+
+# ── App preview tools ────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def helm_start_app_preview(
+    app_id: str,
+    target_type: str = "web_admin",
+    device_id: str = "",
+) -> dict:
+    """Start a preview session for an app.
+
+    Creates a preview session that shows the current working draft config.
+    Use target_type="web_admin" for web preview or "mobile_device" for device preview.
+
+    Args:
+        app_id: The app UUID.
+        target_type: "web_admin" or "mobile_device".
+        device_id: Required if target_type is "mobile_device".
+    """
+    return await tools_start_app_preview(
+        get_current_user_id(), app_id, target_type, device_id or None,
+    )
+
+
+@mcp.tool()
+async def helm_exit_preview(session_id: str) -> dict:
+    """Exit preview mode for a preview session.
+
+    Args:
+        session_id: The preview session UUID to exit.
+    """
+    return await exit_preview(get_current_user_id(), session_id)
+
+
+# ── Device preview tools ─────────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def helm_start_device_preview(app_id: str, device_id: str) -> dict:
+    """Start a preview session on a specific device.
+
+    Creates a mobile device preview session and marks the device as in preview mode.
+
+    Args:
+        app_id: The app UUID.
+        device_id: The device UUID to preview on.
+    """
+    return await tools_start_device_preview(get_current_user_id(), app_id, device_id)
+
+
+@mcp.tool()
+async def helm_get_device_status(device_id: str) -> dict:
+    """Get device status including app version, runtime version, and connection info.
+
+    Args:
+        device_id: The device UUID to check.
+    """
+    return await get_device_status(get_current_user_id(), device_id)
 
 
 def get_mcp_asgi_app():

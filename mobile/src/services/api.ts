@@ -259,4 +259,11 @@ export class ApiClient {
   async getDeviceConfig(deviceId: string): Promise<any> {
     return this.request<any>(`/api/devices/${deviceId}/config`);
   }
+
+  // Preview mode
+  async exitPreview(deviceId: string): Promise<void> {
+    return this.request<void>(`/api/devices/${deviceId}/exit-preview`, {
+      method: 'POST',
+    });
+  }
 }

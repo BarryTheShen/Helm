@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Smartphone, Plus, Save, ChevronDown, Eye } from 'lucide-react';
+import { Smartphone, Plus, Save, ChevronDown, Eye, Rocket, History, Clock } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAppEditorStore } from '../stores/useAppEditorStore';
 import { usePreviewStore } from '../stores/usePreviewStore';
@@ -7,6 +7,17 @@ import { BottomBarConfig } from '../components/AppEditor/BottomBarConfig';
 import { PreviewPicker } from '../components/PreviewPicker';
 import { BrowserPreview } from '../components/BrowserPreview';
 import type { ModuleInstance, BottomBarSlot } from '../stores/useAppEditorStore';
+
+interface AppVersion {
+  id: string;
+  version_number: number;
+  display_name: string;
+  default_timestamp_name: string;
+  custom_name: string | null;
+  source: string;
+  change_summary: string | null;
+  created_at: string;
+}
 
 export function AppEditorPage() {
   const {
@@ -30,6 +41,15 @@ export function AppEditorPage() {
 
   const { startPreview } = usePreviewStore();
   const currentApp = apps?.find(app => app.id === currentAppId);
+
+  // ── Versioning state ──────────────────────────────────────────────────
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishResult, setPublishResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [appVersions, setAppVersions] = useState<AppVersion[]>([]);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [liveVersionDisplay, setLiveVersionDisplay] = useState<string | null>(null);
 
   const showMsg = (type: 'success' | 'error' | 'info', text: string) => {
     console.log(`[AppEditor] message: ${type} — ${text}`);
@@ -80,6 +100,34 @@ export function AppEditorPage() {
     void loadModules();
    
   }, []);
+
+  // Fetch version info when app changes
+  useEffect(() => {
+    if (!currentAppId) {
+      setLiveVersionDisplay(null);
+      return;
+    }
+
+    const fetchAppVersions = async () => {
+      try {
+        const response = await api.get<{ items: AppVersion[] }>(`/api/apps/${currentAppId}/versions`);
+        const versions = response.items || [];
+        setAppVersions(versions);
+
+        // Find latest published version for the live indicator
+        const published = versions.find(v => v.source === 'publish');
+        if (published) {
+          setLiveVersionDisplay(`v${published.version_number} — ${published.custom_name || published.display_name}`);
+        } else {
+          setLiveVersionDisplay(null);
+        }
+      } catch {
+        setLiveVersionDisplay(null);
+      }
+    };
+
+    void fetchAppVersions();
+  }, [currentAppId]);
 
   const handleUpdateBottomBar = (slots: BottomBarSlot[]) => {
     if (!currentAppId) return;
@@ -168,6 +216,75 @@ export function AppEditorPage() {
     console.log('[AppEditor] handlePreviewDevice() — clicked (not yet implemented)');
     showMsg('info', 'Device preview coming soon');
     // TODO: Implement device preview
+  };
+
+  const handlePublishApp = async () => {
+    if (!currentApp) return;
+    console.log('[AppEditor] handlePublishApp() — publishing app:', currentApp.id);
+    setPublishing(true);
+    setPublishResult(null);
+
+    try {
+      // Step 1: Save the current app config
+      await api.updateApp(currentApp.id, currentApp);
+      console.log('[AppEditor] handlePublishApp() — app saved');
+
+      // Step 2: Delete existing draft so checkpoint creates fresh from live config
+      await api.del(`/api/apps/${currentApp.id}/draft`).catch(() => {
+        // Ignore if no draft exists
+      });
+
+      // Step 3: Create a checkpoint
+      const checkpointResult = await api.post<{ id: string; version_number: number; display_name: string }>(
+        `/api/apps/${currentApp.id}/checkpoints`,
+        { change_summary: `Published from editor` }
+      );
+      console.log(`[AppEditor] handlePublishApp() — checkpoint: ${checkpointResult.id} (v${checkpointResult.version_number})`);
+
+      // Step 4: Publish the checkpoint version
+      const publishResult = await api.post<{ version_id: string; version_number: number; display_name: string; device_count: number }>(
+        `/api/apps/${currentApp.id}/versions/${checkpointResult.id}/publish`
+      );
+      console.log(`[AppEditor] handlePublishApp() — published v${publishResult.version_number} to ${publishResult.device_count} devices`);
+
+      setPublishResult({
+        type: 'success',
+        text: `Published v${publishResult.version_number} — ${publishResult.display_name} (${publishResult.device_count} device${publishResult.device_count === 1 ? '' : 's'})`,
+      });
+
+      setLiveVersionDisplay(`v${publishResult.version_number} — ${publishResult.display_name}`);
+
+      // Refresh versions list
+      try {
+        const versionsResponse = await api.get<{ items: AppVersion[] }>(`/api/apps/${currentApp.id}/versions`);
+        setAppVersions(versionsResponse.items || []);
+      } catch {
+        // Non-critical
+      }
+    } catch (err) {
+      console.error('[AppEditor] handlePublishApp() — error:', err);
+      setPublishResult({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Publish failed',
+      });
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const handleOpenVersionHistory = async () => {
+    if (!currentAppId) return;
+    console.log('[AppEditor] handleOpenVersionHistory() — app:', currentAppId);
+    setShowVersionHistory(true);
+    setLoadingVersions(true);
+    try {
+      const response = await api.get<{ items: AppVersion[] }>(`/api/apps/${currentAppId}/versions`);
+      setAppVersions(response.items || []);
+    } catch {
+      setAppVersions([]);
+    } finally {
+      setLoadingVersions(false);
+    }
   };
 
   const handleCreateApp = async () => {
@@ -271,12 +388,41 @@ export function AppEditorPage() {
             }`}>{message.text}</span>
           )}
 
+          {/* Live version indicator */}
+          {liveVersionDisplay ? (
+            <span className="flex items-center gap-1 px-2 py-1 text-[11px] bg-green-100 text-green-700 rounded-full font-medium">
+              <Rocket size={10} />
+              Live: {liveVersionDisplay}
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 px-2 py-1 text-[11px] bg-gray-100 text-gray-500 rounded-full font-medium">
+              <Clock size={10} />
+              No live version
+            </span>
+          )}
+
           <button
             onClick={() => setShowPreviewPicker(true)}
             className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
           >
             <Eye size={14} />
             Preview
+          </button>
+
+          <button
+            onClick={() => setShowPublishModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          >
+            <Rocket size={14} />
+            Publish
+          </button>
+
+          <button
+            onClick={handleOpenVersionHistory}
+            className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+            title="Version History"
+          >
+            <History size={14} />
           </button>
 
           <button
@@ -442,6 +588,128 @@ export function AppEditorPage() {
           appId={currentApp.id}
           onClose={() => setShowBrowserPreview(false)}
         />
+      )}
+
+      {/* Publish Modal */}
+      {showPublishModal && currentApp && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-5 w-[480px]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                <Rocket size={14} />
+                Publish App — {currentApp.name}
+              </h3>
+              <button onClick={() => { setShowPublishModal(false); setPublishResult(null); }} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">App</span>
+                  <span className="font-medium text-gray-800">{currentApp.icon} {currentApp.name}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Bottom bar modules</span>
+                  <span className="font-medium text-gray-800">{currentApp.bottom_bar_config.length}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Launchpad modules</span>
+                  <span className="font-medium text-gray-800">{currentApp.launchpad_config?.length || 0}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Current live version</span>
+                  <span className="font-medium text-gray-800">{liveVersionDisplay || 'None'}</span>
+                </div>
+              </div>
+
+              {publishResult && (
+                <div className={`text-xs px-3 py-2 rounded ${
+                  publishResult.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                }`}>
+                  {publishResult.text}
+                </div>
+              )}
+
+              <p className="text-xs text-gray-500">
+                Publishing will save the current app configuration, create a version checkpoint, and push it live to all assigned mobile devices.
+              </p>
+
+              <div className="flex gap-2 justify-end pt-1">
+                <button
+                  onClick={() => { setShowPublishModal(false); setPublishResult(null); }}
+                  disabled={publishing}
+                  className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePublishApp}
+                  disabled={publishing}
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded transition-colors disabled:opacity-50"
+                >
+                  <Rocket size={12} />
+                  {publishing ? 'Publishing...' : 'Publish to Mobile'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Version History Modal */}
+      {showVersionHistory && currentApp && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-5 w-[560px] max-h-[75vh] overflow-auto">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                <History size={14} />
+                Version History — {currentApp.icon} {currentApp.name}
+              </h3>
+              <button onClick={() => setShowVersionHistory(false)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+            </div>
+
+            {loadingVersions ? (
+              <div className="text-center py-8 text-gray-400 text-sm">Loading versions...</div>
+            ) : appVersions.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="text-gray-400 text-sm mb-2">No versions yet</div>
+                <div className="text-gray-400 text-xs">Click Publish to create the first version.</div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {appVersions.map((v) => {
+                  const isPublished = v.source === 'publish';
+                  return (
+                    <div key={v.id} className={`border rounded-lg overflow-hidden ${isPublished ? 'border-green-200' : 'border-gray-200'}`}>
+                      <div className="flex items-center justify-between p-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm font-medium text-gray-800">
+                              v{v.version_number} — {v.display_name}
+                            </div>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full capitalize ${
+                              isPublished
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-gray-100 text-gray-500'
+                            }`}>
+                              {isPublished ? 'Live' : v.source}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-gray-400 mt-0.5">
+                            {new Date(v.created_at).toLocaleString()}
+                            {v.change_summary && (
+                              <span className="ml-2 text-gray-500">— {v.change_summary}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

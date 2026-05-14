@@ -1,6 +1,9 @@
 """Devices router — device registration and app assignment endpoints."""
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -10,8 +13,11 @@ from app.schemas.device import (
     DeviceConfigResponse,
     DeviceCreate,
     DeviceResponse,
+    DeviceStatusOut,
     DeviceUpdate,
 )
+from app.models.device import Device
+from app.models.preview_session import PreviewSession
 from app.services import device_service
 from app.services.audit import log_audit
 from app.services.websocket_manager import manager
@@ -177,3 +183,67 @@ async def unregister_device(
         device_id,
         ip=request.client.host if request.client else None,
     )
+
+
+@router.get("/{device_id}/status", response_model=DeviceStatusOut)
+async def get_device_status(
+    device_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get detailed device status including app version, connection, and update info."""
+    result = await db.execute(
+        select(Device).where(Device.id == device_id, Device.user_id == user_id)
+    )
+    device = result.scalar_one_or_none()
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    return DeviceStatusOut(
+        id=device.id,
+        device_name=device.device_name,
+        platform=device.config_json.get("platform") if device.config_json else None,
+        assigned_app_id=device.assigned_app_id,
+        active_app_version_id=device.active_app_version_id,
+        preview_session_id=device.preview_session_id,
+        installed_runtime_version=device.installed_runtime_version,
+        connection_status="connected" if device.last_seen else "unknown",
+        update_status=device.update_status if device.update_status else "up_to_date",
+        last_seen_at=device.last_seen,
+    )
+
+
+@router.post("/{device_id}/exit-preview", status_code=200)
+async def exit_device_preview(
+    device_id: str,
+    request: Request,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Exit preview mode on a device."""
+    result = await db.execute(
+        select(Device).where(Device.id == device_id, Device.user_id == user_id)
+    )
+    device = result.scalar_one_or_none()
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    session_id = device.preview_session_id
+    device.preview_session_id = None
+
+    # If there's an active preview session, mark it as exited
+    if session_id:
+        result = await db.execute(
+            select(PreviewSession).where(PreviewSession.id == session_id)
+        )
+        session = result.scalar_one_or_none()
+        if session is not None:
+            session.status = "exited"
+            session.exited_at = datetime.now(timezone.utc)
+
+    await log_audit(
+        db, user_id, "DEVICE_PREVIEW_EXITED", "device",
+        device_id, ip=request.client.host if request.client else None,
+    )
+    await db.commit()
+    return {"device_id": device_id, "exited": True}

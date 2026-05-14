@@ -1,6 +1,8 @@
 from app.models.agent_config import AgentConfig
 from app.models.app import App
 from app.models.app_module_ref import AppModuleRef
+from app.models.app_version import AppVersion
+from app.models.app_working_draft import AppWorkingDraft
 from app.models.article import Article
 from app.models.audit_log import AuditLog
 from app.models.base import Base
@@ -23,6 +25,7 @@ from app.models.screen_history import ScreenHistory
 from app.models.session import Session
 from app.models.settings import Settings
 from app.models.template import SDUITemplate
+from app.models.template_version import TemplateVersion
 from app.models.todo import Todo
 from app.models.trigger import TriggerDefinition
 from app.models.user import User
@@ -32,6 +35,8 @@ __all__ = [
     "Base",
     "App",
     "AppModuleRef",
+    "AppVersion",
+    "AppWorkingDraft",
     "Article",
     "AuditLog",
     "User",
@@ -55,6 +60,7 @@ __all__ = [
     "ScreenHistory",
     "Settings",
     "SDUITemplate",
+    "TemplateVersion",
     "Todo",
     "TriggerDefinition",
     "Workflow",

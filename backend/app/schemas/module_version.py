@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, RootModel
 
 
 class ModuleCheckpointCreate(BaseModel):
@@ -72,3 +72,9 @@ class ModuleWorkingDraftUpdate(BaseModel):
     sdui_json: dict[str, Any]
     base_version_id: str | None = None
     dirty: bool = True
+
+
+class ModuleUsageOut(BaseModel):
+    """Schema for module usage info showing which apps use this module."""
+    module_id: str
+    used_by_apps: list[dict[str, str]] = Field(default_factory=list, description="List of {app_id, app_name}")

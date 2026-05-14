@@ -9,8 +9,15 @@ from app.dependencies import PaginationParams, get_current_user, get_current_use
 from app.models.module_state import ModuleState
 from app.models.screen_history import ScreenHistory
 from app.models.template import SDUITemplate
+from app.models.template_version import TemplateVersion
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
+from app.schemas.template_version import (
+    TemplateVersionCreate,
+    TemplateVersionDetailOut,
+    TemplateVersionOut,
+    TemplateVersionRename,
+)
 from app.schemas.templates import (
     ApplyTemplateRequest,
     TemplateCreate,
@@ -24,6 +31,7 @@ from app.services.sdui_state import (
     validate_sdui_screen_payload,
     send_draft_update,
 )
+from app.services.version_service import make_timestamp_name
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
 
@@ -320,3 +328,163 @@ async def get_template_rows(
         "rows": screen.get("rows", []),
         "sections": screen.get("sections", []),
     }
+
+
+# ── Template Versioning endpoints ───────────────────────────────────────────
+
+
+@router.get("/{template_id}/versions", response_model=PaginatedResponse[TemplateVersionOut])
+async def list_template_versions(
+    template_id: str,
+    pagination: PaginationParams = Depends(),
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all versions for a template, newest first."""
+    template = await db.get(SDUITemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if not template.is_public and template.created_by != current_user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    query = (
+        select(TemplateVersion)
+        .where(
+            TemplateVersion.template_id == template_id,
+            TemplateVersion.user_id == current_user_id,
+        )
+        .order_by(TemplateVersion.version_number.desc())
+        .offset(pagination.offset)
+        .limit(pagination.limit)
+    )
+    count_query = select(func.count()).select_from(
+        select(TemplateVersion).where(
+            TemplateVersion.template_id == template_id,
+            TemplateVersion.user_id == current_user_id,
+        ).subquery()
+    )
+
+    results = await db.execute(query)
+    total = (await db.execute(count_query)).scalar() or 0
+    versions = list(results.scalars().all())
+
+    return PaginatedResponse[TemplateVersionOut](
+        items=[TemplateVersionOut.model_validate(v) for v in versions],
+        total=total,
+        limit=pagination.limit,
+        offset=pagination.offset,
+        has_more=(pagination.offset + pagination.limit) < total,
+    )
+
+
+@router.post("/{template_id}/versions", response_model=TemplateVersionDetailOut, status_code=201)
+async def create_template_version(
+    template_id: str,
+    body: TemplateVersionCreate,
+    request: Request,
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a versioned snapshot from the current template JSON."""
+    template = await db.get(SDUITemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if not template.is_public and template.created_by != current_user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Get next version number
+    result = await db.execute(
+        select(func.max(TemplateVersion.version_number)).where(
+            TemplateVersion.template_id == template_id,
+        )
+    )
+    max_num = result.scalar() or 0
+    version_number = max_num + 1
+
+    timestamp_name = make_timestamp_name()
+    display_name = f"v{version_number} — {timestamp_name}"
+
+    version = TemplateVersion(
+        id=str(uuid4()),
+        template_id=template_id,
+        user_id=current_user_id,
+        version_number=version_number,
+        display_name=display_name,
+        default_timestamp_name=timestamp_name,
+        custom_name=None,
+        template_json=body.template_json,
+        source="manual",
+        change_summary=body.change_summary,
+        validation_status="valid",
+    )
+    db.add(version)
+
+    # Update template's current_version_id
+    template.current_version_id = version.id
+
+    await log_audit(
+        db, current_user_id, "TEMPLATE_VERSION_CREATED", "template_version",
+        version.id, ip=request.client.host if request.client else None,
+    )
+    await db.commit()
+    await db.refresh(version)
+    return TemplateVersionDetailOut.model_validate(version)
+
+
+@router.get("/{template_id}/versions/{version_id}", response_model=TemplateVersionDetailOut)
+async def get_template_version_detail(
+    template_id: str,
+    version_id: str,
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get full template version detail including template JSON."""
+    template = await db.get(SDUITemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if not template.is_public and template.created_by != current_user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    result = await db.execute(
+        select(TemplateVersion).where(
+            TemplateVersion.id == version_id,
+            TemplateVersion.template_id == template_id,
+        )
+    )
+    version = result.scalar_one_or_none()
+    if version is None:
+        raise HTTPException(status_code=404, detail="Version not found")
+    return TemplateVersionDetailOut.model_validate(version)
+
+
+@router.patch("/{template_id}/versions/{version_id}/rename", response_model=TemplateVersionOut)
+async def rename_template_version(
+    template_id: str,
+    version_id: str,
+    body: TemplateVersionRename,
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Rename a template version with a custom name."""
+    template = await db.get(SDUITemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if not template.is_public and template.created_by != current_user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    result = await db.execute(
+        select(TemplateVersion).where(
+            TemplateVersion.id == version_id,
+            TemplateVersion.template_id == template_id,
+            TemplateVersion.user_id == current_user_id,
+        )
+    )
+    version = result.scalar_one_or_none()
+    if version is None:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    version.custom_name = body.custom_name
+    version.display_name = body.custom_name
+    await db.commit()
+    await db.refresh(version)
+    return TemplateVersionOut.model_validate(version)
