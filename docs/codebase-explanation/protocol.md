@@ -1,6 +1,6 @@
 # Protocol — Communication Layer
 
-> Last updated: 2026-05-11
+> Last updated: 2026-05-14 (FF4: versioning, new MCP tools, component changes)
 
 ## Tier 1: TLDR
 
@@ -11,7 +11,8 @@ Helm communicates between frontend and backend using **three channels**:
 3. **MCP Server** (`/mcp`) — Machine-readable tool interface for external AI agents
 
 The chat flow: User types → WebSocket → backend → LLM streams tokens → WS tokens to frontend.
-The SDUI flow: Agent calls `helm_set_screen` → WS draft notification → user approves → live screen.
+The SDUI flow (legacy): Agent calls `helm_set_screen` → WS draft notification → user approves → live screen.
+The SDUI flow (FF4 versioning): Agent calls `helm_set_screen` → user edits → `helm_create_checkpoint` → `helm_publish_version` → live screen. Or directly: `helm_set_screen` → `helm_publish_version` for auto-approve.
 
 ---
 
@@ -70,7 +71,7 @@ App                     Backend                    LLM
  |<-- {type:"chat_complete"}
 ```
 
-**SDUI draft flow:**
+**SDUI draft flow (legacy — still supported):**
 ```
  [Agent calls helm_set_screen (draft=True)]
  |<-- {type:"sdui_draft_update", module_id:"home", screen:{...}, version:N}
@@ -80,7 +81,20 @@ App                     Backend                    LLM
  |<-- {type:"sdui_draft_update", module_id:"home", screen:null, version:0}
  |<-- {type:"sdui_draft_rejected", module_id:"home"}   // legacy companion clear event
  |<-- {type:"sdui_screen_update", module_id:"home", screen:{...}, version:N}
+ ```
+
+**SDUI versioning flow (FF4 — preferred):**
 ```
+ [Agent calls helm_set_screen (draft=True) OR user edits in editor]
+ | [Working draft saved via autosave]
+ |-- POST /api/modules/{moduleId}/checkpoints -->  // Create checkpoint
+ |<- {checkpoint_id, version_number}
+ |-- GET /api/modules/{moduleId}/versions -->       // List versions
+ |-- POST /api/modules/{moduleId}/preview/web -->   // Preview before publish
+ |-- POST /api/modules/{moduleId}/versions/{id}/restore-to-draft -->  // Restore if needed
+ |-- POST /api/modules/{moduleId}/versions/{id}/publish --> // OR direct helm_publish_version
+ |<-- {type:"sdui_screen_update", module_id:"home", screen:{...}, version:N}
+ ```
 
 ### WebSocket Message Reference (Server → Client)
 
@@ -103,6 +117,8 @@ App                     Backend                    LLM
 | `tool_error` | `{tool, message}` | Tool call failed |
 | `action_result` | `{ref?, result}` | `module_action` action completed |
 | `action_error` | `{ref?, message}` | `module_action` action failed |
+| `preview_session_started` | `{session_id, app_config?, sdui_json?}` | **NEW (FF4):** Mobile enters preview mode with preview config |
+| `app_version_published` | `{version_id, app_id}` | **NEW (FF4):** New app version published to mobile devices |
 
 ### WebSocket Message Reference (Client → Server)
 
@@ -142,6 +158,10 @@ Mounted at `/mcp` on the FastAPI app. Uses FastMCP (Streamable HTTP). All reques
 | `helm_show_tab` | `tab_id: str` | Restore hidden tab |
 | `helm_rename_tab` | `tab_id: str`, `name?: str`, `icon?: str` | Rename a tab and/or change its emoji icon |
 | `helm_list_tabs` | — | List all tabs + visibility status |
+| `helm_create_checkpoint` | `module_id: str`, `change_summary?: str` | **NEW (FF4):** Create a version checkpoint from working draft |
+| `helm_list_module_versions` | `module_id: str`, `limit?: int`, `offset?: int` | **NEW (FF4):** List version history for a module |
+| `helm_restore_version` | `module_id: str`, `version_id: str` | **NEW (FF4):** Restore a version to the working draft |
+| `helm_publish_version` | `module_id: str`, `version_id?: str` | **NEW (FF4):** Publish a version as the live screen |
 
 **Valid `module_id` values (built-in):** `home`, `chat`, `calendar`, `forms`, `alerts`, `modules`, `settings` — plus any user-created custom module IDs (slug-based, e.g. `my-module`)
 
@@ -197,7 +217,7 @@ Mounted at `/mcp` on the FastAPI app. Uses FastMCP (Streamable HTTP). All reques
       "cells": [
         {
           "id": "cell-1",
-          "width": 1,
+          "width": "50%",
           "content": {
             "type": "Text",
             "props": {
@@ -205,13 +225,22 @@ Mounted at `/mcp` on the FastAPI app. Uses FastMCP (Streamable HTTP). All reques
               "variant": "heading"
             }
           }
+        },
+        {
+          "id": "cell-2",
+          "width": "50%",
+          "content": {
+            "type": "Button",
+            "props": {
+              "label": "Tap me",
+              "variant": "primary"
+            }
+          }
         }
       ],
-      "compact": { "direction": "column", "gap": 8 },
-      "regular": { "direction": "row", "gap": 16 },
-      "scrollable": false,
-      "backgroundColor": "#FFFFFF",
-      "padding": 16
+      "compact": { "direction": "column" },
+      "regular": { "direction": "row" },
+      "scrollable": false
     }
   ]
 }
@@ -219,20 +248,25 @@ Mounted at `/mcp` on the FastAPI app. Uses FastMCP (Streamable HTTP). All reques
 
 Persisted V2 payloads are row-first. `rows` is the required shape discriminator; `schema_version`, `module_id`, and `title` may be omitted on stored payloads and added later by editor/runtime layers. New authored content should still use PascalCase V2 types, but server validation also permits preserved lowercase legacy runtime component types so existing live screens can round-trip.
 
-**V2 component types (PascalCase):** `Text`, `Markdown`, `Button`, `Image`, `TextInput`, `Icon`, `Container`, `CalendarModule`, `ChatModule`, `NotesModule`, `InputBar`
+**V2 component types (PascalCase):** `Text` (markdown-based), `Button`, `Image`, `Icon`, `Container`, `CalendarModule` (5 variants), `ChatModule`, `NotesModule`, `InputBar`, `Badge`, `Stat`, `List`, `Alert`, `Todo`, `TodoModule`, `ArticleCard`, `ArticleCardModule`, `RichText`, `RichTextRenderer`, `Empty`
 
-> **Note:** `Divider` was removed as a standalone cell component per Architecture Decisions Session 9. It is now a row-level property. The type is preserved for backward compatibility in the backend type map and legacy registry entries, but new screens should not use it as a cell component.
+> **FF4 changes:** `TextInput` removed (use `InputBar`). `Markdown` merged into `Text` (which now uses `react-native-markdown-display`). `TodoModule`, `ArticleCardModule`, `RichTextRenderer` added. `Empty` synchronized across all layers.
+>
+> `Divider` was removed as a standalone cell component per Architecture Decisions Session 9. It is now a row-level property. The type is preserved for backward compatibility.
 
-**V2 cell `width`:** numeric weight for flex proportion in standard rows, or fixed card-rail width scaling in scrollable rows; `"auto"` behaves like natural/fill width in non-scrollable rows
+**V2 cell `width`:** Percentage-based string (e.g. `"50%"`, `"33%"`, `"auto"`). Minimum cell width: 80px. Pre-flight validation blocks invalid configurations.
+
+> **FF4 change:** Cell widths are now percentage-based instead of numeric flex weights. `"auto"` distributes remaining space equally among auto-sized cells. When all cells are fixed-width and total < 100%, cells center with side padding.
 
 **V2 row responsive behavior:**
 - `compact` props → applied on screens < 768px wide
 - `regular` props → applied on screens ≥ 768px wide
-- If `scrollable: true` → horizontal card rail with fixed-width cells sized from each cell's numeric `width`, matching the editor preview instead of flex paging
+- If `scrollable: true` → horizontal card rail with fixed-width cells
+- **FF4:** Row padding/gap/background removed. Rows are clean containers with no spacing properties.
 
 **V2 spacing notes:**
-- Rows may use `paddingTop`, `paddingBottom`, `paddingLeft`, and `paddingRight`; runtimes fall back to `padding` when a side-specific value is omitted
-- ~~`Divider`~~ may include both `indent` and `margin` — **Deprecated**, Divider is now a row-level property
+- ~~Row spacing~~ — Gap, padding, and background color removed from rows per FF4. Use `Container` (vertical row) for nested layouts with spacing.
+- ~~`Divider`~~ — Preserved in legacy type map for backward compatibility.
 
 **V2 action types:** `navigate`, `api_call`, `server_action`, `dismiss`, `copy_text`, `open_url`
 
@@ -263,8 +297,8 @@ These are the registered functions callable via `server_action`:
 | `mark_notification_read` | `{notification_id}` | Marks notification read |
 | `create_calendar_event` | `{title, start_time, end_time, ...}` | Creates calendar event |
 | `delete_calendar_event` | `{event_id}` | Deletes calendar event |
-| `approve_draft` | `{module_id}` | Promotes SDUI draft to live |
-| `reject_draft` | `{module_id, feedback?}` | Discards SDUI draft |
+| `approve_draft` | `{module_id}` | Promotes SDUI draft to live (legacy — use versioning for new screens) |
+| `reject_draft` | `{module_id, feedback?}` | Discards SDUI draft (legacy) |
 | `set_variable` | `{name, value, type?}` | Upserts a CustomVariable by user + name |
 
 **Client-only action stubs (16):** `navigate`, `go_back`, `open_url`, `open_sheet`, `dismiss`, `server_action`, `set_component_state`, `toggle`, `show_notification`, `show_alert`, `haptic`, `share`, `copy_text`, `delay`, `chain`, `conditional` — acknowledged by backend but executed on client.

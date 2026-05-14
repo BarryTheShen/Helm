@@ -33,7 +33,7 @@
 | ✅ | Sandbox mode middleware (`X-Helm-Sandbox`) | `backend/app/middleware/sandbox.py`, `backend/app/database.py` | Runs requests in rollback-only mode and logs sandbox actions separately |
 | ✅ | `manage.py` CLI for user management | `backend/manage.py` | Create/list/delete users outside the locked setup endpoint |
 | ✅ | pytest test suite | `backend/tests/` | Auth, calendar, notifications, workflows, drafts |
-| ❌ | Docker deployment (Dockerfile + docker-compose) | — | Spec defined in Backend Spec §8; not yet created |
+| ✅ | Docker deployment (Dockerfile + docker-compose) | `Dockerfile` (repo root), `docker-compose.yml` | Single-service bundled deployment; backend + web admin on port 8000; `SERVE_STATIC=true` for production |
 | ❌ | PostgreSQL production database | — | One-line config swap; needs staging test |
 | ❌ | Redis for WebSocket session state / caching | — | Required for multi-instance horizontal scale |
 | ❌ | Background job queue (Celery or ARQ) | — | For long-running agent tasks beyond APScheduler |

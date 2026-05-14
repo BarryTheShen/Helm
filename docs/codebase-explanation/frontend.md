@@ -1,6 +1,6 @@
 # Frontend — React Native (Expo) Mobile App + Web Admin
 
-> Last updated: 2026-05-11
+> Last updated: 2026-05-14 (FF4: versioning model, component sync, row/cell simplification)
 
 ## Tier 1: TLDR
 
@@ -69,10 +69,9 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 - **State written:** `authStore.token` + `authStore.user` (persisted)
 
 ### `app/(tabs)/home.tsx` — SDUI Home
-- **Shows:** AI-generated SDUI screen, or `DraftPreview` if draft exists, or empty-state prompt
+- **Shows:** AI-generated SDUI screen, or working draft preview if draft exists, or empty-state prompt
 - **API:** `GET /api/sdui/home` + `GET /api/sdui/home/draft` via `useSDUIScreen('home')`
-- **Approve draft:** `POST /api/actions/execute {function: "approve_draft", params: {module_id: "home"}}`
-- **Reject draft:** `POST /api/actions/execute {function: "reject_draft", ...}`
+- **Versioning:** AI creates a draft via `helm_set_screen` → user creates checkpoint → version history available. Old draft/approve/reject flow is superseded by Draft → Checkpoint → Version → Preview → Publish model.
 
 ### `app/(tabs)/chat.tsx` — AI Chat
 - **Shows:** Chat message list (FlashList v2), typing indicator (`●●●`), text input + Send button. If AI set SDUI for chat tab, renders that instead.
@@ -98,10 +97,9 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 - **Navigation:** Built-in modules route to `/(tabs)/{name}`, custom modules route to `/module/{id}`
 
 ### `app/module/[moduleId].tsx` — Custom Module Route
-- **Shows:** AI-generated SDUI screen for the selected custom module, or `DraftPreview` if draft exists, or empty-state prompt
+- **Shows:** AI-generated SDUI screen for the selected custom module, or working draft preview if draft exists, or empty-state prompt
 - **API:** `GET /api/sdui/{moduleId}` + `GET /api/sdui/{moduleId}/draft` via `useSDUIScreen(moduleId)`
-- **Approve draft:** `POST /api/actions/execute {function: "approve_draft", params: {module_id}}`
-- **Reject draft:** `POST /api/actions/execute {function: "reject_draft", params: {module_id, feedback?}}`
+- **Versioning:** Draft → Checkpoint → Version → Preview → Publish model. Supports version history via `GET /api/modules/{moduleId}/versions`.
 
 ### `app/(tabs)/forms.tsx` — Forms
 - **Shows:** SDUI-driven form screen via `useSDUIScreen('forms')`, or empty-state loading/error. **No native fallback UI** — purely SDUI.
@@ -265,12 +263,11 @@ Rendered by `SDUIScreenRenderer` → `SDUIRenderer` (single component) in `src/c
     {
       "id": "r1",
       "cells": [
-        { "id": "c1", "width": 1, "content": { "type": "Text", ... } }
+        { "id": "c1", "width": "50%", "content": { "type": "Text", ... } }
       ],
       "compact": { "direction": "column" },
       "regular": { "direction": "row" },
-      "scrollable": false,
-      "gap": 12
+      "scrollable": false
     }
   ]
 }
@@ -278,8 +275,10 @@ Rendered by `SDUIScreenRenderer` → `SDUIRenderer` (single component) in `src/c
 
 Persisted V2 screens are row-first. The mobile type guard only requires `rows`; `schema_version`, `module_id`, and `title` are optional on stored payloads.
 
+**Row/cell changes (FF4):** Row padding/gap/background removed. Cell widths are percentage-based (e.g. `"50%"`, `"33%"`, or `"auto"`). Minimum cell width enforced at 80px. Pre-flight validation prevents adding cells or resizing below minimum width. Rows no longer have `padding`, `paddingTop`, `paddingBottom`, `paddingLeft`, `paddingRight`, `gap`, or `backgroundColor` properties.
+
 Component types (PascalCase — registered in `src/renderer/componentRegistry.ts`):
-`Text`, `Markdown`, `Button`, `Image`, `TextInput`, `Icon`, `Container`, `CalendarModule`, `ChatModule`, `NotesModule`, `InputBar`, `Badge`, `Stat`, `List`, `Alert`
+`Text` (markdown-based, replaced old Text + Markdown), `Button`, `Image`, `Icon`, `Container` (simplified — no gap/padding/background), `CalendarModule` (5 variants), `ChatModule`, `NotesModule`, `InputBar`, `Badge`, `Stat`, `List`, `Alert`, `Todo`, `TodoModule`, `ArticleCard`, `ArticleCardModule`, `RichText`, `RichTextRenderer`, `Empty`
 
 > **Divider removed as standalone component** — `Divider` was removed from the component registry per Architecture Decisions Session 9 and Feature Feedback 2. Divider is now a row-level property (`showDivider: true` or `type: 'divider'` on rows), not a cell component. The backend validation whitelist still permits legacy `divider` type for backward compatibility with existing screens.
 
@@ -318,21 +317,20 @@ Detects format via `isSDUIPage()` type guard and dispatches to `SDUIPageRenderer
 
 ### V2 Atomic (`src/components/atomic/`)
 
-| Component | Key Props |
-|-----------|-----------|
-| `SDUIText` | `content, variant?('heading'\|'body'\|'caption'), color?, bold?, italic?, underline?, strikethrough?, align?, numberOfLines?, selectable?` |
-| `SDUIMarkdown` | `content` — uses `react-native-markdown-display` library |
-| `SDUIButton` | `label?, icon?, variant?('primary'\|'secondary'\|'ghost'\|'icon'\|'destructive'), size?('sm'\|'md'\|'lg'), loading?, fullWidth?, dispatch?` |
-| `SDUIImage` | `src, alt?, width?, height?, aspectRatio?, borderRadius?, onPress?, placeholder?('blur'\|'skeleton'\|'none')` |
-| `SDUITextInput` | `value?, onChangeText?, placeholder?, multiline?, maxLines?, secureTextEntry?, keyboardType?, editable?` |
-| `SDUIIcon` | `name` (Feather name → emoji/unicode map, ~40 icons), `size?, color?, onPress?` |
+| Component | Key Props | Notes |
+|-----------|-----------|-------|
+| `SDUIText` | `content, variant?('heading'\|'body'\|'caption'), color?, bold?, italic?, underline?, strikethrough?, align?('left'\|'center'\|'right'), numberOfLines?, selectable?` | **FF4:** Merged with old `SDUIMarkdown` — uses `react-native-markdown-display` library. Supports markdown content + text alignment. Old `SDUIMarkdown` removed. |
+| `SDUIButton` | `label?, icon?, variant?('primary'\|'secondary'\|'ghost'\|'icon'\|'destructive'), size?('sm'\|'md'\|'lg'), loading?, fullWidth?, dispatch?` | Fills entire cell. |
+| `SDUIImage` | `src, fitMode?('fitWidth'\|'fitHeight'), action?` | **FF4:** Simplified — only `src`, `fitMode`, and `action`. Removed `alt`, `width`, `height`, `aspectRatio`, `borderRadius`, `onPress`, `placeholder`. |
+| `SDUIIcon` | `name` (Feather name → emoji/unicode map, ~40 icons), `size?, color?, onPress?` | Fills entire cell (centered). Icon picker popup enhanced. |
 | ~~`SDUIDivider`~~ | ~~`direction?('horizontal'\|'vertical'), thickness?, color?, indent?, margin?`~~ | **Removed** — Divider is now a row property, not a cell component. |
+| ~~`SDUITextInput`~~ | ~~`value?, onChangeText?, placeholder?, ...`~~ | **Removed (FF4)** — replaced by `InputBar` for input needs. |
 
 ### V2 Structural (`src/components/structural/`)
 
-| Component | Key Props |
-|-----------|-----------|
-| `SDUIContainer` | `direction?, gap?, padding?, backgroundColor?, borderRadius?, shadow?('sm'\|'md'\|'lg'), flex?, align?, justify?, children?` |
+| Component | Key Props | Notes |
+|-----------|-----------|-------|
+| `SDUIContainer` | `direction?, borderRadius?, shadow?('sm'\|'md'\|'lg'), flex?, align?, justify?, children?` | **FF4:** Simplified — removed `gap`, `padding`, `backgroundColor`. Acts as a vertical row (direction defaults to `column`). |
 
 Uses `resolveColor()` and `themeShadows` from `src/theme/tokens.ts`.
 
@@ -340,21 +338,21 @@ Uses `resolveColor()` and `themeShadows` from `src/theme/tokens.ts`.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `CalendarModule` | Full MVP | Uses `react-native-calendars`; month/week/day/agenda variants; event dots; day agenda; pull-to-refresh |
+| `CalendarModule` | Full FF4 | Uses `react-native-calendars`; **5 variants** (month/week/day/eventList/compact); date navigation controls (`◀ [range] ▶ Today`); unified event model; fit-the-cell sizing; Compact variant for small cells |
 | `ChatModule` | Placeholder | Shows "navigate to Chat tab"; pull-to-refresh via RefreshControl |
-| `NotesModule` | Implemented | TextInput + SDUIMarkdown preview; pull-to-refresh via RefreshControl |
-| `InputBar` | Full MVP | Text input + send strip; send stays disabled unless both `onSend` and `dispatch` are available, and typed text is only cleared after a send action actually dispatches |
-| `TodoModule` | Implemented | FF3: Todo list with toggle, add, delete actions |
-| `ArticleCardModule` | Implemented | FF3: Article preview card with image, metadata, tap navigation |
+| `NotesModule` | Full FF4 | Wired to backend Notes CRUD; markdown rendering for note content; create/edit/delete |
+| `InputBar` | Full MVP | Text input + send strip; wired to backend actions; variable resolution |
+| `TodoModule` | Full FF4 | Wired to backend Todos CRUD; toggle complete via backend; add/delete via backend |
+| `ArticleCardModule` | Full FF4 | Wired to backend Articles; tap navigation to article detail |
 
-### V2 SDUI Components (NEW in Session 9)
+### V2 SDUI Components (FF4)
 
 | Component | File | Key Props | Notes |
 |-----------|------|-----------|-------|
-| `CalendarComponent` | `src/components/sdui/CalendarComponent.tsx` | `events, variant?('month'\|'week'\|'day'\|'agenda'), onEventPress?, onAction?` | Rewritten with variant support and date navigation controls |
-| `TodoComponent` | `src/components/sdui/TodoComponent.tsx` | `items: {id, text, completed}[], placeholder?, onToggle?, onAdd?, onDelete?, dispatch?` | Checkbox list with add/delete actions |
-| `RichTextRendererComponent` | `src/components/sdui/RichTextRendererComponent.tsx` | `content (markdown), theme?('light'\|'dark'), dispatch?` | Custom regex-based markdown parser (headings, bold, italic, lists, links, code blocks, blockquotes) |
-| `ArticleCardComponent` | `src/components/sdui/ArticleCardComponent.tsx` | `title, description, imageUrl?, publishedAt, source, onPress?, dispatch?` | News article card with image, metadata, and tap action |
+| `CalendarComponent` | `src/components/sdui/CalendarComponent.tsx` | `events, variant?('month'\|'week'\|'day'\|'eventList'\|'compact'), onEventPress?, onAction?` | 5 variants; date navigation; fit-the-cell |
+| `TodoComponent` | `src/components/sdui/TodoComponent.tsx` | `items: {id, text, completed}[], placeholder?, onToggle?, onAdd?, onDelete?, dispatch?` | Wired to backend Todos CRUD |
+| `RichTextRendererComponent` | `src/components/sdui/RichTextRendererComponent.tsx` | `content (markdown), theme?('light'\|'dark'), dispatch?` | Custom regex-based markdown parser |
+| `ArticleCardComponent` | `src/components/sdui/ArticleCardComponent.tsx` | `title, description, imageUrl?, publishedAt, source, onPress?, dispatch?` | Wired to backend Articles |
 
 ### Component Registry (`src/renderer/componentRegistry.ts`)
 
@@ -405,9 +403,9 @@ resolveColor(tokenOrHex, fallback?)  // resolves token name or passes through he
 
 **V1:** `SDUISection`, `SDUIScreen` (schema_version: 1)
 
-**V2:** `SDUICell { id, width, content }`, `SDUIRow { id, cells, compact?, regular?, scrollable?, gap?, padding?, paddingTop?, paddingBottom?, paddingLeft?, paddingRight?, backgroundColor? }`, `SDUIPage { schema_version?: '1.0.0', module_id?: string, title?: string, rows }`
+**V2:** `SDUICell { id, width, content }` (width is percentage-based, e.g. `"50%"` or `"auto"`), `SDUIRow { id, cells, compact?, regular?, scrollable? }` (row properties simplified — no gap/padding/background), `SDUIPage { schema_version?: '1.0.0', module_id?: string, title?: string, rows }`
 
-The mobile runtime uses the per-side row padding values when present and falls back to `padding` for uniform spacing.
+**FF4 row/cell changes:** Row padding, gap, and background color have been removed. Cell widths are percentage-based with minimum width enforcement (80px). Pre-flight validation blocks invalid configurations (e.g., adding cells when minimum width would be violated). Components are expected to fill their cell (`flex: 1`, `width: '100%'`, `height: '100%'`).
 
 Persisted rows-first payloads may omit page wrapper metadata; `isSDUIPage(payload)` now treats `rows` as the accepted V2 discriminator.
 
@@ -555,12 +553,15 @@ The editor page (`/editor`) is a custom React + Zustand SDUI editor built from `
 
 **Editing flow:**
 - Device preview supports presets, rotation, and custom width/height values with an explicit Apply action; the toolbar and status bar read actual `deviceWidth`/`deviceHeight` from the Zustand store
+- **Top bar overhaul (FF4):** Replaced `Draft v1 | Approve | Reject` with document-style autosave/checkpoints/version history: `[Module: {name} ▼] Saved {time} [Create Checkpoint] [Preview in Web Admin] [Version History]`
+- **Versioning toolbar:** Creates checkpoints (snapshots) from the working draft. Preview before publishing. Full version history with restore-to-draft capability. See `module_versions` API for version CRUD.
 - The canvas provides component previews, add-row buttons, row drag handles, cell width resize handles, and direct row-height drag handles
-- Multi-step row dragging uses a 50px movement threshold and 300ms debounce to prevent overshoot
+- Multi-step row dragging uses a 50px movement threshold and 300ms debounce to prevent overshoot; row drag handles moved to the LEFT of the row boundary
 - `ComponentPicker` only offers components marked authorable in `types.ts`
-- `PropertyInspector` edits row height, cell count, cell widths, background, uniform and per-side padding, horizontal scrollability, and component props/actions
+- **Row system (FF4):** `PropertyInspector` row properties simplified — no padding/gap/background controls. Cell widths are percentage-based with auto/fixed toggle. Pre-flight validation blocks invalid cell configurations. Minimum width enforced (80px).
+- `PropertyInspector` edits row height, cell count, cell widths, horizontal scrollability, and component props/actions
 - New actions limited to supported authorable set (`navigate`, `server_action`, `open_url`, `go_back`, `send_to_agent`, `dismiss`, `copy_text`)
-- Save stores a draft; Push Live saves then auto-approves it
+- Save stores a working draft; Create Checkpoint creates a version; Publish Version goes live
 - Delete Screen only enabled when module has a persisted live screen or pending draft
 
 ### App Editor (`/app-editor`)
@@ -572,7 +573,8 @@ The editor page (`/editor`) is a custom React + Zustand SDUI editor built from `
 - **Right panel:** Launchpad section (modules not in bottom bar) + app properties (name, icon, dark mode)
 - **State:** `useAppEditorStore` — `App` type with id, user_id, name, icon, splash, theme, design_tokens, dark_mode, default_launch_module_instance_id, bottom_bar_config, launchpad_config
 - **Preview:** `usePreviewStore` with `startPreview()` launching browser-based iframe preview of app configuration
-- **API calls:** `getApps()`, `createApp()`, `updateApp()`, `deleteApp()`, `updateAppBottomBar()` via `/api/apps` endpoints
+- **Versioning (FF4):** Top bar shows `[App: {name} ▼] Saved {time} Live: {live version} [Preview ▼] [Publish to Mobile] [Version History]`. Preview dropdown: "Preview in Web Admin" | "Preview on Device...". Publish confirmation modal with validation results and device status.
+- **API calls:** `getApps()`, `createApp()`, `updateApp()`, `deleteApp()`, `updateAppBottomBar()` via `/api/apps` endpoints. Versioning endpoints via `/api/apps/{id}/versions`, `/api/apps/{id}/publish`.
 
 ---
 
@@ -602,3 +604,36 @@ The editor page (`/editor`) is a custom React + Zustand SDUI editor built from `
 - VariablePicker with @ trigger for variable insertion
 - External drag handles for rows
 - New component schemas: Todo, RichTextRenderer, ArticleCard, Calendar variant
+
+## FF4 Changes (2026-05-14)
+
+### Versioning Model
+Replaced the old Draft/Approve/Reject flow with a new document-style versioning model:
+- **Working Draft** — current editing state, autosaved
+- **Checkpoint** — snapshot of the working draft
+- **Version** — named, publishable state (created from checkpoint)
+- **Preview** — time-limited preview session on device or web admin
+- **Publish** — publish a version live to mobile devices
+
+Module Editor top bar: `[Module: {name} ▼] Saved {time} [Create Checkpoint] [Preview in Web Admin] [Version History]`
+App Editor top bar: `[App: {name} ▼] Saved {time} Live: {live version} [Preview ▼] [Publish to Mobile] [Version History]`
+
+### Component Changes
+- **Text** merged with old **Markdown** — `SDUIText` now uses `react-native-markdown-display` and supports alignment. Old `SDUIMarkdown` removed.
+- **TextInput** removed — replaced by `InputBar` for input needs.
+- **Image** simplified — only `src`, `fitMode` (fitWidth/fitHeight), and `action` props.
+- **Icon** fixed — fills cell, icon picker popup enhanced.
+- **Button** — fills entire cell; icon mode renders centered icon.
+- **Empty Container** — simplified as vertical row; no gap/padding/background.
+- **Calendar** — 5 variants (month/week/day/eventList/compact), date navigation, unified event model.
+
+### Row/Cell Simplification
+- Row padding, gap, and background color removed
+- Cell widths are percentage-based (e.g. `"50%"`, `"33%"`, `"auto"`)
+- Minimum cell width: 80px
+- Pre-flight validation prevents invalid cell configurations
+- Components fill the cell (`flex: 1`, full width/height)
+- Row drag handles moved to the LEFT of the row boundary
+
+### Component Type Sync
+Four-way sync maintained between: mobile `componentRegistry.ts` ↔ web `types.ts` COMPONENT_REGISTRY ↔ backend `mcp/tools.py` `_VALID_V2_COMPONENT_TYPES` ↔ backend `component_seed.py`. All new component types (`TodoModule`, `ArticleCardModule`, `RichTextRenderer`) added to all layers.

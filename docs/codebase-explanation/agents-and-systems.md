@@ -1,6 +1,6 @@
 # Agents, MCP, Workflows & Additional Systems
 
-> Last updated: 2026-05-07
+> Last updated: 2026-05-14 (FF4: new MCP tools, versioning)
 
 ## Tier 1: TLDR
 
@@ -83,7 +83,7 @@ For models that don't use OpenAI function-calling (e.g. stepfun): if `finish_rea
 4. Sends `{type:"chat_message_replace", message_id, content: cleaned_content}` to strip XML from frontend display
 
 ### Built-in Tool Definitions (`_get_tool_definitions()`)
-16 tools exposed to the LLM (OpenAI function-calling format):
+18 tools exposed to the LLM (OpenAI function-calling format):
 
 | Tool name | Required params | Description |
 |-----------|----------------|-------------|
@@ -99,6 +99,10 @@ For models that don't use OpenAI function-calling (e.g. stepfun): if `finish_rea
 | `get_draft` | `module_id` | Get the pending draft SDUI screen for a module, if one exists |
 | `approve_draft` | `module_id` | Approve and publish a pending draft as the live screen |
 | `reject_draft` | `module_id` | Reject and discard a pending draft; optional `feedback` param |
+| `create_checkpoint` | `module_id` | **NEW (FF4):** Create a version checkpoint from the working draft |
+| `list_module_versions` | `module_id` | **NEW (FF4):** List version history for a module |
+| `restore_version` | `module_id, version_id` | **NEW (FF4):** Restore a version to the working draft |
+| `publish_version` | `module_id` | **NEW (FF4):** Publish a version as live — replaces `approve_draft` for new screens |
 | `hide_tab` | `tab_id` | Hide nav-bar tab; valid: home/chat/modules/calendar/forms/alerts/settings |
 | `show_tab` | `tab_id` | Restore hidden tab |
 | `list_tabs` | — | All tabs + visibility |
@@ -158,8 +162,11 @@ All functions are `async`. Main `execute_tool(name, args, user_id)` dispatcher.
 | Function | Key behavior |
 |----------|-------------|
 | `set_screen(module_id, screen, user_id, draft=True)` | Normalizes screen JSON via `normalize_sdui_screen()`, stores as draft or live, pushes WS event |
-| `approve_draft(module_id, user_id)` | Copies `sdui__X__draft` → `sdui__X`, deletes draft, pushes `sdui_screen_update` |
-| `reject_draft(module_id, user_id, feedback?)` | Deletes draft, pushes `sdui_draft_rejected` |
+| `approve_draft(module_id, user_id)` | Copies `sdui__X__draft` → `sdui__X`, deletes draft, pushes `sdui_screen_update` (legacy) |
+| `reject_draft(module_id, user_id, feedback?)` | Deletes draft, pushes `sdui_draft_rejected` (legacy) |
+| `create_checkpoint(module_id, user_id, change_summary?)` | **NEW (FF4):** Creates a version checkpoint from the working draft |
+| `restore_version(module_id, version_id, user_id)` | **NEW (FF4):** Restores a version to the working draft |
+| `publish_version(module_id, user_id, version_id?)` | **NEW (FF4):** Publishes a version as the live screen |
 | `get_draft(module_id, user_id)` | Returns `{screen, has_draft}` |
 | `hide_tab(tab_id, user_id)` | Adds to hidden list in `_tabs_config`, pushes `tabs_updated` |
 | `show_tab(tab_id, user_id)` | Removes from hidden list, pushes `tabs_updated` |
@@ -358,6 +365,7 @@ Key contents:
 - Three few-shot `helm_set_screen` examples and a "NEVER DO" blacklist
 - Common Feather icon names reference
 - All action types and `server_action` function names
-- Workflow: `helm_set_screen` → `helm_approve_draft`
+- Workflow (legacy): `helm_set_screen` → `helm_approve_draft`
+- Workflow (FF4 versioning): `helm_set_screen` → `helm_create_checkpoint` → `helm_publish_version`
 - Responsive layout guidance (compact/regular breakpoints)
 - Filesystem tool usage for editing `mobile/` source code directly

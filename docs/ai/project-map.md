@@ -1,15 +1,15 @@
 # Project Map
 
-Current state of the Helm codebase. Updated 2026-05-11.
+Current state of the Helm codebase. Updated 2026-05-14 (FF4: versioning, new models, bundled deployment).
 
 ## File Counts (Verified)
 
 | Module | Files | Notes |
 |--------|-------|-------|
-| Models | 25 | SQLAlchemy ORM (`backend/app/models/`) |
-| Schemas | 24 | Pydantic request/response (`backend/app/schemas/`) |
-| Routers | 25 | FastAPI route modules (`backend/app/routers/`) |
-| Services | 15 | Business logic (`backend/app/services/`) |
+| Models | 28 | SQLAlchemy ORM (`backend/app/models/`) |
+| Schemas | 27 | Pydantic request/response (`backend/app/schemas/`) |
+| Routers | 27 | FastAPI route modules (`backend/app/routers/`) |
+| Services | 19 | Business logic (`backend/app/services/`) |
 | Test Files | 23 | pytest-asyncio (`backend/tests/`) |
 
 Verify with: `find backend/app/<dir> -name '*.py' ! -name '__init__*.py' | wc -l`
@@ -19,7 +19,8 @@ Verify with: `find backend/app/<dir> -name '*.py' ! -name '__init__*.py' | wc -l
 | Service | Port | Config |
 |---------|------|--------|
 | Backend API | 8000 | `backend/app/config.py` (`server_port: int = 8000`) |
-| Web Admin | 5174 | `web/vite.config.ts` (`port: 5174`) |
+| Web Admin (dev) | 5174 | `web/vite.config.ts` (`port: 5174`) |
+| Web Admin (Docker) | 8000 | Same port as backend — served via `SERVE_STATIC=true` |
 | Standalone Agent | 7860 | `agent/api_server.py` |
 | Docker Web Admin | 8080 | `docker-compose.yml` |
 
@@ -33,6 +34,7 @@ Verify with: `find backend/app/<dir> -name '*.py' ! -name '__init__*.py' | wc -l
 | Agent | PydanticAI + OpenRouter |
 | Protocol | WebSocket + REST + MCP StreamableHTTP |
 | QA | Playwright, pytest-asyncio |
+| Deployment | Docker / docker-compose (bundled web+backend on port 8000) |
 
 ## Directory Map
 

@@ -1,7 +1,7 @@
 # Backend — Python FastAPI Server
 
-> Last updated: 2026-05-11
-> Last audit: 2026-05-11 — ✅ All systems operational (26 test files, 338+ tests passing)
+> Last updated: 2026-05-14 (FF4: versioning, new models, MCP tools, bundled deployment)
+> Last audit: 2026-05-14 — ✅ FF4 fully implemented (10 phases)
 
 ## Tier 1: TLDR
 
@@ -66,10 +66,10 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | Config | `app/config.py` | pydantic-settings loading from `.env` (resolves from repo root) |
 | Database | `app/database.py` | Async SQLAlchemy engine + session factory |
 | Auth dependencies | `app/dependencies.py` | `get_current_user`, `get_current_user_id`, `get_token_from_request`, `require_admin`, `PaginationParams` |
-| Models | `app/models/` | 22 SQLAlchemy ORM models (added App, ModuleInstance, AppModuleRef, Article, Todo, Settings) |
-| Schemas | `app/schemas/` | Pydantic request/response models (19 files) |
-| Routers | `app/routers/` | 25 route files (added apps, module_instances, articles, todos, devices, settings) |
-| Services | `app/services/` | auth, agent_proxy, websocket_manager, workflow_engine, action_registry, audit, component_seed, variable_resolver, trigger_engine, app_service, module_service, device_service, data_connectors, sdui_state, template_seed |
+| Models | `app/models/` | 28 SQLAlchemy ORM models (added Note, ModuleVersion, ModuleWorkingDraft, PreviewSession) |
+| Schemas | `app/schemas/` | Pydantic request/response models (27 files) |
+| Routers | `app/routers/` | 27 route files (added notes, module_versions) |
+| Services | `app/services/` | auth, agent_proxy, websocket_manager, workflow_engine, action_registry, audit, component_seed, variable_resolver, trigger_engine, app_service, module_service, device_service, data_connectors, sdui_state, template_seed, version_service, variable_seed, workflow_seed, calendar_seed |
 | SDUI shared contract helpers | `app/services/sdui_state.py` | Live/draft key helpers, shared validate/apply pipeline, row-aware counters, and broadcast utilities used by REST + MCP |
 | Middleware | `app/middleware/sandbox.py` | Sandbox mode ASGI middleware |
 | MCP | `app/mcp/` | MCP server + shared tool implementations |
@@ -90,7 +90,7 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 
 **Background task `_run_time_alerts()`**: Every 2 minutes, saves a Notification to DB for every connected user and broadcasts a notification via WebSocket. Controlled by `DEMO_TIME_ALERTS` env var — **defaults to true**. Disable in production.
 
-**Routers registered:** auth, modules, chat, calendar, notifications, agent_config, workflows, actions, websocket, users, sessions, audit, components, templates, admin, variables, data_sources, triggers
+**Routers registered:** auth, modules, chat, calendar, notifications, agent_config, workflows, actions, websocket, users, sessions, audit, components, templates, admin, variables, data_sources, triggers, notes, module_versions, apps, devices, articles, settings, todos
 
 **MCP mounted:** `app.mount(settings.mcp_path, _MCPAuthMiddleware(mcp.streamable_http_app()))` → at `/mcp`
 
@@ -98,12 +98,12 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 
 ---
 
-## Database Tables (24 total)
+## Database Tables (28 total)
 
 | Table | Key Fields |
 |-------|------------|
 | `users` | id (UUID PK), username (unique), password_hash, role (admin/user) |
-| `devices` | id, user_id (FK), device_name, device_id (unique), config_json, last_seen |
+| `devices` | id, user_id (FK), device_name, device_id (unique), config_json, last_seen, assigned_app_id (FK → apps), active_app_version_id, preview_session_id, installed_runtime_version, supported_schema_versions, update_status |
 | `sessions` | id, user_id (FK), device_id (FK), token (unique), expires_at, is_active |
 | `chat_messages` | id, user_id (FK), role (user/assistant/system/tool), content, metadata_json |
 | `calendar_events` | id, user_id (FK), title, start_time, end_time, description, color, location, is_all_day |
@@ -115,18 +115,21 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | `audit_logs` | id, user_id, action_type (50, indexed), resource_type (50, indexed), resource_id, details_json, ip_address |
 | `component_registry` | id, type (100, unique, indexed), tier (50), name, icon, description, props_schema (JSON), default_props (JSON), is_active |
 | `sdui_templates` | id, name, description, category (indexed), screen_json (JSON), created_by (FK), is_public |
-| `sdui_screen_history` | id, module_id (100, indexed), user_id (FK), screen_json, version, source (50), is_starred |
+| `sdui_screen_history` | id, module_id (100, indexed), user_id (FK), screen_json, version, source (50), is_starred | **Deprecated** — use `module_versions` for new data |
 | `sandbox_actions` | id, session_id (100, indexed), user_id (FK), method, path (500), request_body (JSON), response_body (JSON), response_code |
 | `custom_variables` | id, user_id (FK), name, value, type (text/number/boolean), description |
 | `data_sources` | id, user_id (FK), name, type, config_json |
 | `trigger_definitions` | id, user_id (FK), name, trigger_type (schedule/data_change/server_event), config_json, action_chain_json, enabled, created_at, updated_at |
-| `apps` | id, user_id (FK), name, icon, splash, theme (JSON), design_tokens (JSON), dark_mode, default_launch_module_id (FK → module_instances), bottom_bar_config (JSON), launchpad_config (JSON) |
+| `apps` | id, user_id (FK), name, icon, splash, theme (JSON), design_tokens (JSON), dark_mode, default_launch_module_id (FK → module_instances), bottom_bar_config (JSON), launchpad_config (JSON), **current_working_draft_id**, **current_published_version_id** |
 | `app_module_refs` | id, app_id (FK), module_instance_id (FK), order, slot_position (0-4 for bottom bar) — junction table for app↔module many-to-many |
-| `module_instances` | id, user_id (FK), module_type, name, icon, description, config_json, status, template_id (FK), created_at, updated_at |
+| `module_instances` | id, user_id (FK), module_type, name, icon, description, config_json, status, template_id (FK), created_at, updated_at, **current_working_draft_id**, **current_version_id** |
 | `settings` | id, user_id (FK, unique), display_name, email, endpoint_url, dark_mode, password_hash |
 | `todos` | id, user_id (FK), text, completed |
 | `articles` | id, user_id (FK), title, source, url, summary_markdown, content_markdown, image_url, published_at |
-| `devices.assigned_app_id` | FK → apps.id (added to existing devices table) |
+| `notes` | id, user_id (FK), title, content | **NEW (FF4)** |
+| `module_working_drafts` | id, module_id (FK), user_id (FK), sdui_json (JSON), last_autosaved_at, base_version_id, validation_status, validation_errors (JSON), dirty | **NEW (FF4)** — replaces old `__draft` ModuleState |
+| `module_versions` | id, module_id (FK), user_id (FK), version_number, display_name, default_timestamp_name, custom_name, sdui_json (JSON), source, parent_version_id, change_summary, validation_status, validation_errors (JSON), schema_version, created_at | **NEW (FF4)** |
+| `preview_sessions` | id, user_id (FK), target_type (web_admin/mobile_device), app_id (FK), module_id (FK), resolved_config_json (JSON), resolved_sdui_json (JSON), device_id (FK), status (active/expired/exited), created_at, expires_at, exited_at | **NEW (FF4)** |
 
 **Divider removed as standalone component:** `Divider` is no longer a standalone cell component per Architecture Decisions Session 9 and Feature Feedback 2. It has been removed from the web editor's `COMPONENT_REGISTRY` and the backend `_VALID_V2_COMPONENT_TYPES` (`mcp/tools.py`). Divider is now a row-level property. The legacy `divider` type remains in `_LEGACY_V2_TYPE_MAP` and `_SDUI_PROPS_FIELDS` for backward compatibility with existing screens, but new screens should use row-level dividers instead.
 
@@ -556,9 +559,11 @@ React Flow graph execution engine with APScheduler (`AsyncIOScheduler(timezone="
 
 Seeds the `component_registry` table on startup with default components. Only inserts if the component type doesn't already exist.
 
-**Atomic components (12):** `text`, `markdown`, `rich_text_renderer`, `button`, `image`, `textinput`, `container`, `divider`, `spacer`, `alert`, `list`, `empty`
+**Atomic components (10):** `text`, `button`, `image`, `icon`, `container`, `divider` (legacy), `spacer`, `alert`, `list`, `empty`
 
-**Composite components (6):** `calendar`, `form`, `todo`, `article_card`, `calendar_module`, `chat_module`, `notes_module`, `input_bar`
+> **FF4 changes:** `markdown` and `textinput` removed (text merged with markdown, TextInput replaced by InputBar). `icon` added as atomic. `rich_text_renderer` remains as legacy alias.
+
+**Composite components (8):** `calendar`, `form`, `todo`, `article_card`, `calendar_module`, `chat_module`, `notes_module`, `input_bar`
 
 > **Note:** `divider` is preserved in the DB seed for backward compatibility with existing screens, but is deprecated as a standalone component.
 
@@ -608,14 +613,18 @@ ASGI middleware that checks for `X-Helm-Sandbox: true` header. When active:
 | `helm_list_screens` | — | List all AI-set screens |
 | `helm_get_screen` | `module_id` | Get current SDUI JSON for a module |
 | `helm_get_draft` | `module_id` | Get pending draft `{screen, has_draft}` for a module |
-| `helm_approve_draft` | `module_id` | Promote draft to live |
-| `helm_reject_draft` | `module_id, feedback?` | Discard pending draft with optional feedback |
+| `helm_approve_draft` | `module_id` | Promote draft to live (legacy — use versioning for new screens) |
+| `helm_reject_draft` | `module_id, feedback?` | Discard pending draft with optional feedback (legacy) |
 | `helm_hide_tab` | `tab_id` | Hide a nav-bar tab |
 | `helm_show_tab` | `tab_id` | Restore hidden tab |
 | `helm_rename_tab` | `tab_id, name?, icon?` | Rename a tab and/or change its emoji icon |
 | `helm_list_tabs` | — | List all tabs with visibility |
+| `helm_create_checkpoint` | `module_id, change_summary?` | **NEW (FF4):** Create a version checkpoint from the working draft |
+| `helm_list_module_versions` | `module_id, limit?, offset?` | **NEW (FF4):** List version history for a module |
+| `helm_restore_version` | `module_id, version_id` | **NEW (FF4):** Restore a version to the working draft |
+| `helm_publish_version` | `module_id, version_id?` | **NEW (FF4):** Publish a version as the live screen |
 
-**Total: 22 MCP tools** (registered in `mcp/server.py` via `@mcp.tool()`). The Agent Proxy (`services/agent_proxy.py`) exposes a **16-tool subset** of these to the in-app LLM.
+**Total: 26 MCP tools** (registered in `mcp/server.py` via `@mcp.tool()`). The Agent Proxy (`services/agent_proxy.py`) exposes an **18-tool subset** of these to the in-app LLM.
 
 ### `mcp/tools.py` — Core Tool Implementations
 
@@ -663,6 +672,100 @@ All tool logic is here; shared between the Agent Proxy (internal) and MCP Server
 | `python-dotenv` | ≥1.0 | `.env` loading |
 | `cryptography` | ≥44.0 | Fernet encryption for credentials |
 | `feedparser` | ≥6.0.0 | RSS feed parsing |
+
+---
+
+## FF4 Changes (2026-05-14)
+
+### New Models
+- **Note** — Simple note CRUD (`notes` table: id, user_id, title, content)
+- **ModuleWorkingDraft** — Replaces old `__draft` ModuleState-based draft system (`module_working_drafts` table: id, module_id, user_id, sdui_json, last_autosaved_at, base_version_id, validation_status, validation_errors, dirty)
+- **ModuleVersion** — Versioned snapshots of module SDUI screens (`module_versions` table: id, module_id, user_id, version_number, display_name, default_timestamp_name, custom_name, sdui_json, source, parent_version_id, change_summary, validation_status, validation_errors, schema_version, created_at)
+- **PreviewSession** — Time-limited preview sessions (`preview_sessions` table: id, user_id, target_type, app_id, module_id, resolved_config_json, resolved_sdui_json, device_id, status, created_at, expires_at, exited_at)
+
+### Enhanced Models
+- **apps** — Added `current_working_draft_id`, `current_published_version_id`
+- **module_instances** — Added `current_working_draft_id`, `current_version_id`
+- **devices** — Added `assigned_app_id`, `active_app_version_id`, `preview_session_id`, `installed_runtime_version`, `supported_schema_versions`, `update_status`
+- **sdui_templates** (class `SDUITemplate`) — Added `current_version_id`
+- New `template_version` relationship via existing version model
+
+### New Routers
+- **notes.py** — Notes CRUD (`GET/POST/PUT/DELETE /api/notes`)
+- **module_versions.py** — Module versioning endpoints: list versions, create checkpoint, restore to draft, rename, publish
+
+### New Services
+- **version_service.py** — Shared version tree logic, timestamp naming, draft-to-version pipeline
+- **variable_seed.py** — Sample custom variable seeding (user.name, app.theme, greeting.morning)
+- **workflow_seed.py** — Sample workflow seeding (Daily Summary, Event Reminder, New Todo Alert)
+- **calendar_seed.py** — Sample calendar event seeding
+
+### Versioning Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| PATCH | `/api/modules/{moduleId}/draft` | ✅ | Update module working draft (autosave) |
+| GET | `/api/modules/{moduleId}/draft` | ✅ | Get module working draft |
+| POST | `/api/modules/{moduleId}/checkpoints` | ✅ | Create checkpoint from working draft |
+| GET | `/api/modules/{moduleId}/versions` | ✅ | List versions |
+| GET | `/api/modules/{moduleId}/versions/{versionId}` | ✅ | Get version detail |
+| PATCH | `/api/modules/{moduleId}/versions/{versionId}/rename` | ✅ | Rename a version |
+| POST | `/api/modules/{moduleId}/versions/{versionId}/restore-to-draft` | ✅ | Restore version to working draft |
+| POST | `/api/modules/{moduleId}/preview/web` | ✅ | Start web admin preview |
+| GET | `/api/modules/{moduleId}/usage` | ✅ | Where this module is used |
+| PATCH | `/api/apps/{appId}/draft` | ✅ | Update app working draft |
+| GET | `/api/apps/{appId}/draft` | ✅ | Get app working draft |
+| POST | `/api/apps/{appId}/checkpoints` | ✅ | Create app checkpoint |
+| GET | `/api/apps/{appId}/versions` | ✅ | List app versions |
+| POST | `/api/apps/{appId}/versions/{versionId}/restore-to-draft` | ✅ | Restore app version to draft |
+| POST | `/api/apps/{appId}/preview/web` | ✅ | Start web admin app preview |
+| POST | `/api/apps/{appId}/preview/device` | ✅ | Start mobile device preview |
+| POST | `/api/apps/{appId}/publish` | ✅ | Publish app version to mobile |
+| GET | `/api/templates/{templateId}/versions` | ✅ | List template versions |
+| POST | `/api/templates/{templateId}/versions` | ✅ | Create template version |
+| POST | `/api/templates/{templateId}/versions/{versionId}/apply` | ✅ | Apply template version to module |
+| GET | `/api/preview-sessions/{sessionId}` | ✅ | Get preview session |
+| POST | `/api/preview-sessions/{sessionId}/exit` | ✅ | Exit preview session |
+| POST | `/api/preview-sessions/{sessionId}/extend` | ✅ | Extend preview session |
+| GET | `/api/devices/{deviceId}/status` | ✅ | Get device status with version info |
+| POST | `/api/devices/{deviceId}/exit-preview` | ✅ | Exit device preview mode |
+
+### Validation Pipeline
+New `validation_service.py` validates SDUI screens at multiple stages:
+- Autosave validation (lightweight schema check)
+- Checkpoint/version validation (component types, actions, data bindings)
+- App preview validation (bottom bar slots, Launchpad, modules)
+- Publish validation (device compatibility, runtime version check)
+
+### Component Type Sync
+`_VALID_V2_COMPONENT_TYPES` in `mcp/tools.py` updated to include:
+- `TodoModule`, `ArticleCardModule` — added alongside existing `Todo`/`ArticleCard` for mobile registry alignment
+- `RichTextRenderer` — added for MCP validation consistency
+- `Empty` — synchronized across all three layers (backend, mobile, web)
+
+### New MCP Tools
+- `helm_create_checkpoint` — Save a versioned snapshot from the working draft
+- `helm_list_module_versions` — List version history for a module
+- `helm_restore_version` — Restore a version to the working draft
+- `helm_publish_version` — Publish a version as the live screen
+
+### WebSocket Events (New)
+- `preview_session_started` — Mobile enters preview mode with preview config
+- `app_version_published` — New app version published to mobile devices
+
+### Notes CRUD
+Complete REST endpoints for notes (`/api/notes`). Wired to the NotesModule composite component on mobile.
+
+### Sample Data Seeding
+- **Workflows:** "Daily Summary" (9am notification with today's events), "Event Reminder" (15 min before calendar events), "New Todo Alert" (notifies when todo added)
+- **Variables:** `user.name`, `app.theme`, `greeting.morning`
+- **Calendar events:** Sample events for demo purposes
+
+### ScreenHistory Migration
+The existing `sdui_screen_history` table is deprecated in favor of `module_versions`. New code writes to `module_versions` only. The old table and APIs remain for backward compatibility with existing data.
+
+### Template Seed Validation
+All seed `screen_json` payloads validated against `validate_sdui_screen_payload()` at startup (logged as warnings on failure). Templates rewritten to use only real, working component types (no fake/placeholder components).
 
 ---
 

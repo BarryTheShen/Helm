@@ -2,8 +2,8 @@
 
 How to run, configure, and edit every part of the stack.
 
-> Last updated: 2026-05-07
-> Last audit: 2026-05-07 — ✅ All systems operational (run `cd backend && pytest -q` and `cd qa && npx playwright test` for current counts)
+> Last updated: 2026-05-14 (FF4: Docker bundled deployment, single port, test count update)
+> Last audit: 2026-05-14 — ✅ FF4 fully implemented
 
 ---
 
@@ -117,7 +117,7 @@ pytest tests/test_auth.py      # single file
 pytest --cov=app               # with coverage
 ```
 
-Test files (18 total):
+Test files (23 total):
 | File | Covers |
 |------|--------|
 | `tests/test_auth.py` | Registration, login, lockdown, JWT |
@@ -137,6 +137,12 @@ Test files (18 total):
 | `tests/test_data_sources.py` | Data source management |
 | `tests/test_modules.py` | Module and SDUI screen management |
 | `tests/test_sdui_parity.py` | Row-first validate/apply parity, proxy tool defs, streamed message_id reuse |
+| `tests/test_apps.py` | App CRUD, bottom bar config |
+| `tests/test_devices.py` | Device registration, app assignment |
+| `tests/test_settings.py` | Settings CRUD |
+| `tests/test_todos.py` | Todo CRUD |
+| `tests/test_module_install.py` | Module install flow |
+| `tests/test_workflow_engine_unit.py` | Workflow engine unit tests (graph execution) |
 
 ### User management (CLI)
 
@@ -285,6 +291,45 @@ After the first user is created, `POST /auth/setup` is permanently locked (retur
 cd web
 npm run build    # outputs to web/dist/
 ```
+
+### Production Build (Docker Bundled)
+
+**NEW in FF4:** Backend + web admin bundled in a single Docker container. The Python FastAPI server serves the compiled web admin static files.
+
+```bash
+# Build
+docker compose build
+
+# Run (single service on port 8000)
+docker compose up -d
+
+# Check logs
+docker compose logs -f helm
+
+# Stop
+docker compose down
+```
+
+**Configuration:** `docker-compose.yml` at repo root. Environment variables passed through from `.env` (required: `ENCRYPTION_KEY`, `SECRET_KEY`). Persistent SQLite data volume at `helm-data:/app/data`.
+
+**Architecture:**
+- `Dockerfile` at repo root: multi-stage build (Node 20-alpine for web build → Python 3.11-slim for runtime)
+- `docker-compose.yml`: single service exposing port 8000
+- `SERVE_STATIC=true` env var enables static file serving in production
+- API routes (`/api/*`, `/auth/*`, `/ws/*`, `/mcp/*`) take precedence over static files
+- `/` and `/admin` routes serve the web admin SPA with client-side routing fallback
+
+**Port 8000 serves everything:**
+| URL | What it is |
+|-----|-----------|
+| `http://localhost:8000/` | Web admin (production) |
+| `http://localhost:8000/admin` | Web admin SPA fallback |
+| `http://localhost:8000/api/...` | REST API |
+| `http://localhost:8000/ws` | WebSocket |
+| `http://localhost:8000/mcp` | MCP server |
+| `http://localhost:8000/docs` | Swagger UI |
+
+In development, use the separate Vite dev server (`cd web && npm run dev`) for hot reload. The `SERVE_STATIC` env var is `false` by default (development mode).
 
 ### Pages
 
