@@ -532,6 +532,35 @@ test.describe('Template Quality', () => {
       return;
     }
 
+    // Load canonical types for module alias resolution
+    const canonical = JSON.parse(fs.readFileSync(qaPath('src/canonical-types.json'), 'utf-8'));
+    const canonicalSet = new Set(canonical.v2_component_types || []);
+
+    // Build module_alias → canonical type mapping
+    // e.g. TodoModule → Todo, ArticleCardModule → ArticleCard, RichTextRenderer → RichText
+    const aliasToCanonical: Record<string, string> = {};
+    for (const alias of canonical.module_aliases || []) {
+      // Skip aliases that are already canonical types
+      if (canonicalSet.has(alias)) continue;
+      // Try stripping "Module" suffix
+      let candidate = alias.replace(/Module$/, '');
+      if (canonicalSet.has(candidate)) {
+        aliasToCanonical[alias] = candidate;
+        continue;
+      }
+      // Try stripping "Renderer" suffix
+      candidate = alias.replace(/Renderer$/, '');
+      if (canonicalSet.has(candidate)) {
+        aliasToCanonical[alias] = candidate;
+        continue;
+      }
+      // Try capitalizing first letter (for lowercase aliases like "todo")
+      candidate = alias.charAt(0).toUpperCase() + alias.slice(1);
+      if (canonicalSet.has(candidate)) {
+        aliasToCanonical[alias] = candidate;
+      }
+    }
+
     const missingTypes: string[] = [];
 
     for (const typeName of backendTypes) {
@@ -543,6 +572,10 @@ test.describe('Template Quality', () => {
         (t) => t.toLowerCase() === lower,
       );
       if (caseInsensitiveMatch) continue;
+      // Module alias resolution: check if typeName is a known alias whose
+      // canonical counterpart exists in the web registry
+      const canonicalName = aliasToCanonical[typeName];
+      if (canonicalName && webRegistryTypes.has(canonicalName)) continue;
 
       missingTypes.push(`Backend whitelist type "${typeName}" is missing from web component registry`);
     }

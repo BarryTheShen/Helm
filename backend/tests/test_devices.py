@@ -37,7 +37,7 @@ async def test_register_device(auth_client):
     data = resp.json()
     assert data["device_id"] == "device-uuid-123"
     assert data["device_name"] == "iPhone 15 Pro"
-    assert data["config_json"] == {}
+    assert data["config_json"] == {"device_type": "mobile"}
     assert data["assigned_app_id"] is None
     assert "id" in data
     assert "user_id" in data

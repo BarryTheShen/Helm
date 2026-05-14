@@ -1021,7 +1021,11 @@ async def test_mcp_set_screen_rejects_container_child_without_type(
         await set_screen(module_id="home", screen=invalid_screen, user_id=user_id)
 
 
-@pytest.mark.parametrize("component_type", ["Todo", "RichText", "ArticleCard"])
+@pytest.mark.parametrize("component_type", [
+    "Todo", "TodoModule",
+    "RichText", "RichTextRenderer",
+    "ArticleCard", "ArticleCardModule",
+])
 async def test_mcp_set_screen_accepts_widget_types_registered_in_mobile(
     auth_client,
     db_session,
@@ -1175,5 +1179,10 @@ def test_set_screen_tool_schema_requires_component_type() -> None:
     )
     type_enum = content_schema["properties"]["type"]["enum"]
     # Must at least include the core + widget types registered in mobile/src/renderer/componentRegistry.ts
-    for required_type in ("Text", "Button", "Container", "Todo", "RichText", "ArticleCard"):
+    for required_type in (
+        "Text", "Button", "Container",
+        "Todo", "TodoModule",
+        "RichText", "RichTextRenderer",
+        "ArticleCard", "ArticleCardModule",
+    ):
         assert required_type in type_enum

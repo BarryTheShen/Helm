@@ -17,7 +17,7 @@ export const TemplatesPage = {
   applyAsDraftBtn: 'button:has-text("Apply as Draft")',
   applyCancelBtn: 'button:has-text("Cancel")',
   loadingMsg: 'text=Loading templates...',
-  emptyMsg: 'text=No templates found. Create one from the Visual Editor.',
+  emptyMsg: 'text=No templates found. Create one from the Module Editor.',
   categoryBadge: '.rounded-full.text-xs.font-medium',
   publicBadge: 'text=Public',
 };

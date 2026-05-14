@@ -36,11 +36,11 @@ async function addComponentToFirstCell(page: Page, componentName: string) {
 
   // Component picker popover should appear - find the component in the list
   // The picker shows display names which may differ from type names:
-  // e.g. type="TextInput" → displayName="Text Input"
+  // e.g. type="InputBar" → displayName="Input Bar"
   // Try exact match first, then fall back to CamelCase→spaced conversion
   let componentBtn = page.getByText(componentName, { exact: true }).first();
   if (await componentBtn.count() === 0) {
-    // Convert CamelCase type names to display names: "TextInput" → "Text Input"
+    // Convert CamelCase type names to display names: "InputBar" → "Input Bar"
     const spacedName = componentName
       .replace(/([a-z])([A-Z])/g, '$1 $2')
       .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2');
@@ -154,18 +154,18 @@ test('Calendar variant persists after re-selecting row', async ({ page, login })
 });
 
 // ---------------------------------------------------------------------------
-// Test: TextInput renders as input, not select dropdown (Issue 17)
+// Test: InputBar renders with input field (was TextInput before FF4 removal)
 // ---------------------------------------------------------------------------
-test('TextInput renders as an input field', async ({ page, login }) => {
+test('InputBar renders with an input field', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
   await page.waitForLoadState('networkidle');
 
   await ensureEmptyCellExists(page);
-  await addComponentToFirstCell(page, 'TextInput');
+  await addComponentToFirstCell(page, 'InputBar');
 
-  // Verify it renders as an input (has type="text")
-  // TextInputPreview renders <input type="text"> or <textarea>
+  // Verify it renders with an input (has type="text")
+  // InputBarPreview renders <input type="text">
   const inputInCanvas = page.locator(EditorPage.canvas).locator('input[type="text"]').first();
   const textareaInCanvas = page.locator(EditorPage.canvas).locator('textarea').first();
 
@@ -174,17 +174,17 @@ test('TextInput renders as an input field', async ({ page, login }) => {
 
   expect(
     hasInput > 0 || hasTextarea > 0,
-    'TextInput should render as an input or textarea, not a select dropdown'
+    'InputBar should render with an input or textarea, not a select dropdown'
   ).toBe(true);
 
   // Also verify it is NOT a select element inside the canvas
   const selectsInCanvas = page.locator(EditorPage.canvas).locator('select');
   expect(
     await selectsInCanvas.count(),
-    'TextInput preview should NOT contain a select element inside canvas'
+    'InputBar preview should NOT contain a select element inside canvas'
   ).toBe(0);
 
-  await page.screenshot({ path: 'results/screenshots/textinput-as-input.png' });
+  await page.screenshot({ path: 'results/screenshots/inputbar-as-input.png' });
 });
 
 // ---------------------------------------------------------------------------

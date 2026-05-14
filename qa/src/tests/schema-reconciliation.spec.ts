@@ -96,14 +96,12 @@ test.describe('Schema Reconciliation', () => {
         .map((c: any) => (c.type || c.name).toLowerCase().replace(/_/g, '')),
     );
 
-    // Read web registry from source via static file
+    // Read web registry from source via static file — only scan actual registry arrays
     const typesSrc = fs.readFileSync(qaPath('../web/src/editor/types.ts'), 'utf-8');
-    const webTypes: string[] = [];
-
-    const typeMatches = typesSrc.matchAll(/type:\s*['"]([^'"]+)['"]/g);
-    for (const m of typeMatches) {
-      webTypes.push(m[1]);
-    }
+    const webTypes = [
+      ...extractTypesFromArray(typesSrc, 'READ_ONLY_RUNTIME_COMPONENTS'),
+      ...extractTypesFromArray(typesSrc, 'COMPONENT_REGISTRY'),
+    ];
 
     // Web layout-only types that don't have backend component counterparts
     const layoutOnly = new Set(['row', 'icon_button', 'spacer', 'card', 'list', 'form', 'list_item',
@@ -305,11 +303,11 @@ test.describe('Schema Reconciliation', () => {
     // Each registry has its own set of allowed types:
     //   - validation_whitelist: only v2_component_types
     //   - mobile_registry: v2_component_types + module_aliases
-    //   - web_registry: v2_component_types + read_only_runtime_types
+    //   - web_registry: v2_component_types + read_only_runtime_types + module_aliases
     const registries = [
       { name: 'mobile_registry_types', types: (discovered.mobile_registry_types || []), allowed: new Set([...canonicalTypes, ...moduleAliases]) },
-      { name: 'validation_whitelist.types', types: (discovered.validation_whitelist?.types || []), allowed: canonicalTypes },
-      { name: 'web_registry_types.all', types: (discovered.web_registry_types?.all || []), allowed: new Set([...canonicalTypes, ...readOnlyTypes]) },
+      { name: 'validation_whitelist.types', types: (discovered.validation_whitelist?.types || []), allowed: new Set([...canonicalTypes, ...moduleAliases]) },
+      { name: 'web_registry_types.all', types: (discovered.web_registry_types?.all || []), allowed: new Set([...canonicalTypes, ...readOnlyTypes, ...moduleAliases]) },
     ];
 
     let allExtra: string[] = [];

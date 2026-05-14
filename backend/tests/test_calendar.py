@@ -8,10 +8,20 @@ pytestmark = pytest.mark.anyio
 EVENTS = "/api/calendar/events"
 
 
-async def test_list_events_empty(auth_client):
+async def test_list_events_seeded(auth_client):
+    """First GET seeds demo events, then returns them."""
     resp = await auth_client.get(EVENTS)
     assert resp.status_code == 200
-    assert resp.json()["events"] == []
+    data = resp.json()
+    assert "events" in data
+    # Should have seeded events
+    assert len(data["events"]) > 0
+    # Verify event shape
+    ev = data["events"][0]
+    assert "id" in ev
+    assert "title" in ev
+    assert "start_time" in ev
+    assert "end_time" in ev
 
 
 async def test_create_event(auth_client):
@@ -49,6 +59,9 @@ async def test_create_event_with_optional_fields(auth_client):
 
 
 async def test_list_events_after_create(auth_client):
+    resp = await auth_client.get(EVENTS)
+    initial_count = len(resp.json()["events"])
+
     await auth_client.post(
         EVENTS,
         json={
@@ -60,8 +73,9 @@ async def test_list_events_after_create(auth_client):
     resp = await auth_client.get(EVENTS)
     assert resp.status_code == 200
     events = resp.json()["events"]
-    assert len(events) == 1
-    assert events[0]["title"] == "Stand-up"
+    assert len(events) == initial_count + 1
+    # Our event should be somewhere in the list
+    assert any(e["title"] == "Stand-up" for e in events)
 
 
 async def test_get_event_by_id_via_list(auth_client):

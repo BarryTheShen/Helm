@@ -115,7 +115,7 @@ test('Issue 13: markdown content renders as HTML heading, not raw text', async (
     // Fallback: check for an <h1> or heading element in the preview/canvas
     // Give ReactMarkdown time to finish rendering
     await page.waitForTimeout(500);
-    const heading = page.locator('h1, h2, h3').first();
+    const heading = page.locator('[data-testid="editor-canvas"] h1, [data-testid="editor-canvas"] h2, [data-testid="editor-canvas"] h3').first();
     const headingCount = await heading.count();
     if (headingCount > 0) {
       const text = await heading.textContent();
