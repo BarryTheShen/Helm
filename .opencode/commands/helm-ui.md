@@ -29,6 +29,16 @@ For visual/screenshot review, delegate to `helm-ui-reviewer`. It is a visual/UI 
 UI review runs automatically for all UI-visible changes — it is no longer rare. The standard flow is:
 1. Implementation → tester live/e2e check → UI reviewer visual/exhaustive sweep → fix issues → re-test.
 
+### Feature Feedback / Product-Spec Mode
+
+When `$ARGUMENTS` involves UI work driven by a Feature Feedback document or product spec:
+
+- **Requirement ID references required** — UI implementation must reference REQ-IDs from `.helm-sessions/current/requirements-ledger.md`. Each UI change should map to specific requirement IDs.
+- **QA mode determines test depth** — If a REQ-ID has QA mode `automated-test`, write automated Playwright/pytest tests. If `manual-flow-test`, produce a manual test script. If `review-only`, code inspection is sufficient.
+- **Acceptance criteria as checklist** — `helm-ui-reviewer` uses the ledger's acceptance criteria as the visual/UX review checklist.
+- **Workflow-aware QA** — Test realistic multi-step user journeys (not just static page inspection): login → navigate → perform action → verify result. Test round trips (create → edit → delete), save/reload persistence, and preview/publish propagation.
+- **Original complaint reproduction** — If fixing a bug from Feature Feedback, reproduce the original complaint (with `helm-tester`) before implementing. Verify the fix resolves the original issue AND passes acceptance criteria.
+
 ### Exhaustive Page Sweep
 
 For significant UI pages (dashboard, editor, preview, templates, etc.), `helm-ui-reviewer` performs an exhaustive page sweep covering:

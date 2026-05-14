@@ -28,6 +28,7 @@ Helm is a self-hosted AI super app — a React Native (Expo) mobile frontend tha
 | Blueprint specs | `docs/Agentic AI Super App — Project Hub/Blueprint — Production Spec Documents/` |
 | AI workflow details | `docs/ai/` |
 | OpenCode model policy | `docs/ai/opencode-models.md` |
+| Feature Feedback workflow | `docs/ai/workflows.md` (Feature Feedback section) |
 
 ---
 

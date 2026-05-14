@@ -41,6 +41,15 @@ This combines the previous `reviewer` and `feature-validator` responsibilities.
 - Check `qa/results/` for recent test run results.
 - Use QA discovery output as evidence, not as a pass/fail gate.
 
+### Feature Feedback / Product-Spec Mode
+
+When `$ARGUMENTS` involves a Feature Feedback document, product spec, or requirements-driven feature:
+
+- **Require `product-completeness-matrix.md`** — the review must read and verify `.helm-sessions/current/product-completeness-matrix.md` (produced by `helm-reviewer`). Each REQ-ID must have a verdict (PASS/FAIL/PARTIAL/NOT TESTED).
+- **Require `coverage-gate.md`** — the review must read and verify `.helm-sessions/current/coverage-gate.md`. The gate must be OPEN (all must-have requirements PASS) for the work to proceed.
+- **Source context verification** — compare the implementation against the original source context in `requirements-ledger.md` ("Source document/page" and "Context notes" columns), not just against the plan. If the plan lost nuance from the source document, that is a review finding.
+- **Overrides above** — For FF/product-spec work, the product completeness review (matrix + gate) takes priority over the standard checklist below.
+
 ## Rules
 
 - All agents in this workflow are READ-ONLY. No automatic fixes.

@@ -96,6 +96,16 @@ For each claim in the plan, explore only the exact files/symbols to verify:
 - Does the plan address every requirement listed in `requirements-checklist.md`?
 - Are there gaps or unspecified behavior?
 
+### 9. FF/product-spec: Requirements-ledger alignment
+For Feature Feedback / product-spec work (when `.helm-sessions/current/requirements-ledger.md` exists):
+
+- Read `.helm-sessions/current/requirements-ledger.md` and verify the plan against it.
+- **Reject plans with vague paraphrases and no REQ-IDs** — every implementation step must reference specific requirement IDs.
+- **Reject plans that skip required QA mode or acceptance criteria** — if a REQ-ID has QA mode `automated-test` or `manual-flow-test`, the plan must include a testing strategy for it. If acceptance criteria are defined, the plan must explain how they will be verified.
+- **Reject plans that claim too broad a slice** — a single plan step should not claim more REQ-IDs than one agent can implement in one pass (typically 3-5 REQ-IDs per slice, depending on complexity). Flag slices with 10+ REQ-IDs as potentially too broad.
+- **Verify concrete implementation approach** — for every REQ-ID in the plan's scope, confirm the plan has a concrete implementation approach (specific files to edit, patterns to follow) and references the acceptance criteria.
+- **Check included vs excluded REQ-IDs** — if the "Scope control" section lists explicitly excluded REQ-IDs, verify those exclusions are justified and documented.
+
 ## Output format
 
 ### If objections found — write to critic-report.md AND return to planner:

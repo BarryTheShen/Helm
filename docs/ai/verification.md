@@ -105,3 +105,51 @@ find backend/app/services -name '*.py' ! -name '__init__*.py' | wc -l
 - [ ] No hardcoded secrets in diff
 - [ ] Docs updated if behavior/API/architecture changed (not for every commit)
 - [ ] Feature completeness verified against requirements-checklist.md (for feature-level changes)
+
+## Feature Feedback / Product-Spec Verification
+
+For Feature Feedback / product-spec work, verification extends beyond layer-specific commands to ensure every requirement is traceable through implementation and testing.
+
+### Layered Smart QA
+
+"Smart QA" is a layered system, not magic. The layers are:
+
+1. **Structural discovery** — automated endpoint/schema/component discovery (existing `qa/src/discover.cjs`)
+2. **Deterministic E2E tests** — Playwright tests with resilient user-facing locators (`getByRole`, `getByLabel`, `getByText`)
+3. **BDD-style acceptance scenarios** — Given-When-Then scenarios derived from acceptance criteria in the requirements ledger
+4. **Manual test scripts** — for requirements where automation is impractical (produced in `qa-plan.md`)
+5. **Traceability review** — cross-reference every REQ-ID against implementation and test evidence
+
+No single layer catches all failure modes. Each is necessary.
+
+### Requirement-Derived QA
+
+For FF work, QA mode is set per requirement in the requirements ledger:
+
+| QA Mode | What To Do |
+|---------|------------|
+| `automated-test` | Write Playwright/pytest tests with resilient user-facing locators. Verify passes before shipping. |
+| `manual-flow-test` | Produce step-by-step manual test script with expected outcomes. Include in `qa-plan.md`. |
+| `review-only` | Code inspection checklist. Reviewer verifies acceptance criteria manually. |
+| `deferred` | Intentionally skipped. Noted in coverage gate with reason. Must be explicitly approved. |
+
+### Workflow-Aware QA Checklist
+
+Beyond structural checks, QA for FF work must cover:
+
+- **User journeys** — realistic multi-step flows end-to-end, not isolated component checks
+- **Round-trip tests** — create → read → update → delete cycle for every data entity
+- **Save/reload persistence** — data survives page refresh and full browser restart
+- **Preview/publish propagation** — changes in editor appear correctly in preview and published views
+- **Original complaint reproduction** — verify the exact scenario from the bug report passes
+- **Unintended side effects** — regression check on related features, not just the changed ones
+
+### qa-plan.md
+
+For FF sessions, `qa-plan.md` in `.helm-sessions/current/` lists how each REQ-ID will be tested. Format:
+
+| REQ ID | Test Approach | Test Location / Script | Status |
+|--------|---------------|----------------------|--------|
+| `FF4-DASH-001` | automated-test | `qa/tests/dashboard.spec.ts` | planned |
+| `FF4-DASH-002` | manual-flow-test | `.helm-sessions/current/manual-scripts/dash-002.md` | planned |
+| `FF4-DASH-003` | review-only | Reviewer checklist item | planned |

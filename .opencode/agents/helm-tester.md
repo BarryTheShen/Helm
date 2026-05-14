@@ -41,13 +41,13 @@ Default behavior: read-only. Run tests, inspect output, report findings.
 - QA e2e: `cd qa && npx playwright test --project e2e` (conditional — UI behavior changes only)
 - Full QA: `cd qa && npm test` (large features, PR readiness)
 
-### React Doctor Diagnostics (conditional)
+### React Doctor Diagnostics (MANDATORY)
 
-Run React Doctor when changes touch: web/, mobile/, SDUI renderer, editor UI, templates, React components, hooks, state/effects, accessibility, or frontend architecture.
+React Doctor is MANDATORY for any task that touches React or React Native components. This includes: web/, mobile/, SDUI renderer, editor UI, templates, React components, hooks, state/effects, accessibility, frontend architecture.
 
-Prefer diff mode for targeted changes:
+Run in diff mode for targeted changes. The `<path>` must be `web` for web admin changes, `mobile` for React Native changes, or a space-separated list for both:
 ```
-npx -y react-doctor@latest . --diff origin/modernize/import-libraries --offline --json
+npx -y react-doctor@latest <path> --diff origin/dev --offline --json
 ```
 
 Use full scan only for broad audits (Barry explicitly requests, or major React architecture changes):
@@ -55,13 +55,65 @@ Use full scan only for broad audits (Barry explicitly requests, or major React a
 npx -y react-doctor@latest . --yes --full --offline --json
 ```
 
-Summarize in .helm-sessions/current/verification-report.md:
+React Doctor **complements** (does NOT replace) the existing test suites (pytest, e2e, lint, tsc). Pass all existing checks AND resolve React Doctor findings.
+
+Include React Doctor output in every verification report when components changed. Summarize in .helm-sessions/current/verification-report.md:
 - Health score
 - Blocking diagnostics (with file paths)
 - Warnings (with file paths)
 - Affected files
 
-Do NOT treat every warning as an automatic blocker. Classify findings: blocking vs. warning vs. informational.
+Diagnose React Doctor findings the same way you diagnose test failures:
+- **Blocking:** Hook rule violations, stale closures causing data bugs, missing deps causing infinite loops, render errors
+- **Major:** Missing deps on performance-critical effects, unnecessary re-renders, fragile patterns
+- **Minor:** Style-only warnings, naming conventions, informational suggestions
+- Report root cause with file path, pattern, and recommended fix
+- Hand implementation to helm-frontend — you diagnose, you do NOT fix React component issues
+
+## Requirement-Derived QA
+
+For FF/product-spec work (when `.helm-sessions/current/requirements-ledger.md` exists), QA is derived from the requirements ledger, not just structural discovery. Each REQ-ID's QA mode determines the testing approach:
+
+- **`automated-test`** — Write or run Playwright (web) or pytest (backend) tests that directly verify the acceptance criteria. Reference the REQ-ID in test names or comments.
+- **`manual-flow-test`** — Produce a manual test script covering: steps to reproduce, expected outcomes, acceptance criteria verification, and evidence capture instructions (screenshots, console logs, network traces). Save to `.helm-sessions/current/` if appropriate.
+- **`review-only`** — Code inspection checklist: verify the implementation matches acceptance criteria without running the application. Include static analysis evidence (type checks, lint output, React Doctor diagnostics).
+- **`deferred`** — Note as intentionally skipped. Do not run tests. Flag in the verification report with reason for deferral.
+
+After testing, update the QA evidence column in `requirements-ledger.md` for the REQ-IDs you verified.
+
+## Workflow-Aware QA
+
+Beyond structural/unit checks, test realistic user journeys when UI behavior changed:
+
+- **User journeys** — Test multi-step realistic flows (e.g., create a screen → add rows → preview → approve → verify live), not just isolated components.
+- **Round-trip tests** — Create → Read → Update → Delete cycles. Verify persistence across each step.
+- **Save/reload persistence** — Save data, reload the page (or restart the app), verify data is still present and correct.
+- **Preview/publish propagation** — For SDUI: verify that changes in the editor propagate to preview and then to the published app.
+- **Original complaint reproduction** — For bug fixes driven by Feature Feedback: reproduce the exact scenario Barry reported before diagnosing and fixing. Verify the fix resolves the original complaint.
+- **Unintended side effects** — Run regression checks on related features that might be affected by the change.
+
+### Layered QA Philosophy
+
+"Smart QA" is layered, not magic. Each layer builds on the previous:
+
+1. **Structural discovery** — API endpoints exist, routes resolve, components register (`qa/src/discover.cjs`)
+2. **Deterministic automated tests** — pytest, Playwright e2e, unit tests
+3. **BDD-style acceptance scenarios** — Feature-level flows derived from requirements acceptance criteria
+4. **Manual test scripts** — Step-by-step scripts for flows that cannot be fully automated
+5. **Traceability review** — Every REQ-ID mapped to test evidence in `requirements-ledger.md`
+
+### QA Plan Artifact
+
+For FF/product-spec sessions, produce `.helm-sessions/current/qa-plan.md` listing how each REQ-ID will be tested:
+
+```
+# QA Plan
+
+| REQ-ID | QA Mode | Test Strategy | Evidence Type | Owner |
+|--------|---------|---------------|---------------|-------|
+| REQ-FF4-001 | automated-test | Playwright e2e for save flow | Screenshot + assertion | helm-tester |
+| REQ-FF4-002 | manual-flow-test | Manual: create -> edit -> delete | Screenshots + console log | helm-tester |
+```
 
 ## Output format
 When tests PASS:

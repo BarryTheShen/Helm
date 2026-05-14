@@ -16,6 +16,20 @@ Plan the implementation strategy for: $ARGUMENTS
 3. Produce a step-by-step implementation plan with file-level specificity.
 4. Surface trade-offs and edge cases before any code is written.
 
+### Feature Feedback / Product-Spec Mode
+
+When `$ARGUMENTS` involves a Feature Feedback document, product spec, or detailed feature request:
+
+1. **First, invoke `helm-requirements-auditor`** to produce the requirements ledger (`requirements-ledger.md`), audit (`requirements-audit.md`), implementation slices (`implementation-slices.md`), and source index (`source-index.md`).
+2. **Wait for APPROVED status** from the auditor. If OBJECTIONS are returned, relay them — do not proceed to planning.
+3. **Proceed with standard planning** — but now the plan is ledger-guided and REQ-ID-referenced.
+4. **Plan must include:**
+   - Included REQ-IDs (which requirements are in scope)
+   - Excluded REQ-IDs (which requirements are explicitly out of scope, with reason)
+   - Each implementation step referencing specific REQ-IDs (e.g., `Step 1: Implement REQ-FF4-001..003`)
+
+Barry's request like "fix Feature Feedback 4" should trigger the full chain: auditor → planner → critic → implementation — without requiring separate prompts for each step.
+
 ## Rules
 
 - Read-only. No code changes, no bash.

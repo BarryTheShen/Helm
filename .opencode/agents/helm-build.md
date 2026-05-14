@@ -39,6 +39,39 @@ Must not edit: `.opencode/agents/`, `.opencode/commands/`, `docs/` (unless expli
 - Mobile changes: `cd mobile && npx expo start` smoke check
 - Run verification proportional to what changed (see `docs/ai/verification.md`)
 
+## Feature Feedback / Product-Spec Mode
+
+This mode applies when implementation is driven by `.helm-sessions/current/requirements-ledger.md`, `.helm-sessions/current/implementation-slices.md`, and `.helm-sessions/current/requirements-audit.md` — artifacts produced by `helm-requirements-auditor`.
+
+### Claiming slices
+
+1. Read `.helm-sessions/current/implementation-slices.md` to identify which slice(s) you are implementing.
+2. Read `.helm-sessions/current/requirements-ledger.md` to understand the specific REQ-IDs and their acceptance criteria.
+3. Read `.helm-sessions/current/requirements-audit.md` for any flags (INSUFFICIENT_AC, NEEDS_CONTEXT) that affect your slice.
+
+### Implementation discipline
+
+- **Implement only your claimed REQ-IDs.** Do not implement requirements outside your slice.
+- **Update evidence for specific REQ-IDs only.** After implementing a requirement, note the evidence (file paths, test results, screenshots) in the implementation summary.
+- **Do NOT claim broad completion.** If you implement 3 of 5 REQ-IDs in your slice, report partial completion — do not claim the slice is done.
+- **Leave unimplemented IDs as not-started / deferred / not-tested.** Do not silently omit them from your output. Every REQ-ID in your slice must be accounted for.
+
+### Updating the ledger
+
+After implementing a slice, update the evidence column in `.helm-sessions/current/requirements-ledger.md`:
+- Add an **Implementation Evidence** column entry for each REQ-ID you handled.
+- Format: `[Implemented in: file/path.py, file/path.tsx]` with relevant file paths.
+- Do NOT modify requirement IDs, source references, acceptance criteria, or other columns.
+
+### Reporting
+
+When returning results, include:
+- **Slice implemented:** which slice(s) were worked on
+- **REQ-IDs completed:** list of REQ-IDs with evidence
+- **REQ-IDs not completed:** list with reason (deferred, needs clarification, blocked)
+- **Evidence summary:** file paths, test output, screenshots per REQ-ID
+- **QA-touched REQ-IDs:** which requirements have test coverage
+
 ## Output format
 Return a summary of:
 - What was changed (files, what)

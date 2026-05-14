@@ -70,6 +70,26 @@ You manage the `.helm-sessions/current/` session workspace. You create, archive,
 | `current-plan.md` | Only when planning begins (orchestrator delegates to planner) | Implementation plan |
 | `critic-report.md` | Only when critique begins (plan-critic agent) | Critic findings |
 | `verification-report.md` | Only when verification begins (tester/reviewer) | Test results, review findings |
+| `source-index.md` | FF/product-spec session init only (stub) | Source document to requirement ID mapping |
+| `requirements-ledger.md` | FF/product-spec session init only (stub) | Atomic requirements table with REQ-IDs |
+| `requirements-audit.md` | FF/product-spec session init only (stub) | Audit findings (MISSING, AMBIGUOUS, etc.) |
+| `implementation-slices.md` | FF/product-spec session init only (stub) | Dependency-ordered implementation slices |
+| `qa-plan.md` | FF/product-spec session init only (stub) | How each REQ-ID will be tested |
+| `product-completeness-matrix.md` | FF/product-spec session init only (stub) | Implementation vs ledger traceability matrix |
+| `coverage-gate.md` | FF/product-spec session init only (stub) | Gate summary: total REQ-IDs, PASS/FAIL counts |
+
+### Feature Feedback / Product-Spec Stubs
+
+For FF/product-spec sessions, the 7 stub files above are initialized with headers only (e.g., `# Source Index`, `# Requirements Ledger`). They serve as placeholders — `helm-requirements-auditor`, `helm-planner`, `helm-tester`, and `helm-reviewer` populate them as the workflow progresses.
+
+Stub template for each FF stub file:
+```
+# [Title]
+
+Status: Not populated yet.
+Owner: [owning agent].
+Notes: Populated during the FF/product-spec workflow.
+```
 
 ### Requirements Checklist Stub
 

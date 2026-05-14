@@ -62,11 +62,75 @@ Tests passing is NOT sufficient — product requirements must be independently v
 
 React Doctor output (if available) is supporting evidence, not the whole review.
 
+## Feature Feedback / Product-Spec Mode
+
+For FF/product-spec work (when `.helm-sessions/current/requirements-ledger.md` exists), **product completeness review is PRIMARY** and code quality review is SECONDARY. The implementation must be verified against the atomic requirements ledger and original source context, not just against the plan.
+
+### Primary: Product completeness review
+
+Compare the implementation against:
+1. `.helm-sessions/current/requirements-ledger.md` — every REQ-ID in scope must have matching implementation evidence.
+2. Original source documents referenced in the ledger's "Source document/page" column — verify the implementation matches the full source context, not a lossy summary.
+3. `.helm-sessions/current/requirements-audit.md` — verify that flagged items (INSUFFICIENT_AC, NEEDS_CONTEXT) were addressed or explicitly deferred.
+
+### Artifact: product-completeness-matrix.md
+
+Write `.helm-sessions/current/product-completeness-matrix.md` with the following columns:
+
+| Column | Description |
+|--------|-------------|
+| **Requirement ID** | REQ-ID from the ledger |
+| **Source/Context** | Source document reference + context summary |
+| **Implementation Evidence** | File paths, screenshots, or other evidence the implementation exists |
+| **QA/Manual Evidence** | Test results, manual test scripts, or inspection notes verifying correctness |
+| **Verdict** | PASS / FAIL / PARTIAL / NOT TESTED |
+
+Rules for verdicts:
+- **PASS** — Implementation evidence exists AND QA/manual evidence confirms it works correctly against acceptance criteria.
+- **FAIL** — Implementation exists but does not meet acceptance criteria, or is broken.
+- **PARTIAL** — Implementation partially addresses the requirement but has known gaps.
+- **NOT TESTED** — No QA or manual evidence could be gathered. Must include a reason (e.g., "needs live environment", "deferred from this slice").
+- If no evidence exists for a REQ-ID at all, the verdict is FAIL or NOT TESTED — never silently pass.
+
+### Artifact: coverage-gate.md
+
+After completing the matrix, write `.helm-sessions/current/coverage-gate.md`:
+
+```markdown
+# Coverage Gate
+
+| Metric | Count |
+|--------|-------|
+| Total REQ-IDs in scope | N |
+| PASS | N |
+| FAIL | N |
+| NOT TESTED | N |
+| PARTIAL | N |
+
+**Gate status:** OPEN | CLOSED
+```
+
+- **OPEN** — All must-have (priority `must`) requirements PASS. Known FAIL/NOT TESTED items are documented with reasons.
+- **CLOSED** — One or more must-have requirements are FAIL or NOT TESTED with no documented reason. Blocks shipping.
+
+### Secondary: Code quality review
+
+After the product completeness review is complete, perform a standard code quality review focusing on:
+
+- Structural issues (wrong patterns, broken layering)
+- Security concerns (hardcoded values, missing auth, injection vectors)
+- Performance concerns (N+1 queries, unnecessary re-renders)
+- React/RN hook rule violations, stale closures, missing deps (review React Doctor output if available)
+- Duplication and readability
+
+Code quality findings are advisory and do not block the coverage gate unless they are critical (data loss, security risk).
+
 ## Reasoning effort
 
 Use the highest reasoning effort available. Think carefully before acting. Do not guess. Diagnose root causes before proposing or applying fixes. Challenge your own assumptions. Prefer correct, minimal actions over fast guesses. Verify file existence, imports, and cross-layer consistency before asserting.
 
 ## Escalation / handoff rules
 - If you find critical issues, flag them clearly for the orchestrator.
+- For FF/product-spec work, if the product completeness review reveals missing requirements or broken implementation, flag it with the specific REQ-ID.
 - Do NOT fix issues yourself — the orchestrator will delegate fixes to the appropriate implementation agent.
 - If you need more context to complete the review, ask the orchestrator.

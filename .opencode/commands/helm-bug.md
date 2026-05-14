@@ -19,6 +19,18 @@ Fix the following bug: $ARGUMENTS
 4. **VERIFY** — Run the reproduction. Run the relevant test suite per `docs/ai/verification.md`. No regressions. For React fixes: run React Doctor again to confirm no new pattern violations were introduced.
 5. If the approach is wrong, revert. If verification reveals a small localized mistake, fix it once. Do not stack blind patches.
 
+### Feature Feedback / Product-Spec Mode
+
+When `$ARGUMENTS` involves a bug driven by a Feature Feedback document or product spec (check for `.helm-sessions/current/requirements-ledger.md`):
+
+1. **Reproduce the original complaint first** — Read the original complaint context from `requirements-ledger.md` (REQ-ID source context, source document/page column). Reproduce the exact scenario Barry reported before diagnosing anything.
+2. **Only then diagnose and fix** — After confirming the bug is reproducible, proceed with the standard diagnose → fix cycle.
+3. **Verify against both** — After fixing, verify:
+   - The fix resolves the original complaint (re-run the reproduction scenario).
+   - The fix meets the acceptance criteria for the relevant REQ-IDs in the ledger.
+   - The fix does not break any other acceptance criteria (run regression checks on related REQ-IDs).
+4. **Update the ledger** — Add a note in the QA/manual evidence column in `requirements-ledger.md` for the affected REQ-IDs indicating the bug was fixed and verified.
+
 ## Rules
 
 - Write the failing test FIRST. The failing test IS the reproduction.

@@ -37,20 +37,21 @@ The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/
 | Agent | Type | Can edit? | Can run tests? | Can commit/push? | Main responsibility | Explicitly does NOT do |
 |-------|------|-----------|----------------|------------------|--------------------|-----------------------|
 | `helm-orchestrator` | primary | No | No | No | Classify tasks, delegate subagents, verify completion, report | Read source, write code, run tests, call MCP tools directly, explore codebase |
-| `helm-session-init` | subagent | Session artifacts only | No | No | Session workspace lifecycle — archive, reset, initialize | Edit app source, run tests, commit |
-| `helm-planner` | subagent | Session artifacts only | No | No | Produces plans, invokes plan-critic | Edit app source, broadly explore codebase, run tests, spawn agents other than plan-critic |
-| `helm-plan-critic` | subagent | Session artifacts only | No | No | Targeted explorer + plan critic — verifies plan assumptions | Broad exploration (>8 files), edit source, run tests, spawn subagents (leaf node) |
-| `helm-build` | subagent | Yes (backend, frontend, mobile, config) | Yes | No | General implementation worker, routine fixes | Commit, edit docs/agent-prompts, blindly apply specialist suggestions |
+| `helm-session-init` | subagent | Session artifacts only | No | No | Session workspace lifecycle — archive, reset, initialize. For FF sessions, initializes additional artifact stubs (source-index, ledger, audit, slices, qa-plan, matrix, coverage-gate). | Edit app source, run tests, commit |
+| `helm-planner` | subagent | Session artifacts only | No | No | Produces plans, invokes plan-critic. For FF work, must invoke helm-requirements-auditor before planning; references REQ-IDs not paraphrases. | Edit app source, broadly explore codebase, run tests, spawn agents other than plan-critic |
+| `helm-plan-critic` | subagent | Session artifacts only | No | No | Targeted explorer + plan critic — verifies plan assumptions. For FF work, critiques against requirements-ledger.md; rejects plans without REQ-IDs. | Broad exploration (>8 files), edit source, run tests, spawn subagents (leaf node) |
+| `helm-build` | subagent | Yes (backend, frontend, mobile, config) | Yes | No | General implementation worker, routine fixes. For FF work, claims a slice from implementation-slices.md; updates evidence per REQ-ID. | Commit, edit docs/agent-prompts, blindly apply specialist suggestions |
 | `helm-backend` | subagent | Yes (backend/ only) | Yes | No | Backend implementation (FastAPI, models, schemas, services) | Edit frontend/mobile/docs, commit, add secrets |
 | `helm-frontend` | subagent | Yes (mobile/, web/ only) | Yes | No | Frontend implementation (React Native, web admin) | Edit backend/docs, commit, add secrets |
 | `helm-protocol` | subagent | Default: No. Yes if explicitly asked | No | No | API/WS/MCP/SDUI contract alignment | Implement unrelated behavior, edit application logic |
 | `helm-agent-runtime` | subagent | Yes (agent/, backend/app/mcp/) | Yes | No | PydanticAI, MCP tools, agent proxy | Alter secrets, add paid providers, edit frontend |
-| `helm-tester` | subagent | Test files only (if explicitly asked) | Yes | No | Run tests, diagnose failures, run React Doctor diagnostics on React component issues, recommend fixes | Fix application code, auto-fix loops, edit source |
-| `helm-reviewer` | subagent | No | No | No | Code quality, architecture review, feature-completeness verification against requirements-checklist | Edit files, fix issues, run tests, apply patches |
-| `helm-ui-reviewer` | subagent | No | No | No | Visual/UX review, layout consistency, exhaustive page sweep. Runs for all UI-visible changes. | Edit files, run commands, fix UI issues |
+| `helm-tester` | subagent | Test files only (if explicitly asked) | Yes | No | Run tests, diagnose failures, run React Doctor diagnostics on React component issues, recommend fixes. For FF work, runs requirement-derived QA per QA mode column in ledger; produces qa-plan.md. | Fix application code, auto-fix loops, edit source |
+| `helm-reviewer` | subagent | No | No | No | Code quality, architecture review, feature-completeness verification against requirements-checklist. For FF work, product completeness review is primary; produces product-completeness-matrix.md and coverage-gate.md. | Edit files, fix issues, run tests, apply patches |
+| `helm-ui-reviewer` | subagent | No | No | No | Visual/UX review, layout consistency, exhaustive page sweep. Runs for all UI-visible changes. For FF work, adds red-team questions based on original complaint context; verifies realistic user flows. | Edit files, run commands, fix UI issues |
 | `helm-docs` | subagent | Yes (docs/, README, AGENTS, CLAUDE) | No | No | Documentation maintenance | Edit app source, run app tests, commit |
 | `helm-security` | subagent | Default: No. Narrow fix if asked | No | No | Security audit, secrets detection | Add credentials, add paid providers, fix issues by default |
 | `helm-git` | subagent | No | No | Yes (with approval) | Branch management, commit, push | Edit source files, force push, push to main |
+| `helm-requirements-auditor` | subagent | Session artifacts only (requirements-ledger.md, requirements-audit.md, implementation-slices.md, source-index.md) | No | No | Compile atomic requirements ledger from full source docs; audit for completeness; produce implementation slices | Implement code, write plans, summarize, edit app source, run tests |
 
 ### Agent Details
 
@@ -67,17 +68,20 @@ The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/
 - **On new task:** Move `.helm-sessions/current/` to `.helm-sessions/archive/YYYY-MM-DD-HHMMSS-task-slug/`, create fresh workspace with `task.md` and `context-index.md`.
 - **On continuation:** Report existing session state, do not reset.
 - **Artifacts:** Creates `task.md`, `context-index.md` on init. `current-plan.md`, `critic-report.md`, `verification-report.md` created conditionally as the loop progresses.
+- **For FF sessions:** Initializes additional artifact stubs: `source-index.md`, `requirements-ledger.md`, `requirements-audit.md`, `implementation-slices.md`, `qa-plan.md`, `product-completeness-matrix.md`, `coverage-gate.md`.
 
 #### `helm-planner`
 - **Purpose:** Read documentation, produce focused implementation plans, delegate verification to `helm-plan-critic`.
 - **Delegate only to:** `helm-plan-critic`. Cannot delegate to any other agent.
 - **Process:** Draft plan → write `current-plan.md` → invoke critic → revise based on objections → max 3 rounds → mark APPROVED or UNRESOLVED.
+- **For FF work:** Must invoke `helm-requirements-auditor` before planning; references REQ-IDs not paraphrases; lists included and excluded REQ-IDs explicitly.
 
 #### `helm-plan-critic` (combined targeted explorer + critic)
 - **Purpose:** Verify plan assumptions by reading only the exact files/symbols needed. Challenges file existence, imports, dependencies, ordering, cross-layer sync, and edge cases.
 - **Read limit:** Max 8 source files per invocation.
 - **Output:** Writes findings to `critic-report.md`. Returns APPROVED or specific objections with evidence.
 - **Leaf node:** Cannot spawn subagents. No broad exploration.
+- **For FF work:** Critiques against `requirements-ledger.md`; rejects plans that paraphrase requirements or omit REQ-IDs.
 
 #### `helm-build` / `helm-backend` / `helm-frontend` / `helm-agent-runtime`
 Implementation agents. Each owns its domain. See [workflows.md](workflows.md) for routing table.
@@ -88,6 +92,14 @@ Advisory specialists. Produce findings, do not fix by default.
 ##### `helm-reviewer`
 - **Purpose:** Code quality and architecture review. Verifies implementation completeness against `requirements-checklist.md` — classifies each requirement as PASS, FAIL, PARTIAL, or NOT TESTED. Tests passing is not enough if product requirements are missing.
 - **Default:** Read-only. Reports findings grouped by severity. Does not apply fixes.
+- **For FF work:** Product completeness review is primary; produces `product-completeness-matrix.md` and `coverage-gate.md`. Product completeness is checked BEFORE code quality.
+
+#### `helm-requirements-auditor`
+- **Purpose:** Read-oriented. Reads full source documents (never summaries), atomizes every individual requirement into the requirements ledger, audits for completeness gaps, and produces implementation slices.
+- **Model:** `opencode-go/deepseek-v4-pro` (Reasoning tier)
+- **Leaf node:** Cannot spawn subagents.
+- **Output:** APPROVED (ledger complete and internally consistent) or OBJECTIONS (specific gaps found). Must return APPROVED before the planner may proceed.
+- **For FF work:** Compiles `source-index.md`, `requirements-ledger.md`, `requirements-audit.md`, and `implementation-slices.md`. Does not write plans or implement code.
 
 ### Handoff Model
 
@@ -101,6 +113,15 @@ Specialist agents (tester, reviewer, security, ui-reviewer) are **advisory by de
 5. Tester verifies the fix (if behavior changed)
 6. Reviewer checks quality (if the change is risky)
 
+**FF/product-spec handoff flow:**
+1. Auditor compiles requirements ledger → must return APPROVED before proceeding
+2. Planner reads approved ledger → produces plan referencing REQ-IDs
+3. Critic validates plan against ledger → rejects paraphrased requirements without REQ-IDs
+4. Implementation agent claims one slice from `implementation-slices.md` → implements only those REQ-IDs
+5. Tester runs requirement-derived QA per QA mode column in ledger
+6. Reviewer produces product-completeness matrix and coverage gate → PRIMARY review gate
+7. Coverage gate must be OPEN before shipping — orchestrator delegates fixes or defers requirements if CLOSED
+
 ### Depth Policy
 
 The OpenCode agent hierarchy has three layers:
@@ -111,7 +132,8 @@ Layer 0: helm-orchestrator (primary)
   ├── Layer 1: helm-session-init, helm-planner, helm-build, helm-backend,
   │            helm-frontend, helm-protocol, helm-agent-runtime,
   │            helm-tester, helm-reviewer, helm-ui-reviewer,
-  │            helm-docs, helm-security, helm-git
+  │            helm-docs, helm-security, helm-git,
+  │            helm-requirements-auditor
   │
   └── Layer 1: helm-planner
         └── Layer 2: helm-plan-critic (LEAF — no subagents)
@@ -176,3 +198,4 @@ See [workflows.md](workflows.md) for the full exhaustive page sweep policy.
 | `helm-tester` | Worker | `opencode-go/deepseek-v4-flash` (fallback: `local/qwen3.6-27b-autoround`) |
 | `helm-docs` | Worker | `opencode-go/deepseek-v4-flash` |
 | `helm-git` | Worker | `opencode-go/deepseek-v4-flash` |
+| `helm-requirements-auditor` | Reasoning | `opencode-go/deepseek-v4-pro` |

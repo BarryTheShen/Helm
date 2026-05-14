@@ -262,3 +262,120 @@ The legacy agent definitions remain in `.claude/agents/` for Claude Code session
 - **Context7** (MCP): Allowed for docs/library lookup by planner, docs, or critic if needed. NOT called by orchestrator.
 - **Playwright** (MCP): Allowed for tester, ui-reviewer, and live verification. NOT called by orchestrator.
 - Keep API keys and env values out of the repo. They are user-managed.
+
+## Feature Feedback / Product-Spec Workflow
+
+This section applies when working from Feature Feedback documents, product specs, blueprint documents, or any large unstructured requirement source. It extends the canonical loop with traceability guarantees.
+
+### Core Principle
+
+**Never let an AI summary become the canonical source of truth.** Summaries are lossy by nature — an AI reading a 50-page FF document and summarizing it into 3 paragraphs loses nuance, edge cases, conditionals, and context. When a planner then implements from that summary, requirements silently drop.
+
+For FF/product-spec work, the canonical source of truth is:
+1. The **original full document** (never a paraphrase or summary)
+2. The **traceable requirements ledger** (atomic, ID'd, and directly sourced from the original)
+
+Summaries are navigation aids only — never implementation specs.
+
+### Additional Session Artifacts
+
+For FF sessions, `helm-session-init` initializes these additional artifacts in `.helm-sessions/current/`:
+
+| Artifact | Purpose |
+|----------|---------|
+| `source-index.md` | Maps each source document (page, section) to the requirement IDs it generates |
+| `requirements-ledger.md` | Atomic table: every individual requirement as a row with full traceability |
+| `requirements-audit.md` | Flags MISSING, AMBIGUOUS, DUPLICATE, NEEDS_CONTEXT, INSUFFICIENT_AC requirements |
+| `implementation-slices.md` | Cohesive groups of REQ-IDs with dependency ordering |
+| `qa-plan.md` | Per-requirement test approach (automated, manual, review-only, or deferred) |
+| `product-completeness-matrix.md` | REQ-ID → PASS/FAIL/PARTIAL/NOT_TESTED verdict (primary reviewer output) |
+| `coverage-gate.md` | Summary gate: must-have requirements must all be PASS before shipping |
+
+### Workflow Extension
+
+For FF/product-spec work, the canonical loop extends to:
+
+```
+session init → requirements auditor (ledger + audit + slices) → plan (REQ-ID referenced)
+→ plan critic (ledger-based) → implementation (slice-claimed) → requirement-derived QA
+→ product completeness review → coverage gate → docs → git
+```
+
+Each step:
+
+1. **Session init** — `helm-session-init` archives stale sessions and initializes all FF artifacts (including stubs for source-index, ledger, audit, slices, qa-plan, matrix, coverage-gate).
+
+2. **Requirements auditor** — `helm-requirements-auditor` reads **full source documents** (never summaries), atomizes every requirement into the ledger, audits for gaps, and produces implementation slices. Must return APPROVED before planning begins.
+
+3. **Plan (REQ-ID referenced)** — Planner references REQ-IDs, not paraphrases. Lists included and excluded REQ-IDs explicitly. Does not proceed without APPROVED ledger.
+
+4. **Plan critic (ledger-based)** — Critic validates the plan against the ledger. Rejects plans that paraphrase requirements or omit REQ-IDs.
+
+5. **Implementation (slice-claimed)** — Each implementation agent claims **one slice** from `implementation-slices.md` and implements only those REQ-IDs. Updates evidence per REQ-ID. No broad "all FF is fixed" claims.
+
+6. **Requirement-derived QA** — Tester runs QA per the QA mode column in the ledger (automated-test, manual-flow-test, review-only, or deferred). Produces `qa-plan.md`.
+
+7. **Product completeness review** — Reviewer produces `product-completeness-matrix.md` (PASS/FAIL/PARTIAL/NOT_TESTED per REQ-ID) and `coverage-gate.md`. Product completeness is the **primary** review concern — code quality is secondary for FF work.
+
+8. **Coverage gate** — Coverage gate must be OPEN before shipping. CLOSED gate = cannot ship.
+
+9. **Docs + Git** — Standard docs update and git stage.
+
+### Requirements Ledger Format
+
+The ledger is a markdown table with the following columns:
+
+| Column | Description |
+|--------|-------------|
+| REQ ID | Unique identifier (e.g., `FF4-DASH-001`) |
+| Source doc/page | Which document and page number the requirement came from |
+| Source section/path | Section heading, paragraph, or bullet point in the source |
+| Context notes | Surrounding context needed to understand the requirement correctly |
+| Expanded contextual requirement | The full requirement written as an atomic, testable statement |
+| Type | `functional` / `UI` / `data` / `validation` / `workflow` / `QA` / `docs` / `architecture` |
+| Priority | `must` / `should` / `could` / `deferred` |
+| Acceptance criteria | Concrete pass/fail criteria in Given-When-Then or checklist form |
+| QA mode | `automated-test` / `manual-flow-test` / `review-only` / `deferred` |
+| Slice ID | Which implementation slice this requirement belongs to |
+
+The ledger is the authoritative requirements source for the entire FF session. All plans, tests, and reviews reference REQ-IDs from this table.
+
+### Implementation Slices
+
+The auditor groups requirements into **domain-cohesive slices** — groups of related REQ-IDs that share a feature area, data model, or user flow. Each slice:
+
+- Has a unique Slice ID and description
+- Lists the REQ-IDs it contains
+- States dependencies on other slices (if any)
+- Is ordered for implementation
+
+Each implementation agent claims **one slice** and implements only those REQ-IDs. This prevents the "I fixed all FF" anti-pattern where an agent claims completion but only addressed a subset. After a slice is implemented, the agent updates evidence in the ledger (linking to files, commits, test names).
+
+### Coverage Gate
+
+Before shipping FF work, `coverage-gate.md` is produced by the reviewer. It:
+
+- Lists every `must`-priority REQ-ID
+- Shows the verdict from `product-completeness-matrix.md` (PASS / FAIL / PARTIAL / NOT TESTED)
+- Marks the gate as **OPEN** (all must-haves PASS) or **CLOSED** (one or more must-haves not PASS)
+- For non-must requirements (`should`, `could`, `deferred`), notes status but does not block the gate
+
+**CLOSED gate = cannot ship.** The orchestrator must delegate fixes or defer missing requirements (with explicit approval) before reopening.
+
+### Existing requirements-checklist.md Status
+
+For FF/product-spec work, `requirements-checklist.md` is **downgraded** to a short checklist derived from the ledger. It is NOT the canonical source. The ledger IS the canonical source. The reviewer may generate `requirements-checklist.md` from the ledger as a convenience view, but all traceability decisions reference the ledger.
+
+### Industry Basis
+
+These practices are not new — they are established industry techniques applied to AI-assisted development:
+
+- **Requirements Traceability Matrix (RTM):** Every requirement maps to implementation and test evidence. The ledger is Helm's RTM, ensuring no requirement is lost between source document and shipped code.
+
+- **BDD / Given-When-Then:** Acceptance criteria in the ledger are written as scenario-oriented conditions, enabling direct translation into automated tests or manual check scripts.
+
+- **E2E / user journey testing:** QA exercises realistic multi-step workflows, not isolated unit checks. Round-trip tests (create → read → update → delete) and save/reload persistence checks catch integration gaps.
+
+- **Playwright best practices:** Tests use resilient user-facing locators (`getByRole`, `getByLabel`, `getByText`), codegen for fast authoring, and trace viewer for failure diagnosis. Avoid fragile CSS/XPath selectors.
+
+- **Reality of "smart QA":** There is no magic one-button QA solution. "Smart QA" is a layered system: structural discovery (`discover.cjs`) + deterministic E2E tests + BDD scenario checks + manual test scripts + traceability review. Each layer catches different failure modes; no single layer is sufficient.

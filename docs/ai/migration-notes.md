@@ -1,5 +1,46 @@
 # Migration Notes
 
+## 2026-05-14: Add Requirements Traceability Workflow for Feature Feedback
+
+### What Changed
+
+- Created `helm-requirements-auditor` agent — read-oriented, compiles atomic requirements ledger from full source docs.
+- Added 7 new session artifacts for FF/product-spec sessions: `source-index.md`, `requirements-ledger.md`, `requirements-audit.md`, `implementation-slices.md`, `qa-plan.md`, `product-completeness-matrix.md`, `coverage-gate.md`.
+- Updated `helm-session-init` to initialize FF artifact stubs.
+- Updated `helm-planner` to require REQ-ID references and ledger-guided planning for FF work.
+- Updated `helm-plan-critic` to critique against the requirements ledger.
+- Updated `helm-build` to claim slices and update REQ-ID evidence.
+- Updated `helm-tester` to support requirement-derived QA (automated, manual-flow, review-only, deferred) and workflow-aware QA (user journeys, round trips, persistence, original complaint reproduction).
+- Updated `helm-reviewer` to make product completeness review primary; added `product-completeness-matrix.md` and `coverage-gate.md`.
+- Updated `helm-ui-reviewer` to add red-team workflow questions and realistic user-flow verification.
+- Updated `docs/ai/workflows.md` with full FF workflow documentation, industry basis (RTM, BDD, E2E, Playwright best practices, layered QA).
+- Updated `docs/ai/agents.md` with auditor role, model routing, and updated agent responsibilities.
+- Updated `docs/ai/verification.md` with layered smart QA and requirement-derived QA documentation.
+- Updated `AGENTS.md` with pointer to FF workflow.
+
+### Why
+
+Barry observed that agents claimed Feature Feedback bugs were fixed, but manual testing showed many were still unfixed. Root cause: requirements loss through summarization — huge FF docs were summarized, planner implemented from summary, QA checked the plan, and nobody checked against the full requirement chain.
+
+### New Principle
+
+Never let an AI summary become the canonical source of truth. For Feature Feedback/product-spec work, the source of truth is the original full Feature Feedback/product request plus a traceable requirements ledger generated from it. Summaries are navigation aids only, never implementation specs.
+
+### Key Workflow Changes
+
+- Auditor gate: planner cannot proceed until requirements ledger is APPROVED.
+- REQ-ID traceability: every plan item, implementation, test, and review references REQ-IDs.
+- Slice-based implementation: agents claim one slice, not "all FF fixed."
+- Coverage gate: must-have requirements must have PASS verdict before shipping.
+- Product completeness before code quality: reviewer checks feature completeness against ledger first.
+
+### What was NOT changed
+
+- No app source files changed (backend, frontend, mobile, agent code untouched).
+- Existing workflow for non-FF tasks is unchanged.
+- Existing QA discovery infrastructure preserved and extended, not replaced.
+- No secrets, API keys, or credentials added.
+
 ## 2026-05-07: Portable AI Instruction Entrypoint
 
 ### What Changed
