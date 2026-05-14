@@ -1,15 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useEditorStore, MIN_ROW_HEIGHT } from './useEditorStore';
 import { COMPONENT_SCHEMAS, ACTION_TYPES } from './componentSchemas';
 import type { ActionSchema, FieldSchema } from './componentSchemas';
 import { getActionPropName, getComponentDefinition } from './types';
 import type { ActionRule, EditorComponent } from './types';
-import { Settings, Rows3, Box, Minus, Plus } from 'lucide-react';
+import { Settings, Rows3, Box, Minus, Plus, Lock } from 'lucide-react';
 import { RuleBuilder } from './RuleBuilder';
 import { api } from '../lib/api';
 import type { DataSource } from '../lib/api';
 import { VariableInput } from './VariableInput';
 import { IconPicker } from './IconPicker';
+// FF4-ROW-011: Import cell width validation for pre-flight checks
+import { canAddCell, MIN_CELL_WIDTH_PERCENT } from './cellWidthEngine';
+import type { CellWidthInput } from './cellWidthEngine';
 
 const INTERACTIVE_COMPONENTS = new Set(['Button', 'InputBar']);
 
@@ -686,15 +689,25 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
   const updateCellWidth = useEditorStore(s => s.updateCellWidth);
 
   const row = rows.find(r => r.id === rowId);
+
+  // FF4-ROW-011: Pre-flight check — disable add cell if it would violate minimum widths
+  // NOTE: useMemo hooks must be called unconditionally before early return
+  const cellWidthInputs = useMemo<CellWidthInput[]>(
+    () => row ? row.cells.map(c => ({ id: c.id, width: c.width })) : [],
+    [row],
+  );
+  const addCellCheck = useMemo(() => canAddCell(cellWidthInputs), [cellWidthInputs]);
+
   if (!row) return null;
 
   const rowIdx = rows.indexOf(row);
   const isScrollable = row.scrollable ?? false;
+  const canDeleteCell = row.cells.length > 1;
 
   const handleCellWidthChange = (cellIndex: number, value: string) => {
     const parsed = parseFloat(value);
     if (!isNaN(parsed) && parsed > 0) {
-      updateCellWidth(rowId, cellIndex, `${Math.max(5, Math.min(100, parsed))}%`);
+      updateCellWidth(rowId, cellIndex, `${Math.max(MIN_CELL_WIDTH_PERCENT, Math.min(100, parsed))}%`);
     }
   };
 
@@ -710,26 +723,33 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
       {/* Content-type only properties */}
       {rowType === 'content' && (
         <>
-          {/* Cell count */}
+          {/* Cell count — FF4-ROW-011: Disable add cell button when it would violate minimum width */}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Cells</label>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => row.cells.length > 1 && setCellCount(rowId, row.cells.length - 1)}
-                disabled={row.cells.length <= 1}
+                onClick={() => canDeleteCell && setCellCount(rowId, row.cells.length - 1)}
+                disabled={!canDeleteCell}
                 className="p-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                title={canDeleteCell ? 'Remove last cell' : 'Must have at least 1 cell'}
               >
                 <Minus size={12} />
               </button>
               <span className="text-sm font-medium w-8 text-center">{row.cells.length}</span>
               <button
-                onClick={() => setCellCount(rowId, row.cells.length + 1)}
-                className="p-1 rounded border border-gray-200 hover:bg-gray-50"
+                onClick={() => addCellCheck.allowed && setCellCount(rowId, row.cells.length + 1)}
+                disabled={!addCellCheck.allowed}
+                className="p-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                title={addCellCheck.reason || 'Add cell'}
               >
                 <Plus size={12} />
               </button>
             </div>
-            <div className="text-[10px] text-gray-300 mt-1">No maximum limit. Minimum width enforced per cell.</div>
+            <div className="text-[10px] text-gray-300 mt-1">
+              {addCellCheck.allowed
+                ? 'Minimum width enforced per cell.'
+                : <span className="text-amber-600">{addCellCheck.reason}</span>}
+            </div>
           </div>
 
           {/* Row height */}
@@ -796,16 +816,24 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
                     >
                       Auto
                     </button>
-                    <input
-                      type="number"
-                      value={numericValue}
-                      onChange={e => handleCellWidthChange(cellIdx, e.target.value)}
-                      step={1}
-                      min={5}
-                      placeholder="%"
-                      disabled={isAuto}
-                      className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
-                    />
+                    {/* FF4-ROW-011-LOCK: lock icon + stronger disabled state when cell is auto-distributed */}
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        value={numericValue}
+                        onChange={e => handleCellWidthChange(cellIdx, e.target.value)}
+                        step={1}
+                        min={5}
+                        placeholder="%"
+                        disabled={isAuto}
+                        className="w-full px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-300 disabled:cursor-not-allowed pr-5"
+                      />
+                      {isAuto && (
+                        <span className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" title="Auto-distributed width">
+                          <Lock size={10} className="text-gray-300" />
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[10px] text-gray-400 w-4">%</span>
                     {isPercentage && (
                       <button

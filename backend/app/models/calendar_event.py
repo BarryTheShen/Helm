@@ -19,4 +19,10 @@ class CalendarEvent(Base, TimestampMixin):
     location: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_all_day: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # FF4-CAL-026: sourceType field — tracks event origin (local/caldav/notion/custom)
+    source_type: Mapped[str] = mapped_column(String(20), nullable=False, default="local")
+
+    # FF4-CAL-027: free-form notes/content field for event details
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     user: Mapped["User"] = relationship(back_populates="calendar_events")  # type: ignore[name-defined]  # noqa: F821

@@ -34,3 +34,19 @@ class WorkflowAnalyticsItem(BaseModel):
     name: str
     enabled: bool
     audit_entries: int
+
+
+class CleanupPreviewOut(BaseModel):
+    """Preview of what would be deleted by cleanup."""
+
+    apps_deleted: int = 0
+    module_instances_deleted: int = 0
+    templates_deleted: int = 0
+    details: list[str] = []
+    errors: list[str] = []
+
+
+class CleanupResultOut(CleanupPreviewOut):
+    """Result of a completed cleanup operation."""
+
+    pass

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
-import { Loader2, Smartphone, AppWindow, Trash2 } from 'lucide-react';
+import { Loader2, Smartphone, AppWindow, Trash2, AlertTriangle } from 'lucide-react';
 
 interface App {
   id: string;
@@ -27,9 +27,69 @@ export function SettingsPage() {
   const [saving, setSaving] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Device | null>(null);
 
+  // ── Clean State ──────────────────────────────────────────────────────────
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanupPreview, setCleanupPreview] = useState<{
+    apps_deleted: number;
+    module_instances_deleted: number;
+    templates_deleted: number;
+    details: string[];
+    errors: string[];
+  } | null>(null);
+  const [cleanConfirm, setCleanConfirm] = useState(false);
+
+  const handleCleanPreview = async () => {
+    setCleaning(true);
+    try {
+      const result = await api.get<{
+        apps_deleted: number;
+        module_instances_deleted: number;
+        templates_deleted: number;
+        details: string[];
+        errors: string[];
+      }>('/api/admin/cleanup/preview');
+      setCleanupPreview(result);
+      if (result.apps_deleted === 0 && result.module_instances_deleted === 0 && result.templates_deleted === 0) {
+        toast.info('No test artifacts found — system is clean');
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to preview cleanup');
+    } finally {
+      setCleaning(false);
+    }
+  };
+
+  const handleCleanExecute = async () => {
+    setCleaning(true);
+    setCleanConfirm(false);
+    try {
+      const result = await api.post<{
+        apps_deleted: number;
+        module_instances_deleted: number;
+        templates_deleted: number;
+        details: string[];
+        errors: string[];
+      }>('/api/admin/cleanup/execute', {});
+      setCleanupPreview(result);
+      const total = result.apps_deleted + result.module_instances_deleted + result.templates_deleted;
+      if (total > 0) {
+        toast.success(`Cleanup complete — removed ${total} test artifact${total === 1 ? '' : 's'}`);
+      } else {
+        toast.info('No test artifacts found');
+      }
+      if (result.errors.length > 0) {
+        toast.error(`Cleanup errors: ${result.errors.join(', ')}`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to execute cleanup');
+    } finally {
+      setCleaning(false);
+    }
+  };
+
   const loadDevices = () => {
     setLoading(true);
-    api.get<Device[]>('/api/devices')
+    api.get<Device[] | { items: Device[] }>('/api/devices')
       .then(d => setDevices(Array.isArray(d) ? d : d.items || []))
       .catch(e => {
         toast.error(e.message);
@@ -194,6 +254,106 @@ export function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* ── Clean State Section ───────────────────────────────────────────── */}
+      <div className="mt-8 border-t border-gray-200 pt-8">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Clean State</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Find and remove test artifacts (apps, modules, templates with names starting with &ldquo;test&rdquo;)
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCleanPreview}
+              disabled={cleaning}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              {cleaning ? 'Scanning...' : 'Preview'}
+            </button>
+            {cleanupPreview && (cleanupPreview.apps_deleted > 0 || cleanupPreview.module_instances_deleted > 0 || cleanupPreview.templates_deleted > 0) && !cleanConfirm && (
+              <button
+                onClick={() => setCleanConfirm(true)}
+                disabled={cleaning}
+                className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                Remove All
+              </button>
+            )}
+          </div>
+        </div>
+
+        {cleanupPreview && (
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            {(cleanupPreview.apps_deleted > 0 || cleanupPreview.module_instances_deleted > 0 || cleanupPreview.templates_deleted > 0) ? (
+              <>
+                <div className="grid grid-cols-3 gap-4 mb-3">
+                  <div className="text-center p-3 bg-red-50 rounded-lg">
+                    <div className="text-2xl font-bold text-red-700">{cleanupPreview.apps_deleted}</div>
+                    <div className="text-xs text-red-600 mt-0.5">Apps</div>
+                  </div>
+                  <div className="text-center p-3 bg-orange-50 rounded-lg">
+                    <div className="text-2xl font-bold text-orange-700">{cleanupPreview.module_instances_deleted}</div>
+                    <div className="text-xs text-orange-600 mt-0.5">Modules</div>
+                  </div>
+                  <div className="text-center p-3 bg-yellow-50 rounded-lg">
+                    <div className="text-2xl font-bold text-yellow-700">{cleanupPreview.templates_deleted}</div>
+                    <div className="text-xs text-yellow-600 mt-0.5">Templates</div>
+                  </div>
+                </div>
+                {cleanupPreview.details.length > 0 && (
+                  <details className="text-xs text-gray-500">
+                    <summary className="cursor-pointer hover:text-gray-700 font-medium mb-1">
+                      Details ({cleanupPreview.details.length} items)
+                    </summary>
+                    <ul className="list-disc pl-4 space-y-0.5 max-h-32 overflow-y-auto">
+                      {cleanupPreview.details.map((d, i) => (
+                        <li key={i}>{d}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                {cleanupPreview.errors.length > 0 && (
+                  <div className="mt-2 p-2 bg-red-50 text-red-700 text-xs rounded">
+                    Errors: {cleanupPreview.errors.join(', ')}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-sm text-gray-500 text-center py-4">
+                No test artifacts found. The system is clean.
+              </div>
+            )}
+          </div>
+        )}
+
+        {cleanConfirm && (
+          <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+            <AlertTriangle size={16} className="text-amber-600 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800">Confirm deletion of {cleanupPreview ? cleanupPreview.apps_deleted + cleanupPreview.module_instances_deleted + cleanupPreview.templates_deleted : 0} test artifacts</p>
+              <p className="text-xs text-amber-700 mt-0.5">This action cannot be undone. All associated data will be permanently deleted.</p>
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={handleCleanExecute}
+                  disabled={cleaning}
+                  className="px-3 py-1 text-xs bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {cleaning ? 'Removing...' : 'Yes, Remove All'}
+                </button>
+                <button
+                  onClick={() => setCleanConfirm(false)}
+                  disabled={cleaning}
+                  className="px-3 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

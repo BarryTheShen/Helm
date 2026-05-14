@@ -3,6 +3,11 @@
  * Interactive todo/task list with checkboxes, variable resolution, and data binding.
  * Supports pull-to-refresh when connected to a data source.
  *
+ * REQ-IDs:
+ *   FF4-TODO-001 — Real functional component with checkbox + strikethrough
+ *   FF4-TODO-002 — Daily Planner template uses real Todo component
+ *   FF4-TODO-004 — Registered as real component for publish validation
+ *
  * Each item supports {{expression}} variable resolution in the text field
  * and strikethrough styling for completed items.
  *

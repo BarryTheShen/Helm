@@ -1,6 +1,6 @@
 # Protocol — Communication Layer
 
-> Last updated: 2026-05-14 (FF4: versioning, new MCP tools, component changes)
+> Last updated: 2026-05-15 (FF4 Reassessment: CalendarEvent source_type + notes fields)
 
 ## Tier 1: TLDR
 
@@ -375,9 +375,15 @@ Content-Type: application/json
   "description": null,
   "color": "#007AFF",
   "location": null,
-  "all_day": false
+  "all_day": false,
+  "source_type": "local",
+  "notes": null
 }
 ```
+
+**`source_type`** (String, default `"local"`) — tracks event origin. Valid values: `local`, `caldav`, `notion`, `custom`. Mobile displays a colored badge per source type.
+
+**`notes`** (String, nullable) — free-form notes/content field for event details. Mobile shows up to 2 lines truncated.
 
 **`GET /api/notifications` response:**
 ```json

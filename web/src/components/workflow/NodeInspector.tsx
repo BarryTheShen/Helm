@@ -61,7 +61,8 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateData = (updates: any) => {
-    setLocalData((prev) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setLocalData((prev: any) => {
       const newData = { ...prev, ...updates };
       // Defer parent update to avoid re-render during typing
       setTimeout(() => onUpdate(node.id, newData), 0);
@@ -71,7 +72,8 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateConfig = (key: string, value: any) => {
-    setLocalData((prev) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setLocalData((prev: any) => {
       const config = prev.config || {};
       const newData = { ...prev, config: { ...config, [key]: value } };
       setTimeout(() => onUpdate(node.id, newData), 0);

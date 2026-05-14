@@ -270,17 +270,29 @@ function serializeCellForRuntime(cell: EditorCell): EditorCell {
   };
 }
 
+// FF4-ROW-023: Strip deprecated row padding/gap/background on serialization.
+// Backward compat: existing rows retain values in the data model but controls
+// are hidden in PropertyInspector. On re-save, stale values are stripped.
+const DEPRECATED_ROW_PROPS = [
+  'bgColor', 'backgroundColor',
+  'padding', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight',
+  'gap',
+] as const;
+
 function serializeRowForRuntime(row: EditorRow): EditorRow {
   const clonedRow = cloneValue(row);
-  const backgroundColor = getCanonicalRowBackgroundColor(clonedRow);
   const { bgColor: _bgColor, backgroundColor: _backgroundColor, cells: _cells, type: _type, ...rest } = clonedRow;
+
+  // FF4-ROW-023: Strip deprecated props
+  for (const key of DEPRECATED_ROW_PROPS) {
+    delete (rest as Record<string, unknown>)[key];
+  }
 
   const rowType = _type ?? 'content';
 
   return {
     ...rest,
     ...(rowType !== 'content' ? { type: rowType } : {}),
-    ...(backgroundColor !== undefined ? { backgroundColor } : {}),
     cells: row.cells.map((cell) => serializeCellForRuntime(cell)),
   };
 }

@@ -246,6 +246,156 @@ async def test_apply_template_rejects_invalid_row_first_payload(auth_client, db_
     assert draft.json() == {"screen": None, "has_draft": False, "version": 0}
 
 
+# ── Template Version Apply ────────────────────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_apply_template_version_creates_draft(auth_client):
+    create = await auth_client.post("/api/templates", json={
+        "name": "Versioned", "category": "dashboard", "screen_json": LEGACY_SAMPLE_SCREEN,
+    })
+    tid = create.json()["id"]
+
+    # Create a version
+    ver = await auth_client.post(f"/api/templates/{tid}/versions", json={
+        "template_json": LEGACY_SAMPLE_SCREEN,
+    })
+    assert ver.status_code == 201
+    vid = ver.json()["id"]
+
+    # Apply the version
+    resp = await auth_client.post(f"/api/templates/{tid}/versions/{vid}/apply", json={
+        "module_id": "vapply",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["applied"] is True
+    assert data["version_id"] == vid
+    assert data["template_id"] == tid
+    assert data["module_id"] == "vapply"
+
+    # Verify draft was created
+    draft = await auth_client.get("/api/sdui/vapply/draft")
+    assert draft.status_code == 200
+    assert draft.json()["has_draft"] is True
+    screen = draft.json()["screen"]
+    assert screen is not None
+    # The legacy sections format gets normalized to row-first by validate_sdui_screen_payload
+    assert "rows" in screen or "sections" in screen
+
+
+@pytest.mark.anyio
+async def test_apply_template_version_not_found(auth_client):
+    create = await auth_client.post("/api/templates", json={
+        "name": "NotFound", "category": "dashboard", "screen_json": LEGACY_SAMPLE_SCREEN,
+    })
+    tid = create.json()["id"]
+
+    resp = await auth_client.post(f"/api/templates/{tid}/versions/nonexistent/apply", json={
+        "module_id": "home",
+    })
+    assert resp.status_code == 404
+    assert "Version not found" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_apply_template_version_template_not_found(auth_client):
+    resp = await auth_client.post("/api/templates/badid/versions/nonexistent/apply", json={
+        "module_id": "home",
+    })
+    assert resp.status_code == 404
+    assert "Template not found" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_apply_template_version_rejects_invalid_payload(auth_client, db_session):
+    from sqlalchemy import select
+    from app.models.template_version import TemplateVersion
+
+    create = await auth_client.post("/api/templates", json={
+        "name": "BrokenVer", "category": "dashboard", "screen_json": LEGACY_SAMPLE_SCREEN,
+    })
+    tid = create.json()["id"]
+
+    # Create a version with valid JSON first
+    ver = await auth_client.post(f"/api/templates/{tid}/versions", json={
+        "template_json": LEGACY_SAMPLE_SCREEN,
+    })
+    vid = ver.json()["id"]
+
+    # Mutate the version's template_json to be invalid
+    result = await db_session.execute(
+        select(TemplateVersion).where(TemplateVersion.id == vid)
+    )
+    version = result.scalar_one()
+    version.template_json = INVALID_ROW_FIRST_SCREEN
+    await db_session.commit()
+
+    resp = await auth_client.post(f"/api/templates/{tid}/versions/{vid}/apply", json={
+        "module_id": "vapply",
+    })
+    assert resp.status_code == 422
+    assert "missing 'id'" in resp.json()["detail"]
+
+    # Verify no draft was created
+    draft = await auth_client.get("/api/sdui/vapply/draft")
+    assert draft.status_code == 200
+    assert draft.json()["has_draft"] is False
+
+
+@pytest.mark.anyio
+async def test_apply_template_version_with_row_first_payload(auth_client):
+    create = await auth_client.post("/api/templates", json={
+        "name": "RowVer", "category": "dashboard", "screen_json": LEGACY_SAMPLE_SCREEN,
+    })
+    tid = create.json()["id"]
+
+    ver = await auth_client.post(f"/api/templates/{tid}/versions", json={
+        "template_json": VALID_ROW_FIRST_SCREEN,
+    })
+    vid = ver.json()["id"]
+
+    resp = await auth_client.post(f"/api/templates/{tid}/versions/{vid}/apply", json={
+        "module_id": "vrowapply",
+    })
+    assert resp.status_code == 200
+    assert resp.json()["applied"] is True
+
+    draft = await auth_client.get("/api/sdui/vrowapply/draft")
+    assert draft.status_code == 200
+    assert draft.json()["has_draft"] is True
+
+
+@pytest.mark.anyio
+async def test_apply_template_version_requires_auth(client):
+    resp = await client.post("/api/templates/fake/versions/fake/apply", json={
+        "module_id": "home",
+    })
+    assert resp.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_apply_template_version_records_history(auth_client):
+    create = await auth_client.post("/api/templates", json={
+        "name": "HistVer", "category": "dashboard", "screen_json": LEGACY_SAMPLE_SCREEN,
+    })
+    tid = create.json()["id"]
+    ver = await auth_client.post(f"/api/templates/{tid}/versions", json={
+        "template_json": LEGACY_SAMPLE_SCREEN,
+    })
+    vid = ver.json()["id"]
+
+    await auth_client.post(f"/api/templates/{tid}/versions/{vid}/apply", json={
+        "module_id": "vhist",
+    })
+
+    history = await auth_client.get("/api/sdui/vhist/history")
+    assert history.status_code == 200
+    data = history.json()
+    assert data["total"] == 1
+    assert data["items"][0]["source"] == "template_version"
+
+
 @pytest.mark.anyio
 async def test_import_template(auth_client):
     resp = await auth_client.post("/api/templates/import", json={

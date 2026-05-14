@@ -2,7 +2,7 @@
   "version": 2,
   "description": "Single source of truth for SDUI component types. QA discovery checks all registries against this.",
   "v2_component_types": [
-    "Text", "Markdown", "Button", "Image", "TextInput", "Icon",
+    "Text", "Button", "Image", "Icon",
     "Empty", "Container",
     "CalendarModule", "ChatModule", "NotesModule", "InputBar",
     "Badge", "Stat", "List", "Alert",
@@ -14,7 +14,8 @@
     "RichTextRenderer",
     "article_card",
     "rich_text_renderer",
-    "todo"
+    "todo",
+    "Markdown"
   ],
   "read_only_runtime_types": [
     "RichTextRenderer",

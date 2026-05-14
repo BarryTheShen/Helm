@@ -175,7 +175,7 @@
             "children": [
               { "type": "Text", "id": "sched-title", "props": { "variant": "heading", "content": "Today's Schedule" } },
               { "type": "Divider", "id": "sched-div", "props": { "thickness": 1, "indent": 0 } },
-              { "type": "Markdown", "id": "sched-md", "props": { "content": "**10:00 AM** — Team Standup *(Zoom)*\n\n**1:00 PM** — Design Review *(Room 3B)*\n\n**4:30 PM** — 1:1 with Manager *(Zoom)*" } }
+              { "type": "Text", "id": "sched-md", "props": { "content": "**10:00 AM** — Team Standup *(Zoom)*\n\n**1:00 PM** — Design Review *(Room 3B)*\n\n**4:30 PM** — 1:1 with Manager *(Zoom)*" } }
             ]
           }
         },
@@ -209,7 +209,7 @@
             "children": [
               { "type": "Text", "id": "note-title-1", "props": { "variant": "body", "bold": true, "content": "Architecture Decisions", "numberOfLines": 1 } },
               { "type": "Text", "id": "note-time-1", "props": { "variant": "caption", "content": "2h ago", "color": "textSecondary" } },
-              { "type": "Markdown", "id": "note-body-1", "props": { "content": "Component tier system finalized. 7 atomics, 4 composites..." } },
+              { "type": "Text", "id": "note-body-1", "props": { "content": "Component tier system finalized. 7 atomics, 4 composites..." } },
               { "type": "Button", "id": "note-btn-1", "props": { "variant": "ghost", "size": "sm", "label": "Open", "icon": "external-link", "iconPosition": "right", "onPress": { "type": "navigate", "screen": "workspace", "params": { "noteId": "note-001" } } } }
             ]
           }
@@ -223,7 +223,7 @@
             "children": [
               { "type": "Text", "id": "note-title-2", "props": { "variant": "body", "bold": true, "content": "Sprint Planning Notes", "numberOfLines": 1 } },
               { "type": "Text", "id": "note-time-2", "props": { "variant": "caption", "content": "5h ago", "color": "textSecondary" } },
-              { "type": "Markdown", "id": "note-body-2", "props": { "content": "Q2 goals reviewed. Focus on performance and stability..." } },
+              { "type": "Text", "id": "note-body-2", "props": { "content": "Q2 goals reviewed. Focus on performance and stability..." } },
               { "type": "Button", "id": "note-btn-2", "props": { "variant": "ghost", "size": "sm", "label": "Open", "icon": "external-link", "iconPosition": "right", "onPress": { "type": "navigate", "screen": "workspace", "params": { "noteId": "note-002" } } } }
             ]
           }
@@ -237,7 +237,7 @@
             "children": [
               { "type": "Text", "id": "note-title-3", "props": { "variant": "body", "bold": true, "content": "Meeting Takeaways", "numberOfLines": 1 } },
               { "type": "Text", "id": "note-time-3", "props": { "variant": "caption", "content": "yesterday", "color": "textSecondary" } },
-              { "type": "Markdown", "id": "note-body-3", "props": { "content": "Design review feedback: simplify the onboarding flow..." } },
+              { "type": "Text", "id": "note-body-3", "props": { "content": "Design review feedback: simplify the onboarding flow..." } },
               { "type": "Button", "id": "note-btn-3", "props": { "variant": "ghost", "size": "sm", "label": "Open", "icon": "external-link", "iconPosition": "right", "onPress": { "type": "navigate", "screen": "workspace", "params": { "noteId": "note-003" } } } }
             ]
           }

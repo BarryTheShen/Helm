@@ -1,6 +1,6 @@
 # Frontend — React Native (Expo) Mobile App + Web Admin
 
-> Last updated: 2026-05-14 (FF4: versioning model, component sync, row/cell simplification)
+> Last updated: 2026-05-15 (FF4 Reassessment: cell width engine, row context menu, version diff UI, calendar mobile, Empty container SDUI props)
 
 ## Tier 1: TLDR
 
@@ -84,6 +84,8 @@ Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
 - **Shows:** Month navigation header, 7-column day grid with event dots, selected day agenda. SDUI fallback if AI sets it.
 - **API:** `GET /api/calendar/events?start_date=...&end_date=...` via `useFocusEffect` (re-runs on focus + currentMonth change)
 - **Performance:** `useMemo` for `calendarDays`, `eventsByDate` (O(1) lookup by date string), `selectedDayEvents`
+- **Variant switching:** Admin-controlled only — mobile shows no variant switcher UI (only time navigation arrows + Today button)
+- **Source types:** Events display colored badges by source type (local/caldav/notion/custom) and optional notes text
 
 ### `app/(tabs)/alerts.tsx` — Notifications
 - **Shows:** List of notification cards with title, message, formatted timestamp. SDUI fallback if set.
@@ -338,7 +340,7 @@ Uses `resolveColor()` and `themeShadows` from `src/theme/tokens.ts`.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `CalendarModule` | Full FF4 | Uses `react-native-calendars`; **5 variants** (month/week/day/eventList/compact); date navigation controls (`◀ [range] ▶ Today`); unified event model; fit-the-cell sizing; Compact variant for small cells |
+| `CalendarModule` | Full FF4 | Uses `react-native-calendars`; **5 variants** (month/week/day/eventList/compact); date navigation controls (`◀ [range] ▶ Today`); unified event model; fit-the-cell sizing; Compact variant for small cells; **sourceType badges** (colored by local/caldav/notion/custom); **notes display** (up to 2 truncated lines) |
 | `ChatModule` | Placeholder | Shows "navigate to Chat tab"; pull-to-refresh via RefreshControl |
 | `NotesModule` | Full FF4 | Wired to backend Notes CRUD; markdown rendering for note content; create/edit/delete |
 | `InputBar` | Full MVP | Text input + send strip; wired to backend actions; variable resolution |
@@ -503,16 +505,17 @@ web/src/
 │   ├── WorkflowsPage.tsx → React Flow visual workflow builder with node inspector (Session 9)
 │   ├── VariablesPage.tsx → Custom variable management with React Hook Form + Zod (Session 10)
 │   ├── ConnectionsPage.tsx → OAuth/API key management with Fernet encryption (Session 9)
-│   ├── SettingsPage.tsx  → General settings (Session 9: replaced Users page)
+│   ├── SettingsPage.tsx  → General settings (Session 9: replaced Users page); **FF4 Reassessment:** "Clean State" section with preview/execute test data cleanup buttons
 │   ├── LogsPage.tsx      → Merged Sessions + Audit Logs (Session 9)
 │   └── PillEditorTestPage.tsx → Test harness for PillEditor variable inline editing
 ├── editor/
 │   ├── types.ts          → Editor types, row visual props, device presets, component registry; preserves lowercase legacy types as read-only; requires valid server_action.function+params before persistence
+├── cellWidthEngine.ts → **FF4 (658 lines):** Percentage-based cell width calculation engine with 24+ exported validation functions — pre-flight checks, minimum width enforcement, disabled action calculation, existing row validation, row validation pipeline for 12 operations, all-fixed vs mixed rules, cell split support
 │   ├── templateLibrary.ts→ Local starter screens + reusable row templates; starter InputBar no longer seeds dead send_to_agent.message defaults
 │   ├── componentSchemas.ts → Dynamic property schemas for inspector; only supported authorable actions offered for new edits; Session 9: Todo, RichTextRenderer, ArticleCard, Calendar variants; FF3 gap fix: Divider (color, thickness, margin)
 │   ├── useEditorStore.ts → Rows-first Zustand contract, 50-state undo/redo, selection, device preview; exports MIN_ROW_HEIGHT=48 constant; updateRowHeight() clamps to MIN_ROW_HEIGHT; serializeCellForRuntime() preserves rules array
 │   ├── StructureTree.tsx → Left panel tree + JSON copy actions
-│   ├── EditorCanvas.tsx  → Center canvas with cell resize, row-height resize, @dnd-kit/sortable multi-step row drag, external drag handles, percentage width rendering; PREVIEW_RENDERERS includes EmptyPreview and RichTextRendererPreview
+│   ├── EditorCanvas.tsx  → Center canvas with cell resize, row-height resize, @dnd-kit/sortable multi-step row drag, external drag handles, percentage width rendering; PREVIEW_RENDERERS includes EmptyPreview and RichTextRendererPreview; **RowContextMenu** (right-click Add Above/Below, Duplicate, Delete)
 │   ├── PropertyInspector.tsx → Right panel editor with auto width controls, uniform + per-side padding, InputBar action narrowing, read-only summaries for legacy payloads; Session 9: width toggle, VariableInput integration
 │   ├── VariablePicker.tsx → @ trigger variable picker with namespace support; includes Date category (date.today, date.now) in STATIC_NAMESPACES
 │   ├── VariableInput.tsx → Text input with variable picker integration
@@ -637,3 +640,50 @@ App Editor top bar: `[App: {name} ▼] Saved {time} Live: {live version} [Previe
 
 ### Component Type Sync
 Four-way sync maintained between: mobile `componentRegistry.ts` ↔ web `types.ts` COMPONENT_REGISTRY ↔ backend `mcp/tools.py` `_VALID_V2_COMPONENT_TYPES` ↔ backend `component_seed.py`. All new component types (`TodoModule`, `ArticleCardModule`, `RichTextRenderer`) added to all layers.
+
+## FF4 Reassessment Changes (2026-05-15)
+
+### Cell Width Validation Engine (`web/src/editor/cellWidthEngine.ts`)
+Expanded from 241 to 658 lines with 24+ exported validation functions:
+- **Pre-flight validation:** `canAddCell()`, `canChangeCellWidth()`, `canChangeCellWidthV2()`, `canIncreasePadding()`, `canResizeRow()`, `canToggleHorizontalScroll()` — all return boolean before action commits
+- **Disabled action calculation:** `getDisabledActions()` returns which controls should be greyed out
+- **Minimum width enforcement:** `calculateUsableRowWidth()`, `calculateMinWidthPercent()` — per FF4-ROW-007
+- **Existing row validation:** `validateExistingRow()` — flags invalid saved rows (does not silently normalize)
+- **Row validation pipeline:** `validateRow()` checks all 12 operations (add, delete, split, resize, padding, scroll toggle, load, import, etc.)
+- **All-fixed vs mixed rules:** `allCellsFixed()`, `calculateSidePadding()` — leftover becomes side padding only when ALL cells are fixed-width
+- **Cell split support:** `canSplitCell()` — validates cell splitting within row constraints
+
+### Row Context Menu (`web/src/editor/EditorCanvas.tsx`)
+New `RowContextMenu` component with ARIA accessibility:
+- **Add Row Above** — inserts a new row before the current
+- **Add Row Below** — inserts a new row after the current
+- **Duplicate Row** — clones the row with all cells and components
+- **Delete Row** — removes the row (with confirmation if cells contain content)
+- Triggered by right-click on any row in the editor canvas
+
+### Version Comparison/Diff UI
+New comparison mode in both **Module Editor** (`EditorPage.tsx`) and **App Editor** (`AppEditorPage.tsx`):
+- Click "Compare Versions" button (available when ≥2 versions exist)
+- Select two versions (A and B) by clicking them in the version history list
+- Side-by-side comparison shows: row counts, component counts, component type lists (added vs removed)
+- Visual indicators: each version's row count, component type tags, added/removed type lists
+- Exit diff mode to return to standard version history
+
+### Calendar Mobile Changes
+- **View switcher removed** — mobile CalendarModule no longer shows variant switching UI. Variant is admin-controlled only (FF4-CAL-005). Only time navigation (prev/next arrows, Today button) remains on mobile.
+- **Auto-adapt for small cells** — when calendar cell width < 200px, auto-switches to Compact or Event List variant (FF4-CAL-013)
+- **sourceType badges** — each event shows a colored badge (Local/Gray, CalDAV/Blue, Notion/Purple, Custom/Teal) based on event source (FF4-CAL-026)
+- **Notes display** — events with `notes` field show up to 2 lines of notes text, truncated with `numberOfLines` (FF4-CAL-027)
+
+### SDUI Empty Container Props
+`SDUIEmpty.tsx` enhanced with standard SDUI V2 props:
+- **`dispatch`** — function to dispatch `SDUIAction` for interactive behavior (FF4-EC-005)
+- **`dataBinding`** — `SDUIDataBinding` for data source integration
+- Already a vertical flex container (`flexDirection: 'column', flex: 1`) — enhancement adds real registry-component treatment without redesigning the layout
+
+### Settings Clean State
+New "Clean State" section in admin Settings page (`web/src/pages/SettingsPage.tsx`):
+- **Preview button** — calls `GET /api/admin/cleanup/preview` to show what test data would be deleted
+- **Execute button** — calls `POST /api/admin/cleanup/execute` to remove test apps/modules/templates (names starting with "test"/"Test")
+- Displays deletion counts for apps, module instances, and templates
+- Linked to backend `cleanup_service.py` and admin router cleanup endpoints

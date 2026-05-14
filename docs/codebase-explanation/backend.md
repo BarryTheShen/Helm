@@ -1,7 +1,7 @@
 # Backend — Python FastAPI Server
 
-> Last updated: 2026-05-14 (FF4: versioning, new models, MCP tools, bundled deployment)
-> Last audit: 2026-05-14 — ✅ FF4 fully implemented (10 phases)
+> Last updated: 2026-05-15 (FF4 Reassessment: cleanup endpoints, CalendarEvent fields, cell width validation)
+> Last audit: 2026-05-15 — ✅ FF4 Reassessment complete
 
 ## Tier 1: TLDR
 
@@ -66,10 +66,10 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | Config | `app/config.py` | pydantic-settings loading from `.env` (resolves from repo root) |
 | Database | `app/database.py` | Async SQLAlchemy engine + session factory |
 | Auth dependencies | `app/dependencies.py` | `get_current_user`, `get_current_user_id`, `get_token_from_request`, `require_admin`, `PaginationParams` |
-| Models | `app/models/` | 28 SQLAlchemy ORM models (added Note, ModuleVersion, ModuleWorkingDraft, PreviewSession) |
-| Schemas | `app/schemas/` | Pydantic request/response models (27 files) |
-| Routers | `app/routers/` | 27 route files (added notes, module_versions) |
-| Services | `app/services/` | auth, agent_proxy, websocket_manager, workflow_engine, action_registry, audit, component_seed, variable_resolver, trigger_engine, app_service, module_service, device_service, data_connectors, sdui_state, template_seed, version_service, variable_seed, workflow_seed, calendar_seed |
+| Models | `app/models/` | 32 SQLAlchemy ORM models (added Note, ModuleVersion, ModuleWorkingDraft, PreviewSession) |
+| Schemas | `app/schemas/` | Pydantic request/response models (29 files; added admin) |
+| Routers | `app/routers/` | 28 route files (added notes, module_versions) |
+| Services | `app/services/` | auth, agent_proxy, websocket_manager, workflow_engine, action_registry, audit, component_seed, variable_resolver, trigger_engine, app_service, module_service, device_service, data_connectors, sdui_state, template_seed, version_service, variable_seed, workflow_seed, calendar_seed, **cleanup_service** |
 | SDUI shared contract helpers | `app/services/sdui_state.py` | Live/draft key helpers, shared validate/apply pipeline, row-aware counters, and broadcast utilities used by REST + MCP |
 | Middleware | `app/middleware/sandbox.py` | Sandbox mode ASGI middleware |
 | MCP | `app/mcp/` | MCP server + shared tool implementations |
@@ -106,7 +106,7 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | `devices` | id, user_id (FK), device_name, device_id (unique), config_json, last_seen, assigned_app_id (FK → apps), active_app_version_id, preview_session_id, installed_runtime_version, supported_schema_versions, update_status |
 | `sessions` | id, user_id (FK), device_id (FK), token (unique), expires_at, is_active |
 | `chat_messages` | id, user_id (FK), role (user/assistant/system/tool), content, metadata_json |
-| `calendar_events` | id, user_id (FK), title, start_time, end_time, description, color, location, is_all_day |
+| `calendar_events` | id, user_id (FK), title, start_time, end_time, description, color, location, is_all_day, **source_type** (String(20), default='local', values: local/caldav/notion/custom), **notes** (Text, nullable) |
 | `notifications` | id, user_id (FK), title, message, severity (info/warning/error/success), actions (JSON), is_read |
 | `workflows` | id, user_id (FK), name, description, graph (JSON), trigger_type (onSchedule/onDataChange/onServerEvent/manual), trigger_config (JSON), enabled |
 | `connections` | id, user_id (FK), name, provider, credentials_encrypted (Fernet) |
@@ -319,6 +319,8 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | GET | `/api/admin/stats` | ✅ Admin | Aggregate counts (users, sessions, WS connections, events, workflows, notifications, screens, templates, audit entries) |
 | GET | `/api/admin/stats/workflows` | ✅ Admin | Per-workflow analytics |
 | GET | `/api/admin/stats/websocket` | ✅ Admin | Live WS connection details |
+| GET | `/api/admin/cleanup/preview` | ✅ Admin | Preview test data cleanup — returns counts of apps/modules/templates that would be deleted |
+| POST | `/api/admin/cleanup/execute` | ✅ Admin | Execute test data cleanup — deletes apps/modules/templates with "test/Test" prefix |
 
 ### Apps (`/api/apps`)
 

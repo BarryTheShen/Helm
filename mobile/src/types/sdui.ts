@@ -359,7 +359,6 @@ export type SDUIComponentTypeV2 =
   | SDUIComponentType
   // Tier 2 atomic additions
   | 'Text'
-  | 'Markdown'
   | 'Button'
   | 'Image'
   | 'Icon'

@@ -112,7 +112,7 @@ _SYSTEM_PROMPT = (
     "  ]\n"
     "}\n\n"
     "## Component Types (PascalCase only)\n\n"
-    "Atomic: Text, Markdown, Button, Image, TextInput, Icon, Divider\n"
+     "Atomic: Text, Button, Image, Icon, Divider\n"
     "Structural: Container (has 'children' array — the ONLY component with children)\n"
     "Composite (black-box leaves — never nest inside each other):\n"
     "  CalendarModule { events:[{id,title,start,end,color?}], defaultView?(month|threeDay) }\n"

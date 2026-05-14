@@ -3,10 +3,10 @@
   "lastUpdated": "2026-03-30",
   "components": {
     "Text": { "since": "1.0.0", "status": "stable" },
-    "Markdown": { "since": "1.0.0", "status": "stable" },
+    "Markdown": { "since": "1.0.0", "status": "deprecated", "note": "Merged into Text in FF4" },
     "Button": { "since": "1.0.0", "status": "stable" },
     "Image": { "since": "1.0.0", "status": "stable" },
-    "TextInput": { "since": "1.0.0", "status": "stable" },
+    "TextInput": { "since": "1.0.0", "status": "deprecated", "note": "Removed in FF4 (replaced by InputBar)" },
     "Icon": { "since": "1.0.0", "status": "stable" },
     "Divider": { "since": "1.0.0", "status": "stable" },
     "Container": { "since": "1.0.0", "status": "stable" },

@@ -132,6 +132,11 @@ async def update_module_draft(
     """Update (autosave) the working draft for a module.
 
     Validates the SDUI JSON before saving.
+
+    NOTE (FF4-EDGE-001): This endpoint modifies ONLY the Module Working Draft.
+    It does NOT change any published Module Version or App Version.
+    The live mobile app is unaffected until the App Editor explicitly
+    publishes a new App Version that resolves to this module.
     """
     # Validate SDUI JSON
     try:
@@ -247,20 +252,32 @@ async def create_checkpoint(
     if draft is not None and draft.sdui_json:
         sdui_json = draft.sdui_json
     else:
-        # Fallback: get live screen from ModuleState
+        # Fallback: check old ModuleState-based draft system
+        old_draft_key = draft_screen_key(module_id)
         result = await db.execute(
             select(ModuleState).where(
                 ModuleState.user_id == user_id,
-                ModuleState.module_type == live_screen_key(module_id),
+                ModuleState.module_type == old_draft_key,
             )
         )
-        live_state = result.scalars().first()
-        if live_state is None or not live_state.state_json:
-            raise HTTPException(
-                status_code=400,
-                detail="No working draft or live screen to checkpoint. Save something first.",
+        old_draft = result.scalars().first()
+        if old_draft is not None and old_draft.state_json:
+            sdui_json = old_draft.state_json
+        else:
+            # Fallback: get live screen from ModuleState
+            result = await db.execute(
+                select(ModuleState).where(
+                    ModuleState.user_id == user_id,
+                    ModuleState.module_type == live_screen_key(module_id),
+                )
             )
-        sdui_json = live_state.state_json
+            live_state = result.scalars().first()
+            if live_state is None or not live_state.state_json:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No working draft or live screen to checkpoint. Save something first.",
+                )
+            sdui_json = live_state.state_json
 
     version = await create_module_checkpoint(
         db,
@@ -528,7 +545,21 @@ async def exit_preview_session(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Exit a preview session."""
+    """Exit a preview session.
+
+    NOTE (FF4-EDGE-007): This endpoint is called when a preview session
+    ends normally or when the mobile device encounters a render failure
+    during preview. On failure, the mobile side should:
+    1. Call this endpoint (exit preview session)
+    2. Call usePreviewStore.exitPreview() to revert to live mode
+    3. Log the failure for debugging
+
+    The device also auto-exits preview when the session expires
+    (expires_at timestamp is checked on the mobile side).
+
+    Broadcasts preview_session_ended to the device so it can exit
+    preview mode in real time.
+    """
     result = await db.execute(
         select(PreviewSession).where(
             PreviewSession.id == session_id,
@@ -543,6 +574,18 @@ async def exit_preview_session(
     session.exited_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(session)
+
+    # Broadcast preview_session_ended to the device (FF4-EDGE-007)
+    if session.device_id:
+        await manager.send(
+            user_id,
+            {
+                "type": "preview_session_ended",
+                "session_id": session.id,
+                "device_id": session.device_id,
+            },
+        )
+
     return PreviewSessionOut.model_validate(session)
 
 

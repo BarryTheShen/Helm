@@ -70,7 +70,8 @@ const providerBadge: Record<string, string> = {
   custom: 'bg-gray-100 text-gray-700',
 };
 
-const getCustomBadgeClass = () => `bg-teal-100 text-teal-700`;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const getCustomBadgeClass = (_providerValue: string) => `bg-teal-100 text-teal-700`;
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required'),

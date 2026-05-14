@@ -14,10 +14,13 @@ from app.models.user import User
 from app.models.workflow import Workflow
 from app.schemas.admin import (
     AdminStatsOut,
+    CleanupPreviewOut,
+    CleanupResultOut,
     WebSocketConnectionOut,
     WebSocketStatsOut,
     WorkflowAnalyticsItem,
 )
+from app.services.cleanup_service import execute_cleanup, preview_cleanup
 from app.schemas.common import PaginatedResponse
 from app.services.websocket_manager import manager
 
@@ -134,4 +137,36 @@ async def get_websocket_stats(
             )
             for user_id, conn in manager.get_all_connections()
         ]
+    )
+
+
+@router.get("/cleanup/preview", response_model=CleanupPreviewOut)
+async def preview_cleanup_endpoint(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CleanupPreviewOut:
+    """Preview which test artifacts would be removed (dry-run)."""
+    result = await preview_cleanup(db)
+    return CleanupPreviewOut(
+        apps_deleted=result.apps_deleted,
+        module_instances_deleted=result.module_instances_deleted,
+        templates_deleted=result.templates_deleted,
+        details=result.details,
+        errors=result.errors,
+    )
+
+
+@router.post("/cleanup/execute", response_model=CleanupResultOut)
+async def execute_cleanup_endpoint(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CleanupResultOut:
+    """Remove all test artifacts (apps/modules/templates with 'test'/'Test' prefix)."""
+    result = await execute_cleanup(db)
+    return CleanupResultOut(
+        apps_deleted=result.apps_deleted,
+        module_instances_deleted=result.module_instances_deleted,
+        templates_deleted=result.templates_deleted,
+        details=result.details,
+        errors=result.errors,
     )

@@ -61,6 +61,10 @@ async def _update_sdui_calendar(db: AsyncSession, user_id: str) -> None:
             "start": e.start_time.isoformat() if e.start_time else "",
             "end": e.end_time.isoformat() if e.end_time else "",
             "color": e.color or "#6366f1",
+            # FF4-CAL-026: pass sourceType to the SDUI calendar screen
+            "sourceType": e.source_type or "local",
+            # FF4-CAL-028: pass notes to the SDUI calendar screen
+            "notes": e.notes,
         }
         for e in events
     ]
@@ -143,6 +147,8 @@ async def list_events(
                 color=e.color,
                 location=e.location,
                 all_day=e.is_all_day,
+                source_type=e.source_type or "local",
+                notes=e.notes,
                 created_at=e.created_at,
             )
             for e in events
@@ -167,6 +173,10 @@ async def create_event(
         color=body.color,
         location=body.location,
         is_all_day=body.all_day,
+        # FF4-CAL-026: pass sourceType through
+        source_type=body.source_type or "local",
+        # FF4-CAL-027: pass notes through
+        notes=body.notes,
     )
     db.add(event)
     await db.flush()
@@ -190,6 +200,8 @@ async def create_event(
         color=event.color,
         location=event.location,
         all_day=event.is_all_day,
+        source_type=event.source_type or "local",
+        notes=event.notes,
         created_at=event.created_at,
     )
 
@@ -259,6 +271,10 @@ async def add_meeting(
         description=body.get("description") or None,
         color=body.get("color") or "#6366f1",
         is_all_day=False,
+        # FF4-CAL-026: add-meeting creates local events by default
+        source_type=body.get("source_type", "local") or "local",
+        # FF4-CAL-027: pass optional notes through
+        notes=body.get("notes"),
     )
     db.add(event)
     await db.flush()
@@ -319,6 +335,8 @@ async def update_event(
         color=event.color,
         location=event.location,
         all_day=event.is_all_day,
+        source_type=event.source_type or "local",
+        notes=event.notes,
         created_at=event.created_at,
     )
 

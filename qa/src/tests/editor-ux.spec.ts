@@ -2,7 +2,7 @@ import { test, expect } from '../fixtures';
 import { EditorPage } from '../page-objects/editor';
 import { ensureEmptyCellExists } from '../editor-helpers';
 
-test('Issue 1: drag handles are positioned outside the canvas area', async ({ page, login }) => {
+test('Issue 1: drag handles should be positioned inside the canvas area', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
   await expect(page.locator(EditorPage.canvas)).toBeVisible();
@@ -27,15 +27,14 @@ test('Issue 1: drag handles are positioned outside the canvas area', async ({ pa
       const canvasBox = await canvas.boundingBox();
       expect(canvasBox, 'canvas should exist').not.toBeNull();
 
-      // Drag handle should be OUTSIDE the canvas bounds (not overlapping the center)
-      // It should be positioned to the left or right of the canvas
+      // Drag handle should be INSIDE the canvas bounds (visible overlapping the canvas area)
       const isInsideCanvas =
         handleBox!.x > canvasBox!.x &&
         handleBox!.x + handleBox!.width < canvasBox!.x + canvasBox!.width;
 
       expect(
-        !isInsideCanvas,
-        'drag handles should be positioned outside the canvas area, not inside it'
+        isInsideCanvas,
+        'drag handles should be positioned inside the canvas area, not outside it'
       ).toBe(true);
     }
   } else {

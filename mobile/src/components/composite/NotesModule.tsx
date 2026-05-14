@@ -4,6 +4,14 @@
  * Editing uses TextInput; rendering uses SDUIText (markdown-based).
  * Supports pull-to-refresh when connected to a data source.
  *
+ * REQ-IDs:
+ *   FF4-NOTE-001 — Real first-class component with real data binding
+ *   FF4-NOTE-002 — Same tier as Calendar/Chat/Todo
+ *   FF4-NOTE-003 — V1 only: no deep redesign
+ *   FF4-NOTE-004 — Markdown source model (dual view/edit via SDUIText)
+ *   FF4-NOTE-005 — Local-first SQLite notes table
+ *   FF4-NOTE-006 — Backend binding + real data rendering (V1 focus)
+ *
  * Backend integration:
  *  - Load: via dataBinding prop (useDataSource hook)
  *  - Create/Update: via dispatch (server_action to backend notes API)

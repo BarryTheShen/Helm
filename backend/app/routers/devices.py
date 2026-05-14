@@ -220,7 +220,11 @@ async def exit_device_preview(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Exit preview mode on a device."""
+    """Exit preview mode on a device.
+
+    NOTE (FF4-EDGE-007): Broadcasts preview_session_ended so the device
+    exits preview mode in real time and returns to the live version.
+    """
     result = await db.execute(
         select(Device).where(Device.id == device_id, Device.user_id == user_id)
     )
@@ -240,6 +244,16 @@ async def exit_device_preview(
         if session is not None:
             session.status = "exited"
             session.exited_at = datetime.now(timezone.utc)
+
+    # Broadcast preview_session_ended to the device (FF4-EDGE-007)
+    await manager.send(
+        user_id,
+        {
+            "type": "preview_session_ended",
+            "session_id": session_id,
+            "device_id": device_id,
+        },
+    )
 
     await log_audit(
         db, user_id, "DEVICE_PREVIEW_EXITED", "device",

@@ -1,6 +1,32 @@
 /**
  * CalendarModule — Calendar display component with 5 view variants.
  *
+ * REQ-IDs covered:
+ *   FF4-CAL-001 — Real functional component with data binding
+ *   FF4-CAL-003 — Single component with variant (admin-controlled)
+ *   FF4-CAL-004 — 5 variants: month, week, day, eventList, compact
+ *   FF4-CAL-005 — NO variant switcher on mobile (FF4-CAL-005)
+ *   FF4-CAL-006 — Time navigation within chosen variant
+ *   FF4-CAL-007 — Prev/next arrows + Today button (DateNavBar)
+ *   FF4-CAL-011 — Built-in navigation (not manual user construction)
+ *   FF4-CAL-012 — Layout-aware: respects cell size
+ *   FF4-CAL-013 — Auto-adapt to Compact when cell width < 200px
+ *   FF4-CAL-014 — Compact shows event count + next event
+ *   FF4-CAL-017 — Month: 7-column grid
+ *   FF4-CAL-018 — Today highlighted
+ *   FF4-CAL-019 — Clickable dates
+ *   FF4-CAL-020 — Event dots with indicators
+ *   FF4-CAL-021 — Source color on dots
+ *   FF4-CAL-022 — Tap date → agenda (lower part)
+ *   FF4-CAL-023 — Week/Day: time-block grid
+ *   FF4-CAL-024 — Event title, time, source color
+ *   FF4-CAL-025 — Event List sorted chronologically
+ *   FF4-CAL-034 — Real data binding (useDataSource)
+ *   FF4-CAL-037 — Library wrapper pattern (react-native-calendars wrapped)
+ *   FF4-CAL-038 — Daily Planner integration (Week variant)
+ *   FF4-CAL-039 — First-class registry component
+ *   FF4-CAL-040 — Event tap interaction
+ *
  * Variants:
  *   - **month**:   7-column month grid via react-native-calendars, event dots, tap→agenda
  *   - **week**:    7-day column layout with events per day
@@ -10,6 +36,12 @@
  *
  * When no dataBinding is provided, the module auto-fetches events from
  * the backend calendar API for the currently visible date range.
+ *
+ * FF4-CAL-005: Variant switching is admin-controlled only.
+ * The mobile user sees ONLY time navigation controls (prev/next/Today),
+ * no Month/Week/Day/List/Compact switcher buttons.
+ *
+ * FF4-CAL-013: If cell width < 200px, Month/Week/Day auto-adapt to Compact.
  */
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
@@ -38,6 +70,8 @@ interface CalendarEvent {
   allDay?: boolean;
   sourceColor?: string;
   color?: string;
+  sourceType?: string;  // FF4-CAL-026
+  notes?: string;       // FF4-CAL-027
   properties?: Record<string, unknown>;
 }
 
@@ -54,6 +88,14 @@ interface CalendarModuleProps {
 type ValidVariant = 'month' | 'week' | 'day' | 'eventList' | 'compact';
 
 const VALID_VARIANTS: ValidVariant[] = ['month', 'week', 'day', 'eventList', 'compact'];
+
+// FF4-CAL-026: Source type display configuration
+const SOURCE_TYPE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  local: { label: 'Local', color: '#6B7280', bg: '#F3F4F6' },
+  caldav: { label: 'CalDAV', color: '#2563EB', bg: '#DBEAFE' },
+  notion: { label: 'Notion', color: '#7C3AED', bg: '#EDE9FE' },
+  custom: { label: 'Custom', color: '#0D9488', bg: '#CCFBF1' },
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -171,6 +213,7 @@ const EventItem = React.memo(function EventItem({
   showDate?: boolean;
 }) {
   const color = getEventColor(event);
+  const st = event.sourceType ? SOURCE_TYPE_CONFIG[event.sourceType] : undefined;
   return (
     <TouchableOpacity
       style={[styles.eventItem, { borderLeftColor: color }]}
@@ -178,13 +221,25 @@ const EventItem = React.memo(function EventItem({
       activeOpacity={0.7}
     >
       <View style={styles.eventItemContent}>
-        <Text style={styles.eventItemTitle} numberOfLines={1}>
-          {event.allDay ? '📅 ' : ''}{event.title}
-        </Text>
+        <View style={styles.eventItemTitleRow}>
+          <Text style={styles.eventItemTitle} numberOfLines={1}>
+            {event.allDay ? '📅 ' : ''}{event.title}
+          </Text>
+          {/* FF4-CAL-026: sourceType badge */}
+          {st ? (
+            <View style={[styles.sourceBadge, { backgroundColor: st.bg }]}>
+              <Text style={[styles.sourceBadgeText, { color: st.color }]}>{st.label}</Text>
+            </View>
+          ) : null}
+        </View>
         <Text style={styles.eventItemTime}>
           {showDate ? `${formatDateLong(event.start)} · ` : ''}
           {event.allDay ? 'All day' : `${formatTime(event.start)} – ${formatTime(event.end)}`}
         </Text>
+        {/* FF4-CAL-027: notes display */}
+        {event.notes ? (
+          <Text style={styles.eventNotes} numberOfLines={2}>{event.notes}</Text>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
@@ -415,19 +470,34 @@ function DayView({
                 {slotEvents.length === 0 && (
                   <View style={styles.timeSlotEmpty} />
                 )}
-                {slotEvents.map((e) => (
-                  <TouchableOpacity
-                    key={e.id}
-                    style={[styles.timeSlotEvent, { borderLeftColor: getEventColor(e) }]}
-                    onPress={() => onEventPress?.(e)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.slotEventTitle}>{e.title}</Text>
-                    <Text style={styles.slotEventTime}>
-                      {e.allDay ? 'All day' : `${formatTime(e.start)} – ${formatTime(e.end)}`}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {slotEvents.map((e) => {
+                  const st = e.sourceType ? SOURCE_TYPE_CONFIG[e.sourceType] : undefined;
+                  return (
+                    <TouchableOpacity
+                      key={e.id}
+                      style={[styles.timeSlotEvent, { borderLeftColor: getEventColor(e) }]}
+                      onPress={() => onEventPress?.(e)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.slotEventTitleRow}>
+                        <Text style={styles.slotEventTitle}>{e.title}</Text>
+                        {/* FF4-CAL-026: sourceType badge */}
+                        {st ? (
+                          <View style={[styles.slotSourceBadge, { backgroundColor: st.bg }]}>
+                            <Text style={[styles.slotSourceBadgeText, { color: st.color }]}>{st.label}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Text style={styles.slotEventTime}>
+                        {e.allDay ? 'All day' : `${formatTime(e.start)} – ${formatTime(e.end)}`}
+                      </Text>
+                      {/* FF4-CAL-027: notes display */}
+                      {e.notes ? (
+                        <Text style={styles.slotEventNotes} numberOfLines={1}>{e.notes}</Text>
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
           );
@@ -603,6 +673,8 @@ export function CalendarModule({
           allDay: e.allDay ?? e.is_all_day ?? e.all_day ?? false,
           sourceColor: e.color ?? e.sourceColor,
           color: e.color,
+          sourceType: e.sourceType ?? e.source_type ?? 'local',  // FF4-CAL-026
+          notes: e.notes ?? undefined,                            // FF4-CAL-027
           description: e.description,
           location: e.location,
         })),
@@ -630,6 +702,8 @@ export function CalendarModule({
         end: String(row.end ?? row.end_time ?? ''),
         allDay: Boolean(row.allDay ?? row.is_all_day ?? false),
         sourceColor: (row.sourceColor ?? row.color) as string | undefined,
+        sourceType: String(row.sourceType ?? row.source_type ?? 'local'),  // FF4-CAL-026
+        notes: row.notes as string | undefined,                            // FF4-CAL-027
         color: row.color as string | undefined,
         properties: row.properties as Record<string, unknown> | undefined,
       }));
@@ -656,8 +730,16 @@ export function CalendarModule({
     return Math.min(SCREEN_WIDTH - 32, 600);
   }, []);
 
+  // FF4-CAL-013: Auto-adapt — if cell is too small for Month/Week/Day, fall back to Compact
+  const effectiveVariant = useMemo<ValidVariant>(() => {
+    if (cellWidth < 200 && (validVariant === 'month' || validVariant === 'week' || validVariant === 'day')) {
+      return 'compact';
+    }
+    return validVariant;
+  }, [cellWidth, validVariant]);
+
   const renderVariant = () => {
-    switch (validVariant) {
+    switch (effectiveVariant) {
       case 'month':
         return <MonthView events={events} onEventPress={onEventPress} cellWidth={cellWidth} />;
       case 'week':
@@ -682,23 +764,14 @@ export function CalendarModule({
         <Text style={styles.moduleTitle}>{title}</Text>
       ) : null}
 
-      {/* View Switcher */}
-      <View style={styles.viewSwitcher}>
-        {(['month', 'week', 'day', 'eventList', 'compact'] as ValidVariant[]).map((v) => (
-          <TouchableOpacity
-            key={v}
-            style={[styles.viewTab, validVariant === v && styles.viewTabActive]}
-            onPress={() => {/* variant is admin-controlled in SDUI payload */}}
-          >
-            <Text
-              style={[styles.viewTabText, validVariant === v && styles.viewTabTextActive]}
-              numberOfLines={1}
-            >
-              {v === 'month' ? 'Month' : v === 'week' ? 'Week' : v === 'day' ? 'Day' : v === 'eventList' ? 'List' : '📋'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {/* FF4-CAL-005: NO variant switcher on mobile — variant is admin-controlled via SDUI payload */}
+      {/* Only time navigation is available within the chosen variant */}
+
+      {cellWidth < 200 && validVariant !== effectiveVariant && (
+        <Text style={styles.autoAdaptNotice}>
+          Auto-adapted to compact view (cell too small)
+        </Text>
+      )}
 
       {renderVariant()}
     </ScrollView>
@@ -722,33 +795,8 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 4,
   },
-  viewSwitcher: {
-    flexDirection: 'row',
-    padding: 8,
-    gap: 4,
-    backgroundColor: '#F2F2F7',
-    margin: 12,
-    borderRadius: 8,
-  },
-  viewTab: {
-    flex: 1,
-    paddingVertical: 6,
-    alignItems: 'center',
-    borderRadius: 6,
-  },
-  viewTabActive: {
-    backgroundColor: '#fff',
-    elevation: 1,
-  },
-  viewTabText: {
-    fontSize: 11,
-    color: '#8E8E93',
-    fontWeight: '500',
-  },
-  viewTabTextActive: {
-    color: '#007AFF',
-    fontWeight: '600',
-  },
+  // FF4-CAL-005: No view switcher on mobile — variant is admin-controlled
+  // View switcher styles removed per FF4-CAL-005 requirement
   // Date navigation
   dateNav: {
     flexDirection: 'row',
@@ -818,6 +866,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8E8E93',
     marginTop: 2,
+  },
+  // FF4-CAL-026: sourceType badge styles
+  eventItemTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sourceBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  sourceBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  // FF4-CAL-027: notes text style
+  eventNotes: {
+    fontSize: 12,
+    color: '#8E8E93',
+    fontStyle: 'italic',
+    marginTop: 4,
+    lineHeight: 16,
   },
   // Week variant
   weekGrid: {
@@ -921,6 +992,29 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#8E8E93',
   },
+  // FF4-CAL-026: sourceType badge for DayView
+  slotEventTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  slotSourceBadge: {
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  slotSourceBadgeText: {
+    fontSize: 9,
+    fontWeight: '600',
+  },
+  // FF4-CAL-027: notes text for DayView
+  slotEventNotes: {
+    fontSize: 11,
+    color: '#8E8E93',
+    fontStyle: 'italic',
+    marginTop: 2,
+    lineHeight: 14,
+  },
   // Event List variant
   eventListGroup: {
     paddingHorizontal: 16,
@@ -973,5 +1067,13 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     fontWeight: '500',
     flex: 1,
+  },
+  autoAdaptNotice: {
+    fontSize: 11,
+    color: '#8E8E93',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 12,
   },
 });

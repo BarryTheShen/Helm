@@ -43,9 +43,9 @@ INITIAL_COMPONENTS = [
             "variant": {"type": "enum", "options": ["primary", "secondary", "outline", "ghost", "danger"], "default": "primary"},
             "size": {"type": "enum", "options": ["small", "medium", "large"], "default": "medium"},
             "fullWidth": {"type": "boolean", "default": True},
-            "action": {"type": "action", "default": None},
+            "onPress": {"type": "action", "default": None},
         },
-        "default_props": {"label": "Button", "variant": "primary", "size": "medium", "fullWidth": True, "action": None},
+        "default_props": {"label": "Button", "variant": "primary", "size": "medium", "fullWidth": True, "onPress": None},
     },
     {
         "type": "image",

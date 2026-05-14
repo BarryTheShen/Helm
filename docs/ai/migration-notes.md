@@ -281,3 +281,24 @@ Rewrote `opencode.jsonc` to match official OpenCode v1.14 config format. Updated
 - Application source code — out of scope.
 - Command files (`.opencode/commands/*.md`) — no changes needed.
 - `.claude/` files — legacy Claude Code config, left alone.
+
+## 2026-05-15: Document FF4 Reassessment Changes
+
+### What Changed
+
+Documented the FF4 Reassessment implementation in living docs:
+
+- **`docs/codebase-explanation/backend.md`** — Added cleanup endpoints (`GET/POST /api/admin/cleanup/preview|execute`), CalendarEvent `source_type` and `notes` fields, `cleanup_service.py` to service list, updated file counts (28→32 models, 27→29 schemas, 27→28 routers, 19→21 services).
+- **`docs/codebase-explanation/frontend.md`** — Added FF4 Reassessment section documenting: cell width validation engine expansion (241→658 lines, 24+ functions), `RowContextMenu` component, version comparison/diff UI in Module Editor and App Editor, calendar mobile changes (view switcher removed, sourceType badges, notes display, admin-controlled variant), SDUI Empty container `dispatch`/`dataBinding` props, and Settings "Clean State" section.
+- **`docs/codebase-explanation/protocol.md`** — Added `source_type` and `notes` fields to CalendarEvent API body example.
+- **`docs/ai/project-map.md`** — Updated file counts to match actual backend (32 models, 29 schemas, 28 routers, 21 services).
+
+### Why
+
+FF4 Reassessment implementation added cleanup endpoints, CalendarEvent fields, cell width validation functions, row context menu, version diff UI, calendar mobile improvements, Empty container SDUI props, and settings cleanup UI. Documentation needed to reflect these changes.
+
+### What was NOT changed
+
+- No app source files changed.
+- No agent definitions (`docs/ai/agents.md`, `.opencode/agents/*.md`) changed.
+- No workflow docs (`docs/ai/workflows.md`) changed.

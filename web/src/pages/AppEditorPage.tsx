@@ -51,6 +51,11 @@ export function AppEditorPage() {
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [liveVersionDisplay, setLiveVersionDisplay] = useState<string | null>(null);
 
+  // ── Version diff state (FF4-VERSIONING-APP) ───────────────────────────
+  const [versionDiffMode, setVersionDiffMode] = useState(false);
+  const [versionDiffA, setVersionDiffA] = useState<string | null>(null);
+  const [versionDiffB, setVersionDiffB] = useState<string | null>(null);
+
   const showMsg = (type: 'success' | 'error' | 'info', text: string) => {
     console.log(`[AppEditor] message: ${type} — ${text}`);
     setMessage({ type, text });
@@ -90,7 +95,11 @@ export function AppEditorPage() {
         const response = await api.getModuleInstances();
         const activeCount = response.items.filter(m => m.status === 'active').length;
         console.log(`[AppEditor] loadModules() — loaded ${response.items.length} modules, ${activeCount} active`);
-        setAvailableModules(response.items.filter(m => m.status === 'active'));
+        setAvailableModules(
+          response.items
+            .filter(m => m.status === 'active')
+            .map(m => ({ ...m, icon: 'Package' })) as ModuleInstance[]
+        );
       } catch (err) {
         console.error('[AppEditor] loadModules() — failed:', err instanceof Error ? err.message : err);
         showMsg('error', 'Failed to load modules');
@@ -575,7 +584,6 @@ export function AppEditorPage() {
       {/* Preview Picker Modal */}
       {showPreviewPicker && currentApp && (
         <PreviewPicker
-          appId={currentApp.id}
           onSelectBrowser={handlePreviewBrowser}
           onSelectDevice={handlePreviewDevice}
           onClose={() => setShowPreviewPicker(false)}
@@ -659,13 +667,24 @@ export function AppEditorPage() {
       {/* Version History Modal */}
       {showVersionHistory && currentApp && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-5 w-[560px] max-h-[75vh] overflow-auto">
+          <div className="bg-white rounded-lg p-5 w-[620px] max-h-[75vh] overflow-auto">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold flex items-center gap-1.5">
                 <History size={14} />
-                Version History — {currentApp.icon} {currentApp.name}
+                {versionDiffMode ? 'Compare Versions' : `Version History — ${currentApp.icon} ${currentApp.name}`}
               </h3>
-              <button onClick={() => setShowVersionHistory(false)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+              <div className="flex items-center gap-2">
+                {versionDiffMode ? (
+                  <button onClick={() => { setVersionDiffMode(false); setVersionDiffA(null); setVersionDiffB(null); }} className="text-xs text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors">
+                    Exit Compare
+                  </button>
+                ) : appVersions.length >= 2 ? (
+                  <button onClick={() => setVersionDiffMode(true)} className="text-xs text-purple-600 hover:bg-purple-50 px-2 py-1 rounded transition-colors">
+                    Compare
+                  </button>
+                ) : null}
+                <button onClick={() => setShowVersionHistory(false)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+              </div>
             </div>
 
             {loadingVersions ? (
@@ -677,15 +696,53 @@ export function AppEditorPage() {
               </div>
             ) : (
               <div className="space-y-2">
+                {versionDiffMode && (
+                  <div className="text-xs text-gray-500 mb-2">
+                    {versionDiffA && !versionDiffB
+                      ? 'Select another version to compare:'
+                      : 'Click a version to select it as the first comparison:'}
+                  </div>
+                )}
                 {appVersions.map((v) => {
                   const isPublished = v.source === 'publish';
+                  const isDiffSelectedA = versionDiffA === v.id;
+                  const isDiffSelectedB = versionDiffB === v.id;
                   return (
-                    <div key={v.id} className={`border rounded-lg overflow-hidden ${isPublished ? 'border-green-200' : 'border-gray-200'}`}>
+                    <div
+                      key={v.id}
+                      className={`border rounded-lg overflow-hidden transition-colors ${
+                        isDiffSelectedA ? 'border-purple-400 bg-purple-50/30'
+                        : isDiffSelectedB ? 'border-purple-600 bg-purple-100/30'
+                        : versionDiffMode ? 'border-gray-200 cursor-pointer hover:border-purple-300'
+                        : isPublished ? 'border-green-200' : 'border-gray-200'
+                      }`}
+                      onClick={() => {
+                        if (versionDiffMode) {
+                          if (!versionDiffA) {
+                            setVersionDiffA(v.id);
+                          } else if (!versionDiffB && versionDiffA !== v.id) {
+                            setVersionDiffB(v.id);
+                          }
+                        }
+                      }}
+                    >
                       <div className="flex items-center justify-between p-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
+                            {versionDiffMode && (
+                              <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center text-[8px] font-bold ${
+                                isDiffSelectedA ? 'border-purple-500 bg-purple-500 text-white'
+                                : isDiffSelectedB ? 'border-purple-600 bg-purple-600 text-white'
+                                : 'border-gray-300'
+                              }`}>
+                                {isDiffSelectedA ? 'A' : isDiffSelectedB ? 'B' : ''}
+                              </span>
+                            )}
                             <div className="text-sm font-medium text-gray-800">
-                              v{v.version_number} — {v.display_name}
+                              {/* FF4-VERSIONING-APP-001: avoid "v11 — v11" duplicate when display_name matches version prefix */}
+                              {v.display_name === `v${v.version_number}`
+                                ? `v${v.version_number}`
+                                : `v${v.version_number} — ${v.display_name}`}
                             </div>
                             <span className={`text-[10px] px-1.5 py-0.5 rounded-full capitalize ${
                               isPublished
@@ -706,6 +763,23 @@ export function AppEditorPage() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Diff result summary */}
+            {versionDiffA && versionDiffB && versionDiffMode && (
+              <div className="mt-4 border border-purple-200 bg-purple-50 rounded-lg p-3">
+                <div className="text-xs font-semibold text-purple-800 mb-2">Selected Versions</div>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="bg-white rounded p-2 border border-purple-100">
+                    <div className="font-medium text-gray-700">A: {appVersions.find(v => v.id === versionDiffA)?.display_name}</div>
+                    <div className="text-gray-500 mt-1">{appVersions.find(v => v.id === versionDiffA)?.source}</div>
+                  </div>
+                  <div className="bg-white rounded p-2 border border-purple-100">
+                    <div className="font-medium text-gray-700">B: {appVersions.find(v => v.id === versionDiffB)?.display_name}</div>
+                    <div className="text-gray-500 mt-1">{appVersions.find(v => v.id === versionDiffB)?.source}</div>
+                  </div>
+                </div>
               </div>
             )}
           </div>

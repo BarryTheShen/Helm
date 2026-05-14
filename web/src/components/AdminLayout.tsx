@@ -19,28 +19,28 @@ const MIN_EDITOR_WIDTH = 1024;
 export function AdminLayout() {
   const logout = useAuthStore(s => s.logout);
   const user = useAuthStore(s => s.user);
-  const location = useLocation();
+  const { pathname } = useLocation();
   const navigate = useNavigate();
   const [editorExpanded, setEditorExpanded] = useState(true);
 
   // Clear module_instance_id from search params when navigating away from /editor.
   // React Router v7 preserves query params across SPA navigation, so ?module_instance_id=home
   // would stick around on /templates and cause issues when navigating back to /editor.
-  const prevPathnameRef = useRef(location.pathname);
+  const prevPathnameRef = useRef(pathname);
   useEffect(() => {
     const prev = prevPathnameRef.current;
-    prevPathnameRef.current = location.pathname;
-    if (prev.startsWith('/editor') && !location.pathname.startsWith('/editor')) {
+    prevPathnameRef.current = pathname;
+    if (prev.startsWith('/editor') && !pathname.startsWith('/editor')) {
       const params = new URLSearchParams(window.location.search);
       if (params.get('module_instance_id')) {
         params.delete('module_instance_id');
         navigate({ search: params.toString() || undefined }, { replace: true });
       }
     }
-  }, [location.pathname, navigate]);
+  }, [pathname, navigate]);
 
-  const requiresWideViewport = WIDE_VIEWPORT_PAGES.some(p => location.pathname.startsWith(p));
-  const isEditorActive = location.pathname.startsWith('/editor');
+  const requiresWideViewport = WIDE_VIEWPORT_PAGES.some(p => pathname.startsWith(p));
+  const isEditorActive = pathname.startsWith('/editor');
 
   return (
     <div className="flex h-screen">

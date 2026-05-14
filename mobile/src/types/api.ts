@@ -55,6 +55,8 @@ export interface CalendarEvent {
   is_all_day: boolean;
   location?: string;
   color?: string;
+  source_type?: string; // FF4-CAL-026
+  notes?: string;       // FF4-CAL-027
   created_at: string;
   updated_at: string;
 }

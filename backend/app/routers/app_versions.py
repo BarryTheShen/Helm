@@ -431,6 +431,22 @@ async def publish_app_version(
 
     This promotes a version to be the live app config. All devices assigned
     to this app will be notified via WebSocket.
+
+    NOTE (FF4-EDGE-002): This endpoint should resolve "use_newest" module
+    references to concrete ModuleVersion IDs before creating the AppVersion.
+    The AppVersion stores both resolved_module_versions (concrete version IDs
+    at publish time) and module_reference_policies (the ref mode used).
+    TODO: Add module reference resolution logic here — iterate over
+    app.module_refs, resolve "use_newest" to latest valid ModuleVersion,
+    and populate resolved_module_versions + module_reference_policies.
+    Current implementation stores empty lists for both fields.
+
+    NOTE (FF4-EDGE-005): Devices that are offline when this endpoint runs
+    still get their active_app_version_id updated. When they reconnect,
+    they fetch the latest config via GET /api/devices/{device_id}/config.
+    The update_status field should be set to 'update_available' for offline
+    devices to indicate a pending update. On reconnection, the device can
+    detect the status and fetch the new version automatically.
     """
     app = await get_app_or_404(db, app_id, user_id)
 
@@ -458,6 +474,8 @@ async def publish_app_version(
     devices = list(result.scalars().all())
     for device in devices:
         device.active_app_version_id = version.id
+        # Mark device as having a pending update (FF4-EDGE-005)
+        device.update_status = "update_available"
 
     await log_audit(
         db, user_id, "APP_VERSION_PUBLISHED", "app_version",

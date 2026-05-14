@@ -3,7 +3,15 @@ import { useEffect, useState } from 'react';
 import { X, Smartphone } from 'lucide-react';
 import { usePreviewStore } from '../stores/usePreviewStore';
 import { SDUIPreview } from './SDUIPreview';
+import { api } from '../lib/api';
 
+/**
+ * BrowserPreview — Renders an app preview in the web admin.
+ *
+ * REQ-ID: FF4-VE-005 — App Preview renders in web admin using SDUIPreview.
+ * Attempts real data loading from backend API first; falls back to mock data
+ * if backend is unreachable (graceful degradation).
+ */
 interface BrowserPreviewProps {
   appId: string;
   onClose: () => void;
@@ -14,21 +22,42 @@ export function BrowserPreview({ appId, onClose }: BrowserPreviewProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentScreen, setCurrentScreen] = useState<'home' | 'chat' | 'modules' | 'calendar' | 'forms'>('home');
+  const [liveScreens, setLiveScreens] = useState<Record<string, any>>({});
+  const [useLiveData, setUseLiveData] = useState(false);
 
   useEffect(() => {
     const loadPreviewData = async () => {
       setLoading(true);
       setError(null);
-      try {
-        // TODO: Replace with actual API call to /api/preview/browser
-        // const response = await api.post(`/api/preview/browser`, { app_id: appId });
-        // startPreview(response.config, 'browser');
 
-        // Mock preview data for now
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setLoading(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load preview');
+      // FF4-VE-005: Attempt to load real SDUI data from backend first
+      try {
+        const modulesData = await api.get<{ items: Array<{ module_id: string; has_screen: boolean }> }>('/api/sdui/modules');
+        const mainTabs = ['home', 'chat', 'modules', 'calendar', 'forms'];
+        const screenMap: Record<string, any> = {};
+
+        for (const mod of modulesData.items ?? []) {
+          if (mainTabs.includes(mod.module_id) && mod.has_screen) {
+            try {
+              const screenData = await api.get<{ screen?: any; state_json?: any }>(`/api/sdui/${mod.module_id}`);
+              const screen = screenData.screen || screenData.state_json || null;
+              if (screen) {
+                screenMap[mod.module_id] = screen;
+              }
+            } catch {
+              // Module-specific fetch failure — skip, use mock for this screen
+            }
+          }
+        }
+
+        if (Object.keys(screenMap).length > 0) {
+          setLiveScreens(screenMap);
+          setUseLiveData(true);
+        }
+      } catch {
+        // Backend unreachable — fall back to mock data gracefully
+        console.warn('BrowserPreview: backend unreachable, using mock data');
+      } finally {
         setLoading(false);
       }
     };
@@ -41,7 +70,7 @@ export function BrowserPreview({ appId, onClose }: BrowserPreviewProps) {
     onClose();
   };
 
-  // Mock SDUI screen data for demonstration
+  // Mock SDUI screen data for demonstration (fallback when backend is unreachable)
   const mockScreens: Record<string, any> = {
     home: {
       rows: [
@@ -170,7 +199,11 @@ export function BrowserPreview({ appId, onClose }: BrowserPreviewProps) {
     },
   };
 
-  const currentScreenData = mockScreens[currentScreen];
+  // FF4-VE-005: Use live data when available, fall back to mock data
+  const currentScreenData = useLiveData && liveScreens[currentScreen]
+    ? liveScreens[currentScreen]
+    : mockScreens[currentScreen];
+
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

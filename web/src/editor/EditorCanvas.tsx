@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { CSSProperties, JSX } from 'react';
 import {
   DndContext,
@@ -21,13 +21,96 @@ import type { EditorCell, EditorComponent, EditorRow, EditorRowHeight } from './
 import { assertRegisteredComponentType } from './typeGuards';
 
 import { ComponentPicker } from './ComponentPicker';
-import { Plus, GripVertical, X, Edit2, Eye, Copy } from 'lucide-react';
+import { Plus, Grip, X, Edit2, Eye, Copy, Trash2, ArrowUp, ArrowDown, Clipboard } from 'lucide-react';
 import { resolveVariables } from './variableResolver';
 import ReactMarkdown from 'react-markdown';
 
+// cell width validation constants — SLICE-CELL-WIDTH (FF4-ROW-004..021, FF4-ROW-024)
+// NOTE: MIN_CELL_WIDTH_PERCENT is also defined locally below (EditorCanvas.tsx:112)
+
+// ── Context Menu ──────────────────────────────────────────────────────────
+
+interface RowContextMenuProps {
+  rowId: string;
+  position: { x: number; y: number };
+  onClose: () => void;
+  onDeleteRow: (rowId: string) => void;
+  onDuplicateRow: (rowId: string) => void;
+  onAddRowAbove: (rowId: string) => void;
+  onAddRowBelow: (rowId: string) => void;
+}
+
+function RowContextMenu({ rowId, position, onClose, onDeleteRow, onDuplicateRow, onAddRowAbove, onAddRowBelow }: RowContextMenuProps) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose();
+      }
+    }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      className="fixed bg-white border border-gray-200 rounded-lg shadow-xl z-[9999] py-1 w-44"
+      style={{ top: position.y, left: position.x }}
+      role="menu"
+      aria-label="Row context menu"
+    >
+      <button
+        onClick={() => { onAddRowAbove(rowId); onClose(); }}
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors text-left"
+        role="menuitem"
+      >
+        <ArrowUp size={12} />
+        Add Row Above
+      </button>
+      <button
+        onClick={() => { onAddRowBelow(rowId); onClose(); }}
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors text-left"
+        role="menuitem"
+      >
+        <ArrowDown size={12} />
+        Add Row Below
+      </button>
+      <button
+        onClick={() => { onDuplicateRow(rowId); onClose(); }}
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors text-left"
+        role="menuitem"
+      >
+        <Clipboard size={12} />
+        Duplicate Row
+      </button>
+      <div className="border-t border-gray-100 my-1" />
+      <button
+        onClick={() => { onDeleteRow(rowId); onClose(); }}
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-red-50 text-red-600 transition-colors text-left"
+        role="menuitem"
+      >
+        <Trash2 size={12} />
+        Delete Row
+      </button>
+    </div>
+  );
+}
+
 const MIN_ROW_HEIGHT = 48;
 const ROW_DRAG_HANDLE_WIDTH = 24;
-const ROW_DRAG_HANDLE_OFFSET = -60; // Position drag handle well outside the phone mockup (negative = left of screen)
+/** FF4-ROW-001: Drag handle positioned to the left of the row, inside the editor canvas.
+ *  Previously at -60px (off-screen). Now uses a negative left offset relative to the row
+ *  container that places it just outside the row border but still within the canvas viewport. */
+const ROW_DRAG_HANDLE_OFFSET = -28;
 const SCROLLABLE_CELL_WIDTH = 160;
 const SCROLLABLE_CELL_MIN_WIDTH = 120;
 const MAX_PREVIEW_WIDTH = 960;
@@ -684,16 +767,19 @@ function ContainerPreview({
   );
 }
 
-function EmptyPreview({ gap, padding, backgroundColor, children }: { gap?: number; padding?: number; backgroundColor?: string; children?: EditorComponent[] }) {
+// FF4-ROW-023: Simplified EmptyPreview — no gap/padding/background controls.
+// FF4-EC-001: Vertical flex container with component fitting.
+function EmptyPreview({ children }: { gap?: number; padding?: number; backgroundColor?: string; children?: EditorComponent[] }) {
   return (
-    <div
-      className="flex flex-col min-h-[48px] border border-dashed border-gray-200 rounded p-2"
-      style={{ gap: gap ?? 0, padding: padding ?? 0, backgroundColor }}
-    >
+    <div className="flex flex-col min-h-[48px] flex-1 w-full border border-dashed border-gray-200 rounded">
       {children && children.length > 0 ? (
-        children.map((child) => <ComponentPreview key={child.id} component={child} />)
+        children.map((child) => (
+          <div key={child.id} className="flex-1 w-full" style={{ minHeight: 0 }}>
+            <ComponentPreview component={child} />
+          </div>
+        ))
       ) : (
-        <div className="text-xs italic text-gray-400">Empty container</div>
+        <div className="flex items-center justify-center flex-1 text-xs italic text-gray-400">Empty container</div>
       )}
     </div>
   );
@@ -978,6 +1064,8 @@ function CellResizeHandle({
 }
 
 // ── Row Drag Handle ──────────────────────────────────────────────────────────
+// FF4-ROW-001: 6-dot drag handle positioned visibly to the left of each row.
+// Uses GripVertical from lucide-react. Opacity transitions on row hover.
 
 function RowDragHandle({
   isDragging,
@@ -997,20 +1085,20 @@ function RowDragHandle({
       {...attributes}
       {...listeners}
       data-testid={testId}
-      className={`absolute z-10 flex select-none items-center justify-center transition-opacity touch-none ${
+      className={`absolute z-10 flex select-none items-center justify-center transition-opacity touch-none rounded-l-md ${
         isDragging
-          ? 'opacity-100 cursor-grabbing'
-          : 'opacity-0 cursor-grab group-hover:opacity-100'
+          ? 'opacity-100 cursor-grabbing bg-blue-50'
+          : 'opacity-0 cursor-grab group-hover:opacity-100 hover:bg-gray-100'
       }`}
       style={{
         left: ROW_DRAG_HANDLE_OFFSET,
         top: 0,
         bottom: 0,
-        width: ROW_DRAG_HANDLE_WIDTH
+        width: ROW_DRAG_HANDLE_WIDTH,
       }}
       title="Drag to reorder row"
     >
-      <GripVertical size={12} className={isDragging ? 'text-blue-500' : 'text-gray-400'} />
+      <Grip size={14} className={isDragging ? 'text-blue-500' : 'text-gray-400'} />
     </div>
   );
 }
@@ -1037,7 +1125,7 @@ function RowHeightResizeHandle({
     const rowElement = e.currentTarget.parentElement;
     if (!rowElement) return;
 
-    rowRef.current = rowElement;
+    rowRef.current = rowElement as HTMLDivElement;
     startYRef.current = e.clientY;
     startHeightRef.current = rowElement.getBoundingClientRect().height;
     nextHeightRef.current = Math.max(MIN_ROW_HEIGHT, Math.round(startHeightRef.current));
@@ -1169,9 +1257,32 @@ function SortableRow({
 }) {
   const { setNodeRef, transform, transition, attributes, listeners, isDragging } = useSortable({ id: row.id });
 
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+    setSelection({ type: 'row', rowId: row.id });
+  };
+
+  const handleAddRowAbove = (rowId: string) => {
+    const idx = useEditorStore.getState().rows.findIndex(r => r.id === rowId);
+    addRow(1, idx >= 0 ? idx : 0);
+  };
+
+  const handleAddRowBelow = (rowId: string) => {
+    const idx = useEditorStore.getState().rows.findIndex(r => r.id === rowId);
+    addRow(1, idx >= 0 ? idx + 1 : useEditorStore.getState().rows.length);
+  };
+
+  const handleDuplicateRow = (rowId: string) => {
+    useEditorStore.getState().duplicateRow(rowId);
   };
 
   return (
@@ -1195,6 +1306,7 @@ function SortableRow({
           rowResizePreview?.rowId === row.id ? rowResizePreview.height : undefined,
         )}
         onClick={(e) => { e.stopPropagation(); setSelection({ type: 'row', rowId: row.id }); }}
+        onContextMenu={handleContextMenu}
       >
         {/* Drag handle */}
         <RowDragHandle testId={`row-drag-handle-${row.id}`} isDragging={isDragging} attributes={attributes} listeners={listeners} />
@@ -1334,6 +1446,19 @@ function SortableRow({
           onCommit={handleRowResizeCommit}
         />
       </div>
+
+      {/* Row context menu */}
+      {contextMenu && (
+        <RowContextMenu
+          rowId={row.id}
+          position={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onDeleteRow={deleteRow}
+          onDuplicateRow={handleDuplicateRow}
+          onAddRowAbove={handleAddRowAbove}
+          onAddRowBelow={handleAddRowBelow}
+        />
+      )}
 
       {/* Insert point after row */}
       <RowInsertionControl onAdd={(n) => addRow(n, rowIdx + 1)} between />

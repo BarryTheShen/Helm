@@ -818,7 +818,7 @@ def _get_tool_definitions() -> list[dict]:
                                                                         "type": {
                                                                             "type": "string",
                                                                             "enum": [
-                                                                                "Text", "Markdown", "Button", "Image",
+                                                                                "Text", "Button", "Image",
                                                                                 "Icon", "Container",
                                                                                 "CalendarModule", "ChatModule", "NotesModule", "InputBar",
                                                                                 "Badge", "Stat", "List", "Alert",

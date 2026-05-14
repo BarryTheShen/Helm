@@ -488,3 +488,73 @@ async def rename_template_version(
     await db.commit()
     await db.refresh(version)
     return TemplateVersionOut.model_validate(version)
+
+
+@router.post("/{template_id}/versions/{version_id}/apply", status_code=200)
+async def apply_template_version(
+    template_id: str,
+    version_id: str,
+    body: ApplyTemplateRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Apply a template version to a module by creating a draft.
+
+    Looks up the versioned template JSON and applies it the same way as
+    the regular template apply endpoint.
+    """
+    template = await db.get(SDUITemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if not template.is_public and template.created_by != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    result = await db.execute(
+        select(TemplateVersion).where(
+            TemplateVersion.id == version_id,
+            TemplateVersion.template_id == template_id,
+        )
+    )
+    version = result.scalar_one_or_none()
+    if version is None:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    user_id = str(current_user.id)
+    module_id = body.module_id
+    screen_json = _prepare_template_screen_or_422(version.template_json, module_id)
+
+    # Create/update a draft (same pattern as apply_template)
+    draft_key = draft_screen_key(module_id)
+    result = await db.execute(
+        select(ModuleState).where(
+            ModuleState.user_id == user_id,
+            ModuleState.module_type == draft_key,
+        )
+    )
+    draft = result.scalar_one_or_none()
+    if draft is None:
+        draft = ModuleState(
+            id=str(uuid4()),
+            user_id=user_id,
+            module_type=draft_key,
+            state_json=screen_json,
+            version=1,
+        )
+        db.add(draft)
+    else:
+        draft.state_json = screen_json
+        draft.version += 1
+
+    await _record_screen_history(db, user_id, module_id, screen_json, source="template_version")
+    await db.commit()
+
+    await send_draft_update(user_id, module_id, screen_json, draft.version)
+
+    return {
+        "module_id": module_id,
+        "version": draft.version,
+        "template_id": template_id,
+        "version_id": version_id,
+        "applied": True,
+    }

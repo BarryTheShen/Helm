@@ -131,3 +131,147 @@ async def test_delete_event(auth_client):
 async def test_event_requires_auth(client):
     resp = await client.get(EVENTS)
     assert resp.status_code == 401
+
+
+# ── FF4-CAL-026: sourceType field tests ─────────────────────────────────────
+
+
+async def test_create_event_with_source_type_default(auth_client):
+    """Creating an event without source_type defaults to 'local'."""
+    resp = await auth_client.post(
+        EVENTS,
+        json={
+            "title": "Default source",
+            "start_time": "2025-07-01T10:00:00Z",
+            "end_time": "2025-07-01T11:00:00Z",
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["source_type"] == "local"
+
+
+async def test_create_event_with_source_type_explicit(auth_client):
+    """Creating an event with explicit source_type values."""
+    for st in ("local", "caldav", "notion", "custom"):
+        resp = await auth_client.post(
+            EVENTS,
+            json={
+                "title": f"Source {st}",
+                "start_time": "2025-07-01T10:00:00Z",
+                "end_time": "2025-07-01T11:00:00Z",
+                "source_type": st,
+            },
+        )
+        assert resp.status_code == 201, f"Failed for source_type={st}"
+        assert resp.json()["source_type"] == st
+
+
+async def test_create_event_with_invalid_source_type(auth_client):
+    """Creating an event with invalid source_type returns 422."""
+    resp = await auth_client.post(
+        EVENTS,
+        json={
+            "title": "Bad source",
+            "start_time": "2025-07-01T10:00:00Z",
+            "end_time": "2025-07-01T11:00:00Z",
+            "source_type": "google",
+        },
+    )
+    assert resp.status_code == 422
+
+
+async def test_update_event_source_type(auth_client):
+    """Updating an event's source_type."""
+    create = await auth_client.post(
+        EVENTS,
+        json={
+            "title": "Change source",
+            "start_time": "2025-07-01T10:00:00Z",
+            "end_time": "2025-07-01T11:00:00Z",
+        },
+    )
+    event_id = create.json()["id"]
+
+    resp = await auth_client.put(
+        f"{EVENTS}/{event_id}",
+        json={"source_type": "caldav"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["source_type"] == "caldav"
+
+
+# ── FF4-CAL-027: notes field tests ──────────────────────────────────────────
+
+
+async def test_create_event_with_notes(auth_client):
+    """Creating an event with notes field."""
+    resp = await auth_client.post(
+        EVENTS,
+        json={
+            "title": "Event with notes",
+            "start_time": "2025-07-01T10:00:00Z",
+            "end_time": "2025-07-01T11:00:00Z",
+            "notes": "Prepare slides, review agenda, confirm attendees",
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["notes"] == "Prepare slides, review agenda, confirm attendees"
+
+
+async def test_create_event_without_notes(auth_client):
+    """Creating an event without notes field — notes should be None."""
+    resp = await auth_client.post(
+        EVENTS,
+        json={
+            "title": "No notes",
+            "start_time": "2025-07-01T10:00:00Z",
+            "end_time": "2025-07-01T11:00:00Z",
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["notes"] is None
+
+
+async def test_update_event_notes(auth_client):
+    """Updating an event's notes field."""
+    create = await auth_client.post(
+        EVENTS,
+        json={
+            "title": "Update notes",
+            "start_time": "2025-07-01T10:00:00Z",
+            "end_time": "2025-07-01T11:00:00Z",
+        },
+    )
+    event_id = create.json()["id"]
+
+    resp = await auth_client.put(
+        f"{EVENTS}/{event_id}",
+        json={"notes": "Updated notes content"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["notes"] == "Updated notes content"
+
+
+async def test_clear_event_notes(auth_client):
+    """Setting notes to empty string should clear the field."""
+    create = await auth_client.post(
+        EVENTS,
+        json={
+            "title": "Clear notes",
+            "start_time": "2025-07-01T10:00:00Z",
+            "end_time": "2025-07-01T11:00:00Z",
+            "notes": "Some notes",
+        },
+    )
+    event_id = create.json()["id"]
+
+    # Update with notes=None — won't clear because exclude_none in update
+    resp = await auth_client.put(
+        f"{EVENTS}/{event_id}",
+        json={"notes": None},
+    )
+    # exclude_none means null values are skipped, so notes should remain
+    assert resp.status_code == 200
+    assert resp.json()["notes"] == "Some notes"

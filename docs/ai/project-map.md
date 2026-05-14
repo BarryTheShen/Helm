@@ -1,15 +1,15 @@
 # Project Map
 
-Current state of the Helm codebase. Updated 2026-05-14 (FF4: versioning, new models, bundled deployment).
+Current state of the Helm codebase. Updated 2026-05-15 (FF4 Reassessment: cleanup service, CalendarEvent fields, cell width validation).
 
 ## File Counts (Verified)
 
 | Module | Files | Notes |
 |--------|-------|-------|
-| Models | 28 | SQLAlchemy ORM (`backend/app/models/`) |
-| Schemas | 27 | Pydantic request/response (`backend/app/schemas/`) |
-| Routers | 27 | FastAPI route modules (`backend/app/routers/`) |
-| Services | 19 | Business logic (`backend/app/services/`) |
+| Models | 32 | SQLAlchemy ORM (`backend/app/models/`) |
+| Schemas | 29 | Pydantic request/response (`backend/app/schemas/`) |
+| Routers | 28 | FastAPI route modules (`backend/app/routers/`) |
+| Services | 21 | Business logic (`backend/app/services/`) |
 | Test Files | 23 | pytest-asyncio (`backend/tests/`) |
 
 Verify with: `find backend/app/<dir> -name '*.py' ! -name '__init__*.py' | wc -l`
@@ -49,10 +49,10 @@ Helm/
 │   ├── app/
 │   │   ├── main.py            # FastAPI app, lifespan, middleware
 │   │   ├── config.py          # Settings (pydantic-settings)
-│   │   ├── models/            # 25 SQLAlchemy ORM models
-│   │   ├── schemas/           # 24 Pydantic schemas
-│   │   ├── routers/           # 25 FastAPI route modules
-│   │   ├── services/          # 15 business logic modules
+│   │   ├── models/            # 32 SQLAlchemy ORM models
+│   │   ├── schemas/           # 29 Pydantic schemas
+│   │   ├── routers/           # 28 FastAPI route modules
+│   │   ├── services/          # 21 business logic modules
 │   │   ├── mcp/               # MCP server + tool implementations
 │   │   └── utils/             # security.py (JWT, bcrypt)
 │   └── tests/                 # 23 test files

@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useEditorStore } from '../editor/useEditorStore';
 import { StructureTree } from '../editor/StructureTree';
+import { ComponentPalette } from '../editor/ComponentPalette';
 import { EditorCanvas } from '../editor/EditorCanvas';
 import { PropertyInspector } from '../editor/PropertyInspector';
 import { AppPreview } from '../components/AppPreview';
@@ -252,6 +253,21 @@ export function EditorPage() {
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [lastCheckpointId, setLastCheckpointId] = useState<string | null>(null);
 
+  // ── Version diff state (FF4-VERSIONING-UI) ────────────────────────────
+  const [versionDiffMode, setVersionDiffMode] = useState(false);
+  const [versionDiffA, setVersionDiffA] = useState<string | null>(null);
+  const [versionDiffB, setVersionDiffB] = useState<string | null>(null);
+  const [versionContentCache, setVersionContentCache] = useState<Record<string, any>>({});
+  const [versionDiffResult, setVersionDiffResult] = useState<{
+    versionA: string; versionB: string;
+    rowsA: number; rowsB: number;
+    compsA: number; compsB: number;
+    typesA: string[]; typesB: string[];
+    added: string[]; removed: string[];
+    sameRows: number;
+  } | null>(null);
+  const [, setLoadingVersionContent] = useState(false);
+
   // Device preview
   const [selectedPreset, setSelectedPreset] = useState<DevicePreset>(DEVICE_PRESETS[1]); // iPhone 15
   const [showDevicePicker, setShowDevicePicker] = useState(false);
@@ -267,7 +283,7 @@ export function EditorPage() {
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [templateCategory, setTemplateCategory] = useState('custom');
-  const [showTemplatePanel, setShowTemplatePanel] = useState(true);
+  const [leftPanelTab, setLeftPanelTab] = useState<'structure' | 'components' | 'templates'>('structure');
   const [showImportJson, setShowImportJson] = useState(false);
   const [importJsonValue, setImportJsonValue] = useState('');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -308,17 +324,10 @@ export function EditorPage() {
     () => getModuleDisplayName(selectedModuleInfo, selectedModule || 'No module selected'),
     [selectedModuleInfo, selectedModule],
   );
-  const templateLibraryStatus = useMemo(() => {
-    if (loadingTemplates) {
-      return 'Loading';
-    }
 
-    if (templates.length > 0) {
-      return `${templates.length} saved + ${LOCAL_SCREEN_TEMPLATES.length} starter`;
-    }
-
-    return `${LOCAL_SCREEN_TEMPLATES.length} starter + rows`;
-  }, [loadingTemplates, templates.length]);
+  // The module is modifiable when a module is selected, loading is done,
+  // and there's no fatal screen error. New modules (no persisted screen, no draft)
+  // should still allow saving — the save handler creates the first draft.
   const canModifySelectedModule = Boolean(selectedModule) && !loading && !screenLoadError;
   const canDeleteSelectedScreen = canModifySelectedModule && (hasPersistedScreen || draftInfo.has_draft);
 
@@ -355,16 +364,6 @@ export function EditorPage() {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 4000);
   }, []);
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const beginModuleTransition = useCallback((_nextModule: string) => {
-    selectedModuleRef.current = nextModule;
-    setLoading(true);
-    setScreenLoadError(null);
-    setDraftInfo({ has_draft: false });
-    setHasPersistedScreen(false);
-    setSearchParams(nextModule ? { module_instance_id: nextModule } : {});
-  }, [setSearchParams]);
 
   // Redirect to first module when URL is empty but modules exist.
   // Read searchParams directly inside the effect — React Router defers updating
@@ -530,7 +529,7 @@ export function EditorPage() {
         setLastSavedAt(null);
         return;
       }
-      console.log(`[Editor] loadSelectedModule() — API success: screen=${!!screenData, draft.has_draft}`, draft);
+      console.log(`[Editor] loadSelectedModule() — API success: screen=${!!screenData}, draft=${draft.has_draft}`, draft);
 
       if (moduleLoadRequestIdRef.current !== requestId) {
         console.log('[Editor] loadSelectedModule() — stale request, skipping');
@@ -906,6 +905,9 @@ export function EditorPage() {
         const detail = await api.get<any>(`/api/modules/${currentModule}/versions/${versionId}`);
         console.log(`[Editor] handleToggleVersionDetail() — loaded detail for version ${versionId}`);
 
+        // Cache full content for version diff (FF4-VERSIONING-UI)
+        setVersionContentCache(prev => ({ ...prev, [versionId]: detail.sdui_json || {} }));
+
         // Compute summary from sdui_json
         const sdui = detail.sdui_json || {};
         const rows = Array.isArray(sdui.rows) ? sdui.rows : [];
@@ -938,6 +940,113 @@ export function EditorPage() {
     }
   }, [expandedVersionId, selectedModule, versionDetails]);
 
+  // ── Version Diff (FF4-VERSIONING-UI) ──────────────────────────────────
+
+  const handleVersionDiff = useCallback(async (versionIdA: string, versionIdB: string) => {
+    console.log('[Editor] handleVersionDiff() — comparing:', versionIdA, 'vs', versionIdB);
+
+    // Ensure both version contents are cached
+    const currentModule = selectedModule;
+    if (!currentModule) return;
+
+    setLoadingVersionContent(true);
+    try {
+      const idsToFetch = [versionIdA, versionIdB].filter(id => !versionContentCache[id]);
+      for (const id of idsToFetch) {
+        const detail = await api.get<any>(`/api/modules/${currentModule}/versions/${id}`);
+        setVersionContentCache(prev => ({ ...prev, [id]: detail.sdui_json || {} }));
+      }
+
+      const contentA = versionContentCache[versionIdA] ?? { rows: [] };
+      const contentB = versionContentCache[versionIdB] ?? { rows: [] };
+      const rowsA = Array.isArray(contentA.rows) ? contentA.rows : [];
+      const rowsB = Array.isArray(contentB.rows) ? contentB.rows : [];
+
+      const typesA = new Set<string>();
+      const typesB = new Set<string>();
+      let compsA = 0;
+      let compsB = 0;
+
+      for (const row of rowsA) {
+        if (Array.isArray(row.cells)) {
+          for (const cell of row.cells) {
+            if (cell?.content?.type) {
+              compsA++;
+              typesA.add(cell.content.type);
+            }
+          }
+        }
+      }
+      for (const row of rowsB) {
+        if (Array.isArray(row.cells)) {
+          for (const cell of row.cells) {
+            if (cell?.content?.type) {
+              compsB++;
+              typesB.add(cell.content.type);
+            }
+          }
+        }
+      }
+
+      const added = Array.from(typesB).filter(t => !typesA.has(t));
+      const removed = Array.from(typesA).filter(t => !typesB.has(t));
+      const sameRows = Math.min(rowsA.length, rowsB.length);
+
+      setVersionDiffResult({
+        versionA: versionIdA, versionB: versionIdB,
+        rowsA: rowsA.length, rowsB: rowsB.length,
+        compsA, compsB,
+        typesA: Array.from(typesA), typesB: Array.from(typesB),
+        added, removed,
+        sameRows,
+      });
+    } catch (err) {
+      console.error('[Editor] handleVersionDiff() — error:', err instanceof Error ? err.message : err);
+    } finally {
+      setLoadingVersionContent(false);
+    }
+  }, [selectedModule, versionContentCache]);
+
+  const handleEnterDiffMode = useCallback((versionId: string) => {
+    setVersionDiffMode(true);
+    setVersionDiffA(versionId);
+    setVersionDiffB(null);
+    setVersionDiffResult(null);
+  }, []);
+
+  const handleSelectDiffTarget = useCallback((versionId: string) => {
+    setVersionDiffB(versionId);
+    if (versionDiffA && versionId) {
+      void handleVersionDiff(versionDiffA, versionId);
+    }
+  }, [versionDiffA, handleVersionDiff]);
+
+  const handleExitDiffMode = useCallback(() => {
+    setVersionDiffMode(false);
+    setVersionDiffA(null);
+    setVersionDiffB(null);
+    setVersionDiffResult(null);
+  }, []);
+
+  // FF4-VERSIONING-UI-002: Close version history modal on Escape key
+  useEffect(() => {
+    if (!showVersionHistory) return;
+
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowVersionHistory(false);
+        setExpandedVersionId(null);
+        if (versionDiffMode) {
+          handleExitDiffMode();
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [showVersionHistory, versionDiffMode, handleExitDiffMode]);
+
   // Templates
   const loadTemplates = useCallback(async () => {
     console.log('[Editor] loadTemplates() — starting');
@@ -956,10 +1065,8 @@ export function EditorPage() {
   }, []);
 
   useEffect(() => {
-    if (showTemplatePanel) {
-      void loadTemplates();
-    }
-  }, [showTemplatePanel, loadTemplates]);
+    void loadTemplates();
+  }, [loadTemplates]);
 
   const handleSaveTemplate = useCallback(async () => {
     console.log(`[Editor] handleSaveTemplate() — saving template: ${templateName} (category: ${templateCategory})`);
@@ -1137,7 +1244,11 @@ export function EditorPage() {
           </button>
 
           <button onClick={handleOpenVersionHistory}
-            className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors">
+            className={`flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded transition-colors ${
+              showVersionHistory
+                ? 'bg-blue-100 text-blue-700'
+                : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+            }`}>
             <History size={10} /> History
           </button>
 
@@ -1297,26 +1408,58 @@ export function EditorPage() {
 
       {/* ── Main 3-Panel Layout ──────────────────────────────────────── */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel: Structure Tree */}
+        {/* Left Panel: Tabbed — Structure | Components | Template Library */}
         <div className="w-[240px] bg-white border-r border-gray-200 shrink-0 overflow-hidden flex flex-col min-h-0">
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <StructureTree moduleLabel={selectedModuleLabel} />
-          </div>
-          <div className="border-t border-gray-200 shrink-0 bg-gray-50/60">
+          {/* Tab bar */}
+          <div className="flex border-b border-gray-200 shrink-0">
             <button
-              onClick={() => setShowTemplatePanel(!showTemplatePanel)}
-              className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50"
+              onClick={() => setLeftPanelTab('structure')}
+              className={`flex-1 text-[10px] font-semibold uppercase tracking-wider py-2 transition-colors ${
+                leftPanelTab === 'structure'
+                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/30'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
             >
-              <span>Template Library</span>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-medium normal-case tracking-normal text-gray-400">
-                  {templateLibraryStatus}
-                </span>
-                <ChevronDown size={12} className={`transition-transform ${showTemplatePanel ? 'rotate-180' : ''}`} />
-              </div>
+              Structure
             </button>
-            {showTemplatePanel && (
-              <div className="max-h-[24rem] overflow-y-auto px-3 pb-3 pt-2 space-y-3">
+            <button
+              onClick={() => setLeftPanelTab('components')}
+              className={`flex-1 text-[10px] font-semibold uppercase tracking-wider py-2 transition-colors ${
+                leftPanelTab === 'components'
+                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/30'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              Components
+            </button>
+            <button
+              onClick={() => setLeftPanelTab('templates')}
+              className={`flex-1 text-[10px] font-semibold uppercase tracking-wider py-2 transition-colors ${
+                leftPanelTab === 'templates'
+                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/30'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              Templates
+            </button>
+          </div>
+
+          {/* Tab content */}
+          {leftPanelTab === 'structure' && (
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <StructureTree moduleLabel={selectedModuleLabel} />
+            </div>
+          )}
+
+          {leftPanelTab === 'components' && (
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <ComponentPalette />
+            </div>
+          )}
+
+          {leftPanelTab === 'templates' && (
+            <div className="flex-1 min-h-0 overflow-auto bg-gray-50/60">
+              <div className="px-3 pb-3 pt-2 space-y-3">
                 <div className="grid gap-1.5">
                   <button
                     onClick={() => { setShowLoadTemplate(true); void loadTemplates(); }}
@@ -1399,7 +1542,9 @@ export function EditorPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Row Templates</div>
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Row Templates</div>
+                  </div>
                   {LOCAL_ROW_TEMPLATES.map(template => (
                     <button
                       key={template.id}
@@ -1420,8 +1565,8 @@ export function EditorPage() {
                   ))}
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Center: Canvas (or JSON view) */}
@@ -1626,14 +1771,85 @@ export function EditorPage() {
       {/* ── Version History Modal ────────────────────────────────────── */}
       {showVersionHistory && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-5 w-[640px] max-h-[75vh] overflow-auto">
+          <div className="bg-white rounded-lg p-5 w-[700px] max-h-[80vh] overflow-auto">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold flex items-center gap-1.5">
                 <History size={14} />
-                Version History — {selectedModuleInfo?.name || selectedModule}
+                {versionDiffMode ? 'Compare Versions' : `Version History — ${selectedModuleInfo?.name || selectedModule}`}
               </h3>
-              <button onClick={() => { setShowVersionHistory(false); setExpandedVersionId(null); }} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+              <div className="flex items-center gap-2">
+                {versionDiffMode && (
+                  <button
+                    onClick={handleExitDiffMode}
+                    className="text-[11px] px-2 py-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                  >
+                    Exit Compare
+                  </button>
+                )}
+                {!versionDiffMode && versions.length >= 2 && (
+                  <button
+                    onClick={() => setVersionDiffMode(true)}
+                    className="text-[11px] px-2 py-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                    title="Compare two versions"
+                  >
+                    Compare
+                  </button>
+                )}
+                <button onClick={() => { setShowVersionHistory(false); setExpandedVersionId(null); handleExitDiffMode(); }} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+              </div>
             </div>
+
+            {/* FF4-VERSIONING-UI: Version diff result */}
+            {versionDiffResult && versionDiffMode && (
+              <div className="mb-4 border border-purple-200 bg-purple-50 rounded-lg p-3 space-y-2">
+                <div className="text-xs font-semibold text-purple-800 flex items-center gap-1.5">
+                  <Info size={12} />
+                  Version Comparison
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="bg-white rounded p-2 border border-purple-100">
+                    <div className="font-medium text-gray-700">Version A</div>
+                    <div className="text-gray-500 mt-1">{versionDiffResult.rowsA} rows, {versionDiffResult.compsA} components</div>
+                    {versionDiffResult.typesA.length > 0 && (
+                      <div className="flex items-center gap-1 mt-1 flex-wrap">
+                        {versionDiffResult.typesA.map(t => <span key={t} className="px-1 py-0.5 rounded bg-gray-100 text-gray-600 text-[10px]">{t}</span>)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="bg-white rounded p-2 border border-purple-100">
+                    <div className="font-medium text-gray-700">Version B</div>
+                    <div className="text-gray-500 mt-1">{versionDiffResult.rowsB} rows, {versionDiffResult.compsB} components</div>
+                    {versionDiffResult.typesB.length > 0 && (
+                      <div className="flex items-center gap-1 mt-1 flex-wrap">
+                        {versionDiffResult.typesB.map(t => <span key={t} className="px-1 py-0.5 rounded bg-gray-100 text-gray-600 text-[10px]">{t}</span>)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {(versionDiffResult.added.length > 0 || versionDiffResult.removed.length > 0) && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {versionDiffResult.added.map(t => (
+                      <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200">
+                        + {t}
+                      </span>
+                    ))}
+                    {versionDiffResult.removed.map(t => (
+                      <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+                        - {t}
+                      </span>
+                    ))}
+                    {versionDiffResult.rowsA === versionDiffResult.rowsB && versionDiffResult.compsA === versionDiffResult.compsB && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">
+                        Same row/component count
+                      </span>
+                    )}
+                  </div>
+                )}
+                {versionDiffResult.added.length === 0 && versionDiffResult.removed.length === 0 && (
+                  <div className="text-[10px] text-gray-500">Same component types in both versions</div>
+                )}
+              </div>
+            )}
 
             {loadingVersions ? (
               <div className="text-center py-8 text-gray-400 text-sm">Loading versions...</div>
@@ -1644,25 +1860,66 @@ export function EditorPage() {
               </div>
             ) : (
               <div className="space-y-2">
+                {versionDiffMode && !versionDiffResult && (
+                  <div className="text-xs text-gray-500 mb-2 px-1">
+                    {versionDiffA && !versionDiffB
+                      ? 'Select another version to compare:'
+                      : 'Click a version to select it as the first comparison:'}
+                  </div>
+                )}
                 {versions.map((v) => {
-                  const isExpanded = expandedVersionId === v.id;
+                  const isExpanded = expandedVersionId === v.id && !versionDiffMode;
                   const detail = versionDetails[v.id];
                   const isLoadingDetail = loadingVersionDetail && isExpanded && !detail;
+                  const isDiffSelectedA = versionDiffA === v.id;
+                  const isDiffSelectedB = versionDiffB === v.id;
 
                   return (
-                    <div key={v.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div
+                      key={v.id}
+                      className={`border rounded-lg overflow-hidden transition-colors ${
+                        isDiffSelectedA ? 'border-purple-400 bg-purple-50/30'
+                        : isDiffSelectedB ? 'border-purple-600 bg-purple-100/30'
+                        : versionDiffMode ? 'border-gray-200 cursor-pointer hover:border-purple-300 hover:bg-gray-50'
+                        : 'border-gray-200'
+                      }`}
+                    >
                       {/* Collapsed header */}
                       <div
                         className="flex items-center justify-between p-3 hover:bg-gray-50 transition-colors cursor-pointer"
-                        onClick={() => { void handleToggleVersionDetail(v.id); }}
+                        onClick={() => {
+                          if (versionDiffMode) {
+                            if (!versionDiffA) {
+                              handleEnterDiffMode(v.id);
+                            } else if (!versionDiffB && versionDiffA !== v.id) {
+                              handleSelectDiffTarget(v.id);
+                            }
+                          } else {
+                            void handleToggleVersionDetail(v.id);
+                          }
+                        }}
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <button className="text-gray-400 hover:text-gray-600 p-0.5">
-                              {isExpanded ? <ChevronUp size={12} /> : <ChevronRight size={12} />}
-                            </button>
+                            {!versionDiffMode && (
+                              <button className="text-gray-400 hover:text-gray-600 p-0.5">
+                                {isExpanded ? <ChevronUp size={12} /> : <ChevronRight size={12} />}
+                              </button>
+                            )}
+                            {versionDiffMode && (
+                              <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center text-[8px] font-bold ${
+                                isDiffSelectedA ? 'border-purple-500 bg-purple-500 text-white'
+                                : isDiffSelectedB ? 'border-purple-600 bg-purple-600 text-white'
+                                : 'border-gray-300'
+                              }`}>
+                                {isDiffSelectedA ? 'A' : isDiffSelectedB ? 'B' : ''}
+                              </span>
+                            )}
                             <div className="text-sm font-medium text-gray-800">
-                              v{v.version_number} — {v.display_name}
+                              {/* FF4-VERSIONING-UI-001: avoid "v11 — v11" duplicate when display_name matches version prefix */}
+                              {v.display_name === `v${v.version_number}`
+                                ? `v${v.version_number}`
+                                : `v${v.version_number} — ${v.display_name}`}
                             </div>
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 capitalize">
                               {v.source}
@@ -1676,26 +1933,30 @@ export function EditorPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0 ml-3" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            data-testid={`btn-restore-v${v.version_number}`}
-                            onClick={() => { void handleRestoreVersion(v.id, v.version_number); setShowVersionHistory(false); }}
-                            className="px-2 py-1 text-[11px] text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                            title="Restore to draft"
-                          >
-                            Restore
-                          </button>
-                          <button
-                            data-testid={`btn-publish-v${v.version_number}`}
-                            onClick={() => { void handlePublishVersion(v.id, v.version_number); setShowVersionHistory(false); }}
-                            className="px-2 py-1 text-[11px] text-green-600 hover:bg-green-50 rounded transition-colors"
-                            title="Publish as live"
-                          >
-                            Publish
-                          </button>
+                          {!versionDiffMode && (
+                            <>
+                              <button
+                                data-testid={`btn-restore-v${v.version_number}`}
+                                onClick={() => { void handleRestoreVersion(v.id, v.version_number); setShowVersionHistory(false); }}
+                                className="px-2 py-1 text-[11px] text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                title="Restore to draft"
+                              >
+                                Restore
+                              </button>
+                              <button
+                                data-testid={`btn-publish-v${v.version_number}`}
+                                onClick={() => { void handlePublishVersion(v.id, v.version_number); setShowVersionHistory(false); }}
+                                className="px-2 py-1 text-[11px] text-green-600 hover:bg-green-50 rounded transition-colors"
+                                title="Publish as live"
+                              >
+                                Publish
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
 
-                      {/* Expanded content preview */}
+                      {/* Expanded content preview (non-diff mode only) */}
                       {isExpanded && (
                         <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 ml-0">
                           {isLoadingDetail ? (

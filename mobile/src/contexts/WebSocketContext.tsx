@@ -11,7 +11,7 @@
  * the token/serverUrl changes.
  */
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import Toast from 'react-native-toast-message';
 import { WebSocketService } from '@/services/websocket';
@@ -28,6 +28,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const { setConnected, showError, hideError } = useUIStore();
   const { loadAppConfig, updateFromWebSocket } = useAppConfigStore();
   const [ws, setWs] = useState<WebSocketService | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!token || !serverUrl) return;
@@ -40,19 +41,18 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     //   3 consecutive close events → "Connection lost" with manual retry
     // ReconnectingWebSocket fires 'close' on every failed attempt, so we
     // count consecutive disconnects to decide when to escalate.
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let disconnectCount = 0;
     const MAX_SOFT_RETRIES = 3;
 
-    const clearTimers = () => {
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
+    const clearReconnectTimer = () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
       }
     };
 
     service.onConnect(() => {
-      clearTimers();
+      clearReconnectTimer();
       disconnectCount = 0;
       setConnected(true);
       hideError();
@@ -64,16 +64,16 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
       if (disconnectCount >= MAX_SOFT_RETRIES) {
         // Retries exhausted — escalate to hard error with manual retry
-        clearTimers();
+        clearReconnectTimer();
         showError('Connection lost. Please check your connection or try logging in again.', () => {
           disconnectCount = 0;
           hideError();
           service.connect();
         });
-      } else if (!reconnectTimer) {
+      } else if (!reconnectTimerRef.current) {
         // First disconnect — show soft banner after 500ms
-        reconnectTimer = setTimeout(() => {
-          reconnectTimer = null;
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
           showError('Reconnecting…');
         }, 500);
       }
@@ -101,14 +101,19 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       } else if (message.type === 'preview_session_ended') {
         // Admin ended the preview session
         usePreviewStore.getState().exitPreview();
-      } else if (message.type === 'app_version_published' && message.version) {
+      } else if (message.type === 'app_version_published' && message.version_number) {
         // A new app version was published — show a toast and reload config
-        const versionLabel = message.version;
-        if (lastPublishedVersion !== versionLabel) {
-          lastPublishedVersion = versionLabel;
+        // NOTE: Backend sends version_number (int), not a "version" string.
+        // The display_name contains the full human-readable version label.
+        const versionLabel = message.version_number;
+        const displayName: string | undefined = message.display_name;
+        if (lastPublishedVersion !== String(versionLabel)) {
+          lastPublishedVersion = String(versionLabel);
           Toast.show({
             type: 'info',
-            text1: `🔄 App updated to v${versionLabel}`,
+            text1: displayName
+              ? `🔄 ${displayName}`
+              : `🔄 App updated to v${versionLabel}`,
             text2: 'Tap to refresh',
             onPress: () => {
               if (serverUrl && token && deviceId) {
@@ -127,7 +132,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     setWs(service);
 
     return () => {
-      clearTimers();
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       service.disconnect();
       setWs(null);
     };

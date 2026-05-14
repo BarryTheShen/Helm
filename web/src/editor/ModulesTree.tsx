@@ -163,9 +163,21 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
     navigate(`/app-editor?module_instance=${moduleInstance.module_id}`);
   };
 
-  const handleNewModule = () => {
-    console.log('[ModulesTree] handleNewModule() — navigating to /editor');
-    navigate('/editor');
+  const handleNewModule = async () => {
+    console.log('[ModulesTree] handleNewModule() — creating module');
+    try {
+      const result = await api.post<{ module_id: string; name: string; icon: string }>('/api/sdui/modules', {
+        name: 'New Module',
+        icon: '📦',
+      });
+      console.log(`[ModulesTree] handleNewModule() — created: ${result.module_id}`);
+      await loadModules();
+      navigate('/editor?module_instance_id=' + result.module_id);
+    } catch (err) {
+      console.error('[ModulesTree] handleNewModule() — error:', err instanceof Error ? err.message : err);
+      // Fallback: navigate to editor with no module (existing behavior)
+      navigate('/editor');
+    }
   };
 
   if (loading) {
