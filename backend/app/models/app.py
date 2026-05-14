@@ -36,6 +36,10 @@ class App(Base, TimestampMixin):
     # JSON array of module_instance_id strings for launchpad
     launchpad_config: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
+    # ── Versioning fields (Phase 5) ──────────────────────────────────────────
+    current_working_draft_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    current_published_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
     # ── Relationships ───────────────────────────────────────────────────────
     user: Mapped["User"] = relationship(back_populates="apps")  # type: ignore[name-defined]  # noqa: F821
     default_launch_module: Mapped["ModuleInstance | None"] = relationship()  # type: ignore[name-defined]  # noqa: F821

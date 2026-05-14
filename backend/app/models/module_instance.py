@@ -47,6 +47,10 @@ class ModuleInstance(Base, TimestampMixin):
         String(20), nullable=False, default="active"
     )  # active | disabled | uninstalled
 
+    # ── Versioning fields (Phase 5) ──────────────────────────────────────────
+    current_working_draft_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    current_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
     # ── Relationships ───────────────────────────────────────────────────────
     user: Mapped["User"] = relationship(back_populates="module_instances")  # type: ignore[name-defined]  # noqa: F821
     template: Mapped["SDUITemplate | None"] = relationship()  # type: ignore[name-defined]  # noqa: F821
@@ -75,5 +79,11 @@ class ModuleInstance(Base, TimestampMixin):
         back_populates="module_instance", cascade="all, delete-orphan"
     )
     screen_histories: Mapped[list["ScreenHistory"]] = relationship(  # type: ignore[name-defined]  # noqa: F821
+        back_populates="module_instance", cascade="all, delete-orphan"
+    )
+    working_draft: Mapped[list["ModuleWorkingDraft"]] = relationship(  # type: ignore[name-defined]  # noqa: F821
+        back_populates="module_instance", cascade="all, delete-orphan"
+    )
+    versions: Mapped[list["ModuleVersion"]] = relationship(  # type: ignore[name-defined]  # noqa: F821
         back_populates="module_instance", cascade="all, delete-orphan"
     )

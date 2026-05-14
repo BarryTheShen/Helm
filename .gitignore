@@ -73,3 +73,9 @@ backend/.pytest_*.txt
 
 # QA environment
 qa/.qa-env.json
+
+# Database backups and derivative files
+*.db.*
+
+# Claude Code worktrees (personal runtime state)
+.claude/worktrees/

@@ -17,6 +17,9 @@ from app.models import (  # noqa: E402, F401
     User, Device, Session, ChatMessage, CalendarEvent,
     Notification, AgentConfig, ModuleState, SandboxAction, Workflow,
     CustomVariable, DataSource,
+    App, AppModuleRef, Article, AuditLog, ComponentRegistry, Connection,
+    ModuleInstance, ModuleVersion, ModuleWorkingDraft, Note,
+    PreviewSession, SDUITemplate, Settings, Todo, TriggerDefinition,
 )
 from app.config import settings  # noqa: E402
 

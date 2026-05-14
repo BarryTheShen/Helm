@@ -30,3 +30,4 @@ class User(Base, TimestampMixin):
     connections: Mapped[list["Connection"]] = relationship(back_populates="user", cascade="all, delete-orphan")  # type: ignore[name-defined]  # noqa: F821
     module_instances: Mapped[list["ModuleInstance"]] = relationship(back_populates="user", cascade="all, delete-orphan")  # type: ignore[name-defined]  # noqa: F821
     settings: Mapped["Settings | None"] = relationship(back_populates="user", cascade="all, delete-orphan", uselist=False)  # type: ignore[name-defined]  # noqa: F821
+    notes: Mapped[list["Note"]] = relationship(back_populates="user", cascade="all, delete-orphan")  # type: ignore[name-defined]  # noqa: F821

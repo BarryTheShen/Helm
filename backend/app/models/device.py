@@ -19,6 +19,17 @@ class Device(Base, TimestampMixin):
         ForeignKey("apps.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
+    # ── Versioning fields (Phase 5) ──────────────────────────────────────────
+    active_app_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    preview_session_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    installed_runtime_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    supported_schema_versions: Mapped[list] = mapped_column(
+        JSON, nullable=False, default=lambda: ["1.0", "2.0"]
+    )
+    update_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="up_to_date"
+    )  # up_to_date | update_available | updating
+
     user: Mapped["User"] = relationship(back_populates="devices")  # type: ignore[name-defined]  # noqa: F821
     app: Mapped["App | None"] = relationship(back_populates="devices")  # type: ignore[name-defined]  # noqa: F821
     sessions: Mapped[list["Session"]] = relationship(back_populates="device", cascade="all, delete-orphan")  # type: ignore[name-defined]  # noqa: F821

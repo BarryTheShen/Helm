@@ -13,7 +13,11 @@ from app.models.data_source import DataSource
 from app.models.device import Device
 from app.models.module_instance import ModuleInstance
 from app.models.module_state import ModuleState
+from app.models.module_version import ModuleVersion
+from app.models.module_working_draft import ModuleWorkingDraft
+from app.models.note import Note
 from app.models.notification import Notification
+from app.models.preview_session import PreviewSession
 from app.models.sandbox_action import SandboxAction
 from app.models.screen_history import ScreenHistory
 from app.models.session import Session
@@ -40,9 +44,13 @@ __all__ = [
     "CustomVariable",
     "DataSource",
     "ModuleInstance",
+    "ModuleVersion",
+    "ModuleWorkingDraft",
+    "Note",
     "Notification",
     "AgentConfig",
     "ModuleState",
+    "PreviewSession",
     "SandboxAction",
     "ScreenHistory",
     "Settings",
