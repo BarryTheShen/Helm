@@ -63,6 +63,7 @@ async def upsert_device(
     device = result.scalar_one_or_none()
     if device is None:
         logger.info(f"upsert_device() — new device created: {device_name}")
+        device_type = "web_admin" if device_name == "Admin Panel" else "mobile"
         device = Device(
             id=str(uuid4()),
             user_id=user_id,
@@ -72,12 +73,18 @@ async def upsert_device(
                 "tab_bar_modules": ["chat", "calendar", "alerts"],
                 "default_module": "chat",
                 "nav_mode": "tabs",
+                "device_type": device_type,
             },
         )
         db.add(device)
     else:
         logger.info(f"upsert_device() — existing device updated, last_seen refresh")
         device.last_seen = datetime.now(timezone.utc)
+        # Retroactively tag admin panels in existing devices
+        if device_name == "Admin Panel" and device.config_json.get("device_type") != "web_admin":
+            cfg = dict(device.config_json)
+            cfg["device_type"] = "web_admin"
+            device.config_json = cfg
     await db.flush()
     return device
 

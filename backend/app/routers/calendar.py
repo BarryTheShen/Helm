@@ -113,8 +113,14 @@ async def list_events(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    user_id = str(current_user.id)
+
+    # Auto-seed sample events if the user has none
+    from app.services.calendar_seed import seed_calendar_events_for_user
+    await seed_calendar_events_for_user(user_id, db)
+
     query = select(CalendarEvent).where(
-        CalendarEvent.user_id == str(current_user.id)
+        CalendarEvent.user_id == user_id
     ).order_by(CalendarEvent.start_time)
 
     if start_date:

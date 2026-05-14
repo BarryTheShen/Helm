@@ -1,5 +1,5 @@
 from loguru import logger
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.component_registry import ComponentRegistry
@@ -10,26 +10,15 @@ INITIAL_COMPONENTS = [
         "tier": "atomic",
         "name": "Text",
         "icon": "📝",
-        "description": "Display text with configurable style, size, and color",
+        "description": "Rich text and markdown content",
         "props_schema": {
-            "content": {"type": "string", "required": True, "default": "Text"},
+            "content": {"type": "string", "required": True, "default": "# Heading"},
             "fontSize": {"type": "number", "default": 16},
             "fontWeight": {"type": "enum", "options": ["normal", "bold", "semibold"], "default": "normal"},
             "color": {"type": "string", "default": "#000000"},
             "textAlign": {"type": "enum", "options": ["left", "center", "right"], "default": "left"},
         },
-        "default_props": {"content": "Text", "fontSize": 16, "fontWeight": "normal", "color": "#000000", "textAlign": "left"},
-    },
-    {
-        "type": "markdown",
-        "tier": "atomic",
-        "name": "Markdown",
-        "icon": "📋",
-        "description": "Render Markdown-formatted text",
-        "props_schema": {
-            "content": {"type": "string", "required": True, "default": "# Heading"},
-        },
-        "default_props": {"content": "# Heading\n\nParagraph text"},
+        "default_props": {"content": "# Heading\n\nParagraph text", "fontSize": 16, "fontWeight": "normal", "color": "#000000", "textAlign": "left"},
     },
     {
         "type": "RichTextRenderer",
@@ -63,29 +52,12 @@ INITIAL_COMPONENTS = [
         "tier": "atomic",
         "name": "Image",
         "icon": "🖼️",
-        "description": "Display an image from URL with configurable sizing",
+        "description": "Display an image from URL with fit mode",
         "props_schema": {
             "uri": {"type": "string", "required": True, "default": "https://via.placeholder.com/300"},
-            "width": {"type": "number", "default": None},
-            "height": {"type": "number", "default": 200},
-            "resizeMode": {"type": "enum", "options": ["cover", "contain", "stretch", "center"], "default": "cover"},
-            "borderRadius": {"type": "number", "default": 0},
+            "fitMode": {"type": "enum", "options": ["fitWidth", "fitHeight"], "default": "fitWidth"},
         },
-        "default_props": {"uri": "https://via.placeholder.com/300", "height": 200, "resizeMode": "cover", "borderRadius": 0},
-    },
-    {
-        "type": "textinput",
-        "tier": "atomic",
-        "name": "Text Input",
-        "icon": "⌨️",
-        "description": "Input field for user text entry",
-        "props_schema": {
-            "placeholder": {"type": "string", "default": "Enter text..."},
-            "label": {"type": "string", "default": ""},
-            "multiline": {"type": "boolean", "default": False},
-            "maxLength": {"type": "number", "default": None},
-        },
-        "default_props": {"placeholder": "Enter text...", "label": "", "multiline": False},
+        "default_props": {"uri": "https://via.placeholder.com/300", "fitMode": "fitWidth"},
     },
     {
         "type": "icon",
@@ -240,15 +212,17 @@ INITIAL_COMPONENTS = [
         "tier": "atomic",
         "name": "Empty",
         "icon": "⬜",
-        "description": "Spacer / placeholder component with configurable gap, padding, and background",
-        "props_schema": {
-            "gap": {"type": "number", "default": 8},
-            "padding": {"type": "number", "default": 0},
-            "backgroundColor": {"type": "string", "default": "#FFFFFF"},
-        },
-        "default_props": {"gap": 8, "padding": 0, "backgroundColor": "#FFFFFF"},
+        "description": "Simple vertical container for stacking child components",
+        "props_schema": {},
+        "default_props": {},
     },
 ]
+
+
+# Component types removed in Phase 3 (TextInput removed outright, Markdown merged into Text).
+# These entries may still exist in the DB from older seed versions and must be cleaned up
+# to keep the component registry in sync with the frontend and validation whitelist.
+_STALE_TYPES: set[str] = {"textinput", "markdown"}
 
 
 async def seed_components(db: AsyncSession) -> None:
@@ -259,10 +233,17 @@ async def seed_components(db: AsyncSession) -> None:
 
     if count > 0:
         logger.info(f"Component registry already has {count} entries — skipping seed")
-        return
+    else:
+        for data in INITIAL_COMPONENTS:
+            db.add(ComponentRegistry(**data))
+        await db.commit()
+        logger.info(f"Seeded {len(INITIAL_COMPONENTS)} components into registry")
 
-    for data in INITIAL_COMPONENTS:
-        db.add(ComponentRegistry(**data))
-
+    # Always clean up stale types that were removed in Phase 3.
+    for stale_type in sorted(_STALE_TYPES):
+        result = await db.execute(
+            delete(ComponentRegistry).where(ComponentRegistry.type == stale_type)
+        )
+        if result.rowcount > 0:
+            logger.info(f"Removed stale component type '{stale_type}' ({result.rowcount} entry)")
     await db.commit()
-    logger.info(f"Seeded {len(INITIAL_COMPONENTS)} components into registry")

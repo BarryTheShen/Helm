@@ -26,30 +26,15 @@ SEED_TEMPLATES = [
         "screen_json": {
             "rows": [
                 # Row 1: Greeting with user name variable
-                _row([_cell("Text", {"content": "Good morning, {{user.name}} 👋", "fontSize": 24, "fontWeight": "bold"})]),
+                _row([_cell("Text", {"content": "# Good morning, {{user.name}} 👋", "variant": "heading", "fontSize": 24})]),
                 # Row 2: Weather (50%) + Calendar Compact (50%)
                 _row([
                     {
                         "id": str(uuid.uuid4()),
                         "width": "50%",
                         "content": {
-                            "type": "Container",
-                            "props": {
-                                "direction": "column",
-                                "gap": 8,
-                                "children": [
-                                    {
-                                        "type": "Text",
-                                        "id": str(uuid.uuid4()),
-                                        "props": {"content": "☀️ 24°C", "fontSize": 18, "fontWeight": "semibold"}
-                                    },
-                                    {
-                                        "type": "Text",
-                                        "id": str(uuid.uuid4()),
-                                        "props": {"content": "Shanghai", "fontSize": 14, "color": "#666666"}
-                                    }
-                                ]
-                            }
+                            "type": "Text",
+                            "props": {"content": "☀️ 24°C  •  Shanghai", "fontSize": 18, "fontWeight": "semibold"}
                         }
                     },
                     {
@@ -58,7 +43,8 @@ SEED_TEMPLATES = [
                         "content": {
                             "type": "CalendarModule",
                             "props": {
-                                "variant": "month",
+                                "variant": "compact",
+                                "maxEvents": 3,
                                 "dataBinding": {
                                     "dataSourceId": "calendar_events",
                                     "refreshInterval": 60000
@@ -87,7 +73,7 @@ SEED_TEMPLATES = [
                         "label": "+ New Task",
                         "variant": "primary",
                         "size": "medium",
-                        "action": {
+                        "onPress": {
                             "type": "server_action",
                             "function": "todos.create",
                             "params": {"title": "New task"}
@@ -97,7 +83,7 @@ SEED_TEMPLATES = [
                         "label": "+ New Note",
                         "variant": "secondary",
                         "size": "medium",
-                        "action": {
+                        "onPress": {
                             "type": "server_action",
                             "function": "notes.create",
                             "params": {"content": ""}
@@ -115,12 +101,12 @@ SEED_TEMPLATES = [
             "rows": [
                 # Row 1: Header with title and settings button
                 _row([
-                    _cell("Text", {"content": "💬 Chat", "fontSize": 24, "fontWeight": "bold"}),
+                    _cell("Text", {"content": "# 💬 Chat", "variant": "heading", "fontSize": 24}),
                     _cell("Button", {
                         "label": "⚙️",
                         "variant": "ghost",
                         "size": "small",
-                        "action": {"type": "navigate", "screen": "settings"}
+                        "onPress": {"type": "navigate", "screen": "settings"}
                     })
                 ]),
                 # Row 2: Chat component (full height)
@@ -147,7 +133,7 @@ SEED_TEMPLATES = [
                                 "label": "Send",
                                 "variant": "primary",
                                 "size": "medium",
-                                "action": {
+                                "onPress": {
                                     "type": "server_action",
                                     "function": "chat.send",
                                     "params": {"message": "{{component.chat_input.value}}"}
@@ -161,57 +147,63 @@ SEED_TEMPLATES = [
     },
     {
         "name": "Daily Planner",
-        "description": "Calendar week view with todo list and notes",
+        "description": "Calendar week view with todo list and notes stacked in a vertical layout.",
         "category": "planner",
         "screen_json": {
             "rows": [
                 # Row 1: Header with dynamic date
-                _row([_cell("Markdown", {
-                    "content": "# 📋 Today — {{date.today}}",
-                    "textAlign": "center"
+                _row([_cell("Text", {
+                    "content": "# 📋 {{date.today}}",
+                    "variant": "heading",
+                    "align": "center"
                 })]),
-                # Row 2: Container with 3 vertical sub-cells
-                _row([_cell("Container", {
-                    "direction": "column",
-                    "gap": 16,
-                    "children": [
-                        # Sub-cell 1: Calendar Week variant
-                        {
-                            "type": "CalendarModule",
-                            "id": str(uuid.uuid4()),
-                            "props": {
-                                "variant": "week",
-                                "dataBinding": {
-                                    "dataSourceId": "calendar_events",
-                                    "refreshInterval": 60000
+                # Row 2: Empty container (vertical row) with Calendar Week | Todo | Notes
+                _row([{
+                    "id": str(uuid.uuid4()),
+                    "width": 1,
+                    "content": {
+                        "type": "Empty",
+                        "id": str(uuid.uuid4()),
+                        "props": {},
+                        "children": [
+                            # Sub-component 1: Calendar Week variant
+                            {
+                                "type": "CalendarModule",
+                                "id": str(uuid.uuid4()),
+                                "props": {
+                                    "variant": "week",
+                                    "dataBinding": {
+                                        "dataSourceId": "calendar_events",
+                                        "refreshInterval": 60000
+                                    }
+                                }
+                            },
+                            # Sub-component 2: Todo Component
+                            {
+                                "type": "Todo",
+                                "id": str(uuid.uuid4()),
+                                "props": {
+                                    "dataBinding": {
+                                        "dataSourceId": "todos",
+                                        "refreshInterval": 60000
+                                    }
+                                }
+                            },
+                            # Sub-component 3: Notes Component filtered to today
+                            {
+                                "type": "NotesModule",
+                                "id": str(uuid.uuid4()),
+                                "props": {
+                                    "filterDate": "{{date.today}}",
+                                    "dataBinding": {
+                                        "dataSourceId": "notes",
+                                        "refreshInterval": 60000
+                                    }
                                 }
                             }
-                        },
-                        # Sub-cell 2: Todo Component
-                        {
-                            "type": "Todo",
-                            "id": str(uuid.uuid4()),
-                            "props": {
-                                "dataBinding": {
-                                    "dataSourceId": "todos",
-                                    "refreshInterval": 60000
-                                }
-                            }
-                        },
-                        # Sub-cell 3: Notes Component filtered to today
-                        {
-                            "type": "NotesModule",
-                            "id": str(uuid.uuid4()),
-                            "props": {
-                                "filterDate": "{{date.today}}",
-                                "dataBinding": {
-                                    "dataSourceId": "notes",
-                                    "refreshInterval": 60000
-                                }
-                            }
-                        }
-                    ]
-                })]),
+                        ]
+                    }
+                }]),
             ]
         },
     },
@@ -228,7 +220,7 @@ SEED_TEMPLATES = [
                         "label": "🔄",
                         "variant": "ghost",
                         "size": "small",
-                        "action": {
+                        "onPress": {
                             "type": "server_action",
                             "function": "fetch_rss",
                             "params": {"feed_url": "https://hnrss.org/frontpage"}

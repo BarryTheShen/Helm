@@ -60,7 +60,7 @@ DEFAULT_SYSTEM_PROMPT = (
     "Row-first V2: { rows: [ { id, cells: [ { id, content: <Component> } ] } ] }\n"
     "Every Component has: type (required), id, props.\n\n"
     "Valid component types (PascalCase only):\n"
-    "  Atomic:     Text, Markdown, Button, Image, TextInput, Icon\n"
+    "  Atomic:     Text, Button, Image, Icon\n"
     "  Structural: Container (only type that may nest via 'children')\n"
     "  Composite:  CalendarModule, ChatModule, NotesModule, InputBar\n"
     "  Widgets:    Badge, Stat, List, Alert, Todo, RichText, ArticleCard\n\n"
@@ -778,8 +778,9 @@ def _get_tool_definitions() -> list[dict]:
                     "The frontend re-renders instantly via WebSocket. "
                     "Use the row-first contract: screen.rows[] -> row.cells[] -> cell.content. "
                     "Every cell.content MUST include a 'type' field — typeless content renders as a red 'Invalid component' box on the phone. "
-                    "Valid V2 component types (PascalCase): Text, Markdown, Button, Image, TextInput, Icon, Container, "
-                    "CalendarModule, ChatModule, NotesModule, InputBar, Badge, Stat, List, Alert, Todo, RichText, ArticleCard. "
+                    "Valid V2 component types (PascalCase): Text, Markdown, Button, Image, Icon, Container, "
+                    "CalendarModule, ChatModule, NotesModule, InputBar, Badge, Stat, List, Alert, "
+                    "Todo, TodoModule, RichText, RichTextRenderer, ArticleCard, ArticleCardModule. "
                     "Stored payloads may omit metadata like schema_version, module_id, and title. "
                     "Legacy sections payloads are still accepted for backward compatibility, but new tool calls should send row-first screens. "
                     "Available module_ids: home | chat | calendar | forms | alerts | modules | settings"
@@ -818,10 +819,12 @@ def _get_tool_definitions() -> list[dict]:
                                                                             "type": "string",
                                                                             "enum": [
                                                                                 "Text", "Markdown", "Button", "Image",
-                                                                                "TextInput", "Icon", "Container",
+                                                                                "Icon", "Container",
                                                                                 "CalendarModule", "ChatModule", "NotesModule", "InputBar",
                                                                                 "Badge", "Stat", "List", "Alert",
-                                                                                "Todo", "RichText", "ArticleCard",
+                                                                                "Todo", "TodoModule",
+                                                                                "RichText", "RichTextRenderer",
+                                                                                "ArticleCard", "ArticleCardModule",
                                                                             ],
                                                                         },
                                                                         "id": {"type": "string"},
@@ -933,13 +936,13 @@ def _get_tool_definitions() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "approve_draft",
-                "description": "Approve and publish a pending SDUI draft so it becomes the live screen.",
+                "description": "Approve and publish a pending SDUI draft so it becomes the live screen. For ModuleInstance-based modules (UUID), this creates a checkpoint and publishes. For tabs (home/calendar/etc.), it promotes the old-style draft to live.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "module_id": {
                             "type": "string",
-                            "description": "The tab whose draft should be approved",
+                            "description": "The tab or ModuleInstance UUID whose draft should be approved",
                         },
                     },
                     "required": ["module_id"],
@@ -950,13 +953,13 @@ def _get_tool_definitions() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "reject_draft",
-                "description": "Reject and discard a pending SDUI draft, optionally recording user feedback.",
+                "description": "Reject and discard a pending SDUI draft, optionally recording user feedback. Clears both new (ModuleWorkingDraft) and old (ModuleState) draft systems.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "module_id": {
                             "type": "string",
-                            "description": "The tab whose draft should be rejected",
+                            "description": "The tab or ModuleInstance UUID whose draft should be rejected",
                         },
                         "feedback": {
                             "type": "string",
@@ -964,6 +967,94 @@ def _get_tool_definitions() -> list[dict]:
                         },
                     },
                     "required": ["module_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "create_checkpoint",
+                "description": "Create a versioned snapshot (checkpoint) from the current working draft for a ModuleInstance-based module. Returns version_number and display_name. Use publish_version to go live.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "module_id": {
+                            "type": "string",
+                            "description": "The ModuleInstance UUID to checkpoint",
+                        },
+                        "change_summary": {
+                            "type": "string",
+                            "description": "Optional description of what changed in this checkpoint",
+                        },
+                    },
+                    "required": ["module_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_module_versions",
+                "description": "List all version checkpoints for a ModuleInstance-based module, newest first.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "module_id": {
+                            "type": "string",
+                            "description": "The ModuleInstance UUID",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Max versions to return (default 50)",
+                        },
+                        "offset": {
+                            "type": "integer",
+                            "description": "Pagination offset (default 0)",
+                        },
+                    },
+                    "required": ["module_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "publish_version",
+                "description": "Publish a version as the live screen. If version_id is provided, publishes that specific version. If omitted, creates a checkpoint from the working draft and publishes it. Replaces approve_draft for ModuleInstance-based modules.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "module_id": {
+                            "type": "string",
+                            "description": "The ModuleInstance UUID",
+                        },
+                        "version_id": {
+                            "type": "string",
+                            "description": "Optional specific version UUID to publish. If empty, creates checkpoint from draft.",
+                        },
+                    },
+                    "required": ["module_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "restore_version",
+                "description": "Restore a version's content back to the working draft for editing.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "module_id": {
+                            "type": "string",
+                            "description": "The ModuleInstance UUID",
+                        },
+                        "version_id": {
+                            "type": "string",
+                            "description": "The version UUID to restore from",
+                        },
+                    },
+                    "required": ["module_id", "version_id"],
                 },
             },
         },

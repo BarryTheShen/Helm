@@ -26,6 +26,8 @@ CANONICAL_SCHEMAS: dict[str, dict[str, Any]] = {
             {"name": "end_time", "type": "datetime"},
             {"name": "location", "type": "string", "nullable": True},
             {"name": "description", "type": "string", "nullable": True},
+            {"name": "color", "type": "string", "nullable": True},
+            {"name": "allDay", "type": "boolean"},
         ],
     },
     "todos": {
@@ -111,6 +113,8 @@ async def _query_calendar(
             "end_time": e.end_time.isoformat() if e.end_time else None,
             "location": e.location,
             "description": e.description,
+            "color": e.color,
+            "allDay": e.is_all_day,
         }
         for e in events
     ]

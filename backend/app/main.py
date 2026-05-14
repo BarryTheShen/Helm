@@ -38,9 +38,25 @@ async def lifespan(app: FastAPI):
     from app.database import AsyncSessionLocal  # noqa: PLC0415
     from app.services.component_seed import seed_components  # noqa: PLC0415
     from app.services.template_seed import seed_templates  # noqa: PLC0415
+    from app.services.workflow_seed import seed_sample_workflows  # noqa: PLC0415
+    from app.services.variable_seed import seed_sample_variables  # noqa: PLC0415
     async with AsyncSessionLocal() as seed_db:
         await seed_components(seed_db)
         await seed_templates(seed_db, replace=True)  # Replace old templates with new ones
+        await seed_sample_workflows(seed_db)
+        await seed_sample_variables(seed_db)
+
+    # Migrate ScreenHistory entries to ModuleVersion table at startup.
+    # Safe to run on every startup — checks for already-migrated entries.
+    try:
+        from app.services.version_service import migrate_all_screen_history as _run_migration  # noqa: PLC0415
+        async with AsyncSessionLocal() as _migrate_db:
+            _migrate_result = await _run_migration(_migrate_db)
+            await _migrate_db.commit()
+            if _migrate_result["total"] > 0:
+                logger.info(f"ScreenHistory migration: {_migrate_result}")
+    except Exception as _migrate_exc:
+        logger.warning(f"ScreenHistory migration skipped: {_migrate_exc}")
 
     # Start the 2-minute time alert task (opt-in via DEMO_TIME_ALERTS=true in .env)
     import asyncio as _asyncio
@@ -140,7 +156,7 @@ async def health():
 
 
 # Register routers
-from app.routers import auth, modules, chat, calendar, notifications, agent_config, websocket, workflows, actions, users, sessions, audit, components, templates, admin, variables, data_sources, triggers, connections, module_instances, articles, todos, apps, devices  # noqa: E402
+from app.routers import auth, modules, chat, calendar, notifications, agent_config, websocket, workflows, actions, users, sessions, audit, components, templates, admin, variables, data_sources, triggers, connections, module_instances, articles, todos, apps, devices, module_versions, notes  # noqa: E402
 from app.routers import settings as settings_router  # noqa: E402
 
 app.include_router(auth.router)
@@ -167,7 +183,9 @@ app.include_router(settings_router.router)
 app.include_router(articles.router)
 app.include_router(apps.router)
 app.include_router(devices.router)
+app.include_router(module_versions.router)
 app.include_router(websocket.router)
+app.include_router(notes.router)
 
 # Mount MCP server
 try:
@@ -186,7 +204,7 @@ try:
     from app.models import (
         User, Session, AuditLog, ChatMessage, CalendarEvent,
         ComponentRegistry, Connection, CustomVariable, DataSource,
-        Notification, AgentConfig, ModuleState, SDUITemplate,
+        Note, Notification, AgentConfig, ModuleState, SDUITemplate,
         TriggerDefinition, Workflow, Settings, Article, Todo,
     )
     from app.database import engine
@@ -293,6 +311,11 @@ try:
         name = "Todo"
         name_plural = "Todos"
 
+    class NoteAdmin(ModelView, model=Note):
+        column_list = ["id", "user_id", "title", "created_at"]
+        name = "Note"
+        name_plural = "Notes"
+
     class ArticleAdmin(ModelView, model=Article):
         column_list = ["id", "user_id", "title", "source", "published_at", "created_at"]
         name = "Article"
@@ -317,15 +340,23 @@ try:
     sqladmin.add_view(WorkflowAdmin)
     sqladmin.add_view(SettingsAdmin)
     sqladmin.add_view(TodoAdmin)
+    sqladmin.add_view(NoteAdmin)
     sqladmin.add_view(ArticleAdmin)
     logger.info("SQLAdmin mounted at /admin/db")
 except Exception as exc:
     logger.warning(f"SQLAdmin not mounted: {exc}")
 
-# Mount admin panel static files if built
-import os
-from fastapi.staticfiles import StaticFiles
+# Serve web admin static build (production deployment)
+# API routes are registered above so they take precedence over the static mount.
+# The static mount uses html=True for SPA client-side routing fallback:
+# unknown paths under / serve index.html instead of 404.
+if settings.serve_static:
+    import os as _os
+    from fastapi.staticfiles import StaticFiles as _StaticFiles
 
-admin_dist = os.path.join(os.path.dirname(__file__), '..', '..', 'web', 'dist')
-if os.path.isdir(admin_dist):
-    app.mount("/admin", StaticFiles(directory=admin_dist, html=True), name="admin")
+    admin_dist = _os.path.join(_os.path.dirname(__file__), '..', '..', 'web', 'dist')
+    if _os.path.isdir(admin_dist):
+        app.mount("/", _StaticFiles(directory=admin_dist, html=True), name="web_admin")
+        logger.info(f"Serving web admin from {admin_dist}")
+    else:
+        logger.info("Web admin build not found — not serving frontend")

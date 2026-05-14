@@ -91,6 +91,12 @@ class Settings(BaseSettings):
     # Enabled by default in dev so the Alerts tab shows live WebSocket push demos.
     demo_time_alerts: bool = True
 
+    # Production deployment
+    # When True, the backend serves the web admin static build at /.
+    # Set to False in development where the Vite dev server runs separately.
+    # Default: True — the static build may not exist in dev, so mounting is no-op.
+    serve_static: bool = True
+
 
 settings = Settings()
 

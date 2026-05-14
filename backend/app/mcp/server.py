@@ -14,6 +14,7 @@ from sqlalchemy import select
 from app.mcp.tools import (
     approve_draft,
     create_event,
+    create_checkpoint as tools_create_checkpoint,
     delete_all_events,
     delete_event,
     delete_screen,
@@ -24,10 +25,13 @@ from app.mcp.tools import (
     hide_tab,
     list_screens,
     list_tabs,
+    list_versions as tools_list_versions,
+    publish_version as tools_publish_version,
     read_all_calendar,
     read_calendar,
     reject_draft,
     rename_tab,
+    restore_version as tools_restore_version,
     send_chat_message,
     send_notification,
     set_screen,
@@ -271,8 +275,13 @@ async def helm_set_screen(module_id: str, screen: dict | str) -> dict:
     """Set a Server-Driven UI screen for a module. Frontend re-renders instantly via WebSocket.
 
     Screens are saved as DRAFTS by default.
-    Always call helm_approve_draft(module_id) after this to publish the screen live.
-    Or use helm_reject_draft(module_id) to discard it.
+    For ModuleInstance-based modules (UUID module_id):
+      Use helm_create_checkpoint to save a versioned snapshot, then
+      helm_publish_version to go live. Or use helm_approve_draft which
+      does both in one step.
+    For tab-based modules ("home", "calendar", etc.):
+      Always call helm_approve_draft(module_id) after this to publish the screen live.
+      Or use helm_reject_draft(module_id) to discard it.
 
     ── SCHEMA (V2 — row-by-row) ───────────────────────────────────────────────
     {
@@ -295,10 +304,9 @@ async def helm_set_screen(module_id: str, screen: dict | str) -> dict:
     ── COMPONENT CATALOG (PascalCase ONLY) ────────────────────────────────────
     Atomic — leaf nodes, no children:
       Text        props: content*, variant?(heading|body|caption), color?, bold?, italic?, align?, numberOfLines?
-      Markdown    props: content*
+                  (Markdown merged into Text — use Text for rich content)
       Button      props: label?, icon?, iconPosition?(left|right), variant?(primary|secondary|ghost|destructive), size?(sm|md|lg), fullWidth?, onPress*:Action, disabled?, loading?
-      Image       props: src*, alt?, resizeMode?(cover|contain|stretch), aspectRatio*, width?, height?, borderRadius?, placeholder?
-      TextInput   props: value?, placeholder?, multiline?, maxLines?
+      Image       props: src*, fitMode?(fitWidth|fitHeight), onPress?:Action
       Icon        props: name* (feather icon), size?, color?
       Divider     props: direction?(horizontal|vertical), thickness?, color?, indent?
 
@@ -495,9 +503,15 @@ async def helm_approve_draft(module_id: str) -> dict:
     Call this after helm_set_screen to promote the saved draft to the live screen.
     The screen becomes visible to the user immediately via WebSocket.
 
+    For ModuleInstance-based modules (UUID), this creates a version checkpoint
+    and publishes it in one step. For tab-based modules ("home", "calendar", etc.),
+    it promotes the old-style draft to live.
+
     Workflow: helm_set_screen → helm_approve_draft
+    Alternative: helm_set_screen → helm_create_checkpoint → helm_publish_version
 
     Available module_ids: home | chat | calendar | forms | alerts | modules | settings
+        or a ModuleInstance UUID.
     """
     return await approve_draft(module_id, get_current_user_id())
 
@@ -507,12 +521,100 @@ async def helm_reject_draft(module_id: str, feedback: str = "") -> dict:
     """Reject and discard a pending draft screen.
 
     The draft is deleted and the frontend clears the preview.
+    Works with both the new ModuleWorkingDraft system and the old
+    ModuleState-based draft system — both are cleared.
     Optionally include feedback explaining why the draft was rejected —
     useful when a user rejects a draft and you want to record their reason.
 
     Available module_ids: home | chat | calendar | forms | alerts | modules | settings
+        or a ModuleInstance UUID.
     """
     return await reject_draft(module_id, get_current_user_id(), feedback or None)
+
+
+# ── Versioning tools (ModuleInstance-based modules) ────────────────────────
+# These tools work with the new ModuleWorkingDraft + ModuleVersion system.
+# They require a ModuleInstance UUID as module_id.
+
+@mcp.tool()
+async def helm_create_checkpoint(
+    module_id: str,
+    change_summary: str = "",
+) -> dict:
+    """Create a versioned checkpoint from the current working draft for a module.
+
+    If no working draft exists, the live screen is checkpointed instead.
+    Returns the version details including version_number and display_name.
+    Use helm_list_versions to see all checkpoints.
+
+    Args:
+        module_id: The ModuleInstance UUID to checkpoint.
+        change_summary: Optional description of what changed.
+    """
+    return await tools_create_checkpoint(
+        module_id, get_current_user_id(), change_summary or None,
+    )
+
+
+@mcp.tool()
+async def helm_list_module_versions(
+    module_id: str,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """List all versions for a module, newest first.
+
+    Returns version metadata (id, version_number, display_name, source, etc.)
+    but not the full SDUI JSON. Use helm_get_module_version for full content.
+
+    Args:
+        module_id: The ModuleInstance UUID.
+        limit: Maximum versions to return (default 50).
+        offset: Pagination offset (default 0).
+    """
+    return await tools_list_versions(
+        module_id, get_current_user_id(), limit=limit, offset=offset,
+    )
+
+
+@mcp.tool()
+async def helm_restore_version(module_id: str, version_id: str) -> dict:
+    """Restore a version's content back to the working draft.
+
+    This allows editing a previous version. The restored content becomes
+    the active working draft and can be edited further or checkpointed again.
+
+    Args:
+        module_id: The ModuleInstance UUID.
+        version_id: The version UUID to restore from.
+    """
+    return await tools_restore_version(
+        module_id, version_id, get_current_user_id(),
+    )
+
+
+@mcp.tool()
+async def helm_publish_version(
+    module_id: str,
+    version_id: str = "",
+) -> dict:
+    """Publish a version as the live screen for a module.
+
+    If version_id is provided, publishes that specific version.
+    If version_id is empty, creates a checkpoint from the working draft and publishes it.
+
+    This replaces the old approve_draft workflow for ModuleInstance-based modules:
+      helm_set_screen → helm_publish_version
+    Or for full version control:
+      helm_set_screen → helm_create_checkpoint → helm_publish_version(version_id=...)
+
+    Args:
+        module_id: The ModuleInstance UUID.
+        version_id: Optional specific version UUID to publish.
+    """
+    return await tools_publish_version(
+        module_id, get_current_user_id(), version_id or None,
+    )
 
 
 # ── Tab management tools ───────────────────────────────────────────────────

@@ -6,11 +6,15 @@ from uuid import uuid4
 
 from loguru import logger
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.database import AsyncSessionLocal
 from app.models.calendar_event import CalendarEvent
 from app.models.chat_message import ChatMessage
+from app.models.module_instance import ModuleInstance
 from app.models.module_state import ModuleState
+from app.models.module_version import ModuleVersion
+from app.models.module_working_draft import ModuleWorkingDraft
 from app.models.notification import Notification
 from app.services.sdui_state import (
     SDUI_MODULE_PREFIX as _SDUI_PREFIX,
@@ -25,6 +29,11 @@ from app.services.sdui_state import (
     send_draft_cleared,
     send_draft_update,
     send_live_screen_update,
+)
+from app.services.version_service import (
+    create_module_checkpoint,
+    list_module_versions,
+    restore_version_to_draft,
 )
 
 
@@ -53,6 +62,10 @@ async def execute_tool(name: str, args: dict[str, Any], user_id: str) -> Any:
         "approve_draft": approve_draft,
         "reject_draft": reject_draft,
         "get_draft": get_draft,
+        "create_checkpoint": create_checkpoint,
+        "list_module_versions": list_versions,
+        "restore_version": restore_version,
+        "publish_version": publish_version,
     }
     handler = handlers.get(name)
     if handler is None:
@@ -363,7 +376,7 @@ _SDUI_PROPS_FIELDS: dict[str, set[str]] = {
     'stat':        {'label', 'value', 'change', 'change_direction', 'icon'},
     'stats_row':   {'stats'},
     'calendar':    {'events', 'view'},
-    'image':       {'uri', 'aspect_ratio', 'alt', 'action'},
+    'image':       {'uri', 'src', 'fitMode', 'action'},
     'progress':    {'value', 'max', 'label', 'color'},
 }
 
@@ -372,12 +385,15 @@ _SDUI_STRUCTURAL_KEYS = {'type', 'id', 'children', 'props'}
 # V2 component types registered in the frontend componentRegistry.ts.
 # MUST stay in sync with mobile/src/renderer/componentRegistry.ts — a drift
 # causes valid LLM output to be rejected here (or invalid output to pass).
+# Markdown was merged into Text in Phase 3 — use Text for rich content.
+# The legacy map (markdown→Text) handles existing data at validation time.
 _VALID_V2_COMPONENT_TYPES: frozenset[str] = frozenset({
-    "Text", "Markdown", "Button", "Image", "TextInput",
+    "Text", "Button", "Image",
     "Icon", "Container",
     "CalendarModule", "ChatModule", "NotesModule", "InputBar",
     "Badge", "Stat", "List", "Alert",
-    "Todo", "RichText", "ArticleCard", "Empty",
+    "Todo", "TodoModule", "RichText", "RichTextRenderer",
+    "ArticleCard", "ArticleCardModule", "Empty",
 })
 
 _LEGACY_V2_TYPE_MAP: dict[str, str] = {
@@ -388,11 +404,9 @@ _LEGACY_V2_TYPE_MAP: dict[str, str] = {
     "chat": "ChatModule",
     "notes": "NotesModule",
     "text": "Text",
-    "markdown": "Markdown",
+    "markdown": "Text",
     "button": "Button",
     "image": "Image",
-    "textinput": "TextInput",
-    "text_input": "TextInput",
     "icon": "Icon",
     "container": "Container",
     "inputbar": "InputBar",
@@ -401,8 +415,16 @@ _LEGACY_V2_TYPE_MAP: dict[str, str] = {
     "stat": "Stat",
     "list": "List",
     "alert": "Alert",
-    "RichTextRenderer": "RichText",
     "Empty": "Empty",
+    # TodoModule / ArticleCardModule aliases
+    "todomodule": "TodoModule",
+    "todo_module": "TodoModule",
+    "articlecardmodule": "ArticleCardModule",
+    "article_card_module": "ArticleCardModule",
+    # RichTextRenderer aliases (keep existing RichTextRenderer→RichText mapping
+    # for backward compat, add lowercase variants too)
+    "richtextrenderer": "RichText",
+    "rich_text_renderer": "RichText",
 }
 
 
@@ -416,7 +438,11 @@ def _validate_sdui_v2_container_children(
     container: dict[str, Any],
     errors: list[str],
 ) -> None:
-    """Recursively validate nested Container descendants in V2 payloads."""
+    """Recursively validate nested Container/Empty descendants in V2 payloads.
+
+    Both Container and Empty components can have children in V2. Empty was
+    redesigned as a vertical row (Phase 3.7) — its children must be validated.
+    """
     container_id = container.get("id", "unknown")
     children = container.get("children")
     if not isinstance(children, list):
@@ -446,7 +472,7 @@ def _validate_sdui_v2_container_children(
             )
             continue
 
-        if child_type == "Container":
+        if child_type in {"Container", "Empty"}:
             _validate_sdui_v2_container_children(child, errors)
 
 
@@ -498,7 +524,7 @@ def _validate_sdui_v2(screen: dict[str, Any]) -> list[str]:
                     f"Unknown component type '{comp_type}' in cell '{cell.get('id', cell_idx)}'. "
                     f"Valid types: {', '.join(sorted(_VALID_V2_COMPONENT_TYPES))}"
                 )
-            if comp_type == "Container":
+            if comp_type in {"Container", "Empty"}:
                 _validate_sdui_v2_container_children(content, errors)
     return errors
 
@@ -934,16 +960,95 @@ async def rename_tab(
 # ── Draft management (Human-in-the-Loop) ──────────────────────────────────
 # Architecture Decision: Session 2, Section 8.
 # AI layout changes go through approval. Draft screens are stored separately.
+#
+# Phase 9 update: Now works with both the new ModuleWorkingDraft + ModuleVersion
+# system (for ModuleInstance-based modules) and the old ModuleState-based draft
+# system (for tab-based modules like "home", "calendar"). The new system is
+# tried first, with fallback to the old system for backward compatibility.
+
+async def _try_new_draft_approve(
+    db: AsyncSessionLocal,
+    module_id: str,
+    user_id: str,
+) -> dict[str, Any] | None:
+    """Try to approve using the new ModuleWorkingDraft + ModuleVersion system.
+    
+    Returns the result dict if a working draft was found and processed,
+    or None if no working draft exists for this module_id.
+    """
+    # ModuleWorkingDraft uses ModuleInstance IDs (UUIDs)
+    result = await db.execute(
+        select(ModuleWorkingDraft).where(
+            ModuleWorkingDraft.module_id == module_id,
+            ModuleWorkingDraft.user_id == user_id,
+        )
+    )
+    working_draft = result.scalar_one_or_none()
+    if working_draft is None or not working_draft.sdui_json:
+        return None
+
+    screen = working_draft.sdui_json
+
+    # Create a checkpoint from the working draft
+    version = await create_module_checkpoint(
+        db,
+        module_id=module_id,
+        user_id=user_id,
+        sdui_json=screen,
+        change_summary="Approved via MCP approve_draft",
+        source="mcp_approve",
+    )
+
+    # Publish to live screen (ModuleState-based live storage)
+    live_version, _ = await persist_live_screen(
+        db,
+        user_id=user_id,
+        module_id=module_id,
+        screen=screen,
+        clear_existing_draft=True,
+    )
+
+    # Clear the working draft
+    await db.delete(working_draft)
+    await db.flush()
+
+    return {
+        "module_id": module_id,
+        "version": live_version,
+        "checkpoint_id": version.id,
+        "approved": True,
+        "system": "new",
+        "_screen": screen,
+    }
+
 
 async def approve_draft(module_id: str, user_id: str) -> dict[str, Any]:
-    """Approve a draft screen — promote it to the live screen."""
-    draft_key = draft_screen_key(module_id)
-
+    """Approve a draft screen — promote it to the live screen.
+    
+    Tries the new ModuleWorkingDraft system first (for ModuleInstance-based
+    modules), then falls back to the old ModuleState-based draft system
+    (for tab-based modules like "home", "calendar").
+    """
     async with AsyncSessionLocal() as db:
+        # Try new system first
+        new_result = await _try_new_draft_approve(db, module_id, user_id)
+        if new_result is not None:
+            screen = new_result.pop("_screen", None)
+            await db.commit()
+            await send_draft_cleared(user_id, module_id)
+            await send_live_screen_update(
+                user_id, module_id,
+                screen,
+                new_result["version"],
+            )
+            return new_result
+
+        # Fallback to old ModuleState-based draft system
+        draft_key_val = draft_screen_key(module_id)
         result = await db.execute(
             select(ModuleState).where(
                 ModuleState.user_id == user_id,
-                ModuleState.module_type == draft_key,
+                ModuleState.module_type == draft_key_val,
             )
         )
         draft = result.scalars().first()
@@ -980,25 +1085,46 @@ async def approve_draft(module_id: str, user_id: str) -> dict[str, Any]:
 
     await send_draft_cleared(user_id, module_id)
     await send_live_screen_update(user_id, module_id, screen, version)
-    return {"module_id": module_id, "version": version, "approved": True}
+    return {"module_id": module_id, "version": version, "approved": True, "system": "legacy"}
 
 
 async def reject_draft(module_id: str, user_id: str, feedback: str | None = None) -> dict[str, Any]:
-    """Reject a draft screen — discard it and optionally provide feedback."""
-    draft_key = draft_screen_key(module_id)
-
+    """Reject a draft screen — discard it and optionally provide feedback.
+    
+    Clears both the new ModuleWorkingDraft (if one exists for this module_id)
+    and the old ModuleState-based draft for backward compatibility.
+    """
     async with AsyncSessionLocal() as db:
+        found_any = False
+
+        # Clear new ModuleWorkingDraft
+        result = await db.execute(
+            select(ModuleWorkingDraft).where(
+                ModuleWorkingDraft.module_id == module_id,
+                ModuleWorkingDraft.user_id == user_id,
+            )
+        )
+        working_draft = result.scalar_one_or_none()
+        if working_draft is not None:
+            await db.delete(working_draft)
+            found_any = True
+
+        # Clear old ModuleState-based draft
+        draft_key_val = draft_screen_key(module_id)
         result = await db.execute(
             select(ModuleState).where(
                 ModuleState.user_id == user_id,
-                ModuleState.module_type == draft_key,
+                ModuleState.module_type == draft_key_val,
             )
         )
         draft = result.scalars().first()
-        if draft is None:
+        if draft is not None:
+            await db.delete(draft)
+            found_any = True
+
+        if not found_any:
             return {"status": "error", "message": f"No draft found for module '{module_id}'"}
 
-        await db.delete(draft)
         await db.commit()
 
     await send_draft_cleared(user_id, module_id)
@@ -1013,18 +1139,230 @@ async def reject_draft(module_id: str, user_id: str, feedback: str | None = None
 
 
 async def get_draft(module_id: str, user_id: str) -> dict[str, Any]:
-    """Get the current draft screen for a module, if any."""
-    draft_key = draft_screen_key(module_id)
-
+    """Get the current draft screen for a module, if any.
+    
+    Tries the new ModuleWorkingDraft first, then falls back to the
+    old ModuleState-based draft system.
+    """
     async with AsyncSessionLocal() as db:
+        # Try new ModuleWorkingDraft first
+        result = await db.execute(
+            select(ModuleWorkingDraft).where(
+                ModuleWorkingDraft.module_id == module_id,
+                ModuleWorkingDraft.user_id == user_id,
+            )
+        )
+        working_draft = result.scalar_one_or_none()
+        if working_draft is not None and working_draft.sdui_json:
+            return {
+                "screen": working_draft.sdui_json,
+                "has_draft": True,
+                "system": "new",
+                "validation_status": working_draft.validation_status,
+                "dirty": working_draft.dirty,
+            }
+
+        # Fallback to old ModuleState-based draft
+        draft_key_val = draft_screen_key(module_id)
         result = await db.execute(
             select(ModuleState).where(
                 ModuleState.user_id == user_id,
-                ModuleState.module_type == draft_key,
+                ModuleState.module_type == draft_key_val,
             )
         )
         draft = result.scalars().first()
 
-    if draft is None:
-        return {"screen": None, "has_draft": False}
-    return {"screen": draft.state_json, "version": draft.version, "has_draft": True}
+        if draft is None:
+            return {"screen": None, "has_draft": False}
+        return {"screen": draft.state_json, "version": draft.version, "has_draft": True, "system": "legacy"}
+
+
+# ── Versioning MCP tools ──────────────────────────────────────────────────
+# New MCP tools for the versioning system — checkpoint, list, restore, publish.
+
+async def create_checkpoint(module_id: str, user_id: str, change_summary: str | None = None) -> dict[str, Any]:
+    """Create a checkpoint (versioned snapshot) from the current working draft.
+    
+    If no working draft exists, uses the live screen instead.
+    Returns the created version info.
+    """
+    async with AsyncSessionLocal() as db:
+        # Get SDUI JSON from working draft first
+        result = await db.execute(
+            select(ModuleWorkingDraft).where(
+                ModuleWorkingDraft.module_id == module_id,
+                ModuleWorkingDraft.user_id == user_id,
+            )
+        )
+        draft = result.scalar_one_or_none()
+
+        if draft is not None and draft.sdui_json:
+            sdui_json = draft.sdui_json
+        else:
+            # Fallback to live screen
+            result = await db.execute(
+                select(ModuleState).where(
+                    ModuleState.user_id == user_id,
+                    ModuleState.module_type == live_screen_key(module_id),
+                )
+            )
+            live_state = result.scalars().first()
+            if live_state is None or not live_state.state_json:
+                return {
+                    "status": "error",
+                    "message": "No working draft or live screen to checkpoint. Save something first.",
+                }
+            sdui_json = live_state.state_json
+
+        version = await create_module_checkpoint(
+            db,
+            module_id=module_id,
+            user_id=user_id,
+            sdui_json=sdui_json,
+            change_summary=change_summary,
+            source="checkpoint",
+        )
+
+        # Mark draft as clean after checkpoint
+        if draft is not None:
+            draft.dirty = False
+            draft.last_autosaved_at = datetime.now()
+
+        await db.commit()
+
+        return {
+            "id": version.id,
+            "module_id": module_id,
+            "version_number": version.version_number,
+            "display_name": version.display_name,
+            "created_at": version.created_at.isoformat() if version.created_at else None,
+            "created": True,
+        }
+
+
+async def list_versions(module_id: str, user_id: str, limit: int = 50, offset: int = 0) -> dict[str, Any]:
+    """List all versions for a module, newest first."""
+    async with AsyncSessionLocal() as db:
+        versions, total = await list_module_versions(
+            db, module_id, user_id,
+            offset=offset,
+            limit=limit,
+        )
+
+        return {
+            "versions": [
+                {
+                    "id": v.id,
+                    "version_number": v.version_number,
+                    "display_name": v.display_name,
+                    "custom_name": v.custom_name,
+                    "source": v.source,
+                    "validation_status": v.validation_status,
+                    "created_at": v.created_at.isoformat() if v.created_at else None,
+                }
+                for v in versions
+            ],
+            "total": total,
+            "has_more": (offset + limit) < total,
+        }
+
+
+async def restore_version(module_id: str, version_id: str, user_id: str) -> dict[str, Any]:
+    """Restore a version's content back to the working draft."""
+    async with AsyncSessionLocal() as db:
+        try:
+            draft = await restore_version_to_draft(
+                db, module_id, version_id, user_id, as_draft=True,
+            )
+            await db.commit()
+        except ValueError as exc:
+            return {"status": "error", "message": str(exc)}
+
+        return {
+            "module_id": module_id,
+            "version_id": version_id,
+            "restored": True,
+            "draft_id": draft.id,
+            "message": f"Version restored to working draft.",
+        }
+
+
+async def publish_version(module_id: str, user_id: str, version_id: str | None = None) -> dict[str, Any]:
+    """Publish a version as the live screen.
+    
+    If version_id is provided, publishes that specific version.
+    Otherwise, creates a checkpoint from the working draft and publishes it.
+    This is the equivalent of the old "approve draft" for the new system.
+    """
+    async with AsyncSessionLocal() as db:
+        if version_id:
+            # Publish a specific version
+            result = await db.execute(
+                select(ModuleVersion).where(
+                    ModuleVersion.id == version_id,
+                    ModuleVersion.module_id == module_id,
+                    ModuleVersion.user_id == user_id,
+                )
+            )
+            version = result.scalar_one_or_none()
+            if version is None:
+                return {"status": "error", "message": f"Version {version_id} not found"}
+            sdui_json = version.sdui_json
+        else:
+            # Create checkpoint from working draft, then publish
+            result = await db.execute(
+                select(ModuleWorkingDraft).where(
+                    ModuleWorkingDraft.module_id == module_id,
+                    ModuleWorkingDraft.user_id == user_id,
+                )
+            )
+            draft = result.scalar_one_or_none()
+            if draft is None or not draft.sdui_json:
+                return {
+                    "status": "error",
+                    "message": "No working draft found. Save something first or specify a version_id.",
+                }
+            sdui_json = draft.sdui_json
+
+            # Create checkpoint
+            version = await create_module_checkpoint(
+                db,
+                module_id=module_id,
+                user_id=user_id,
+                sdui_json=sdui_json,
+                change_summary="Published via MCP publish_version",
+                source="mcp_publish",
+            )
+
+            # Clear working draft
+            await db.delete(draft)
+
+        # Publish to live screen
+        new_version, cleared_existing_draft = await persist_live_screen(
+            db,
+            user_id=user_id,
+            module_id=module_id,
+            screen=sdui_json,
+        )
+
+        # Update module instance current version pointer
+        result = await db.execute(
+            select(ModuleInstance).where(ModuleInstance.id == module_id)
+        )
+        instance = result.scalar_one_or_none()
+        if instance is not None:
+            instance.current_version_id = version.id
+
+        await db.commit()
+
+    if cleared_existing_draft:
+        await send_draft_cleared(user_id, module_id)
+    await send_live_screen_update(user_id, module_id, sdui_json, new_version)
+
+    return {
+        "module_id": module_id,
+        "version_id": version.id,
+        "version": new_version,
+        "published": True,
+        "checkpoint_id": version.id,
+    }

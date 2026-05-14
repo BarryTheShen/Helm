@@ -58,7 +58,7 @@ async def register_device(
         user_id=user_id,
         device_id=device_id,
         device_name=device_name,
-        config_json={},
+        config_json={"device_type": "mobile"},
         last_seen=datetime.now(timezone.utc),
         assigned_app_id=None,
     )
@@ -192,14 +192,14 @@ async def get_device_app_config(db: AsyncSession, device_id: str) -> dict | None
 
 
 async def list_devices(db: AsyncSession, user_id: str) -> list[Device]:
-    """List all devices for a user.
+    """List mobile devices for a user (excludes web admin sessions).
 
     Args:
         db: Database session
         user_id: Owner user ID
 
     Returns:
-        List of Device instances
+        List of Device instances (mobile only)
     """
     result = await db.execute(
         select(Device)
@@ -207,7 +207,12 @@ async def list_devices(db: AsyncSession, user_id: str) -> list[Device]:
         .order_by(Device.created_at)
         .options(selectinload(Device.app))
     )
-    return list(result.scalars().all())
+    all_devices = list(result.scalars().all())
+    # Filter out web admin sessions (tagged in auth.upsert_device)
+    return [
+        d for d in all_devices
+        if d.config_json.get("device_type") != "web_admin"
+    ]
 
 
 async def update_connection_state(
