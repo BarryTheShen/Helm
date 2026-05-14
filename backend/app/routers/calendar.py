@@ -15,6 +15,7 @@ from app.schemas.calendar import (
     CalendarEventOut,
     CalendarEventsResponse,
     CalendarEventUpdate,
+    MeetingCreate,
 )
 from app.schemas.common import BulkDeleteRequest
 from app.services.audit import log_audit
@@ -22,9 +23,14 @@ from app.services.audit import log_audit
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
 _SDUI_CALENDAR_KEY = "sdui__calendar"
+CALENDAR_COMPONENT_TYPE = "calendar"
 
 
-async def _update_sdui_calendar(db: AsyncSession, user_id: str) -> None:
+async def _update_sdui_calendar(
+    db: AsyncSession,
+    user_id: str,
+    commit: bool = True,
+) -> None:
     """After any event mutation, rebuild the calendar events in the SDUI screen and broadcast.
 
     This makes the Calendar tab in the mobile app auto-refresh whenever an event
@@ -32,6 +38,9 @@ async def _update_sdui_calendar(db: AsyncSession, user_id: str) -> None:
 
     Only runs if the user already has a SDUI calendar screen set. If no screen
     exists yet, this is a no-op (the agent hasn't set up the tab yet).
+
+    When ``commit`` is True (default), the ModuleState changes are committed
+    immediately. When False, the caller is responsible for calling ``db.commit()``.
     """
     from app.services.websocket_manager import manager
 
@@ -75,7 +84,7 @@ async def _update_sdui_calendar(db: AsyncSession, user_id: str) -> None:
 
     def _update_components(components: list) -> list:
         for comp in components:
-            if comp.get("type") == "calendar":
+            if comp.get("type") == CALENDAR_COMPONENT_TYPE:
                 # Update events in both flat and props-based formats
                 comp["events"] = event_list
                 if "props" in comp:
@@ -90,14 +99,15 @@ async def _update_sdui_calendar(db: AsyncSession, user_id: str) -> None:
         if comps:
             section["components"] = _update_components(comps)
         # Also handle legacy singular "component" field
-        if "component" in section and section["component"].get("type") == "calendar":
+        if "component" in section and section["component"].get("type") == CALENDAR_COMPONENT_TYPE:
             section["component"]["events"] = event_list
             if "props" in section["component"]:
                 section["component"]["props"]["events"] = event_list
 
     state.state_json = screen
     state.version += 1
-    await db.commit()
+    if commit:
+        await db.commit()
 
     from app.mcp.tools import normalize_sdui_screen
 
@@ -208,7 +218,7 @@ async def create_event(
 
 @router.post("/add-meeting", status_code=201)
 async def add_meeting(
-    body: dict,
+    body: MeetingCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -216,24 +226,23 @@ async def add_meeting(
 
     Accepts separate date and time fields, auto-combines into ISO datetimes.
 
-    Request body fields:
+    Request body fields (validated by MeetingCreate schema):
       title       (str, required)   e.g. "Team Standup"
       date        (str, required)   e.g. "2026-04-01"
       start_time  (str, required)   e.g. "14:00" or "2:00 PM"
       end_time    (str, required)   e.g. "15:00" or "3:00 PM"
       description (str, optional)
       color       (str, optional)   hex color e.g. "#6366f1"
+      source_type (str, optional)   defaults to "local"; validated against VALID_SOURCE_TYPES
+      notes       (str, optional)
     """
     from datetime import datetime
     import re
 
-    title = (body.get("title") or "").strip()
-    if not title:
-        raise HTTPException(status_code=422, detail="title is required")
-
-    date_str = (body.get("date") or "").strip()
-    start_str = (body.get("start_time") or "").strip()
-    end_str = (body.get("end_time") or "").strip()
+    title = body.title.strip()
+    date_str = body.date.strip()
+    start_str = body.start_time.strip()
+    end_str = body.end_time.strip()
 
     def _parse_time(time_str: str) -> str:
         """Convert various time formats to HH:MM (24h)."""
@@ -268,13 +277,13 @@ async def add_meeting(
         title=title,
         start_time=start_dt,
         end_time=end_dt,
-        description=body.get("description") or None,
-        color=body.get("color") or "#6366f1",
+        description=body.description,
+        color=body.color or "#6366f1",
         is_all_day=False,
-        # FF4-CAL-026: add-meeting creates local events by default
-        source_type=body.get("source_type", "local") or "local",
+        # FF4-CAL-026: source_type is validated by MeetingCreate schema
+        source_type=body.source_type,
         # FF4-CAL-027: pass optional notes through
-        notes=body.get("notes"),
+        notes=body.notes,
     )
     db.add(event)
     await db.flush()

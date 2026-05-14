@@ -1,11 +1,15 @@
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
 # FF4-CAL-026: Valid source types for calendar events
 VALID_SOURCE_TYPES = {"local", "caldav", "notion", "custom"}
+
+# Field naming convention:
+#   Model (SQLAlchemy) → is_all_day
+#   API schema (Pydantic) → all_day
+#   Mapping: router uses field_map = {"all_day": "is_all_day"} in update_event
 
 
 class CalendarEventCreate(BaseModel):
@@ -72,3 +76,39 @@ class CalendarEventOut(BaseModel):
 
 class CalendarEventsResponse(BaseModel):
     events: list[CalendarEventOut]
+
+
+class MeetingCreate(BaseModel):
+    """Schema for the /api/calendar/add-meeting endpoint.
+
+    Accepts separate date and time strings as submitted by the SDUI form;
+    the endpoint combines them into full datetime objects.
+
+    Fields:
+      title      (str, required)   e.g. "Team Standup"
+      date       (str, required)   e.g. "2026-04-01"
+      start_time (str, required)   e.g. "14:00" or "2:00 PM"
+      end_time   (str, required)   e.g. "15:00" or "3:00 PM"
+      description (str, optional)
+      color      (str, optional)   hex color e.g. "#6366f1"
+      source_type (str, optional)  defaults to "local"
+      notes      (str, optional)
+    """
+
+    title: str
+    date: str
+    start_time: str
+    end_time: str
+    description: str | None = None
+    color: str | None = None
+    source_type: str = "local"
+    notes: str | None = None
+
+    @field_validator("source_type")
+    @classmethod
+    def validate_source_type(cls, v: str) -> str:
+        if v not in VALID_SOURCE_TYPES:
+            raise ValueError(
+                f"Invalid source_type '{v}'. Must be one of: {', '.join(sorted(VALID_SOURCE_TYPES))}"
+            )
+        return v

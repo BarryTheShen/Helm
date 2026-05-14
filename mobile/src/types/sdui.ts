@@ -365,6 +365,7 @@ export type SDUIComponentTypeV2 =
   | 'Divider'
   // Tier 1 structural
   | 'Container'
+  | 'Empty'
   // Tier 3 composite
   | 'CalendarModule'
   | 'ChatModule'

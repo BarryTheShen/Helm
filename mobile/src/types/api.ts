@@ -1,4 +1,9 @@
 // Backend API types
+//
+// Naming convention: fields use snake_case to match the REST API (Python
+// FastAPI → SQLAlchemy). Mapping to camelCase for component-internal use
+// is done at the fetch/mapping layer (e.g., CalendarModule's fetchFromApi
+// maps `all_day` → `allDay`, `source_type` → `sourceType`).
 
 export interface User {
   id: string;

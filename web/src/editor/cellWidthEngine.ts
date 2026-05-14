@@ -40,6 +40,8 @@ function resolveWidthToPercent(width: CellWidthInput['width'], totalPercent: num
   }
   // Legacy numeric flex weights — convert to percentage of total
   if (typeof width === 'number' && Number.isFinite(width) && width > 0) {
+    // Guard against division by zero when totalPercent is 0
+    if (!totalPercent) return 0;
     return (width / totalPercent) * 100;
   }
   return NaN;
@@ -52,6 +54,20 @@ export function isAutoWidth(width: CellWidthInput['width']): boolean {
   if (width === 'auto') return true;
   if (typeof width === 'string' && width.endsWith('%')) return false;
   return false; // Treat numbers as fixed (they need to resolve to something)
+}
+
+/**
+ * Sum numeric width values across cells. Shared helper used by both
+ * calculateCellWidths and calculateSidePadding for consistent legacy width handling.
+ * Returns the sum of numeric width values (ignores 'auto' and percentage strings).
+ */
+function sumNumericWidths(cells: CellWidthInput[]): number {
+  return cells.reduce<number>((sum, c) => {
+    if (typeof c.width === 'number' && Number.isFinite(c.width) && c.width > 0) {
+      return sum + c.width;
+    }
+    return sum;
+  }, 0);
 }
 
 /**
@@ -82,19 +98,15 @@ export function calculateCellWidths(
 
   // Calculate total fixed percentage
   // For legacy numeric widths, treat the total sum as the reference
-  let fixedNumericTotal = 0;
-  let hasNumericWidth = false;
-  for (const c of fixedCells) {
-    if (typeof c.width === 'number') {
-      fixedNumericTotal += c.width;
-      hasNumericWidth = true;
-    }
-  }
+  const fixedNumericTotal = sumNumericWidths(fixedCells);
+  const hasNumericWidth = fixedNumericTotal > 0;
 
   // Resolve fixed widths to percentages
+  // A2: Use 100 as fallback when fixedNumericTotal is 0 to avoid division by zero
+  const safeTotal = fixedNumericTotal || 100;
   const resolvedPercentages = fixedCells.map(c => ({
     id: c.id,
-    percent: resolveWidthToPercent(c.width, hasNumericWidth ? fixedNumericTotal : 100),
+    percent: resolveWidthToPercent(c.width, hasNumericWidth ? safeTotal : 100),
   }));
 
   const fixedTotal = resolvedPercentages.reduce((sum, r) => sum + r.percent, 0);
@@ -209,7 +221,8 @@ export function calculateSidePadding(cells: CellWidthInput[]): number {
       fixedTotal += parseFloat(c.width);
       fixedCount++;
     } else if (typeof c.width === 'number') {
-      fixedTotal += (c.width / cells.reduce((s, cc) => s + (typeof cc.width === 'number' ? cc.width : 0), 0)) * 100;
+      const numericSum = sumNumericWidths(cells);
+      fixedTotal += numericSum > 0 ? (c.width / numericSum) * 100 : 0;
       fixedCount++;
     }
   }

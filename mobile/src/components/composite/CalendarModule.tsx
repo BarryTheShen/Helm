@@ -43,7 +43,7 @@
  *
  * FF4-CAL-013: If cell width < 200px, Month/Week/Day auto-adapt to Compact.
  */
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -62,6 +62,19 @@ import type { SDUIDataBinding } from '@/types/sdui';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+/**
+ * Local CalendarEvent type used by CalendarModule's sub-views.
+ *
+ * Naming convention: fields use camelCase (component-internal convention).
+ * The REST API (api.ts CalendarEvent) uses snake_case (is_all_day, source_type).
+ * Mapping from snake_case API responses to camelCase component fields is done
+ * in fetchFromApi() and the dataSource mapping in the main CalendarModule body.
+ *
+ * Fields:
+ *   allDay     ← API: all_day / is_all_day (both variants are handled)
+ *   sourceType ← API: source_type           (FF4-CAL-026)
+ *   notes      ← API: notes                 (FF4-CAL-027)
+ */
 interface CalendarEvent {
   id: string;
   title: string;

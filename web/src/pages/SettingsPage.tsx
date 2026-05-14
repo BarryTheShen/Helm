@@ -49,6 +49,9 @@ export function SettingsPage() {
         errors: string[];
       }>('/api/admin/cleanup/preview');
       setCleanupPreview(result);
+      if (result.errors.length > 0) {
+        toast.error(`Preview errors: ${result.errors.join(', ')}`);
+      }
       if (result.apps_deleted === 0 && result.module_instances_deleted === 0 && result.templates_deleted === 0) {
         toast.info('No test artifacts found — system is clean');
       }

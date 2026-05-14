@@ -5,7 +5,21 @@ apps, modules, and templates must be removable to restore a clean state.
 
 Naming convention: content with names starting with "test" or "Test", OR
 content explicitly flagged as test data, is eligible for cleanup.
+
+CASCADE SCOPE:
+  - Deleting an App cascades to: all app_versions, screens, published_screens,
+    module_instances linked to that app, and any related workflow_state entries.
+  - Deleting a ModuleInstance cascades to: screen_instance entries and
+    references from workflow triggers.
+  - Deleting an SDUITemplate cascades to: published_template_screens.
+  - The admin UI shows a confirmation dialog before calling this endpoint,
+    so the operator is aware of the broad deletion scope.
+  - This service deletes test artifacts one entity type at a time. If a
+    cascade foreign-key constraint fails (e.g. orphaned references), the
+    error is caught per-entity and logged so remaining deletions proceed.
 """
+
+import logging
 
 from dataclasses import dataclass, field
 
@@ -15,6 +29,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.app import App
 from app.models.module_instance import ModuleInstance
 from app.models.template import SDUITemplate
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -85,11 +101,16 @@ async def preview_cleanup(db: AsyncSession) -> CleanupResult:
 
 
 async def execute_cleanup(db: AsyncSession) -> CleanupResult:
-    """Remove all test artifacts from the database."""
+    """Remove all test artifacts from the database.
+
+    Each entity type is deleted in its own try/except block so that a failure
+    deleting one type (e.g. due to a FK constraint on App) does not prevent
+    cleanup of the other types.
+    """
     result = CleanupResult()
 
+    # --- Delete test apps ---
     try:
-        # Find and delete test apps
         test_app_ids = (
             (
                 await db.execute(
@@ -110,8 +131,14 @@ async def execute_cleanup(db: AsyncSession) -> CleanupResult:
             for aid, aname in app_names.items():
                 result.apps_deleted += 1
                 result.details.append(f"Deleted App: {aname!r} (id={aid})")
+                logger.info("Cleanup: deleted App %r (id=%s)", aname, aid)
+    except Exception as exc:
+        msg = f"Error deleting test Apps: {exc}"
+        result.errors.append(msg)
+        logger.error(msg, exc_info=True)
 
-        # Find and delete test module instances
+    # --- Delete test module instances ---
+    try:
         test_mod_ids = (
             (
                 await db.execute(
@@ -136,8 +163,14 @@ async def execute_cleanup(db: AsyncSession) -> CleanupResult:
             for mid, mname in mod_names.items():
                 result.module_instances_deleted += 1
                 result.details.append(f"Deleted ModuleInstance: {mname} (id={mid})")
+                logger.info("Cleanup: deleted ModuleInstance %s (id=%s)", mname, mid)
+    except Exception as exc:
+        msg = f"Error deleting test ModuleInstances: {exc}"
+        result.errors.append(msg)
+        logger.error(msg, exc_info=True)
 
-        # Find and delete test templates
+    # --- Delete test templates ---
+    try:
         test_tmpl_ids = (
             (
                 await db.execute(
@@ -162,11 +195,33 @@ async def execute_cleanup(db: AsyncSession) -> CleanupResult:
             for tid, tname in tmpl_names.items():
                 result.templates_deleted += 1
                 result.details.append(f"Deleted Template: {tname!r} (id={tid})")
+                logger.info("Cleanup: deleted Template %r (id=%s)", tname, tid)
+    except Exception as exc:
+        msg = f"Error deleting test Templates: {exc}"
+        result.errors.append(msg)
+        logger.error(msg, exc_info=True)
 
+    # Commit all successful deletions together; rollback if any still fail
+    try:
         await db.commit()
-
-    except Exception as e:
+    except Exception as exc:
         await db.rollback()
-        result.errors.append(str(e))
+        msg = f"Commit failed during cleanup: {exc}"
+        result.errors.append(msg)
+        logger.error(msg, exc_info=True)
+
+    if not result.errors:
+        logger.info(
+            "Cleanup complete: %d apps, %d module instances, %d templates deleted",
+            result.apps_deleted,
+            result.module_instances_deleted,
+            result.templates_deleted,
+        )
+    else:
+        logger.warning(
+            "Cleanup completed with %d error(s): %s",
+            len(result.errors),
+            "; ".join(result.errors),
+        )
 
     return result

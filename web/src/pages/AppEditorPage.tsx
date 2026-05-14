@@ -84,7 +84,7 @@ export function AppEditorPage() {
     };
 
     void loadApps();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only effect, intentionally empty deps
   }, []);
 
   // Load available modules
@@ -107,7 +107,6 @@ export function AppEditorPage() {
     };
 
     void loadModules();
-   
   }, []);
 
   // Fetch version info when app changes
@@ -185,8 +184,9 @@ export function AppEditorPage() {
     console.log('[AppEditor] handleSave() — saving app:', currentApp.id);
     setSaving(true);
     try {
-      await api.updateApp(currentApp.id, currentApp);
-      console.log('[AppEditor] handleSave() — app saved successfully');
+      // REQ: FF4-PUBLISH-001 — wrap app config in config_json per AppWorkingDraftUpdate schema
+      await api.updateAppDraft(currentApp.id, { config_json: currentApp, dirty: true });
+      console.log('[AppEditor] handleSave() — app saved to draft successfully');
       showMsg('success', 'App saved successfully');
     } catch (err) {
       console.error('[AppEditor] handleSave() — failed:', err instanceof Error ? err.message : err);
@@ -234,14 +234,10 @@ export function AppEditorPage() {
     setPublishResult(null);
 
     try {
-      // Step 1: Save the current app config
-      await api.updateApp(currentApp.id, currentApp);
-      console.log('[AppEditor] handlePublishApp() — app saved');
-
-      // Step 2: Delete existing draft so checkpoint creates fresh from live config
-      await api.del(`/api/apps/${currentApp.id}/draft`).catch(() => {
-        // Ignore if no draft exists
-      });
+      // Step 1: Save the current app config to draft (checkpoint reads from draft)
+      // REQ: FF4-PUBLISH-001 — wrap app config in config_json per AppWorkingDraftUpdate schema
+      await api.updateAppDraft(currentApp.id, { config_json: currentApp, dirty: true });
+      console.log('[AppEditor] handlePublishApp() — app saved to draft');
 
       // Step 3: Create a checkpoint
       const checkpointResult = await api.post<{ id: string; version_number: number; display_name: string }>(

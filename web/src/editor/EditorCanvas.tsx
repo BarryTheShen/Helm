@@ -19,6 +19,7 @@ import { useEditorStore } from './useEditorStore';
 import { getComponentDefinition } from './types';
 import type { EditorCell, EditorComponent, EditorRow, EditorRowHeight } from './types';
 import { assertRegisteredComponentType } from './typeGuards';
+import { MIN_CELL_WIDTH_PERCENT, MIN_CELL_WIDTH_PX, MIN_ROW_HEIGHT } from './cellWidthEngine';
 
 import { ComponentPicker } from './ComponentPicker';
 import { Plus, Grip, X, Edit2, Eye, Copy, Trash2, ArrowUp, ArrowDown, Clipboard } from 'lucide-react';
@@ -26,7 +27,7 @@ import { resolveVariables } from './variableResolver';
 import ReactMarkdown from 'react-markdown';
 
 // cell width validation constants — SLICE-CELL-WIDTH (FF4-ROW-004..021, FF4-ROW-024)
-// NOTE: MIN_CELL_WIDTH_PERCENT is also defined locally below (EditorCanvas.tsx:112)
+// NOTE: MIN_CELL_WIDTH_PERCENT, MIN_CELL_WIDTH_PX, and MIN_ROW_HEIGHT imported from cellWidthEngine
 
 // ── Context Menu ──────────────────────────────────────────────────────────
 
@@ -105,7 +106,6 @@ function RowContextMenu({ rowId, position, onClose, onDeleteRow, onDuplicateRow,
   );
 }
 
-const MIN_ROW_HEIGHT = 48;
 const ROW_DRAG_HANDLE_WIDTH = 24;
 /** FF4-ROW-001: Drag handle positioned to the left of the row, inside the editor canvas.
  *  Previously at -60px (off-screen). Now uses a negative left offset relative to the row
@@ -115,8 +115,6 @@ const SCROLLABLE_CELL_WIDTH = 160;
 const SCROLLABLE_CELL_MIN_WIDTH = 120;
 const MAX_PREVIEW_WIDTH = 960;
 const MAX_PREVIEW_HEIGHT = 1200;
-const MIN_CELL_WIDTH_PERCENT = 5; // Minimum 5% width per cell
-const MIN_CELL_WIDTH_PX = 60; // Minimum cell width in pixels
 const MIN_CELL_PERCENT_FOR_DRAG = 5; // Minimum percentage for drag resize
 
 // ── Component Preview Renderers ──────────────────────────────────────────────
@@ -1151,7 +1149,13 @@ function RowHeightResizeHandle({
       nextHeightRef.current = rawHeight;
       onPreview(rowId, rawHeight);
 
-      // Direct DOM manipulation — no React re-render per frame
+      // A3: Direct DOM manipulation — intentionally bypasses React re-render for smooth
+      // drag resize performance. React state updates (onPreview) would cause re-render
+      // of the entire row tree every frame, causing jank. Direct style mutations are
+      // cleared on mouseup (below) so React can resume control of the row height.
+      // Risk: if a React re-render occurs during drag (e.g. from another state change),
+      // React may overwrite the DOM style. This is acceptable because the drag is
+      // short-lived and the final height is committed via onCommit.
       if (rowRef.current) {
         rowRef.current.style.height = rawHeight + 'px';
         rowRef.current.style.minHeight = rawHeight + 'px';
@@ -1312,8 +1316,9 @@ function SortableRow({
         <RowDragHandle testId={`row-drag-handle-${row.id}`} isDragging={isDragging} attributes={attributes} listeners={listeners} />
 
         {/* Delete row button - top-LEFT outside content area (moved from right to prevent overlap with cell delete) */}
+        {/* m3: Use -left-1 instead of -left-2.5 to prevent clipping by phone frame overflow-hidden */}
         <button
-          className="absolute -left-2.5 -top-2.5 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-red-600 shadow-md"
+          className="absolute -left-1 -top-2.5 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-red-600 shadow-md"
           onClick={(e) => { e.stopPropagation(); deleteRow(row.id); }}
           title="Delete row"
         >

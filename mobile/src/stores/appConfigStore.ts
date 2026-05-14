@@ -57,6 +57,16 @@ export const useAppConfigStore = create<AppConfigState>((set, get) => ({
    * FF4-EDGE-006: If the device encounters a render failure with the new
    * version, the old cached config remains available in AsyncStorage and
    * the store's appConfig field is NOT replaced until rendering succeeds.
+   *
+   * SECURITY CONSIDERATION (A6): The token is accepted as a plain-string
+   * parameter from the caller (WebSocketContext). Ideally the store would
+   * read the token internally from useAuthStore() to avoid passing it
+   * through the call chain, but the current callers already hold the token
+   * in their scope. This is a pragmatic trade-off: the token never leaves
+   * the process boundary (it's used only in the Authorization header), and
+   * the parameter pattern keeps the store testable without mocking auth.
+   * If the security posture tightens, refactor to read token from authStore
+   * inside this function instead of accepting it as a parameter.
    */
   loadAppConfig: async (serverUrl: string, token: string, deviceId: string) => {
     const { appConfig: currentConfig } = get();

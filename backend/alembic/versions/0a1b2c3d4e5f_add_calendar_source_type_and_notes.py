@@ -22,6 +22,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # FF4-CAL-026: source_type column — tracks event origin (local/caldav/notion/custom)
+    #
+    # Convention note: migration uses server_default to set the default at the
+    # database level (existing rows get 'local'), while the model uses a Python-
+    # level default for new ORM instances. Both are set intentionally — the
+    # server_default ensures consistency regardless of ORM layer, and the model
+    # default keeps the ORM self-documenting.
     op.add_column(
         "calendar_events",
         sa.Column("source_type", sa.String(20), nullable=False, server_default="local"),

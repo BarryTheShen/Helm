@@ -405,6 +405,11 @@ class ApiClient {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.put<any>(`/api/apps/${id}`, data);
   }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  updateAppDraft(id: string, data: any) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return this.put<any>(`/api/apps/${id}/draft`, data);
+  }
   deleteApp(id: string) {
     return this.del<void>(`/api/apps/${id}`);
   }
