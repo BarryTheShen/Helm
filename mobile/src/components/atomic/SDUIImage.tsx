@@ -1,68 +1,53 @@
 /**
  * SDUIImage — Tier 2 atomic component.
- * Display images from URLs with proper sizing and placeholders.
+ * Simplified: only src, fitMode, action.
+ * fitWidth: image fills cell width, height auto (maintains aspect ratio).
+ * fitHeight: image fills cell height, width auto.
  */
 import React, { useState } from 'react';
 import { Image, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import { resolveColor, themeColors } from '@/theme/tokens';
+import { themeColors } from '@/theme/tokens';
 import type { SDUIAction } from '@/types/sdui';
 
 interface SDUIImageProps {
   src: string;
-  alt?: string;
-  resizeMode?: 'cover' | 'contain' | 'stretch' | 'center';
-  width?: number | string;
-  height?: number | string;
-  aspectRatio?: number;
-  borderRadius?: number;
+  fitMode?: 'fitWidth' | 'fitHeight';
   onPress?: SDUIAction;
-  placeholder?: 'blur' | 'skeleton' | 'none';
   dispatch?: (action: SDUIAction) => void;
 }
 
 export function SDUIImage({
   src,
-  alt,
-  resizeMode = 'contain',
-  width,
-  height,
-  aspectRatio,
-  borderRadius = 0,
+  fitMode = 'fitWidth',
   onPress,
-  placeholder = 'skeleton',
   dispatch,
 }: SDUIImageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const sizeStyle: any = {};
-  if (width !== undefined) sizeStyle.width = width;
-  if (height !== undefined) sizeStyle.height = height;
-  if (aspectRatio !== undefined) sizeStyle.aspectRatio = aspectRatio;
-  // Ensure we have some dimension constraint
-  if (!width && !height && !aspectRatio) {
-    sizeStyle.width = '100%';
-    sizeStyle.aspectRatio = 16 / 9;
-  }
+  const sizeStyle: any = fitMode === 'fitHeight'
+    ? { width: '100%', height: '100%' }
+    : { width: '100%', aspectRatio: 16 / 9 };
+
+  const resizeModeVal = fitMode === 'fitHeight' ? 'contain' : 'cover';
 
   const imageElement = (
-    <View style={[styles.container, sizeStyle, { borderRadius }]}>
-      {loading && placeholder !== 'none' && (
-        <View style={[styles.placeholder, sizeStyle, { borderRadius }]}>
+    <View style={[styles.container, sizeStyle]}>
+      {loading && (
+        <View style={[styles.placeholder, sizeStyle]}>
           <ActivityIndicator size="small" color={themeColors.textSecondary} />
         </View>
       )}
       {!error ? (
         <Image
           source={{ uri: src }}
-          style={[styles.image, sizeStyle, { borderRadius }]}
-          resizeMode={resizeMode}
+          style={[styles.image, sizeStyle]}
+          resizeMode={resizeModeVal}
           onLoad={() => setLoading(false)}
           onError={() => { setLoading(false); setError(true); }}
-          accessibilityLabel={alt}
         />
       ) : (
-        <View style={[styles.errorPlaceholder, sizeStyle, { borderRadius }]}>
+        <View style={[styles.errorPlaceholder, sizeStyle]}>
           <Text style={styles.errorText}>🖼️</Text>
         </View>
       )}

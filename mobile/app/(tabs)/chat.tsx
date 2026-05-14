@@ -29,7 +29,7 @@ import { useSDUIScreen } from '@/hooks/useSDUIScreen';
 import { ApiClient } from '@/services/api';
 import { ErrorBanner } from '@/components/common/ErrorBanner';
 import { SDUIUniversalRenderer } from '@/components/sdui/SDUIRenderer';
-import { SDUIMarkdown } from '@/components/atomic/SDUIMarkdown';
+import { SDUIText } from '@/components/atomic/SDUIText';
 import { useActionDispatcher } from '@/hooks/useActionDispatcher';
 import { colors, spacing, typography, borderRadius } from '@/theme/colors';
 import type { ChatMessage } from '@/types/api';
@@ -115,7 +115,7 @@ function MessageBubble({ msg }: { msg: UIMessage }) {
         {isUser ? (
           <Text style={styles.bubbleTextUser}>{msg.content}</Text>
         ) : (
-          <SDUIMarkdown content={msg.content || (msg.isStreaming ? '' : '')} />
+          <SDUIText content={msg.content || (msg.isStreaming ? '' : '')} />
         )}
         {msg.isStreaming && !msg.content && (
           <Text style={styles.streamingPlaceholder}>●●●</Text>

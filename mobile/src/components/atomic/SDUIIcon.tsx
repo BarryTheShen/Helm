@@ -4,7 +4,7 @@
  * In production: use @expo/vector-icons Feather set.
  */
 import React from 'react';
-import { Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Text, View, TouchableOpacity, StyleSheet } from 'react-native';
 import { resolveColor, themeColors } from '@/theme/tokens';
 import type { SDUIAction } from '@/types/sdui';
 
@@ -145,9 +145,11 @@ export function SDUIIcon({
   const resolvedColor = resolveColor(color);
 
   const iconElement = (
-    <Text style={[styles.icon, { fontSize: size, color: resolvedColor }]}>
-      {icon}
-    </Text>
+    <View style={styles.cellFit}>
+      <Text style={[styles.icon, { fontSize: size, color: resolvedColor }]}>
+        {icon}
+      </Text>
+    </View>
   );
 
   if (onPress && dispatch) {
@@ -168,6 +170,11 @@ export function SDUIIcon({
 }
 
 const styles = StyleSheet.create({
+  cellFit: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   icon: {
     textAlign: 'center',
   },

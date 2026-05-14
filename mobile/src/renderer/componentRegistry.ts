@@ -8,11 +8,9 @@ import type { ComponentType } from 'react';
 
 // Tier 2 — Atomic
 import { SDUIText } from '@/components/atomic/SDUIText';
-import { SDUIMarkdown } from '@/components/atomic/SDUIMarkdown';
 import { SDUIRichTextRenderer } from '@/components/atomic/SDUIRichTextRenderer';
 import { SDUIButton } from '@/components/atomic/SDUIButton';
 import { SDUIImage } from '@/components/atomic/SDUIImage';
-import { SDUITextInput } from '@/components/atomic/SDUITextInput';
 import { SDUIIcon } from '@/components/atomic/SDUIIcon';
 
 // Tier 1 — Structural
@@ -41,10 +39,9 @@ import { ArticleCardComponent } from '@/components/sdui/ArticleCardComponent';
 const registry: Record<string, ComponentType<any>> = {
   // V2 PascalCase names (preferred)
   Text: SDUIText,
-  Markdown: SDUIMarkdown,
+  Markdown: SDUIText, // Markdown merged into Text — keep alias for backward compat
   Button: SDUIButton,
   Image: SDUIImage,
-  TextInput: SDUITextInput,
   Icon: SDUIIcon,
   Container: SDUIContainer,
   Empty: SDUIEmpty,

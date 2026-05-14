@@ -1,8 +1,12 @@
 /**
  * NotesModule — Tier 3 composite module.
  * Document feed for notes created by users and AI.
- * Editing uses TextInput; rendering uses SDUIMarkdown (react-native-markdown-display).
+ * Editing uses TextInput; rendering uses SDUIText (markdown-based).
  * Supports pull-to-refresh when connected to a data source.
+ *
+ * Backend integration:
+ *  - Load: via dataBinding prop (useDataSource hook)
+ *  - Create/Update: via dispatch (server_action to backend notes API)
  *
  * New Architecture (react-native-enriched) is NOT used because the app runs
  * on the old architecture. If newArchEnabled is set in app.json in the future,
@@ -19,9 +23,9 @@ import {
   RefreshControl,
 } from 'react-native';
 import { themeColors } from '@/theme/tokens';
-import { SDUIMarkdown } from '@/components/atomic/SDUIMarkdown';
+import { SDUIText } from '@/components/atomic/SDUIText';
 import { useDataSource, clearDataSourceCache } from '@/hooks/useDataSource';
-import type { SDUIDataBinding } from '@/types/sdui';
+import type { SDUIAction, SDUIDataBinding } from '@/types/sdui';
 
 interface Note {
   id: string;
@@ -32,12 +36,19 @@ interface Note {
 interface NotesModuleProps {
   dataBinding?: SDUIDataBinding;
   onDataRefresh?: () => void;
+  /** Create action — SDUIAction dispatched when creating a new note */
+  onCreate?: SDUIAction;
+  /** Save action — SDUIAction dispatched when saving an edited note */
+  onSave?: SDUIAction;
+  /** Injected by the SDUI renderer */
+  dispatch?: (action: SDUIAction) => void;
 }
 
-export function NotesModule({ dataBinding, onDataRefresh }: NotesModuleProps) {
+export function NotesModule({ dataBinding, onDataRefresh, onCreate, onSave, dispatch }: NotesModuleProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
+  const [editTitle, setEditTitle] = useState('');
 
   const { data: dataSourceData, refresh: dsRefresh } = useDataSource(dataBinding);
 
@@ -61,12 +72,28 @@ export function NotesModule({ dataBinding, onDataRefresh }: NotesModuleProps) {
 
   const startEdit = (note: Note) => {
     setEditingId(note.id);
+    setEditTitle(note.title);
     setEditContent(note.content);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditContent('');
+    setEditTitle('');
+  };
+
+  const saveEdit = () => {
+    if (!editingId || !dispatch || !onSave) return;
+    dispatch({
+      ...onSave,
+      params: { ...((onSave as Record<string, unknown>).params as Record<string, unknown> ?? {}), id: editingId, title: editTitle, content: editContent },
+    } as SDUIAction);
+    cancelEdit();
+  };
+
+  const handleCreate = () => {
+    if (!dispatch || !onCreate) return;
+    dispatch(onCreate);
   };
 
   return (
@@ -75,9 +102,15 @@ export function NotesModule({ dataBinding, onDataRefresh }: NotesModuleProps) {
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={themeColors.primary} />
       }
+      keyboardShouldPersistTaps="handled"
     >
       <View style={styles.header}>
         <Text style={styles.headerText}>Notes</Text>
+        {onCreate && dispatch && (
+          <TouchableOpacity style={styles.createBtn} onPress={handleCreate}>
+            <Text style={styles.createBtnText}>+ New</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {notes.length === 0 ? (
@@ -93,6 +126,13 @@ export function NotesModule({ dataBinding, onDataRefresh }: NotesModuleProps) {
             {editingId === note.id ? (
               <View style={styles.editContainer}>
                 <TextInput
+                  style={styles.titleEditor}
+                  value={editTitle}
+                  onChangeText={setEditTitle}
+                  placeholder="Note title…"
+                  placeholderTextColor="#C7C7CC"
+                />
+                <TextInput
                   style={styles.editor}
                   value={editContent}
                   onChangeText={setEditContent}
@@ -103,6 +143,9 @@ export function NotesModule({ dataBinding, onDataRefresh }: NotesModuleProps) {
                   textAlignVertical="top"
                 />
                 <View style={styles.editActions}>
+                  <TouchableOpacity style={styles.saveBtn} onPress={saveEdit} disabled={!onSave}>
+                    <Text style={styles.saveBtnText}>Save</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.cancelBtn} onPress={cancelEdit}>
                     <Text style={styles.cancelBtnText}>Cancel</Text>
                   </TouchableOpacity>
@@ -111,7 +154,7 @@ export function NotesModule({ dataBinding, onDataRefresh }: NotesModuleProps) {
             ) : (
               <TouchableOpacity onPress={() => startEdit(note)} activeOpacity={0.8}>
                 {note.content ? (
-                  <SDUIMarkdown content={note.content} />
+                  <SDUIText content={note.content} />
                 ) : (
                   <Text style={styles.emptyContent}>Tap to edit…</Text>
                 )}
@@ -126,8 +169,10 @@ export function NotesModule({ dataBinding, onDataRefresh }: NotesModuleProps) {
 
 const styles = StyleSheet.create({
   container: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', minHeight: 200 },
-  header: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#E5E5EA' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: '#E5E5EA' },
   headerText: { fontSize: 17, fontWeight: '600', color: '#000' },
+  createBtn: { paddingHorizontal: 12, paddingVertical: 4, backgroundColor: themeColors.primary, borderRadius: 6 },
+  createBtnText: { fontSize: 13, fontWeight: '600', color: '#fff' },
   emptyState: { alignItems: 'center', justifyContent: 'center', padding: 40 },
   placeholder: { fontSize: 15, color: '#8E8E93', marginBottom: 4 },
   subtext: { fontSize: 13, color: '#C7C7CC' },
@@ -140,6 +185,16 @@ const styles = StyleSheet.create({
   noteTitle: { fontSize: 16, fontWeight: '600', color: '#000', marginBottom: 6 },
   emptyContent: { fontSize: 14, color: '#C7C7CC', fontStyle: 'italic' },
   editContainer: { gap: 8 },
+  titleEditor: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    backgroundColor: '#F9F9F9',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
+    padding: 10,
+  },
   editor: {
     minHeight: 120,
     fontSize: 15,
@@ -152,6 +207,8 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   editActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
+  saveBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 6, backgroundColor: themeColors.primary },
+  saveBtnText: { fontSize: 14, color: '#fff', fontWeight: '600' },
   cancelBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#C7C7CC' },
   cancelBtnText: { fontSize: 14, color: '#8E8E93' },
 });

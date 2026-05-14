@@ -126,67 +126,13 @@ export function SDUIPageRenderer({ page, onAction }: SDUIPageRendererProps) {
   );
 }
 
-type RuntimePaddingAwareRow = SDUIRow & {
-  height?: number | string;
-  paddingTop?: number | string;
-  paddingBottom?: number | string;
-  paddingLeft?: number | string;
-  paddingRight?: number | string;
-};
-
-function resolveSpacingValue(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === 'string') {
-    const parsed = Number(value.trim());
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return undefined;
-}
-
-function getRowPaddingStyle(row: SDUIRow): ViewStyle {
-  const runtimeRow = row as RuntimePaddingAwareRow;
-  const uniformPadding = resolveSpacingValue(runtimeRow.padding);
-  const paddingTop = resolveSpacingValue(runtimeRow.paddingTop) ?? uniformPadding;
-  const paddingBottom = resolveSpacingValue(runtimeRow.paddingBottom) ?? uniformPadding;
-  const paddingLeft = resolveSpacingValue(runtimeRow.paddingLeft) ?? uniformPadding;
-  const paddingRight = resolveSpacingValue(runtimeRow.paddingRight) ?? uniformPadding;
-
-  const style: ViewStyle = {};
-
-  if (paddingTop !== undefined) {
-    style.paddingTop = paddingTop;
-  }
-
-  if (paddingBottom !== undefined) {
-    style.paddingBottom = paddingBottom;
-  }
-
-  if (paddingLeft !== undefined) {
-    style.paddingLeft = paddingLeft;
-  }
-
-  if (paddingRight !== undefined) {
-    style.paddingRight = paddingRight;
-  }
-
-  return style;
-}
-
 function getRowHeightStyle(row: SDUIRow): ViewStyle {
-  const runtimeRow = row as RuntimePaddingAwareRow;
-  const minimumHeight = resolveSpacingValue(runtimeRow.height);
+  const minimumHeight = row.height;
 
-  if (minimumHeight === undefined || minimumHeight <= 0) {
+  if (minimumHeight === undefined || minimumHeight === 'auto' || minimumHeight <= 0) {
     return {};
   }
 
-  // Treat authored row heights as minimums so tall native content can expand the row.
   return {
     minHeight: minimumHeight,
   };
@@ -196,7 +142,12 @@ const SCROLLABLE_CELL_WIDTH = 160;
 const SCROLLABLE_CELL_MIN_WIDTH = 120;
 
 function getNumericCellWidth(width: SDUICell['width']): number {
-  return typeof width === 'number' && Number.isFinite(width) ? width : 1;
+  if (typeof width === 'number' && Number.isFinite(width)) return width;
+  if (typeof width === 'string' && width.endsWith('%')) {
+    const parsed = parseFloat(width);
+    return isNaN(parsed) ? 1 : parsed;
+  }
+  return 1;
 }
 
 function getCellContainerStyle(width: SDUICell['width'], scrollable: boolean): ViewStyle {
@@ -212,7 +163,24 @@ function getCellContainerStyle(width: SDUICell['width'], scrollable: boolean): V
     return { flex: 1 };
   }
 
-  return { flex: width };
+  // Percentage string like '50%' — use flexBasis percentage
+  if (typeof width === 'string') {
+    // Handle percentage strings
+    if (width.endsWith('%')) {
+      const percent = parseFloat(width);
+      if (!isNaN(percent) && percent > 0) {
+        return { flexBasis: `${percent}%`, flex: 1 };
+      }
+    }
+    // Fall through for other string values
+  }
+
+  // Legacy numeric flex weight — use as flex value
+  if (typeof width === 'number' && Number.isFinite(width)) {
+    return { flex: width };
+  }
+
+  return { flex: 1 };
 }
 
 function RowRenderer({
@@ -252,10 +220,10 @@ function RowRenderer({
 
   // Stack cells vertically on compact if specified
   const shouldStack = breakpoint === 'compact' && row.compact?.stack;
-  const gap = row.gap ?? 12;
-  const paddingStyle = getRowPaddingStyle(row);
   const heightStyle = getRowHeightStyle(row);
 
+  // Phase 2: Row padding/gap/backgroundColor removed. Cells use flex layout with no gap.
+  // Show divider still works as a bottom border on content rows.
   const dividerStyle = row.showDivider ? {
     borderBottomWidth: row.dividerThickness ?? 1,
     borderBottomColor: row.dividerColor ?? '#E0E0E0',
@@ -277,8 +245,7 @@ function RowRenderer({
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={[rowStyles.scrollableRow, heightStyle, row.backgroundColor ? { backgroundColor: row.backgroundColor } : null]}
-        contentContainerStyle={[paddingStyle, { gap }]}
+        style={[rowStyles.scrollableRow, heightStyle]}
       >
         {cellElements}
       </ScrollView>
@@ -292,10 +259,7 @@ function RowRenderer({
         heightStyle,
         {
           flexDirection: shouldStack ? 'column' : 'row',
-          gap,
         },
-        row.backgroundColor ? { backgroundColor: row.backgroundColor } : null,
-        paddingStyle,
         dividerStyle,
       ]}
     >
@@ -329,8 +293,11 @@ function CellRenderer({
   const cellStyle = getCellContainerStyle(cell.width, scrollable);
 
   return (
-    <View style={cellStyle}>
-      <V2ComponentRenderer component={cellContent} dispatch={dispatch} />
+    // Phase 2: Cell wraps content with flex: 1 so components fill the cell
+    <View style={[cellStyle, { flex: cellStyle.flex ?? 1 }]}>
+      <View style={{ flex: 1, width: '100%' }}>
+        <V2ComponentRenderer component={cellContent} dispatch={dispatch} />
+      </View>
     </View>
   );
 }
@@ -413,10 +380,13 @@ function V2ComponentRenderer({
       />
     ));
 
+    // Phase 2: Wrap component in flex container for cell fitting
     return (
-      <Comp {...cleanProps} dispatch={dispatch}>
-        {childElements}
-      </Comp>
+      <View style={{ flex: 1, width: '100%' }}>
+        <Comp {...cleanProps} dispatch={dispatch}>
+          {childElements}
+        </Comp>
+      </View>
     );
   }
 

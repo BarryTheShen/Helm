@@ -2,18 +2,27 @@
  * ArticleCardModule — Tier 3 composite module.
  * Single article card with optional image, title, description, source, and date.
  * Used in news feeds, knowledge bases, and content aggregation screens.
+ *
+ * Backend integration:
+ *  - Load: via dataBinding prop (useDataSource hook)
+ *  - Tap: via dispatch or onPress callback (navigate to article detail)
  */
 import React from 'react';
 import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { colors, spacing, typography, borderRadius } from '@/theme/colors';
+import type { SDUIAction } from '@/types/sdui';
 
 interface ArticleCardModuleProps {
+  id?: string;
   title?: string;
   description?: string;
   imageUrl?: string;
   publishedAt?: string;
   source?: string;
-  onPress?: () => void;
+  /** Press action — either a callback or an SDUIAction to dispatch */
+  onPress?: (() => void) | SDUIAction;
+  /** Injected by the SDUI renderer */
+  dispatch?: (action: SDUIAction) => void;
 }
 
 export function ArticleCardModule({
@@ -23,6 +32,7 @@ export function ArticleCardModule({
   publishedAt,
   source,
   onPress,
+  dispatch,
 }: ArticleCardModuleProps) {
   const formattedDate = publishedAt
     ? (() => {
@@ -38,10 +48,18 @@ export function ArticleCardModule({
       })()
     : '';
 
+  const handlePress = () => {
+    if (typeof onPress === 'function') {
+      onPress();
+    } else if (onPress && dispatch) {
+      dispatch(onPress);
+    }
+  };
+
   return (
     <TouchableOpacity
       style={styles.card}
-      onPress={onPress}
+      onPress={handlePress}
       activeOpacity={0.7}
     >
       {imageUrl ? (

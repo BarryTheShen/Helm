@@ -281,8 +281,9 @@ export interface LegacySDUIComponent {
 /** A single cell within a row, holding one component */
 export interface SDUICell {
   id: string;
-  /** Fractional width within the row (1–12 grid, or 'auto'). Default: 'auto' */
-  width?: number | 'auto';
+  /** Cell width: 'auto' for equal distribution, percentage string like '50%' for fixed width.
+   *  Legacy numeric flex weights are deprecated. Default: 'auto' */
+  width?: number | 'auto' | string;
   /** The component rendered inside this cell */
   content: SDUIComponentV2;
 }
@@ -306,16 +307,19 @@ export interface SDUIRow {
   scrollable?: boolean;
   /** Fixed row height from the editor. 'auto' falls back to intrinsic content sizing. */
   height?: SDUIRowHeight;
-  /** Background color for the row */
+  /** @deprecated Row background color removed in Phase 2. Preserved for backward compat. */
   backgroundColor?: string;
-  /** Uniform padding inside the row. Used as a fallback when side-specific padding is omitted. */
+  /** @deprecated Row padding removed in Phase 2. Preserved for backward compat. */
   padding?: number | string;
-  /** Side-specific padding inside the row. The renderer falls back to `padding` when omitted. */
+  /** @deprecated Row padding removed in Phase 2. Preserved for backward compat. */
   paddingTop?: number | string;
+  /** @deprecated Row padding removed in Phase 2. Preserved for backward compat. */
   paddingRight?: number | string;
+  /** @deprecated Row padding removed in Phase 2. Preserved for backward compat. */
   paddingBottom?: number | string;
+  /** @deprecated Row padding removed in Phase 2. Preserved for backward compat. */
   paddingLeft?: number | string;
-  /** Gap between cells */
+  /** @deprecated Row gap removed in Phase 2. Preserved for backward compat. */
   gap?: number;
   /** Whether to show a bottom border on this content row */
   showDivider?: boolean;
@@ -358,7 +362,6 @@ export type SDUIComponentTypeV2 =
   | 'Markdown'
   | 'Button'
   | 'Image'
-  | 'TextInput'
   | 'Icon'
   | 'Divider'
   // Tier 1 structural

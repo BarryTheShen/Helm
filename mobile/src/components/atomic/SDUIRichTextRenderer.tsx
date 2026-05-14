@@ -1,15 +1,12 @@
 /**
  * SDUIRichTextRenderer — Tier 2 atomic component.
- * Thin wrapper around SDUIMarkdown for server-driven rich text content.
+ * Wrapper around SDUIText (markdown-based) for server-driven rich text content.
  *
- * Handles {{expression}} variable resolution via SDUIMarkdown's built-in
+ * Handles {{expression}} variable resolution via SDUIText's built-in
  * useVariableContext + resolveExpression pipeline.
- *
- * The theme prop is accepted for API compatibility but not yet applied
- * to the underlying SDUIMarkdown renderer.
  */
 import React from 'react';
-import { SDUIMarkdown } from '@/components/atomic/SDUIMarkdown';
+import { SDUIText } from '@/components/atomic/SDUIText';
 
 interface SDUIRichTextRendererProps {
   content?: string;
@@ -17,5 +14,5 @@ interface SDUIRichTextRendererProps {
 }
 
 export function SDUIRichTextRenderer({ content, theme: _theme }: SDUIRichTextRendererProps) {
-  return <SDUIMarkdown content={content || ''} />;
+  return <SDUIText content={content || ''} />;
 }
