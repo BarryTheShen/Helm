@@ -2,21 +2,71 @@
 
 - **Slice ID:** FF4-SLICE-APP-EDITOR
 - **Status:** unclaimed
-- **Owner agent:** <!-- empty until claimed -->
-- **Claimed at:** <!-- empty until claimed -->
-- **Included REQ-IDs:** <!-- TBD -->
-- **Explicitly excluded REQ-IDs:** <!-- TBD or "none" -->
-- **Source sections:** <!-- references to source docs -->
-- **Dependencies:** <!-- list of other SLICE-IDs or "none" -->
-- **In-scope implementation notes:** <!-- guidance -->
-- **Out-of-scope notes:** <!-- boundary -->
-- **Acceptance checks:** <!-- checklist -->
-- **QA coverage classification/checks:** <!-- per REQ-ID -->
-- **Implementation evidence:** <!-- links to commits, files, test names -->
-- **QA evidence:** <!-- test output, manual test results -->
-- **Reviewer verdict:** <!-- empty until reviewed -->
-- **Remaining blockers:** <!-- list or "none" -->
-
----
-
-*Note: This is a representative slice. The actual slices and REQ-IDs will be determined by `helm-requirements-auditor` when reading the full FF4 source documents.*
+- **Owner agent:** 
+- **Claimed at:** 
+- **Included REQ-IDs:** FF4-APP-001, FF4-APP-002, FF4-APP-003, FF4-APP-004, FF4-APP-005, FF4-APP-006, FF4-APP-007, FF4-APP-008, FF4-APP-009, FF4-APP-010, FF4-APP-011, FF4-APP-012, FF4-APP-013, FF4-APP-014, FF4-APP-015, FF4-APP-016, FF4-APP-017, FF4-APP-018, FF4-APP-019, FF4-APP-020, FF4-APP-021, FF4-APP-022, FF4-APP-023, FF4-APP-024, FF4-APP-025, FF4-APP-026, FF4-APP-027
+- **Explicitly excluded REQ-IDs:** none
+- **Source sections:** FF4 doc lines 5-16 (Helm Admin / App Editor), lines 1009-1333 (App Editor behavior — full-app composition and publish model, Preview model, Publish model, Mobile live behavior), lines 1540-1554 (UI requirements / App Editor UI), lines 1579-1628 (Edge cases), `docs/codebase-explanation/frontend.md` lines 570-581 (App Editor), lines 664-670 (Version Comparison/Diff UI)
+- **Dependencies:** FF4-SLICE-BACKEND, FF4-SLICE-MODULE-EDITOR, FF4-SLICE-VERSIONING
+- **In-scope implementation notes:** Module icon configuration. Push-to-sync: all App Editor edits → backend JSON. Simplified phone preview: center screen (Launchpad icons) + bottom bar, one sidebar for module settings. Dark mode sync to mobile. Top bar: [App: {name} ▼] Saved {time} Live: {live version} [Preview ▼] [Publish to Mobile] [Version History]. Module reference selector: Use newest / Use specific version with version dropdown. Published version snapshot reproducibility. Publish confirmation modal with validation results and device status. Full app web preview (bottom bar, Launchpad, theme, dark mode). Temporary mobile preview (Preview Mode indicator, exit returns to live). Publish flow (immutable version, WS notification → REST fetch). Mobile live behavior (cache, offline, atomic updates). Edge cases: edit used module, deleted version warning, offline publish, incompatible device, preview failure, restore. Cleanup test data.
+- **Out-of-scope notes:** Module-level editing (handled by FF4-SLICE-MODULE-EDITOR). Row/cell layout (handled by FF4-SLICE-ROWS-CELLS-LAYOUT). Component implementation (handled by FF4-SLICE-COMPONENTS).
+- **Acceptance checks:**
+  - Module icons configurable via emoji picker
+  - All edits push to backend JSON that frontend renders from
+  - Phone preview: center Launchpad + bottom bar only (no two sidebars within phone)
+  - Module icons draggable from center to bottom bar
+  - Dark mode syncs to mobile when published
+  - Mobile only updates after App Editor publishes (not Module Editor edits)
+  - Top bar: App selector, Saved time, Live version, Preview dropdown, Publish, Version History
+  - Preview dropdown: "Preview in Web Admin" + "Preview on Device..."
+  - Module reference: Use newest/Use specific radio + version selector
+  - "Use newest": resolves newest valid version at publish; stores concrete version ID
+  - "Use specific": pinned version stays until changed
+  - Published version stores both policy and resolved version IDs (reproducible)
+  - Publish modal: app name, version name, devices, module versions, validation, Cancel/Publish
+  - Device status after publish: updated/pending with last seen time
+  - Full app web preview includes bottom bar, Launchpad, theme, dark mode
+  - Mobile preview: device enters Preview Mode with indicator; exit returns to live
+  - Preview sessions: expire, no change to active_app_version_id, no publish
+  - Publish: creates immutable App Version, WS notification, devices fetch+switch atomically
+  - Mobile Live Mode: fetch on launch, cache, offline render, atomic updates
+  - WS notification only (app_version_published); REST fetch for actual data
+  - Edit module used by live app: only draft changes; no live update until App Editor publish
+  - Archived module version: warning in App Editor with fix options
+  - Offline publish: backend succeeds, device updates on reconnect
+  - Incompatible device: keeps last good version, admin shows error with runtime versions
+  - Preview failure: return to live, log error
+  - Restore: copies to draft, no auto-publish
+  - Cleanup: remove test apps/modules/templates
+- **QA coverage classification/checks:**
+  - FF4-APP-001: manual-flow-test
+  - FF4-APP-002: automated-test
+  - FF4-APP-003: manual-flow-test
+  - FF4-APP-004: manual-flow-test
+  - FF4-APP-005: manual-flow-test
+  - FF4-APP-006: manual-flow-test
+  - FF4-APP-007: manual-flow-test
+  - FF4-APP-008: automated-test
+  - FF4-APP-009: automated-test
+  - FF4-APP-010: automated-test
+  - FF4-APP-011: manual-flow-test
+  - FF4-APP-012: manual-flow-test
+  - FF4-APP-013: manual-flow-test
+  - FF4-APP-014: manual-flow-test
+  - FF4-APP-015: manual-flow-test
+  - FF4-APP-016: automated-test
+  - FF4-APP-017: automated-test
+  - FF4-APP-018: manual-flow-test
+  - FF4-APP-019: automated-test
+  - FF4-APP-020: manual-flow-test
+  - FF4-APP-021: automated-test
+  - FF4-APP-022: manual-flow-test
+  - FF4-APP-023: automated-test
+  - FF4-APP-024: manual-flow-test
+  - FF4-APP-025: automated-test
+  - FF4-APP-026: automated-test
+  - FF4-APP-027: automated-test
+- **Implementation evidence:** 
+- **QA evidence:** 
+- **Reviewer verdict:** 
+- **Remaining blockers:** 

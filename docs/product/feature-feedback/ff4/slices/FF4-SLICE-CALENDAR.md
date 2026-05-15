@@ -1,0 +1,69 @@
+# Slice: FF4-SLICE-CALENDAR
+
+- **Slice ID:** FF4-SLICE-CALENDAR
+- **Status:** unclaimed
+- **Owner agent:** 
+- **Claimed at:** 
+- **Included REQ-IDs:** FF4-CAL-001, FF4-CAL-002, FF4-CAL-003, FF4-CAL-004, FF4-CAL-005, FF4-CAL-006, FF4-CAL-007, FF4-CAL-008, FF4-CAL-009, FF4-CAL-010, FF4-CAL-011, FF4-CAL-012, FF4-CAL-013, FF4-CAL-014, FF4-CAL-015, FF4-CAL-016, FF4-CAL-017, FF4-CAL-018, FF4-CAL-019, FF4-CAL-020, FF4-CAL-021, FF4-CAL-022, FF4-CAL-023, FF4-CAL-024, FF4-CAL-025
+- **Explicitly excluded REQ-IDs:** none
+- **Source sections:** FF4 doc lines 250-504 (Calendar — full implementation direction), `docs/codebase-explanation/frontend.md` lines 343, 672-676 (CalendarModule, Calendar Mobile Changes), `docs/codebase-explanation/protocol.md` lines 379-385 (CalendarEvent source_type + notes)
+- **Dependencies:** FF4-SLICE-BACKEND (for event data API, unified event model), FF4-SLICE-COMPONENTS (for unified component patterns, fit-the-cell)
+- **In-scope implementation notes:** Calendar is a first-class real component with 5 admin-controlled variants (Month, Week, Day, Event List, Compact). No variant switcher on mobile — admin-only control. Built-in date navigation (◀ range ▶ Today). Fit-the-cell: auto-adapt to Compact/Event List for cells <200px; validation warning for unfittable variants. Month: 7-col grid with colored dots, tap date→agenda, tap event→details. Week/Day: time-block grid 00:00–23:59 with positioned event blocks. 3-day view: deferred. Unified event model (id/title/start/end/allDay/sourceId/sourceName/sourceType/sourceColor/properties). Local-first SQLite; remote sync via connector layer. Sources: Local→CalDAV→Notion→Custom. Auto-assigned per-source colors consistent across variants. Admin-configured filtering. Real data binding (no mock data). Libraries: react-native-calendars + react-native-big-calendar behind Helm interface. Inspector: variant, sources, filters, max events, metadata options. Templates: Personal Dashboard (Weather+Compact 50/50), Daily Planner (Week in Empty Container), Full Calendar (Month/Week). sourceType badges (Local/Gray, CalDAV/Blue, Notion/Purple, Custom/Teal). Notes display (2 lines truncated).
+- **Out-of-scope notes:** CalDAV implementation (future work). Notion integration (future work). 3-day view (deferred). User-customizable colors (deferred QoL). Advanced Notes features (deferred per Notes V1 priority).
+- **Acceptance checks:**
+  - Calendar registered as real first-class component in registry
+  - 5 variants: Month (7-col grid), Week (time-block), Day (time-block), Event List (vertical), Compact (widget)
+  - All variants render real layouts, not fake placeholders
+  - No variant switcher UI on mobile; admin-only variant control
+  - Mobile: only prev/next arrows and Today button for time navigation
+  - Date navigation header built into Calendar: ◀ [range] ▶ [Today]
+  - Fit-the-cell: auto-adapts to Compact/Event List when cell <200px
+  - Validation warning when selected variant cannot fit cell
+  - Month: colored dots on days with events, tap date→agenda list, tap event→details
+  - Week/Day: time-block grid, events at correct positions, overlap handled, tap event→details
+  - 3-day view: deferred (no V1 implementation)
+  - Event detail: title, time, source name/color, notes, location, reminder
+  - Notion event detail: richer property card
+  - Unified event model: id, title, start, end, allDay, sourceId, sourceName, sourceType, sourceColor, properties
+  - Events fetched as unified array regardless of source
+  - Local-first: SQLite events table; remote sync via connector layer
+  - Sources: Local (first) → CalDAV → Notion → Custom (later)
+  - Per-source auto-assigned color; consistent across all variants/displays
+  - Admin filtering: all events, selected sources, selected categories
+  - Real data binding (no static/mock data); all variants display real event data
+  - Libraries wrapped behind Helm interface (stable SDUI schema)
+  - Inspector fields: variant selector, sources, filters, max events, metadata
+  - Templates: Personal Dashboard Weather+Compact 50/50; Daily Planner Week in Empty Container
+  - All Calendar acceptance criteria pass end-to-end
+  - sourceType badges: colored per source (Local/Gray, CalDAV/Blue, Notion/Purple, Custom/Teal)
+  - Notes: up to 2 lines displayed with truncation
+- **QA coverage classification/checks:**
+  - FF4-CAL-001: manual-flow-test
+  - FF4-CAL-002: manual-flow-test
+  - FF4-CAL-003: manual-flow-test
+  - FF4-CAL-004: manual-flow-test
+  - FF4-CAL-005: manual-flow-test
+  - FF4-CAL-006: manual-flow-test
+  - FF4-CAL-007: manual-flow-test
+  - FF4-CAL-008: manual-flow-test
+  - FF4-CAL-009: manual-flow-test
+  - FF4-CAL-010: deferred
+  - FF4-CAL-011: manual-flow-test
+  - FF4-CAL-012: automated-test
+  - FF4-CAL-013: automated-test
+  - FF4-CAL-014: manual-flow-test
+  - FF4-CAL-015: manual-flow-test
+  - FF4-CAL-016: manual-flow-test
+  - FF4-CAL-017: automated-test
+  - FF4-CAL-018: review-only
+  - FF4-CAL-019: manual-flow-test
+  - FF4-CAL-020: manual-flow-test
+  - FF4-CAL-021: automated-test
+  - FF4-CAL-022: manual-flow-test
+  - FF4-CAL-023: manual-flow-test
+  - FF4-CAL-024: manual-flow-test
+  - FF4-CAL-025: manual-flow-test
+- **Implementation evidence:** 
+- **QA evidence:** 
+- **Reviewer verdict:** 
+- **Remaining blockers:** 

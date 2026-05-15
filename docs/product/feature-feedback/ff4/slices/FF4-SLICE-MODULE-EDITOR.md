@@ -2,21 +2,51 @@
 
 - **Slice ID:** FF4-SLICE-MODULE-EDITOR
 - **Status:** unclaimed
-- **Owner agent:** <!-- empty until claimed -->
-- **Claimed at:** <!-- empty until claimed -->
-- **Included REQ-IDs:** <!-- TBD -->
-- **Explicitly excluded REQ-IDs:** <!-- TBD or "none" -->
-- **Source sections:** <!-- references to source docs -->
-- **Dependencies:** <!-- list of other SLICE-IDs or "none" -->
-- **In-scope implementation notes:** <!-- guidance -->
-- **Out-of-scope notes:** <!-- boundary -->
-- **Acceptance checks:** <!-- checklist -->
-- **QA coverage classification/checks:** <!-- per REQ-ID -->
-- **Implementation evidence:** <!-- links to commits, files, test names -->
-- **QA evidence:** <!-- test output, manual test results -->
-- **Reviewer verdict:** <!-- empty until reviewed -->
-- **Remaining blockers:** <!-- list or "none" -->
-
----
-
-*Note: This is a representative slice. The actual slices and REQ-IDs will be determined by `helm-requirements-auditor` when reading the full FF4 source documents.*
+- **Owner agent:** 
+- **Claimed at:** 
+- **Included REQ-IDs:** FF4-MOD-001, FF4-MOD-002, FF4-MOD-003, FF4-MOD-004, FF4-MOD-005, FF4-MOD-006, FF4-MOD-007, FF4-MOD-008, FF4-MOD-009, FF4-MOD-010, FF4-MOD-011, FF4-MOD-012, FF4-MOD-013, FF4-MOD-014, FF4-MOD-015, FF4-MOD-016
+- **Explicitly excluded REQ-IDs:** none
+- **Source sections:** FF4 doc lines 17-31 (Visual Editor general), lines 896-1005 (Module Editor behavior — Word document model), lines 1526-1538 (UI requirements / Module Editor UI), `docs/codebase-explanation/frontend.md` lines 656-662 (Row Context Menu)
+- **Dependencies:** FF4-SLICE-BACKEND, FF4-SLICE-ROWS-CELLS-LAYOUT, FF4-SLICE-VERSIONING
+- **In-scope implementation notes:** Rename "Visual Editor" to "Module Editor". Collapsible sidebar structure. Top bar: [Module: {name} ▼] Saved {time} [Create Checkpoint] [Preview in Web Admin] [Version History] — NO Draft v1/Approve/Reject. Autosave with debounce, save state display. Checkpoint creation (manual + auto before template apply/restore). Web-admin-only module preview (SDUI renderer close to mobile, viewport size, inline validation). Version creation for App Editor references. Restore to working draft (no auto-publish). Row context menu (Add Above/Below, Duplicate, Delete with confirmation). Right-click module context menu. Save enabled for new modules. Templates must use only valid components.
+- **Out-of-scope notes:** App Editor (handled by FF4-SLICE-APP-EDITOR). Rows/cells implementation (handled by FF4-SLICE-ROWS-CELLS-LAYOUT). Versioning backend (handled by FF4-SLICE-BACKEND and FF4-SLICE-VERSIONING). Component implementations (handled by FF4-SLICE-COMPONENTS).
+- **Acceptance checks:**
+  - "Module Editor" used everywhere (not "Visual Editor")
+  - Collapsible sidebar works correctly
+  - Top bar shows: Module selector, Saved time, Create Checkpoint, Preview in Web Admin, Version History
+  - Top bar does NOT show: Draft v1, Approve, Reject, Push to Mobile
+  - Save button enabled for new modules; module persists after save
+  - Autosave triggers after edits with debounce
+  - Save state: "Saving...", "Saved {time}", "Save failed" with retry
+  - No visible version per keystroke
+  - Create Checkpoint creates timestamped checkpoint
+  - Auto-checkpoint before template apply to existing module
+  - Preview in Web Admin: module-only, SDUI renderer close to mobile, validation warnings inline
+  - No mobile preview session from Module Editor
+  - Creating module version does NOT update mobile
+  - Restore copies version SDUI JSON to working draft; no auto-publish
+  - Right-click row: Add Above, Below, Duplicate, Delete with content confirmation
+  - Right-click module: context menu with delete working correctly
+  - All templates use only valid component types
+  - No mobile preview/publish/approve controls in Module Editor
+- **QA coverage classification/checks:**
+  - FF4-MOD-001: review-only
+  - FF4-MOD-002: manual-flow-test
+  - FF4-MOD-003: manual-flow-test
+  - FF4-MOD-004: manual-flow-test
+  - FF4-MOD-005: manual-flow-test
+  - FF4-MOD-006: manual-flow-test
+  - FF4-MOD-007: automated-test
+  - FF4-MOD-008: review-only
+  - FF4-MOD-009: manual-flow-test
+  - FF4-MOD-010: manual-flow-test
+  - FF4-MOD-011: manual-flow-test
+  - FF4-MOD-012: manual-flow-test
+  - FF4-MOD-013: automated-test
+  - FF4-MOD-014: automated-test
+  - FF4-MOD-015: manual-flow-test
+  - FF4-MOD-016: manual-flow-test
+- **Implementation evidence:** 
+- **QA evidence:** 
+- **Reviewer verdict:** 
+- **Remaining blockers:** 

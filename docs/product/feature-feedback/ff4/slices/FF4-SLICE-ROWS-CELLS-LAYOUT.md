@@ -1,0 +1,55 @@
+# Slice: FF4-SLICE-ROWS-CELLS-LAYOUT
+
+- **Slice ID:** FF4-SLICE-ROWS-CELLS-LAYOUT
+- **Status:** unclaimed
+- **Owner agent:** 
+- **Claimed at:** 
+- **Included REQ-IDs:** FF4-ROW-001, FF4-ROW-002, FF4-ROW-003, FF4-ROW-004, FF4-ROW-005, FF4-ROW-006, FF4-ROW-007, FF4-ROW-008, FF4-ROW-009, FF4-ROW-010, FF4-ROW-011, FF4-ROW-012, FF4-ROW-013, FF4-ROW-014, FF4-ROW-015, FF4-CELL-001, FF4-CELL-002, FF4-CELL-003, FF4-CELL-004
+- **Explicitly excluded REQ-IDs:** none
+- **Source sections:** FF4 doc lines 33-199 (Rows and Cells sections), `docs/codebase-explanation/frontend.md` lines 646-653 (cell width engine), lines 633-639 (row/cell simplification)
+- **Dependencies:** FF4-SLICE-BACKEND (for SDUI JSON save/load via API)
+- **In-scope implementation notes:** The cell width validation engine (`cellWidthEngine.ts`) is the core of this slice. Percentage-based cell widths with auto/fixed/mixed rules. Pre-flight validation (block before commit, disable invalid controls). Minimum width enforcement at 80px via usableRowWidth calculation. Horizontal scrolling rule. All-fixed-width centering vs mixed auto-fill. Validation for all 12 operations. Row drag handles moved left of row boundary. Row resize handles follow cursor. Remove padding/gap/background from rows. Cell resize behavior. Delete button positioning. Fit-the-cell for all components. Drag limits (stop at minimum, no bounce-back).
+- **Out-of-scope notes:** Component-specific implementations (Text, Button, Image, etc.), Calendar, versioning, templates, workflows. App-level and module-level editor UI (handled by App Editor and Module Editor slices).
+- **Acceptance checks:**
+  - Cell width percentage calculation: fixed+auto resolves correctly (e.g., 50%/auto/auto → 50/25/25)
+  - Minimum width: 80px based on usableRowWidth (rowWidth - padding - gaps)
+  - Pre-flight validation: Add Cell greyed out when new cell < min width
+  - Action blocking: changes blocked before visual commit
+  - Disabled actions: getDisabledActions() returns correct disabled states
+  - Horizontal scroll: off→no overflow allowed; on→min width still applies
+  - All-fixed centering: 30%+30% = 20% padding + cells + 20% padding
+  - Mixed auto-fill: 50%+auto = auto fills 50%, no side padding
+  - Validation runs for all 12 operations (add, delete, split, resize, padding, scroll, load, import...)
+  - Existing invalid saved rows: show error, refuse publish, do not normalize
+  - Row drag handle: 6-dot icon on left of row, outside boundary
+  - Row height resize: cursor follows in real-time (no lag)
+  - Row simplification: no padding, gap, or background controls in inspector
+  - Components fill entire cell (flex: 1, width: 100%, height: 100%)
+  - Cell resize: divider follows cursor, adjacent cells don't jump
+  - Delete buttons: row delete on left, cell delete on left, no overlap
+  - Drag limits: handle stops at minimum (no bounce-back)
+  - Allow more than 6 cells when width allows
+- **QA coverage classification/checks:**
+  - FF4-ROW-001: manual-flow-test
+  - FF4-ROW-002: manual-flow-test
+  - FF4-ROW-003: automated-test
+  - FF4-ROW-004: automated-test
+  - FF4-ROW-005: automated-test
+  - FF4-ROW-006: automated-test
+  - FF4-ROW-007: automated-test
+  - FF4-ROW-008: automated-test
+  - FF4-ROW-009: automated-test
+  - FF4-ROW-010: automated-test
+  - FF4-ROW-011: automated-test
+  - FF4-ROW-012: manual-flow-test
+  - FF4-ROW-013: review-only
+  - FF4-ROW-014: review-only
+  - FF4-ROW-015: manual-flow-test
+  - FF4-CELL-001: manual-flow-test
+  - FF4-CELL-002: manual-flow-test
+  - FF4-CELL-003: manual-flow-test
+  - FF4-CELL-004: manual-flow-test
+- **Implementation evidence:** 
+- **QA evidence:** 
+- **Reviewer verdict:** 
+- **Remaining blockers:** 

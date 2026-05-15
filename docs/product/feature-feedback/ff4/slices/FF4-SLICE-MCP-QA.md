@@ -1,0 +1,41 @@
+# Slice: FF4-SLICE-MCP-QA
+
+- **Slice ID:** FF4-SLICE-MCP-QA
+- **Status:** unclaimed
+- **Owner agent:** 
+- **Claimed at:** 
+- **Included REQ-IDs:** FF4-MCP-001, FF4-MCP-002, FF4-QA-001, FF4-QA-002, FF4-QA-003, FF4-QA-004, FF4-QA-005, FF4-QA-006, FF4-QA-007, FF4-QA-008, FF4-DES-003
+- **Explicitly excluded REQ-IDs:** none
+- **Source sections:** FF4 doc lines 1748-1750 (MCP/agents), lines 202-203 (QA for variables), lines 15-16 (Live testing), lines 3-4, 1625-1628 (Test cleanup), lines 1753-1754 (react-doctor), lines 188-189 (App preview), lines 574-576 (Connections), lines 578-580 (Logs), lines 582-584 (Settings)
+- **Dependencies:** FF4-SLICE-BACKEND (for MCP server, cleanup endpoints, settings)
+- **In-scope implementation notes:** Complete the MCP system: make all tools available for AI agents, integrate MCP into QA system, prepare for sub-agents creating frontend apps via MCP. QA: comprehensive variable system test script, live testing for App Editor features, test data cleanup (remove Test App/New App/test modules), react-doctor integration into Reviewer agent, app preview must be functional for layout testing, Connections usage documentation, Logs validation (working, can be used more), Settings device list corrected to show only frontend devices. This is parallel work to Templates and Workflows.
+- **Out-of-scope notes:** Backend API implementation (handled by FF4-SLICE-BACKEND). Module Editor and App Editor implementations (handled by respective slices). Specific component QA (handled per component in their slices).
+- **Acceptance checks:**
+  - MCP server complete; all tools available for AI agent use
+  - MCP integrated into QA system; tools covered by QA tests
+  - AI agents can connect to MCP and create frontend apps
+  - Sub-agents can be summoned via MCP to complete tasks
+  - Comprehensive variable QA script: insertion, display, rendering, edge cases across components
+  - Live testing performed for App Editor features on actual devices
+  - Test data cleanup: cleanup endpoints remove Test/New apps/modules/templates
+  - react-doctor integrated into Reviewer agent workflow
+  - App preview functional for bottom divider and layout testing
+  - Connections: documentation/tests explain end-to-end usage
+  - Logs: display correctly, support filtering, capture debug detail
+  - Settings: registered devices show only frontend/mobile devices (not admin panels)
+- **QA coverage classification/checks:**
+  - FF4-MCP-001: automated-test
+  - FF4-MCP-002: automated-test
+  - FF4-QA-001: automated-test
+  - FF4-QA-002: manual-flow-test
+  - FF4-QA-003: automated-test
+  - FF4-QA-004: automated-test
+  - FF4-QA-005: manual-flow-test
+  - FF4-QA-006: review-only
+  - FF4-QA-007: manual-flow-test
+  - FF4-QA-008: manual-flow-test
+  - FF4-DES-003: review-only
+- **Implementation evidence:** 
+- **QA evidence:** 
+- **Reviewer verdict:** 
+- **Remaining blockers:** 

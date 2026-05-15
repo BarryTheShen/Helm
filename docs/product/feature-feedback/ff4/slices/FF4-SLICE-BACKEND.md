@@ -1,0 +1,48 @@
+# Slice: FF4-SLICE-BACKEND
+
+- **Slice ID:** FF4-SLICE-BACKEND
+- **Status:** unclaimed
+- **Owner agent:** 
+- **Claimed at:** 
+- **Included REQ-IDs:** FF4-BE-001, FF4-BE-002, FF4-BE-003, FF4-BE-004, FF4-BE-005, FF4-BE-006, FF4-BE-007, FF4-BE-008, FF4-BE-009, FF4-BE-010, FF4-BE-011, FF4-BE-012, FF4-BE-013, FF4-BE-014, FF4-BE-015, FF4-BE-016, FF4-BE-017, FF4-DES-001
+- **Explicitly excluded REQ-IDs:** none
+- **Source sections:** FF4 doc lines 1664-1747 (Deployment Plan), lines 1450-1521 (Required API surface), lines 684-699 (New Models / Enhanced Models), lines 706-741 (Versioning Endpoints / Validation Pipeline), lines 751-753 (New MCP Tools), lines 1295-1333 (WebSocket Events, Device Update Protocol), lines 11-12 (Architecture), lines 561-562, 762-771 (Sample Data Seeding, Template Seed Validation), lines 766-768 (Screen History Migration), lines 1748-1750 (MCP tools reference)
+- **Dependencies:** none (foundational slice)
+- **In-scope implementation notes:** Backend infrastructure for FF4 versioning, deployment, and API surface. Establish models (ModuleWorkingDraft, ModuleVersion, PreviewSession, Note), endpoints (module/app/template versioning, device preview, cleanup), validation pipeline (autosave → checkpoint → preview → publish), WebSocket events, MCP tools, bundled Docker deployment. This slice is the foundation all other slices depend on.
+- **Out-of-scope notes:** Frontend UI implementation (handled by Module Editor, App Editor, and other slices). Calendar-specific backend logic (handled by Calendar slice). Template content (handled by Templates slice).
+- **Acceptance checks:**
+  - All listed API endpoints exist and return correct schemas
+  - Versioning endpoints: module/app draft, checkpoints, versions, restore, rename, preview, publish
+  - Template version endpoints, template apply
+  - Device status and preview session CRUD
+  - Validation service validates at autosave, checkpoint, preview, publish stages
+  - Cleanup endpoints preview and execute test data removal
+  - WebSocket events: preview_session_started, app_version_published
+  - MCP tools: helm_create_checkpoint, helm_list_module_versions, helm_restore_version, helm_publish_version
+  - Bundled Docker deployment: single port, admin at /, API at /api/, WS at /ws/, MCP at /mcp/
+  - Sample data seeded: workflows, variables, calendar events
+  - Template seed validated on startup
+  - sdui_screen_history deprecated; module_versions used for new code
+- **QA coverage classification/checks:**
+  - FF4-BE-001: automated-test (Docker smoke test)
+  - FF4-BE-002: review-only (code inspection)
+  - FF4-BE-003: automated-test (dev + Docker test)
+  - FF4-BE-004: automated-test (Docker compose up)
+  - FF4-BE-005: automated-test (full Docker + dev acceptance)
+  - FF4-BE-006: review-only (code inspection)
+  - FF4-BE-007: automated-test (API endpoint existence)
+  - FF4-BE-008: review-only (DB schema inspection)
+  - FF4-BE-009: automated-test (versioning endpoint existence)
+  - FF4-BE-010: automated-test (validation service unit tests)
+  - FF4-BE-011: automated-test (seed data existence)
+  - FF4-BE-012: automated-test (template seed validation at startup)
+  - FF4-BE-013: automated-test (new code → module_versions, old table accessible)
+  - FF4-BE-014: automated-test (cleanup preview/execute)
+  - FF4-BE-015: manual-flow-test (full canonical flow walkthrough)
+  - FF4-BE-016: automated-test (WS event assertion)
+  - FF4-BE-017: automated-test (MCP tool assertion)
+  - FF4-DES-001: automated-test (backend serves JSON, admin modifies JSON)
+- **Implementation evidence:** 
+- **QA evidence:** 
+- **Reviewer verdict:** 
+- **Remaining blockers:** 

@@ -1,0 +1,72 @@
+# Slice: FF4-SLICE-COMPONENTS
+
+- **Slice ID:** FF4-SLICE-COMPONENTS
+- **Status:** unclaimed
+- **Owner agent:** 
+- **Claimed at:** 
+- **Included REQ-IDs:** FF4-TEXT-001, FF4-TEXT-002, FF4-TEXT-003, FF4-TEXT-004, FF4-TEXT-005, FF4-BTN-001, FF4-BTN-002, FF4-BTN-003, FF4-IMG-001, FF4-IMG-002, FF4-ICON-001, FF4-EC-001, FF4-EC-002, FF4-EC-003, FF4-EC-004, FF4-EC-005, FF4-VAR-001, FF4-VAR-002, FF4-VAR-003, FF4-NOTES-001, FF4-NOTES-002, FF4-NOTES-003, FF4-NOTES-004, FF4-IB-001, FF4-TODO-001, FF4-TODO-002, FF4-DES-002
+- **Explicitly excluded REQ-IDs:** none
+- **Source sections:** FF4 doc lines 200-248 (Variables, Text, Markdowns, Buttons, Image, Text input, Icons, Empty container), lines 511-554 (Notes, Input bar, Todo, Article Card, Rich Text), lines 507-509 (Chat deferred), `docs/codebase-explanation/frontend.md` lines 324-357 (Component Library), lines 624-631 (Component Changes), lines 678-682 (SDUI Empty Container Props)
+- **Dependencies:** FF4-SLICE-BACKEND, FF4-SLICE-ROWS-CELLS-LAYOUT (for fit-the-cell and layout behavior)
+- **In-scope implementation notes:** Merge Text+Markdown → markdown-based Text (`react-native-markdown-display`). Remove separate Markdown component. Legacy `Markdown` type maps to `Text`. Fix Enter key newline bug in markdown config panel. Add text alignment (left/center/right). Template migration to new Text. Variable compatibility in markdown. Button: fill entire cell, fix icon mode rendering. Image: simplify to src+fitMode+action (remove alt/width/height/aspectRatio/borderRadius/onPress/placeholder). Icon: emoji picker popup, fill cell centered. Empty Container: vertical row, no separate system, remove gap/padding/background, SDUI V2 dispatch+dataBinding, Daily Planner test case. Variable system: fix oversized hit box, end-to-end display, QA script, sample variables. Notes: first-class component, local-first SQLite, markdown rendering, AI notes read-only, template integration, V1 priority only. InputBar: send action to backend with content. Todo/ArticleCard/RichText: make functional with real data binding, use standard component system. Chat: deferred.
+- **Out-of-scope notes:** Calendar (handled by FF4-SLICE-CALENDAR). Row/cell layout engine (handled by FF4-SLICE-ROWS-CELLS-LAYOUT). Template management (handled by FF4-SLICE-TEMPLATES). Versioning (handled by FF4-SLICE-VERSIONING).
+- **Acceptance checks:**
+  - Text is markdown-based; old Text and Markdown removed; only "Text" in registry
+  - Legacy "Markdown" type mapped to Text for backward compatibility
+  - Enter key in Text config panel creates new line in preview
+  - Text alignment control: left, center, right
+  - All templates use new combined Text type
+  - Variables resolve correctly within markdown content
+  - Button fills entire cell regardless of cell size
+  - Button icon mode renders visible centered icon
+  - Image: only src, fitMode (fitWidth/fitHeight), action props
+  - Image fitMode: fitWidth scales to cell width; fitHeight scales to cell height
+  - Icon emoji picker opens on click; selected icon renders centered in cell
+  - Empty Container is a real editable vertical row component
+  - Empty Container: no gap/padding/background; supports SDUI V2 dispatch+dataBinding
+  - Daily Planner test case: row→cell→Empty Container→Calendar/Todo/Notes stacked vertically
+  - Variable pill: hit box proportional to visual size
+  - Variable QA: comprehensive test script covering insertion, display, edge cases
+  - Sample variables (user.name, app.theme) seeded and resolvable
+  - Notes: list feed with title/preview/author/timestamp; tap→full page; markdown; AI notes read-only
+  - Notes: local-first SQLite; reads/writes via backend API
+  - Notes: Home→recent note, Daily Planner→today's notes, +New Note→notes.create
+  - Notes V1: only backend binding, real data, template integration (no advanced features)
+  - InputBar: text content sent to backend as server_action on send
+  - Todo: add/toggle/delete via backend API
+  - ArticleCard: real data with tap navigation
+  - RichText: markdown content rendered correctly
+  - All functional components use standard component registry + SDUI patterns
+  - Chat: no new implementation (deferred)
+- **QA coverage classification/checks:**
+  - FF4-TEXT-001: review-only
+  - FF4-TEXT-002: manual-flow-test
+  - FF4-TEXT-003: manual-flow-test
+  - FF4-TEXT-004: automated-test
+  - FF4-TEXT-005: automated-test
+  - FF4-BTN-001: manual-flow-test
+  - FF4-BTN-002: manual-flow-test
+  - FF4-BTN-003: manual-flow-test
+  - FF4-IMG-001: manual-flow-test
+  - FF4-IMG-002: review-only
+  - FF4-ICON-001: manual-flow-test
+  - FF4-EC-001: manual-flow-test
+  - FF4-EC-002: review-only
+  - FF4-EC-003: review-only
+  - FF4-EC-004: manual-flow-test
+  - FF4-EC-005: automated-test
+  - FF4-VAR-001: manual-flow-test
+  - FF4-VAR-002: automated-test
+  - FF4-VAR-003: automated-test
+  - FF4-NOTES-001: manual-flow-test
+  - FF4-NOTES-002: automated-test
+  - FF4-NOTES-003: manual-flow-test
+  - FF4-NOTES-004: review-only
+  - FF4-IB-001: manual-flow-test
+  - FF4-TODO-001: automated-test
+  - FF4-TODO-002: review-only
+  - FF4-DES-002: deferred
+- **Implementation evidence:** 
+- **QA evidence:** 
+- **Reviewer verdict:** 
+- **Remaining blockers:** 

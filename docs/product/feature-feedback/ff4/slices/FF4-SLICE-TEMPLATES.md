@@ -1,0 +1,36 @@
+# Slice: FF4-SLICE-TEMPLATES
+
+- **Slice ID:** FF4-SLICE-TEMPLATES
+- **Status:** unclaimed
+- **Owner agent:** 
+- **Claimed at:** 
+- **Included REQ-IDs:** FF4-TPL-001, FF4-TPL-002, FF4-TPL-003, FF4-TPL-004, FF4-TPL-005, FF4-TPL-006
+- **Explicitly excluded REQ-IDs:** none
+- **Source sections:** FF4 doc lines 556-563 (Templates), lines 1337-1378 (Template model, Template apply modal), lines 1568-1576 (Template UI requirements)
+- **Dependencies:** FF4-SLICE-BACKEND (for template versioning API), FF4-SLICE-COMPONENTS (for component validity), FF4-SLICE-VERSIONING (for version naming/tree patterns)
+- **In-scope implementation notes:** Templates must be functional using only real components. Two-step process: backend complete → send JSON. Versioned template sources with timestamped names (renamable). Apply flow: Template Version → Module Working Draft → web preview → Module Checkpoint/Version → App Editor → publish. Create checkpoint before applying to existing module. Template apply modal: version selector, target (new/existing module), checkpoint confirmation. Template UI: version selector, apply options, auto-checkpoint, no mobile publish controls. Seed template screen_json validated on startup. Non-existent component types flagged.
+- **Out-of-scope notes:** Calendar templates (handled by FF4-SLICE-CALENDAR). Notes templates (handled by FF4-SLICE-COMPONENTS). Workflow templates (handled by FF4-SLICE-WORKFLOWS). Template content/brainstorming for 5 functional templates is part of this slice.
+- **Acceptance checks:**
+  - All templates use only valid component types from registry
+  - Template application: sends JSON that renders with all functional features
+  - Two-step process: backend complete → template JSON works directly
+  - Templates are versioned; versions have timestamped default names
+  - Template version tree shows where applied
+  - Apply to existing module: auto-creates checkpoint first
+  - Apply writes to Module Working Draft (not directly to live mobile)
+  - Existing modules from old templates do NOT auto-update when template changes
+  - Template apply modal: version selector dropdown, target (new/existing), checkpoint confirmation, Cancel/Apply
+  - Template UI: version selector, apply new/existing, auto-checkpoint, no mobile publish
+  - Seed templates validated against validate_sdui_screen_payload() at startup
+  - Invalid component types in templates flagged and prevented from publishing
+- **QA coverage classification/checks:**
+  - FF4-TPL-001: automated-test
+  - FF4-TPL-002: automated-test
+  - FF4-TPL-003: automated-test
+  - FF4-TPL-004: automated-test
+  - FF4-TPL-005: manual-flow-test
+  - FF4-TPL-006: manual-flow-test
+- **Implementation evidence:** 
+- **QA evidence:** 
+- **Reviewer verdict:** 
+- **Remaining blockers:** 

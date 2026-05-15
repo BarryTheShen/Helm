@@ -1,0 +1,40 @@
+# Slice: FF4-SLICE-VERSIONING
+
+- **Slice ID:** FF4-SLICE-VERSIONING
+- **Status:** unclaimed
+- **Owner agent:** 
+- **Claimed at:** 
+- **Included REQ-IDs:** FF4-VER-001, FF4-VER-002, FF4-VER-003, FF4-VER-004, FF4-VER-005, FF4-VER-006, FF4-VER-007, FF4-VER-008, FF4-VER-009
+- **Explicitly excluded REQ-IDs:** none
+- **Source sections:** FF4 doc lines 586-1663 (Delivery/Versioning Model — Full Implementation Spec), lines 617-628 (Required terminology), lines 630-692 (Version naming rule, Version tree), lines 695-856 (Entity model), lines 1381-1447 (Validation requirements), lines 1556-1566 (Version History UI)
+- **Dependencies:** FF4-SLICE-BACKEND (for versioning API endpoints)
+- **In-scope implementation notes:** Establish terminology (Working Draft, Checkpoint, Version, Live Version, Preview Session, Publish, Restore, Pin, Use newest) throughout UI and code. Timestamp-based version naming (not v1/v2/v3). Version tree display (parent-child, not flat list). Data model entities for App/Module/Template versioning. Published version reproducibility (store concrete module version IDs at publish time). Multi-stage validation (autosave → checkpoint → preview → publish). Publish error messages with exact location (Module→Row→Cell→Component). Version History UI (tree view, status/source badges, actions). Version comparison/diff (row counts, component counts, added/removed types).
+- **Out-of-scope notes:** Module Editor and App Editor UI (handled by their respective slices). Actual backend API implementation (handled by Backend slice). Template versioning UI (handled by Templates slice).
+- **Acceptance checks:**
+  - Terminology: "Working Draft", "Checkpoint", "Version", "Live Version", "Preview Session", "Publish", "Restore", "Pin", "Use newest" used consistently
+  - NO "Draft v1", "Approve", "Reject" in versioning flow
+  - Version names: default timestamp format "YYYY-MM-DD HH:MM" with local timezone
+  - Version tree: parent-child display, not flat v1/v2/v3 list
+  - Live/used status clearly indicated in tree
+  - Published App Version stores concrete module version IDs (even for "Use newest")
+  - Validation at autosave: JSON parseable, required fields, no catastrophic shape
+  - Validation at checkpoint: schema valid, component types exist, props match, bindings present, actions valid
+  - Validation at app preview: config valid, bottom bar ≤5, Launchpad valid, modules resolve
+  - Validation at publish: all preview checks + device compatibility, no unknown/fake types
+  - Publish error: shows "Home Module → Row 3 → Cell 1: Unknown component type 'todo'" with fix guidance
+  - Version History UI: tree view, timestamp name, custom name, status badges, source badges, actions, used-by panel
+  - Compare Versions: available with ≥2 versions, side-by-side diff with row/component counts, added/removed types
+- **QA coverage classification/checks:**
+  - FF4-VER-001: review-only (terminology consistency)
+  - FF4-VER-002: automated-test (checkpoint naming format)
+  - FF4-VER-003: manual-flow-test (tree view)
+  - FF4-VER-004: review-only (DB schema)
+  - FF4-VER-005: automated-test (published snapshot reproducibility)
+  - FF4-VER-006: automated-test (validation pipeline)
+  - FF4-VER-007: manual-flow-test (publish error messages)
+  - FF4-VER-008: manual-flow-test (Version History UI)
+  - FF4-VER-009: manual-flow-test (compare diff UI)
+- **Implementation evidence:** 
+- **QA evidence:** 
+- **Reviewer verdict:** 
+- **Remaining blockers:** 

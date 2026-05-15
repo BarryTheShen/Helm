@@ -1,0 +1,26 @@
+# Slice: FF4-SLICE-WORKFLOWS
+
+- **Slice ID:** FF4-SLICE-WORKFLOWS
+- **Status:** unclaimed
+- **Owner agent:** 
+- **Claimed at:** 
+- **Included REQ-IDs:** FF4-WF-001, FF4-WF-002
+- **Explicitly excluded REQ-IDs:** none
+- **Source sections:** FF4 doc lines 566-568 (Workflows), `docs/codebase-explanation/backend.md` lines 761-764 (Sample Data Seeding / Workflows)
+- **Dependencies:** FF4-SLICE-BACKEND (for workflow engine, sample data seeding)
+- **In-scope implementation notes:** The workflow system needs test workflows that users can visually inspect and test. Three sample workflows must be seeded: "Daily Summary" (9am notification with today's events), "Event Reminder" (15 min before calendar events), "New Todo Alert" (notifies when todo added). Users must be able to see workflows in the UI and execute/test them.
+- **Out-of-scope notes:** Workflow engine implementation (already exists). Workflow editor UI (already exists). Complex workflow branching/conditions (existing feature, not new for FF4).
+- **Acceptance checks:**
+  - Sample workflows seeded on startup: Daily Summary, Event Reminder, New Todo Alert
+  - Workflows visible in the Workflows UI page
+  - Daily Summary: triggers at 9am, includes today's events
+  - Event Reminder: triggers 15 min before calendar events
+  - New Todo Alert: triggers when a todo item is added
+  - Workflows are executable and produce visible results
+- **QA coverage classification/checks:**
+  - FF4-WF-001: manual-flow-test
+  - FF4-WF-002: automated-test
+- **Implementation evidence:** 
+- **QA evidence:** 
+- **Reviewer verdict:** 
+- **Remaining blockers:** 
