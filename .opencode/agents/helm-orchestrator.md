@@ -21,6 +21,7 @@ permission:
     helm-backend: allow
     helm-frontend: allow
     helm-protocol: allow
+    helm-requirements-auditor: allow
     helm-agent-runtime: allow
     helm-tester: allow
     helm-reviewer: allow

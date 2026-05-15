@@ -58,6 +58,7 @@ Read-only for all application source code. May write only to `.helm-sessions/cur
 - `implementation-slices.md`
 - `source-index.md`
 - `context-index.md` (append discovered document paths)
+- `slices/` directory (create per-slice claim files `slices/<SLICE-ID>.md`)
 
 Never write outside `.helm-sessions/current/`.
 

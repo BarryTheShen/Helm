@@ -3,7 +3,14 @@ description: API/WS/MCP contract definitions
 mode: subagent
 model: opencode-go/deepseek-v4-pro
 permission:
-  edit: deny
+  edit:
+    "*": deny
+    "backend/app/schemas/**": allow
+    "mobile/src/types/**": allow
+    "web/src/lib/api.ts": allow
+    "backend/app/mcp/tools.py": allow
+    "backend/app/services/agent_proxy.py": allow
+    "backend/app/mcp/server.py": allow
   task: deny
 ---
 

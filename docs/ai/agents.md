@@ -51,7 +51,7 @@ The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/
 | `helm-docs` | subagent | Yes (docs/, README, AGENTS, CLAUDE) | No | No | Documentation maintenance | Edit app source, run app tests, commit |
 | `helm-security` | subagent | Default: No. Narrow fix if asked | No | No | Security audit, secrets detection | Add credentials, add paid providers, fix issues by default |
 | `helm-git` | subagent | No | No | Yes (with approval) | Branch management, commit, push | Edit source files, force push, push to main |
-| `helm-requirements-auditor` | subagent | Session artifacts only (requirements-ledger.md, requirements-audit.md, implementation-slices.md, source-index.md) | No | No | Compile atomic requirements ledger from full source docs; audit for completeness; produce implementation slices | Implement code, write plans, summarize, edit app source, run tests |
+| `helm-requirements-auditor` | subagent | Session artifacts only (requirements-ledger.md, requirements-audit.md, implementation-slices.md, source-index.md, slices/<SLICE-ID>.md) | No | No | Compile atomic requirements ledger from full source docs; audit for completeness; produce implementation slices | Implement code, write plans, summarize, edit app source, run tests |
 
 ### Agent Details
 
@@ -71,8 +71,8 @@ The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/
 - **For FF sessions:** Initializes additional artifact stubs: `source-index.md`, `requirements-ledger.md`, `requirements-audit.md`, `implementation-slices.md`, `qa-plan.md`, `product-completeness-matrix.md`, `coverage-gate.md`.
 
 #### `helm-planner`
-- **Purpose:** Read documentation, produce focused implementation plans, delegate verification to `helm-plan-critic`.
-- **Delegate only to:** `helm-plan-critic`. Cannot delegate to any other agent.
+- **Purpose:** Read documentation, produce focused implementation plans, delegate verification to `helm-plan-critic` (and `helm-requirements-auditor` for FF/product-spec work).
+- **Delegate only to:** `helm-requirements-auditor` (for FF work) or `helm-plan-critic` (for plan verification). Cannot delegate to any other agent.
 - **Process:** Draft plan → write `current-plan.md` → invoke critic → revise based on objections → max 3 rounds → mark APPROVED or UNRESOLVED.
 - **For FF work:** Must invoke `helm-requirements-auditor` before planning; references REQ-IDs not paraphrases; lists included and excluded REQ-IDs explicitly.
 
@@ -153,7 +153,7 @@ Layer 0: helm-orchestrator (primary)
 
 Rules:
 - Orchestrator delegates to depth-1 agents.
-- Planner may delegate only to plan-critic.
+- Planner may delegate only to helm-requirements-auditor (FF work) or helm-plan-critic (plan verification).
 - Plan-critic is a leaf node — cannot spawn any subagents.
 - All other depth-1 agents are leaf nodes for execution.
 - There is no separate broad-explorer agent. Plan-critic does targeted exploration only.

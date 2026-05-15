@@ -202,7 +202,7 @@ When asking is unavoidable, the orchestrator asks ONE compact question with a re
 ### Depth Policy
 
 - Orchestrator delegates to depth-1 agents (session-init, planner, build, backend, frontend, tester, etc.)
-- Planner may delegate only to plan-critic
+- Planner may delegate only to helm-requirements-auditor (FF work) or helm-plan-critic (plan verification)
 - Plan-critic is a leaf node — cannot spawn any subagents
 - All domain specialists (build, backend, frontend, agent-runtime) are leaf nodes for execution
 
