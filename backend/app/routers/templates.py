@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import PaginationParams, get_current_user, get_current_user_id
 from app.models.module_state import ModuleState
+from app.models.module_working_draft import ModuleWorkingDraft
 from app.models.screen_history import ScreenHistory
 from app.models.template import SDUITemplate
 from app.models.template_version import TemplateVersion
@@ -31,7 +32,9 @@ from app.services.sdui_state import (
     validate_sdui_screen_payload,
     send_draft_update,
 )
-from app.services.version_service import make_timestamp_name
+from app.services.version_service import create_module_checkpoint, make_timestamp_name
+
+logger = __import__("logging").getLogger(__name__)
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
 
@@ -250,7 +253,56 @@ async def apply_template(
     module_id = body.module_id
     screen_json = _prepare_template_screen_or_422(template.screen_json, module_id)
 
-    # Create/update a draft (same pattern as the existing draft system)
+    # ── Auto-checkpoint before applying to existing module ─────────────────
+    # If the module already has a working draft with content, create a
+    # checkpoint to preserve it before overwriting with the template.
+    if body.auto_checkpoint:
+        existing_wd = await db.execute(
+            select(ModuleWorkingDraft).where(
+                ModuleWorkingDraft.module_id == module_id,
+                ModuleWorkingDraft.user_id == user_id,
+            )
+        )
+        existing = existing_wd.scalar_one_or_none()
+        if existing is not None and existing.sdui_json and existing.sdui_json.get("rows"):
+            try:
+                await create_module_checkpoint(
+                    db, module_id, user_id,
+                    sdui_json=existing.sdui_json,
+                    change_summary="Auto-checkpoint before template apply",
+                    source="template_apply",
+                )
+                logger.info(
+                    "Auto-checkpoint created for module %s before template apply",
+                    module_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Auto-checkpoint failed for module %s: %s (continuing with apply)",
+                    module_id, exc,
+                )
+
+    # ── Write to new ModuleWorkingDraft system ─────────────────────────────
+    wd_result = await db.execute(
+        select(ModuleWorkingDraft).where(
+            ModuleWorkingDraft.module_id == module_id,
+            ModuleWorkingDraft.user_id == user_id,
+        )
+    )
+    working_draft = wd_result.scalar_one_or_none()
+    if working_draft is None:
+        working_draft = ModuleWorkingDraft(
+            module_id=module_id,
+            user_id=user_id,
+            sdui_json=screen_json,
+            dirty=True,
+        )
+        db.add(working_draft)
+    else:
+        working_draft.sdui_json = screen_json
+        working_draft.dirty = True
+
+    # ── Also write to old ModuleState draft for backward compatibility ─────
     draft_key = draft_screen_key(module_id)
     result = await db.execute(
         select(ModuleState).where(
@@ -258,26 +310,32 @@ async def apply_template(
             ModuleState.module_type == draft_key,
         )
     )
-    draft = result.scalar_one_or_none()
-    if draft is None:
-        draft = ModuleState(
+    old_draft = result.scalar_one_or_none()
+    if old_draft is None:
+        old_draft = ModuleState(
             id=str(uuid4()),
             user_id=user_id,
             module_type=draft_key,
             state_json=screen_json,
             version=1,
         )
-        db.add(draft)
+        db.add(old_draft)
     else:
-        draft.state_json = screen_json
-        draft.version += 1
+        old_draft.state_json = screen_json
+        old_draft.version += 1
 
     await _record_screen_history(db, user_id, module_id, screen_json, source="template")
     await db.commit()
 
-    await send_draft_update(user_id, module_id, screen_json, draft.version)
+    await send_draft_update(user_id, module_id, screen_json, old_draft.version)
 
-    return {"module_id": module_id, "version": draft.version, "template_id": template_id, "applied": True}
+    return {
+        "module_id": module_id,
+        "version": old_draft.version,
+        "template_id": template_id,
+        "working_draft_version": True,
+        "applied": True,
+    }
 
 
 @router.post("/import", response_model=TemplateDetailOut, status_code=201)
@@ -524,7 +582,54 @@ async def apply_template_version(
     module_id = body.module_id
     screen_json = _prepare_template_screen_or_422(version.template_json, module_id)
 
-    # Create/update a draft (same pattern as apply_template)
+    # ── Auto-checkpoint before applying version to existing module ─────────
+    if body.auto_checkpoint:
+        existing_wd = await db.execute(
+            select(ModuleWorkingDraft).where(
+                ModuleWorkingDraft.module_id == module_id,
+                ModuleWorkingDraft.user_id == user_id,
+            )
+        )
+        existing = existing_wd.scalar_one_or_none()
+        if existing is not None and existing.sdui_json and existing.sdui_json.get("rows"):
+            try:
+                await create_module_checkpoint(
+                    db, module_id, user_id,
+                    sdui_json=existing.sdui_json,
+                    change_summary="Auto-checkpoint before template version apply",
+                    source="template_version_apply",
+                )
+                logger.info(
+                    "Auto-checkpoint created for module %s before template version apply",
+                    module_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Auto-checkpoint failed for module %s: %s (continuing with apply)",
+                    module_id, exc,
+                )
+
+    # ── Write to new ModuleWorkingDraft system ─────────────────────────────
+    wd_result = await db.execute(
+        select(ModuleWorkingDraft).where(
+            ModuleWorkingDraft.module_id == module_id,
+            ModuleWorkingDraft.user_id == user_id,
+        )
+    )
+    working_draft = wd_result.scalar_one_or_none()
+    if working_draft is None:
+        working_draft = ModuleWorkingDraft(
+            module_id=module_id,
+            user_id=user_id,
+            sdui_json=screen_json,
+            dirty=True,
+        )
+        db.add(working_draft)
+    else:
+        working_draft.sdui_json = screen_json
+        working_draft.dirty = True
+
+    # ── Also write to old ModuleState draft for backward compatibility ─────
     draft_key = draft_screen_key(module_id)
     result = await db.execute(
         select(ModuleState).where(
@@ -532,29 +637,30 @@ async def apply_template_version(
             ModuleState.module_type == draft_key,
         )
     )
-    draft = result.scalar_one_or_none()
-    if draft is None:
-        draft = ModuleState(
+    old_draft = result.scalar_one_or_none()
+    if old_draft is None:
+        old_draft = ModuleState(
             id=str(uuid4()),
             user_id=user_id,
             module_type=draft_key,
             state_json=screen_json,
             version=1,
         )
-        db.add(draft)
+        db.add(old_draft)
     else:
-        draft.state_json = screen_json
-        draft.version += 1
+        old_draft.state_json = screen_json
+        old_draft.version += 1
 
     await _record_screen_history(db, user_id, module_id, screen_json, source="template_version")
     await db.commit()
 
-    await send_draft_update(user_id, module_id, screen_json, draft.version)
+    await send_draft_update(user_id, module_id, screen_json, old_draft.version)
 
     return {
         "module_id": module_id,
-        "version": draft.version,
+        "version": old_draft.version,
         "template_id": template_id,
         "version_id": version_id,
+        "working_draft_version": True,
         "applied": True,
     }

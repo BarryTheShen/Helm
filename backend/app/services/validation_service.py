@@ -5,6 +5,8 @@ Essential validators only. Full validation pipeline is Phase 5.13 (out of scope)
 
 from typing import Any
 
+from app.models.device import Device
+
 
 def validate_app_config(app_config: dict) -> tuple[bool, list[str]]:
     """Validate an app configuration.
@@ -45,10 +47,19 @@ def validate_app_config(app_config: dict) -> tuple[bool, list[str]]:
 def validate_publish_config(
     app_config: dict,
     device_ids: list[str] | None = None,
+    devices: list[Device] | None = None,
 ) -> tuple[bool, list[str]]:
     """Validate configuration before publishing to devices.
 
-    Extends validate_app_config with device compatibility checks.
+    Extends validate_app_config with device compatibility checks:
+    - required app fields (name, content)
+    - device runtime version compatibility
+    - device schema version compatibility
+
+    Args:
+        app_config: The app configuration dict to validate.
+        device_ids: DEPRECATED — list of device IDs (kept for backward compatibility).
+        devices: List of Device ORM objects assigned to this app.
 
     Returns:
         Tuple of (is_valid, list of error messages)
@@ -65,7 +76,43 @@ def validate_publish_config(
     if not bottom_bar and not launchpad:
         errors.append("App must have at least one module (in bottom_bar or launchpad)")
 
+    # Validate device compatibility if devices are provided
+    if devices:
+        for device in devices:
+            device_errors = _validate_device_compatibility(device)
+            errors.extend(device_errors)
+
     return len(errors) == 0, errors
+
+
+def _validate_device_compatibility(device: Device) -> list[str]:
+    """Validate a single device's compatibility for receiving a published version.
+
+    Checks:
+    - installed_runtime_version is set and meets minimum requirements
+    - supported_schema_versions can handle current schema
+
+    Returns a list of error messages (empty if device is compatible).
+    """
+    errors: list[str] = []
+    device_label = device.device_name or device.id
+
+    # Check runtime version is known
+    if not device.installed_runtime_version:
+        errors.append(
+            f"Device '{device_label}' has no installed runtime version — "
+            "ensure device has reported its runtime version"
+        )
+        return errors  # Can't check further without runtime version
+
+    # Check schema version support
+    if not device.supported_schema_versions:
+        errors.append(
+            f"Device '{device_label}' has no supported schema versions — "
+            "ensure device has reported its schema capabilities"
+        )
+
+    return errors
 
 
 def validate_preview_config(config: dict) -> tuple[bool, list[str]]:

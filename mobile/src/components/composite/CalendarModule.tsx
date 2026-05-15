@@ -504,9 +504,9 @@ function DayView({
                       <Text style={styles.slotEventTime}>
                         {e.allDay ? 'All day' : `${formatTime(e.start)} – ${formatTime(e.end)}`}
                       </Text>
-                      {/* FF4-CAL-027: notes display */}
+                      {/* FF4-CAL-027: notes display (2 lines truncated) */}
                       {e.notes ? (
-                        <Text style={styles.slotEventNotes} numberOfLines={1}>{e.notes}</Text>
+                        <Text style={styles.slotEventNotes} numberOfLines={2}>{e.notes}</Text>
                       ) : null}
                     </TouchableOpacity>
                   );

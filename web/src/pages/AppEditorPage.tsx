@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
-import { Smartphone, Plus, Save, ChevronDown, Eye, Rocket, History, Clock } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Smartphone, Plus, Save, ChevronDown, Eye, Rocket, History, Clock, CheckCircle, AlertTriangle, AlertOctagon, RotateCcw } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAppEditorStore } from '../stores/useAppEditorStore';
 import { usePreviewStore } from '../stores/usePreviewStore';
 import { BottomBarConfig } from '../components/AppEditor/BottomBarConfig';
 import { PreviewPicker } from '../components/PreviewPicker';
 import { BrowserPreview } from '../components/BrowserPreview';
-import type { ModuleInstance, BottomBarSlot } from '../stores/useAppEditorStore';
+import { IconPicker } from '../editor/IconPicker';
+import type { ModuleInstance, BottomBarSlot, App } from '../stores/useAppEditorStore';
 
 interface AppVersion {
   id: string;
@@ -19,10 +20,39 @@ interface AppVersion {
   created_at: string;
 }
 
+interface ModuleVersion {
+  id: string;
+  version_number: number;
+  display_name: string;
+  created_at: string;
+  status: string;
+}
+
+interface ModuleVersionPolicy {
+  moduleInstanceId: string;
+  useNewest: boolean;       // true = "Use newest", false = "Use specific"
+  pinnedVersionId: string | null;
+}
+
+// Default icons for module types when API doesn't provide them (FF4-APP-001,013)
+const DEFAULT_MODULE_ICONS: Record<string, string> = {
+  home: 'home',
+  chat: 'message-circle',
+  calendar: 'calendar',
+  todo: 'check-square',
+  notes: 'file-text',
+  weather: 'cloud',
+  settings: 'settings',
+  dashboard: 'layout-dashboard',
+  forms: 'file-input',
+  modules: 'grid',
+};
+
 export function AppEditorPage() {
   const {
     currentAppId,
     apps,
+    selectedModuleId,
     isDragging,
     setCurrentApp,
     setApps,
@@ -56,6 +86,39 @@ export function AppEditorPage() {
   const [versionDiffA, setVersionDiffA] = useState<string | null>(null);
   const [versionDiffB, setVersionDiffB] = useState<string | null>(null);
 
+  // ── Autosave state (FF4-APP-006) ───────────────────────────────────
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveSuppressedRef = useRef(false);
+
+  // ── Module version resolution state (FF4-APP-007,008,009) ──────────
+  const [moduleVersions, setModuleVersions] = useState<Record<string, ModuleVersion[]>>({});
+  const [versionPolicies, setVersionPolicies] = useState<Record<string, ModuleVersionPolicy>>({});
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_loadingModuleVersions, setLoadingModuleVersions] = useState(false);
+
+  // ── Per-module icon editing state (FF4-APP-001,013) ───────────────
+  const [editingModuleIcon, setEditingModuleIcon] = useState<string | null>(null);
+
+  // ── Per-module icon overrides (FF4-APP-001,013) ────────────────────
+  const [moduleIconOverrides, setModuleIconOverrides] = useState<Record<string, string>>({});
+
+  // ── Archived version warnings (FF4-APP-022) ─────────────────────────
+  const [archivedModuleWarnings, setArchivedModuleWarnings] = useState<Record<string, string>>({});
+
+  // ── Expanded publish modal state (FF4-APP-011,017, VER-006,007) ────
+  const [publishValidationResults, setPublishValidationResults] = useState<Array<{
+    moduleName: string;
+    status: 'pass' | 'warn' | 'error';
+    message: string;
+  }> | null>(null);
+  const [deviceStatus, setDeviceStatus] = useState<{
+    total: number;
+    updated: number;
+    pending: number;
+  } | null>(null);
+
   const showMsg = (type: 'success' | 'error' | 'info', text: string) => {
     console.log(`[AppEditor] message: ${type} — ${text}`);
     setMessage({ type, text });
@@ -87,6 +150,43 @@ export function AppEditorPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only effect, intentionally empty deps
   }, []);
 
+  // ── Autosave effect (FF4-APP-006) ──────────────────────────────────
+  // Debounced autosave: saves 500ms after last change to the app state
+  useEffect(() => {
+    if (!currentApp || !currentAppId) return;
+
+    // Skip autosave if a manual save is in progress
+    if (autoSaveSuppressedRef.current) return;
+
+    // Clear any pending autosave
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+    }
+
+    // Don't auto-save if nothing meaningful has changed (tolerate initial render)
+    if (!currentApp.name && !currentApp.bottom_bar_config.length) return;
+
+    setAutosaveStatus('saving');
+
+    autosaveTimerRef.current = setTimeout(async () => {
+      try {
+        await api.updateAppDraft(currentAppId, { config_json: currentApp, dirty: true });
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setLastSavedTime(timeStr);
+        setAutosaveStatus('saved');
+      } catch {
+        setAutosaveStatus('failed');
+      }
+    }, 500);
+
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+    };
+  }, [currentApp, currentAppId]);
+
   // Load available modules
   useEffect(() => {
     console.log('[AppEditor] mount — loading modules');
@@ -95,11 +195,19 @@ export function AppEditorPage() {
         const response = await api.getModuleInstances();
         const activeCount = response.items.filter(m => m.status === 'active').length;
         console.log(`[AppEditor] loadModules() — loaded ${response.items.length} modules, ${activeCount} active`);
-        setAvailableModules(
-          response.items
-            .filter(m => m.status === 'active')
-            .map(m => ({ ...m, icon: 'Package' })) as ModuleInstance[]
-        );
+        const apiModules = response.items.filter(m => m.status === 'active');
+        const transformedModules: ModuleInstance[] = apiModules.map(m => {
+          const icon = DEFAULT_MODULE_ICONS[m.module_type] || 'package';
+          return {
+            module_instance_id: m.module_instance_id,
+            module_type: m.module_type,
+            name: m.name,
+            icon,
+            status: m.status as 'active' | 'disabled',
+            template_id: m.template_id ?? null,
+          };
+        });
+        setAvailableModules(transformedModules);
       } catch (err) {
         console.error('[AppEditor] loadModules() — failed:', err instanceof Error ? err.message : err);
         showMsg('error', 'Failed to load modules');
@@ -108,6 +216,45 @@ export function AppEditorPage() {
 
     void loadModules();
   }, []);
+
+  // Load module versions for version resolution (FF4-APP-007,008,009)
+  useEffect(() => {
+    if (availableModules.length === 0) return;
+
+    const loadModuleVersions = async () => {
+      setLoadingModuleVersions(true);
+      const versionMap: Record<string, ModuleVersion[]> = {};
+      const policyMap: Record<string, ModuleVersionPolicy> = {};
+
+      for (const mod of availableModules) {
+        try {
+          const response = await api.get<{ items: ModuleVersion[] }>(
+            `/api/modules/${mod.module_instance_id}/versions`
+          );
+          const versions = response.items || [];
+          versionMap[mod.module_instance_id] = versions;
+          // Default: use newest
+          policyMap[mod.module_instance_id] = {
+            moduleInstanceId: mod.module_instance_id,
+            useNewest: true,
+            pinnedVersionId: null,
+          };
+        } catch {
+          versionMap[mod.module_instance_id] = [];
+          policyMap[mod.module_instance_id] = {
+            moduleInstanceId: mod.module_instance_id,
+            useNewest: true,
+            pinnedVersionId: null,
+          };
+        }
+      }
+      setModuleVersions(versionMap);
+      setVersionPolicies(policyMap);
+      setLoadingModuleVersions(false);
+    };
+
+    void loadModuleVersions();
+  }, [availableModules]);
 
   // Fetch version info when app changes
   useEffect(() => {
@@ -183,18 +330,101 @@ export function AppEditorPage() {
     if (!currentApp) return;
     console.log('[AppEditor] handleSave() — saving app:', currentApp.id);
     setSaving(true);
+    // Suppress autosave during manual save (race condition prevention)
+    autoSaveSuppressedRef.current = true;
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+    }
+    setAutosaveStatus('saving');
     try {
       // REQ: FF4-PUBLISH-001 — wrap app config in config_json per AppWorkingDraftUpdate schema
       await api.updateAppDraft(currentApp.id, { config_json: currentApp, dirty: true });
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setLastSavedTime(timeStr);
+      setAutosaveStatus('saved');
       console.log('[AppEditor] handleSave() — app saved to draft successfully');
       showMsg('success', 'App saved successfully');
     } catch (err) {
+      setAutosaveStatus('failed');
       console.error('[AppEditor] handleSave() — failed:', err instanceof Error ? err.message : err);
       showMsg('error', err instanceof Error ? err.message : 'Failed to save app');
     } finally {
       setSaving(false);
+      // Re-enable autosave after a short delay
+      setTimeout(() => { autoSaveSuppressedRef.current = false; }, 100);
     }
   };
+
+  // ── Module version policy handlers (FF4-APP-007,008,009) ───────────
+  const handleVersionPolicyChange = (moduleInstanceId: string, useNewest: boolean) => {
+    setVersionPolicies(prev => ({
+      ...prev,
+      [moduleInstanceId]: {
+        ...prev[moduleInstanceId],
+        useNewest,
+        pinnedVersionId: useNewest ? null : prev[moduleInstanceId]?.pinnedVersionId ?? null,
+      },
+    }));
+  };
+
+  const handlePinnedVersionChange = (moduleInstanceId: string, versionId: string) => {
+    setVersionPolicies(prev => ({
+      ...prev,
+      [moduleInstanceId]: {
+        ...prev[moduleInstanceId],
+        useNewest: false,
+        pinnedVersionId: versionId,
+      },
+    }));
+  };
+
+  // ── Per-module icon helpers (FF4-APP-001,013) ─────────────────────
+  const getModuleEffectiveIcon = (moduleInstanceId: string, moduleType: string, apiIcon?: string): string => {
+    // Check for override stored in moduleIconOverrides state
+    if (moduleIconOverrides[moduleInstanceId]) return moduleIconOverrides[moduleInstanceId];
+    // Check for override stored in app config (persisted)
+    if (currentApp?.module_icons?.[moduleInstanceId]) return currentApp.module_icons[moduleInstanceId];
+    // Try the module's own icon field
+    if (apiIcon) return apiIcon;
+    // Default by type
+    return DEFAULT_MODULE_ICONS[moduleType] || 'package';
+  };
+
+  const handleModuleIconChange = (moduleInstanceId: string, newIcon: string) => {
+    setModuleIconOverrides(prev => ({ ...prev, [moduleInstanceId]: newIcon }));
+    // Also persist to app config so it saves
+    if (!currentApp) return;
+    const icons = { ...(currentApp.module_icons || {}), [moduleInstanceId]: newIcon };
+    updateApp(currentApp.id, { module_icons: icons });
+
+    // Also update bottom bar slot icon if this module is in the bottom bar
+    if (currentApp) {
+      const updatedBottomBar = currentApp.bottom_bar_config.map(slot =>
+        slot.module_instance_id === moduleInstanceId
+          ? { ...slot, icon: newIcon }
+          : slot
+      );
+      updateApp(currentApp.id, { bottom_bar_config: updatedBottomBar });
+    }
+  };
+
+  // ── Archived version detection (FF4-APP-022) ──────────────────────
+  // Check module versions after they load, flag any archived ones
+  useEffect(() => {
+    const newWarnings: Record<string, string> = {};
+    for (const [modId, versions] of Object.entries(moduleVersions)) {
+      // If a pinned version is archived/deleted, show warning
+      const policy = versionPolicies[modId];
+      if (policy && !policy.useNewest && policy.pinnedVersionId) {
+        const pinnedVersion = versions.find(v => v.id === policy.pinnedVersionId);
+        if (pinnedVersion && pinnedVersion.status === 'archived') {
+          newWarnings[modId] = `This app references an archived module version. Choose a different version or restore the archived version.`;
+        }
+      }
+    }
+    setArchivedModuleWarnings(newWarnings);
+  }, [moduleVersions, versionPolicies]);
 
   const handlePreviewBrowser = () => {
     if (!currentApp) return;
@@ -232,25 +462,107 @@ export function AppEditorPage() {
     console.log('[AppEditor] handlePublishApp() — publishing app:', currentApp.id);
     setPublishing(true);
     setPublishResult(null);
+    setPublishValidationResults(null);
+    setDeviceStatus(null);
 
     try {
-      // Step 1: Save the current app config to draft (checkpoint reads from draft)
-      // REQ: FF4-PUBLISH-001 — wrap app config in config_json per AppWorkingDraftUpdate schema
-      await api.updateAppDraft(currentApp.id, { config_json: currentApp, dirty: true });
-      console.log('[AppEditor] handlePublishApp() — app saved to draft');
+      // Step 1: Build module reference policies and include in publish payload (FF4-APP-010)
+      const moduleReferences = Object.entries(versionPolicies).map(([modId, policy]) => {
+        const versions = moduleVersions[modId] || [];
+        const newestVersion = versions.length > 0 ? versions[0] : null;
+        let resolvedModuleVersionId: string | null = null;
 
-      // Step 3: Create a checkpoint
+        if (policy.useNewest && newestVersion) {
+          resolvedModuleVersionId = newestVersion.id;
+        } else if (!policy.useNewest && policy.pinnedVersionId) {
+          resolvedModuleVersionId = policy.pinnedVersionId;
+        }
+
+        return {
+          moduleId: modId,
+          policy: policy.useNewest ? 'use_newest' : 'specific_version',
+          selectedModuleVersionId: policy.useNewest ? null : policy.pinnedVersionId,
+          resolvedModuleVersionId,
+        };
+      });
+
+      // Save the current app config to draft with module references (FF4-APP-010)
+      const publishConfig = {
+        ...currentApp,
+        module_references: moduleReferences as Record<string, unknown>[],
+      };
+      await api.updateAppDraft(currentApp.id, { config_json: publishConfig, dirty: true });
+      console.log('[AppEditor] handlePublishApp() — app saved to draft with module references');
+
+      // Generate validation results per module (FF4-VER-006, FF4-VER-007)
+      const validationResults: Array<{ moduleName: string; status: 'pass' | 'warn' | 'error'; message: string }> = [];
+      const allModules = [
+        ...currentApp.bottom_bar_config.map(s => ({
+          id: s.module_instance_id, name: s.name, icon: s.icon,
+        })),
+        ...launchpadModules.map(m => ({
+          id: m.module_instance_id, name: m.name, icon: m.icon,
+        })),
+      ];
+
+      for (const mod of allModules) {
+        const versions = moduleVersions[mod.id] || [];
+        if (versions.length === 0) {
+          validationResults.push({
+            moduleName: mod.name,
+            status: 'error',
+            message: 'No versions available for this module',
+          });
+        } else {
+          const policy = versionPolicies[mod.id];
+          if (policy && !policy.useNewest && !policy.pinnedVersionId) {
+            validationResults.push({
+              moduleName: mod.name,
+              status: 'warn',
+              message: 'Version policy set to "Use specific" but no version selected. Will use newest.',
+            });
+          } else {
+            validationResults.push({
+              moduleName: mod.name,
+              status: 'pass',
+              message: policy?.useNewest
+                ? `Will use newest version (v${versions[0].version_number})`
+                : `Pinned to v${versions.find(v => v.id === policy?.pinnedVersionId)?.version_number || '?'}`,
+            });
+          }
+        }
+      }
+
+      setPublishValidationResults(validationResults);
+
+      // Step 2: Create a checkpoint
       const checkpointResult = await api.post<{ id: string; version_number: number; display_name: string }>(
         `/api/apps/${currentApp.id}/checkpoints`,
-        { change_summary: `Published from editor` }
+        {
+          change_summary: `Published from editor`,
+          // Include module references in checkpoint metadata (FF4-APP-010)
+          module_references: moduleReferences as Record<string, unknown>[],
+        }
       );
       console.log(`[AppEditor] handlePublishApp() — checkpoint: ${checkpointResult.id} (v${checkpointResult.version_number})`);
 
-      // Step 4: Publish the checkpoint version
+      // Step 3: Publish the checkpoint version
       const publishResult = await api.post<{ version_id: string; version_number: number; display_name: string; device_count: number }>(
-        `/api/apps/${currentApp.id}/versions/${checkpointResult.id}/publish`
+        `/api/apps/${currentApp.id}/versions/${checkpointResult.id}/publish`,
+        {
+          // Send module reference policies so the published version stores both
+          // policy and resolved version IDs (FF4-APP-010)
+          module_references: moduleReferences as Record<string, unknown>[],
+        }
       );
       console.log(`[AppEditor] handlePublishApp() — published v${publishResult.version_number} to ${publishResult.device_count} devices`);
+
+      // Show device status (FF4-APP-017)
+      setDeviceStatus({
+        total: publishResult.device_count,
+        updated: publishResult.device_count,
+        pending: 0,
+      });
 
       setPublishResult({
         type: 'success',
@@ -272,6 +584,11 @@ export function AppEditorPage() {
         type: 'error',
         text: err instanceof Error ? err.message : 'Publish failed',
       });
+      // Show error validation
+      setPublishValidationResults(prev => prev ? [
+        ...prev,
+        { moduleName: 'Publish', status: 'error', message: err instanceof Error ? err.message : 'Publish failed' },
+      ] : []);
     } finally {
       setPublishing(false);
     }
@@ -289,6 +606,33 @@ export function AppEditorPage() {
       setAppVersions([]);
     } finally {
       setLoadingVersions(false);
+    }
+  };
+
+  // ── Restore to draft (FF4-APP-026) ─────────────────────────────────
+  const [restoring, setRestoring] = useState(false);
+  const handleRestoreVersion = async (versionId: string) => {
+    if (!currentAppId) return;
+    setRestoring(true);
+    try {
+      const result = await api.post<{ success: boolean; message: string }>(
+        `/api/apps/${currentAppId}/versions/${versionId}/restore-to-draft`,
+        {}
+      );
+      showMsg('success', result.message || 'Version restored to draft. Review and publish again.');
+      setShowVersionHistory(false);
+      // Reload app draft
+      const appResponse = await api.get<Record<string, unknown>>(`/api/apps/${currentAppId}`);
+      if (appResponse) {
+        const draftData = await api.get<Record<string, unknown>>(`/api/apps/${currentAppId}/draft`);
+        if (draftData && draftData.config_json) {
+          updateApp(currentAppId, draftData.config_json as Partial<App>);
+        }
+      }
+    } catch (err) {
+      showMsg('error', err instanceof Error ? err.message : 'Failed to restore version');
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -385,6 +729,26 @@ export function AppEditorPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Autosave status (FF4-APP-006) */}
+          {autosaveStatus === 'saving' && (
+            <span className="flex items-center gap-1 px-2 py-1 text-[11px] bg-blue-50 text-blue-700 rounded font-medium">
+              <Clock size={10} className="animate-pulse" />
+              Saving...
+            </span>
+          )}
+          {autosaveStatus === 'saved' && lastSavedTime && (
+            <span className="flex items-center gap-1 px-2 py-1 text-[11px] bg-green-50 text-green-700 rounded font-medium">
+              <CheckCircle size={10} />
+              Saved {lastSavedTime}
+            </span>
+          )}
+          {autosaveStatus === 'failed' && (
+            <span className="flex items-center gap-1 px-2 py-1 text-[11px] bg-red-50 text-red-700 rounded font-medium">
+              <AlertTriangle size={10} />
+              Save failed
+            </span>
+          )}
+
           {message && (
             <span className={`text-xs px-3 py-1 rounded ${
               message.type === 'success' ? 'bg-green-50 text-green-700'
@@ -443,7 +807,7 @@ export function AppEditorPage() {
 
       {/* Main 3-Column Layout */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar - Bottom Bar Config */}
+        {/* Left Sidebar - Bottom Bar Config + Version Resolution */}
         <div className="w-80 bg-white border-r border-gray-200 shrink-0 overflow-y-auto p-4">
           <BottomBarConfig
             slots={currentApp.bottom_bar_config}
@@ -454,6 +818,75 @@ export function AppEditorPage() {
             onDragStart={() => setIsDragging(true)}
             onDragEnd={() => setIsDragging(false)}
           />
+
+          {/* Module version resolution for bottom bar modules (FF4-APP-007,008,009) */}
+          {currentApp.bottom_bar_config.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <h4 className="text-xs font-semibold text-gray-700 mb-2">Module Version Resolution</h4>
+              <div className="space-y-3">
+                {currentApp.bottom_bar_config
+                  .sort((a, b) => a.slot_position - b.slot_position)
+                  .map((slot) => {
+                    const policy = versionPolicies[slot.module_instance_id];
+                    const versions = moduleVersions[slot.module_instance_id] || [];
+                    const pinnedVersion = policy?.pinnedVersionId
+                      ? versions.find(v => v.id === policy.pinnedVersionId)
+                      : null;
+                    if (!policy) return null;
+                    return (
+                      <div key={slot.module_instance_id} className="text-[11px] bg-gray-50 rounded-lg p-2 space-y-1">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-base">{slot.icon}</span>
+                          <span className="text-xs font-medium text-gray-800 truncate">{slot.name}</span>
+                          <span className="text-[9px] text-gray-400 ml-auto">Slot {slot.slot_position + 1}</span>
+                        </div>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`version-bb-${slot.module_instance_id}`}
+                            checked={policy.useNewest}
+                            onChange={() => handleVersionPolicyChange(slot.module_instance_id, true)}
+                            className="w-3 h-3"
+                          />
+                          <span className="text-gray-600">Use newest</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`version-bb-${slot.module_instance_id}`}
+                            checked={!policy.useNewest}
+                            onChange={() => handleVersionPolicyChange(slot.module_instance_id, false)}
+                            className="w-3 h-3"
+                          />
+                          <span className="text-gray-600">Use specific</span>
+                        </label>
+                        {!policy.useNewest && (
+                          <div className="mt-1 ml-3">
+                            <select
+                              value={policy.pinnedVersionId || ''}
+                              onChange={(e) => handlePinnedVersionChange(slot.module_instance_id, e.target.value)}
+                              className="w-full text-[11px] px-2 py-1 border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
+                            >
+                              <option value="">Select a version...</option>
+                              {versions.map(v => (
+                                <option key={v.id} value={v.id}>
+                                  v{v.version_number} — {v.display_name || v.created_at}
+                                </option>
+                              ))}
+                            </select>
+                            {pinnedVersion && (
+                              <div className="text-[10px] text-gray-400 mt-0.5">
+                                Pinned: v{pinnedVersion.version_number}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Center - iPhone Mockup */}
@@ -466,12 +899,63 @@ export function AppEditorPage() {
                 <div className="text-xs text-gray-500">9:41</div>
               </div>
 
-              {/* Content Area */}
-              <div className="flex-1 h-[calc(812px-44px-88px)] bg-white flex items-center justify-center">
-                <div className="text-center text-gray-400">
-                  <Smartphone size={48} className="mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">App Preview</p>
-                </div>
+              {/* Content Area — Live Launchpad (FF4-APP-003, FF4-APP-014) */}
+              <div className="flex-1 h-[calc(812px-44px-88px)] bg-white overflow-y-auto p-4">
+                {selectedModuleId ? (
+                  /* When a module is selected from bottom bar or launchpad, show module preview */
+                  <div className="space-y-3">
+                    <div className="text-center">
+                      {(() => {
+                        const allMods = [
+                          ...currentApp.bottom_bar_config.map(s => ({
+                            id: s.module_instance_id, name: s.name,
+                            icon: moduleIconOverrides[s.module_instance_id] || s.icon,
+                          })),
+                          ...launchpadModules.map(m => ({
+                            id: m.module_instance_id, name: m.name, moduleType: m.module_type,
+                            icon: getModuleEffectiveIcon(m.module_instance_id, m.module_type, m.icon),
+                          })),
+                        ];
+                        const mod = allMods.find(m => m.id === selectedModuleId);
+                        return mod ? (
+                          <div className="flex flex-col items-center gap-2 py-6">
+                            <span className="text-5xl">{mod.icon}</span>
+                            <span className="text-sm font-medium text-gray-800">{mod.name}</span>
+                            <span className="text-[10px] text-gray-400">Tap to open</span>
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+                  </div>
+                ) : launchpadModules.length > 0 ? (
+                  /* Launchpad grid — show modules not in bottom bar */
+                  <div>
+                    <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3 px-1">
+                      Launchpad
+                    </h4>
+                    <div className="grid grid-cols-4 gap-3">
+                      {launchpadModules.map((mod) => (
+                        <button
+                          key={mod.module_instance_id}
+                          onClick={() => setSelectedModule(mod.module_instance_id)}
+                          className="flex flex-col items-center gap-1.5 p-2 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                        >
+                          <span className="text-3xl">{getModuleEffectiveIcon(mod.module_instance_id, mod.module_type, mod.icon)}</span>
+                          <span className="text-[10px] text-gray-600 text-center leading-tight line-clamp-2">
+                            {mod.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  /* Empty state */
+                  <div className="flex flex-col items-center justify-center h-full text-center text-gray-400">
+                    <Smartphone size={36} className="mx-auto mb-2 opacity-50" />
+                    <p className="text-xs">No modules configured</p>
+                    <p className="text-[10px] text-gray-300 mt-1">Add modules from the right sidebar</p>
+                  </div>
+                )}
               </div>
 
               {/* Bottom Bar */}
@@ -488,7 +972,7 @@ export function AppEditorPage() {
                           className="flex flex-col items-center gap-1 min-w-0"
                           onClick={() => setSelectedModule(slot.module_instance_id)}
                         >
-                          <span className="text-2xl">{slot.icon}</span>
+                          <span className="text-2xl">{moduleIconOverrides[slot.module_instance_id] || slot.icon}</span>
                           <span className="text-[10px] text-gray-600 truncate max-w-[60px]">
                             {slot.name}
                           </span>
@@ -510,26 +994,112 @@ export function AppEditorPage() {
               <p className="text-xs text-gray-500 mb-3">
                 Modules not in the bottom bar appear in the launchpad
               </p>
-              <div className="space-y-2">
-                {launchpadModules.map(module => (
-                  <div
-                    key={module.module_instance_id}
-                    className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
-                  >
-                    <span className="text-lg">{module.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-900 truncate">{module.name}</div>
-                      <div className="text-xs text-gray-500">{module.module_type}</div>
+              <div className="space-y-3">
+                {launchpadModules.map(module => {
+                  const policy = versionPolicies[module.module_instance_id];
+                  const versions = moduleVersions[module.module_instance_id] || [];
+                  const pinnedVersion = policy?.pinnedVersionId
+                    ? versions.find(v => v.id === policy.pinnedVersionId)
+                    : null;
+                  const moduleArchiveWarning = archivedModuleWarnings[module.module_instance_id];
+                  return (
+                    <div key={module.module_instance_id} className="space-y-1">
+                      <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors">
+                        <div className="relative group shrink-0 flex items-center">
+                          {editingModuleIcon === module.module_instance_id ? (
+                            <div className="w-32" onClick={e => e.stopPropagation()}>
+                              <IconPicker
+                                value={getModuleEffectiveIcon(module.module_instance_id, module.module_type, module.icon)}
+                                onChange={(newIcon) => {
+                                  if (newIcon) {
+                                    handleModuleIconChange(module.module_instance_id, newIcon);
+                                  }
+                                  setEditingModuleIcon(null);
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <>
+                              <span className="text-lg cursor-default">{getModuleEffectiveIcon(module.module_instance_id, module.module_type, module.icon)}</span>
+                              <button
+                                onClick={() => setEditingModuleIcon(module.module_instance_id)}
+                                className="ml-0.5 p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                title="Change module icon"
+                              >
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                                </svg>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-gray-900 truncate">{module.name}</div>
+                          <div className="text-xs text-gray-500">{module.module_type}</div>
+                        </div>
+                        <button
+                          onClick={() => handleAddToBottomBar(module)}
+                          className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          title="Add to bottom bar"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                      {moduleArchiveWarning && (
+                        <div className="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] text-amber-700 flex items-start gap-1">
+                          <AlertOctagon size={10} className="mt-0.5 shrink-0" />
+                          <span>{moduleArchiveWarning}</span>
+                        </div>
+                      )}
+                      {/* Module version resolution (FF4-APP-007,008,009) */}
+                      {policy && (
+                        <div className="px-3 py-1.5 bg-white border border-gray-100 rounded-lg text-[11px]">
+                          <label className="flex items-center gap-1.5 mb-1 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`version-${module.module_instance_id}`}
+                              checked={policy.useNewest}
+                              onChange={() => handleVersionPolicyChange(module.module_instance_id, true)}
+                              className="w-3 h-3"
+                            />
+                            <span className="text-gray-600">Use newest version</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`version-${module.module_instance_id}`}
+                              checked={!policy.useNewest}
+                              onChange={() => handleVersionPolicyChange(module.module_instance_id, false)}
+                              className="w-3 h-3"
+                            />
+                            <span className="text-gray-600">Use specific version</span>
+                          </label>
+                          {!policy.useNewest && (
+                            <div className="mt-1.5 ml-4">
+                              <select
+                                value={policy.pinnedVersionId || ''}
+                                onChange={(e) => handlePinnedVersionChange(module.module_instance_id, e.target.value)}
+                                className="w-full text-[11px] px-2 py-1 border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
+                              >
+                                <option value="">Select a version...</option>
+                                {versions.map(v => (
+                                  <option key={v.id} value={v.id}>
+                                    v{v.version_number} — {v.display_name || v.created_at}
+                                  </option>
+                                ))}
+                              </select>
+                              {pinnedVersion && (
+                                <div className="text-[10px] text-gray-400 mt-0.5">
+                                  Pinned: v{pinnedVersion.version_number}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <button
-                      onClick={() => handleAddToBottomBar(module)}
-                      className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                      title="Add to bottom bar"
-                    >
-                      <Plus size={14} />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
                 {launchpadModules.length === 0 && (
                   <div className="px-3 py-4 text-center text-xs text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
                     All modules are in the bottom bar
@@ -553,11 +1123,9 @@ export function AppEditorPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Icon</label>
-                  <input
-                    type="text"
+                  <IconPicker
                     value={currentApp.icon}
-                    onChange={(e) => updateApp(currentApp.id, { icon: e.target.value })}
-                    className="w-20 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-blue-500 outline-none text-center"
+                    onChange={(value) => updateApp(currentApp.id, { icon: value })}
                   />
                 </div>
                 <div>
@@ -594,23 +1162,33 @@ export function AppEditorPage() {
         />
       )}
 
-      {/* Publish Modal */}
+      {/* Publish Modal — Expanded (FF4-APP-011, FF4-APP-017, FF4-VER-006, FF4-VER-007) */}
       {showPublishModal && currentApp && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-5 w-[480px]">
+          <div className="bg-white rounded-lg p-5 w-[540px] max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold flex items-center gap-1.5">
                 <Rocket size={14} />
                 Publish App — {currentApp.name}
               </h3>
-              <button onClick={() => { setShowPublishModal(false); setPublishResult(null); }} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+              <button onClick={() => { setShowPublishModal(false); setPublishResult(null); setPublishValidationResults(null); setDeviceStatus(null); }} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
             </div>
 
             <div className="space-y-4">
+              {/* App Info */}
               <div className="bg-gray-50 rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">App</span>
                   <span className="font-medium text-gray-800">{currentApp.icon} {currentApp.name}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Version</span>
+                  <span className="font-medium text-gray-800">
+                    {new Date().toLocaleString('en-US', {
+                      year: 'numeric', month: '2-digit', day: '2-digit',
+                      hour: '2-digit', minute: '2-digit',
+                    })}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Bottom bar modules</span>
@@ -618,13 +1196,107 @@ export function AppEditorPage() {
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Launchpad modules</span>
-                  <span className="font-medium text-gray-800">{currentApp.launchpad_config?.length || 0}</span>
+                  <span className="font-medium text-gray-800">{launchpadModules.length}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Current live version</span>
                   <span className="font-medium text-gray-800">{liveVersionDisplay || 'None'}</span>
                 </div>
               </div>
+
+              {/* Module Versions with validation (FF4-APP-011, FF4-VER-006) */}
+              <div>
+                <h4 className="text-xs font-semibold text-gray-700 mb-2">Module Versions</h4>
+                <div className="space-y-1.5">
+                  {(() => {
+                    const allModules = [
+                      ...currentApp.bottom_bar_config.map(s => ({
+                        id: s.module_instance_id,
+                        name: s.name,
+                        icon: s.icon,
+                        inBottomBar: true,
+                      })),
+                      ...launchpadModules.map(m => ({
+                        id: m.module_instance_id,
+                        name: m.name,
+                        icon: m.icon,
+                        inBottomBar: false,
+                      })),
+                    ];
+                    return allModules.map(mod => {
+                      const policy = versionPolicies[mod.id];
+                      const versions = moduleVersions[mod.id] || [];
+                      const pinnedVersion = policy?.pinnedVersionId
+                        ? versions.find(v => v.id === policy.pinnedVersionId)
+                        : null;
+                      const versionLabel = policy?.useNewest
+                        ? (versions.length > 0 ? `Newest (v${versions[0].version_number})` : 'No versions')
+                        : pinnedVersion
+                          ? `Pinned (v${pinnedVersion.version_number})`
+                          : 'Not configured';
+                      return (
+                        <div key={mod.id} className="flex items-center justify-between px-3 py-1.5 bg-white border border-gray-100 rounded text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{mod.icon}</span>
+                            <span className="text-gray-800 font-medium">{mod.name}</span>
+                            {mod.inBottomBar && (
+                              <span className="text-[9px] px-1 py-0.5 bg-blue-50 text-blue-600 rounded">Bottom bar</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-400">{versionLabel}</span>
+                            {versions.length > 0 ? (
+                              <CheckCircle size={12} className="text-green-500" />
+                            ) : (
+                              <AlertTriangle size={12} className="text-amber-500" />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              {/* Validation results (FF4-VER-007) */}
+              {publishValidationResults && publishValidationResults.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-gray-700 mb-2">Validation Results</h4>
+                  <div className="space-y-1">
+                    {publishValidationResults.map((vr, i) => (
+                      <div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs ${
+                        vr.status === 'pass' ? 'bg-green-50 text-green-700'
+                        : vr.status === 'warn' ? 'bg-amber-50 text-amber-700'
+                        : 'bg-red-50 text-red-700'
+                      }`}>
+                        {vr.status === 'pass' ? <CheckCircle size={12} /> : <AlertTriangle size={12} />}
+                        <span className="font-medium">{vr.moduleName}:</span>
+                        <span>{vr.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Device status after publish */}
+              {deviceStatus && (
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <h4 className="text-xs font-semibold text-gray-700 mb-2">Device Update Status</h4>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-gray-600">{deviceStatus.updated} updated</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="w-2 h-2 rounded-full bg-amber-500" />
+                      <span className="text-gray-600">{deviceStatus.pending} pending</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-gray-400">/ {deviceStatus.total} total</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {publishResult && (
                 <div className={`text-xs px-3 py-2 rounded ${
@@ -640,7 +1312,7 @@ export function AppEditorPage() {
 
               <div className="flex gap-2 justify-end pt-1">
                 <button
-                  onClick={() => { setShowPublishModal(false); setPublishResult(null); }}
+                  onClick={() => { setShowPublishModal(false); setPublishResult(null); setPublishValidationResults(null); setDeviceStatus(null); }}
                   disabled={publishing}
                   className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
                 >
@@ -755,6 +1427,21 @@ export function AppEditorPage() {
                             )}
                           </div>
                         </div>
+                        {/* Restore to Draft button (FF4-APP-026) */}
+                        {!versionDiffMode && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRestoreVersion(v.id);
+                            }}
+                            disabled={restoring}
+                            className="ml-2 shrink-0 flex items-center gap-1 px-2 py-1 text-[10px] bg-purple-50 text-purple-700 rounded hover:bg-purple-100 transition-colors disabled:opacity-50"
+                            title="Restore this version to working draft (does not auto-publish)"
+                          >
+                            <RotateCcw size={10} />
+                            Restore
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

@@ -17,7 +17,7 @@
  */
 
 export const MIN_CELL_WIDTH_PERCENT = 5; // Minimum 5% width per cell
-export const MIN_CELL_WIDTH_PX = 60; // Minimum 60px per cell
+export const MIN_CELL_WIDTH_PX = 80; // Minimum 80px per cell (FF4-ROW-004, requirement: min cell width 80px)
 export const MIN_ROW_HEIGHT = 48; // Minimum row height
 
 export interface CellWidthResult {

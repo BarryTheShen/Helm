@@ -37,6 +37,8 @@ def _sample_events_for_month(year: int, month: int) -> list[dict]:
             "color": "#6366f1",
             "location": "Virtual / Discord",
             "is_all_day": False,
+            "source_type": "local",
+            "notes": "Daily check-in with the engineering team to discuss progress and blockers.",
         },
         {
             "title": "Design Review",
@@ -46,6 +48,8 @@ def _sample_events_for_month(year: int, month: int) -> list[dict]:
             "color": "#ec4899",
             "location": "Figma",
             "is_all_day": False,
+            "source_type": "local",
+            "notes": "Review the new dashboard mockups and provide feedback.",
         },
         {
             "title": "Project Planning Session",
@@ -55,6 +59,8 @@ def _sample_events_for_month(year: int, month: int) -> list[dict]:
             "color": "#f59e0b",
             "location": "Meeting Room A",
             "is_all_day": False,
+            "source_type": "caldav",
+            "notes": "Quarterly planning session. Bring your OKR proposals.",
         },
     ])
 
@@ -68,6 +74,7 @@ def _sample_events_for_month(year: int, month: int) -> list[dict]:
             "color": "#10b981",
             "location": "Office 3rd Floor",
             "is_all_day": False,
+            "source_type": "local",
         },
         {
             "title": "Lunch & Learn",
@@ -77,6 +84,7 @@ def _sample_events_for_month(year: int, month: int) -> list[dict]:
             "color": "#6366f1",
             "location": "Cafeteria",
             "is_all_day": False,
+            "source_type": "caldav",
         },
         {
             "title": "Sprint Retrospective",
@@ -86,6 +94,8 @@ def _sample_events_for_month(year: int, month: int) -> list[dict]:
             "color": "#8b5cf6",
             "location": "Meeting Room B",
             "is_all_day": False,
+            "source_type": "local",
+            "notes": "Action items from last sprint review will be discussed.",
         },
     ])
 
@@ -99,6 +109,8 @@ def _sample_events_for_month(year: int, month: int) -> list[dict]:
             "color": "#ef4444",
             "location": "Virtual / Zoom",
             "is_all_day": False,
+            "source_type": "caldav",
+            "notes": "Demo the new dashboard and calendar features to stakeholders.",
         },
         {
             "title": "Code Review Session",
@@ -108,6 +120,7 @@ def _sample_events_for_month(year: int, month: int) -> list[dict]:
             "color": "#3b82f6",
             "location": "War Room",
             "is_all_day": False,
+            "source_type": "local",
         },
         {
             "title": "Team Outing",
@@ -116,6 +129,8 @@ def _sample_events_for_month(year: int, month: int) -> list[dict]:
             "description": "Quarterly team building activity.",
             "color": "#f59e0b",
             "is_all_day": True,
+            "source_type": "local",
+            "notes": "Quarterly team building event — details to follow.",
         },
     ])
 
@@ -129,6 +144,8 @@ def _sample_events_for_month(year: int, month: int) -> list[dict]:
             "color": "#ec4899",
             "location": "City Medical Center",
             "is_all_day": False,
+            "source_type": "custom",
+            "notes": "Annual physical checkup at City Medical Center.",
         },
         {
             "title": "Release Planning",
@@ -138,6 +155,7 @@ def _sample_events_for_month(year: int, month: int) -> list[dict]:
             "color": "#6366f1",
             "location": "Meeting Room A",
             "is_all_day": False,
+            "source_type": "local",
         },
         {
             "title": "End of Month Review",
@@ -147,6 +165,8 @@ def _sample_events_for_month(year: int, month: int) -> list[dict]:
             "color": "#8b5cf6",
             "location": "CEO Office",
             "is_all_day": False,
+            "source_type": "caldav",
+            "notes": "Monthly review with the CEO. Prepare metrics report in advance.",
         },
         {
             "title": "Conference Talk Prep",
@@ -155,6 +175,8 @@ def _sample_events_for_month(year: int, month: int) -> list[dict]:
             "description": "Prepare slides for the upcoming tech conference talk.",
             "color": "#10b981",
             "is_all_day": False,
+            "source_type": "notion",
+            "notes": "Prepare slides and demo for the upcoming tech conference.",
         },
     ])
 
@@ -203,6 +225,8 @@ async def seed_calendar_events_for_user(
             color=ev_data.get("color", "#6366f1"),
             location=ev_data.get("location"),
             is_all_day=ev_data.get("is_all_day", False),
+            source_type=ev_data.get("source_type", "local"),
+            notes=ev_data.get("notes"),
         )
         db.add(event)
         created_ids.append(str(event.id))

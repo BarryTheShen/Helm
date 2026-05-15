@@ -65,6 +65,8 @@ function serializeEditorContent(json: any): string {
     let result = '';
     if (node.type === 'text') {
       result += node.text || '';
+    } else if (node.type === 'hardBreak') {
+      result += '\n';
     } else if (node.type === 'variablePill') {
       const { namespace, key } = node.attrs;
       result += `{{${namespace}.${key}}}`;

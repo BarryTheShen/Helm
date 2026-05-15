@@ -19,7 +19,7 @@
   - Variables resolve correctly within markdown content
   - Button fills entire cell regardless of cell size
   - Button icon mode renders visible centered icon
-  - Image: only src, fitMode (fitWidth/fitHeight), action props
+  - Image: only src, fitMode (fitWidth/fitHeight) props (action removed per source)
   - Image fitMode: fitWidth scales to cell width; fitHeight scales to cell height
   - Icon emoji picker opens on click; selected icon renders centered in cell
   - Empty Container is a real editable vertical row component

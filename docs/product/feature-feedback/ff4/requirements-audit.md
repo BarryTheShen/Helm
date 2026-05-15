@@ -2,7 +2,7 @@
 
 Completeness audit findings for the requirements ledger.
 
-**Status:** Populated
+**Status:** Populated (2 corrective findings RESOLVED 2026-05-15 — see bottom)
 
 | Finding Type | Description | Source Reference | REQ-ID(s) |
 |-------------|-------------|-----------------|-----------|
@@ -18,3 +18,6 @@ Completeness audit findings for the requirements ledger.
 | INSUFFICIENT_AC | FF4-MOD-005 "App Preview needs complete rework" — acceptance criteria says "rendered preview closely matches the actual React Native mobile rendering" but this is a massive undertaking involving potentially rewriting the entire preview system. The scope is not well defined. Is this a web-admin iframe preview? A React Native Web render? A live simulator integration? | FF4 doc lines 27-28 | FF4-MOD-005 |
 | DUPLICATE | FF4-APP-020 and FF4-MOD-005 both address "App Preview rework." FF4-APP-020 is in the App Editor context; FF4-MOD-005 is in the Module Editor context. They may be the same underlying requirement (preview system rework). Consider merging or clarifying which editor context each applies to. | FF4 doc lines 27-28 | FF4-APP-020, FF4-MOD-005 |
 | AMBIGUOUS | The source says "Also for the minimum widths and heights (all of these 'type' enforcements), instead of letting it happen and resetting it to the minimum to stop the issue, why not just make it so that you can't drag it to below the minimum requirements." This is captured as FF4-ROW-015, but the source includes heights as well ("minimum widths and heights"). Does this apply to row height minimum (48px mentioned in the text) as well as cell width minimum (80px)? | FF4 doc lines 192-193 | FF4-ROW-015 |
+| RESOLVED | 2026-05-15 reassessment: FF4-IMG-002 corrected — `action` removed from Image kept properties per source document lines 222-223. | FF4 doc lines 222-223 | FF4-IMG-002 |
+| RESOLVED | 2026-05-15 reassessment: FF4-TEXT-001 expanded to explicitly include TextInput form component removal (source lines 224-226). Previously only covered Text DISPLAY component merge. | FF4 doc lines 224-226 | FF4-TEXT-001 |
+| CLARIFIED | 2026-05-15 reassessment: FF4-ROW-015 already correctly covers both height (48px) and width minimum drag limits in its acceptance criteria. No change needed. | FF4 doc lines 192-193 | FF4-ROW-015 |

@@ -5,6 +5,7 @@ Provides helpers for:
 - Creating versions from working draft checkpoints
 - Restoring versions to working drafts
 - Listing version history
+- Resolving module references at publish time (FF4-VER-005)
 """
 
 from datetime import datetime, timezone
@@ -17,6 +18,98 @@ from app.models.module_instance import ModuleInstance
 from app.models.module_version import ModuleVersion
 from app.models.module_working_draft import ModuleWorkingDraft
 from app.models.screen_history import ScreenHistory
+
+
+async def resolve_module_references(
+    db: AsyncSession,
+    config_json: dict,
+    user_id: str,
+) -> tuple[list[dict], list[dict]]:
+    """Resolve module references to concrete version IDs at publish time.
+
+    Iterates over module refs in the app config (bottom_bar_config,
+    launchpad_config), resolves each to the latest valid ModuleVersion.
+
+    Returns:
+        Tuple of (resolved_module_versions, module_reference_policies).
+          - resolved_module_versions: [{module_id, version_id, version_number}]
+          - module_reference_policies: [{module_id, policy, selected_version_id?}]
+    """
+    resolved: list[dict] = []
+    policies: list[dict] = []
+    seen_module_ids: set[str] = set()
+
+    # Collect all module_instance_ids from bottom_bar and launchpad
+    module_ids: list[str] = []
+
+    bottom_bar = config_json.get("bottom_bar_config", [])
+    if isinstance(bottom_bar, list):
+        for item in bottom_bar:
+            if isinstance(item, dict):
+                mid = item.get("module_instance_id")
+                if mid and mid not in seen_module_ids:
+                    module_ids.append(mid)
+                    seen_module_ids.add(mid)
+
+    launchpad = config_json.get("launchpad_config", [])
+    if isinstance(launchpad, list):
+        for mid in launchpad:
+            if isinstance(mid, str) and mid not in seen_module_ids:
+                module_ids.append(mid)
+                seen_module_ids.add(mid)
+
+    # For each module, resolve to its current (latest) version
+    for module_id in module_ids:
+        # Find the ModuleInstance to check current_version_id
+        result = await db.execute(
+            select(ModuleInstance).where(
+                ModuleInstance.id == module_id,
+                ModuleInstance.user_id == user_id,
+            )
+        )
+        instance = result.scalar_one_or_none()
+        if instance is None:
+            # Module not found — still record it as unresolved
+            resolved.append({
+                "module_id": module_id,
+                "version_id": None,
+                "version_number": None,
+                "status": "module_not_found",
+            })
+            policies.append({
+                "module_id": module_id,
+                "policy": "use_newest",
+                "selected_version_id": None,
+                "status": "module_not_found",
+            })
+            continue
+
+        # Default: use newest (latest valid version via current_version_id)
+        version_id = instance.current_version_id
+        version_number = None
+
+        if version_id:
+            # Fetch the version to get its number
+            v_result = await db.execute(
+                select(ModuleVersion.version_number).where(
+                    ModuleVersion.id == version_id,
+                )
+            )
+            version_number = v_result.scalar_one_or_none()
+
+        resolved.append({
+            "module_id": module_id,
+            "version_id": version_id,
+            "version_number": version_number,
+            "status": "resolved" if version_id else "no_version",
+        })
+        policies.append({
+            "module_id": module_id,
+            "policy": "use_newest",
+            "selected_version_id": version_id,
+        })
+
+    return resolved, policies
 
 
 def make_timestamp_name(dt: datetime | None = None) -> str:

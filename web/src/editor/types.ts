@@ -293,7 +293,6 @@ export type ActionPropName = 'onPress' | 'onSubmit' | 'onSend';
 
 const ACTION_PROP_MAP = {
   Button: 'onPress',
-  Image: 'onPress',
   InputBar: 'onSend',
 } as const satisfies Partial<Record<string, ActionPropName>>;
 
@@ -789,6 +788,8 @@ export function normalizeComponentPropsForEditor(
       delete normalized.aspect_ratio;
       delete normalized.borderRadius;
       delete normalized.resizeMode;
+      delete normalized.onPress;
+      delete normalized.action;
       break;
     }
 
@@ -870,6 +871,8 @@ export function serializeComponentPropsForRuntime(
       delete serialized.aspect_ratio;
       delete serialized.borderRadius;
       delete serialized.resizeMode;
+      delete serialized.onPress;
+      delete serialized.action;
       break;
     }
 

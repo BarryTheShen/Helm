@@ -19,7 +19,7 @@ import { useEditorStore } from './useEditorStore';
 import { getComponentDefinition } from './types';
 import type { EditorCell, EditorComponent, EditorRow, EditorRowHeight } from './types';
 import { assertRegisteredComponentType } from './typeGuards';
-import { MIN_CELL_WIDTH_PERCENT, MIN_CELL_WIDTH_PX, MIN_ROW_HEIGHT } from './cellWidthEngine';
+import { MIN_CELL_WIDTH_PERCENT, MIN_CELL_WIDTH_PX, MIN_ROW_HEIGHT, calculateSidePadding } from './cellWidthEngine';
 
 import { ComponentPicker } from './ComponentPicker';
 import { Plus, Grip, X, Edit2, Eye, Copy, Trash2, ArrowUp, ArrowDown, Clipboard } from 'lucide-react';
@@ -1325,11 +1325,20 @@ function SortableRow({
           <X size={12} />
         </button>
 
-        {/* Cells container */}
-        <div className="flex min-h-[48px] flex-1 items-stretch" style={getRowContentStyle(row)}>
+        {/* Cells container — FF4-ROW-008: apply side padding when all cells fixed and total < 100% */}
+        {(() => {
+          const rowType = row.type ?? 'content';
+          const isContent = rowType === 'content';
+          const sidePaddingPct = isContent && row.cells.length > 0
+            ? calculateSidePadding(row.cells.map(c => ({ id: c.id, width: c.width })))
+            : 0;
+          const paddingStyle = sidePaddingPct > 0
+            ? { paddingLeft: `${(sidePaddingPct * 100) / 2}%`, paddingRight: `${(sidePaddingPct * 100) / 2}%` }
+            : {};
+          const containerStyle = { ...getRowContentStyle(row), ...paddingStyle };
+          return (
+        <div className="flex min-h-[48px] flex-1 items-stretch" style={containerStyle}>
           {(() => {
-            const rowType = row.type ?? 'content';
-
             if (rowType === 'divider') {
               return (
                 <div className="flex-1 px-3">
@@ -1378,9 +1387,9 @@ function SortableRow({
                       className="cursor-pointer relative group/cell flex-1 flex flex-col min-h-0"
                       onClick={(e) => handleComponentClick(row.id, cellIdx, e)}
                     >
-                      {/* Delete cell button - top-right corner */}
+                      {/* Delete cell button - top-left corner (FF4-CELL-002: both row and cell delete on left, no overlap) */}
                       <button
-                        className="absolute -right-1.5 -top-1.5 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover/cell:opacity-100 transition-opacity z-30 hover:bg-red-600 shadow-md"
+                        className="absolute -left-1.5 -top-1.5 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover/cell:opacity-100 transition-opacity z-30 hover:bg-red-600 shadow-md"
                         onClick={(e) => { e.stopPropagation(); removeComponent(row.id, cellIdx); }}
                         title="Delete component"
                       >
@@ -1413,8 +1422,8 @@ function SortableRow({
                         </button>
                       </div>
 
-                      {/* Component preview */}
-                      <div className="pointer-events-none overflow-hidden flex-1 min-h-0">
+                      {/* Component preview — FF4-ROW-012/FF4-CELL-004: fill entire cell */}
+                      <div className="pointer-events-none overflow-hidden flex-1 min-h-0" style={{ width: '100%', height: '100%' }}>
                         <ComponentPreview component={cell.content} />
                       </div>
                     </div>
@@ -1444,6 +1453,8 @@ function SortableRow({
             });
           })()}
         </div>
+      );
+    })()}
 
         <RowHeightResizeHandle
           rowId={row.id}

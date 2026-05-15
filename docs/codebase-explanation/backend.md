@@ -1,6 +1,6 @@
 # Backend — Python FastAPI Server
 
-> Last updated: 2026-05-15 (FF4 Reassessment: cleanup endpoints, CalendarEvent fields, cell width validation)
+> Last updated: 2026-05-15 (FF4 Reassessment follow-up: device compatibility validation, module reference resolution at publish, apply-template writes to ModuleWorkingDraft, calendar seed source_type/notes)
 > Last audit: 2026-05-15 — ✅ FF4 Reassessment complete
 
 ## Tier 1: TLDR
@@ -69,7 +69,7 @@ The backend is a **Python FastAPI** server that serves as the brain of the Helm 
 | Models | `app/models/` | 32 SQLAlchemy ORM models (added Note, ModuleVersion, ModuleWorkingDraft, PreviewSession) |
 | Schemas | `app/schemas/` | Pydantic request/response models (29 files; added admin) |
 | Routers | `app/routers/` | 28 route files (added notes, module_versions) |
-| Services | `app/services/` | auth, agent_proxy, websocket_manager, workflow_engine, action_registry, audit, component_seed, variable_resolver, trigger_engine, app_service, module_service, device_service, data_connectors, sdui_state, template_seed, version_service, variable_seed, workflow_seed, calendar_seed, **cleanup_service** |
+| Services | `app/services/` | auth, agent_proxy, websocket_manager, workflow_engine, action_registry, audit, component_seed, variable_resolver, trigger_engine, app_service, module_service, device_service, data_connectors, sdui_state, template_seed, version_service, variable_seed, workflow_seed, calendar_seed, **cleanup_service**, **validation_service** |
 | SDUI shared contract helpers | `app/services/sdui_state.py` | Live/draft key helpers, shared validate/apply pipeline, row-aware counters, and broadcast utilities used by REST + MCP |
 | Middleware | `app/middleware/sandbox.py` | Sandbox mode ASGI middleware |
 | MCP | `app/mcp/` | MCP server + shared tool implementations |
@@ -557,6 +557,17 @@ React Flow graph execution engine with APScheduler (`AsyncIOScheduler(timezone="
 |----------|---------|
 | `log_audit(db, user_id, action, resource_type, resource_id, details?, ip_address?)` | Creates an `AuditLog` row. Wired into auth (login/logout/setup), calendar, workflows, notifications, modules, agent_config, users, sessions |
 
+### `services/validation_service.py`
+
+Unified validation for apps, modules, and previews:
+
+| Function | Purpose |
+|----------|---------|
+| `validate_app_config(app_config)` | Validate app config structure (bottom bar ≤5 slots, launchpad format, default_launch_module exists) |
+| `validate_publish_config(app_config, devices=None)` | Extends app config validation with device compatibility checks (runtime version, schema version support). Called at publish time to prevent publishing to incompatible devices. |
+| `_validate_device_compatibility(device)` | Checks a single device: `installed_runtime_version` must be set, `supported_schema_versions` must be present. Returns error messages list. |
+| `validate_preview_config(config)` | Lightweight preview config validation (bottom bar slot count only) |
+
 ### `services/component_seed.py`
 
 Seeds the `component_registry` table on startup with default components. Only inserts if the component type doesn't already exist.
@@ -737,7 +748,21 @@ New `validation_service.py` validates SDUI screens at multiple stages:
 - Autosave validation (lightweight schema check)
 - Checkpoint/version validation (component types, actions, data bindings)
 - App preview validation (bottom bar slots, Launchpad, modules)
-- Publish validation (device compatibility, runtime version check)
+- Publish validation (device compatibility, runtime version check, schema version support)
+
+### Device Compatibility Validation
+`validate_publish_config()` in `validation_service.py` validates devices before publishing:
+- `installed_runtime_version` must be set (device has reported its runtime)
+- `supported_schema_versions` must be present (device can handle current schema)
+- If validation fails, publish returns HTTP 400 with per-device error messages
+
+### Module Reference Resolution at Publish
+`resolve_module_references()` in `version_service.py` resolves per-module version policies at publish time:
+- Iterates over all module references in app config (bottom bar + launchpad)
+- Resolves "use_newest" policy to the latest valid `ModuleVersion` via `ModuleInstance.current_version_id`
+- Resolves "use_specific" policy to the pinned version
+- Populates `resolved_module_versions` and `module_reference_policies` on the `AppVersion` record
+- Device offline handling: devices that are offline still get `active_app_version_id` updated; `update_status` set to `update_available` so they fetch new config on reconnect
 
 ### Component Type Sync
 `_VALID_V2_COMPONENT_TYPES` in `mcp/tools.py` updated to include:
@@ -761,7 +786,7 @@ Complete REST endpoints for notes (`/api/notes`). Wired to the NotesModule compo
 ### Sample Data Seeding
 - **Workflows:** "Daily Summary" (9am notification with today's events), "Event Reminder" (15 min before calendar events), "New Todo Alert" (notifies when todo added)
 - **Variables:** `user.name`, `app.theme`, `greeting.morning`
-- **Calendar events:** Sample events for demo purposes
+- **Calendar events:** Sample events for demo purposes. All events include `source_type` field (local/caldav/notion/custom) for colored badges on mobile. Most events include `notes` field with contextual note text, displayed as 2-line truncated text on mobile.
 
 ### ScreenHistory Migration
 The existing `sdui_screen_history` table is deprecated in favor of `module_versions`. New code writes to `module_versions` only. The old table and APIs remain for backward compatibility with existing data.
@@ -834,6 +859,11 @@ Added `date.today` (YYYY-MM-DD) and `date.now` (ISO 8601 timestamp) to the varia
 - `_prepare_template_screen_or_422()` in `routers/templates.py` validates all SDUI component types (including nested `Container` children) before creating or updating templates
 - Returns HTTP 422 with a clear message listing invalid types found
 - Called by POST/PUT template endpoints
+
+### Template Apply Writes to ModuleWorkingDraft with Auto-Checkpoint
+- `POST /api/templates/{template_id}/apply` now writes to the `ModuleWorkingDraft` system (replacing old `__draft` ModuleState approach)
+- **Auto-checkpoint**: Before overwriting, if the module has an existing working draft with content and `auto_checkpoint=true`, an automatic checkpoint is created to preserve the previous state
+- Also writes to the old ModuleState draft key for backward compatibility
 
 ### Template Seed Startup Validation
 - `seed_templates()` in `services/template_seed.py` now validates all seed `screen_json` payloads against `validate_sdui_screen_payload()` at startup

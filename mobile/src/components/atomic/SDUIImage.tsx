@@ -1,26 +1,21 @@
 /**
  * SDUIImage — Tier 2 atomic component.
- * Simplified: only src, fitMode, action.
+ * Simplified: only src and fitMode. action/onPress removed per FF4-IMG-002.
  * fitWidth: image fills cell width, height auto (maintains aspect ratio).
  * fitHeight: image fills cell height, width auto.
  */
 import React, { useState } from 'react';
-import { Image, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { Image, View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { themeColors } from '@/theme/tokens';
-import type { SDUIAction } from '@/types/sdui';
 
 interface SDUIImageProps {
   src: string;
   fitMode?: 'fitWidth' | 'fitHeight';
-  onPress?: SDUIAction;
-  dispatch?: (action: SDUIAction) => void;
 }
 
 export function SDUIImage({
   src,
   fitMode = 'fitWidth',
-  onPress,
-  dispatch,
 }: SDUIImageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -31,7 +26,7 @@ export function SDUIImage({
 
   const resizeModeVal = fitMode === 'fitHeight' ? 'contain' : 'cover';
 
-  const imageElement = (
+  return (
     <View style={[styles.container, sizeStyle]}>
       {loading && (
         <View style={[styles.placeholder, sizeStyle]}>
@@ -53,16 +48,6 @@ export function SDUIImage({
       )}
     </View>
   );
-
-  if (onPress && dispatch) {
-    return (
-      <TouchableOpacity onPress={() => dispatch(onPress)} activeOpacity={0.8}>
-        {imageElement}
-      </TouchableOpacity>
-    );
-  }
-
-  return imageElement;
 }
 
 const styles = StyleSheet.create({

@@ -41,8 +41,8 @@ from app.schemas.preview import (
     PreviewSessionOut,
 )
 from app.services.audit import log_audit
-from app.services.validation_service import validate_app_config
-from app.services.version_service import make_timestamp_name
+from app.services.validation_service import validate_app_config, validate_publish_config
+from app.services.version_service import make_timestamp_name, resolve_module_references
 from app.services.websocket_manager import manager
 
 logger = logging.getLogger(__name__)
@@ -432,14 +432,12 @@ async def publish_app_version(
     This promotes a version to be the live app config. All devices assigned
     to this app will be notified via WebSocket.
 
-    NOTE (FF4-EDGE-002): This endpoint should resolve "use_newest" module
-    references to concrete ModuleVersion IDs before creating the AppVersion.
-    The AppVersion stores both resolved_module_versions (concrete version IDs
-    at publish time) and module_reference_policies (the ref mode used).
-    TODO: Add module reference resolution logic here — iterate over
-    app.module_refs, resolve "use_newest" to latest valid ModuleVersion,
-    and populate resolved_module_versions + module_reference_policies.
-    Current implementation stores empty lists for both fields.
+    NOTE (FF4-EDGE-002): Module reference resolution is handled by
+    `resolve_module_references()` in version_service.py — it iterates over
+    module refs in the app config (bottom_bar_config, launchpad_config),
+    resolves "use_newest" to the latest valid ModuleVersion via the
+    ModuleInstance.current_version_id pointer, and populates both
+    resolved_module_versions and module_reference_policies on the AppVersion.
 
     NOTE (FF4-EDGE-005): Devices that are offline when this endpoint runs
     still get their active_app_version_id updated. When they reconnect,
@@ -464,6 +462,14 @@ async def publish_app_version(
     # Mark as published
     version.source = "publish"
 
+    # ── FF4-VER-005: Resolve module references to concrete version IDs ──
+    config_json = version.config_json or {}
+    resolved, policies = await resolve_module_references(
+        db, config_json, user_id,
+    )
+    version.resolved_module_versions = resolved
+    version.module_reference_policies = policies
+
     # Update app's current published version
     app.current_published_version_id = version.id
 
@@ -472,6 +478,20 @@ async def publish_app_version(
         select(Device).where(Device.assigned_app_id == app_id)
     )
     devices = list(result.scalars().all())
+
+    # Validate device compatibility before publishing
+    is_valid, validation_errors = validate_publish_config(
+        config_json,
+        devices=devices,
+    )
+    if not is_valid:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Publish validation failed",
+                "errors": validation_errors,
+            },
+        )
     for device in devices:
         device.active_app_version_id = version.id
         # Mark device as having a pending update (FF4-EDGE-005)

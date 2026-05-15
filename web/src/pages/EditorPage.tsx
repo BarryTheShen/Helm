@@ -18,7 +18,7 @@ import {
 } from '../editor/templateLibrary';
 import type { LocalTemplateDefinition } from '../editor/templateLibrary';
 import {
-  Save, Rocket, Undo2, Redo2, FileText,
+  Save, Undo2, Redo2, FileText,
   RefreshCw, Monitor, RotateCw, ChevronDown, ChevronRight, ChevronUp, Code, Trash2, Smartphone,
   Camera, History, Eye, Clock, Info, List
 } from 'lucide-react';
@@ -224,7 +224,6 @@ export function EditorPage() {
   const [modules, setModules] = useState<ModuleInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [pushing, setPushing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [modulesLoadError, setModulesLoadError] = useState<string | null>(null);
   const [screenLoadError, setScreenLoadError] = useState<string | null>(null);
@@ -290,6 +289,8 @@ export function EditorPage() {
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState(buildScreenSnapshot({ rows: [] }));
   const moduleLoadRequestIdRef = useRef(0);
   const selectedModuleRef = useRef(selectedModule);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveSuppressedRef = useRef(false);
 
   // API connection status
   const [aiConnected, setAiConnected] = useState<boolean | null>(null);
@@ -646,6 +647,13 @@ export function EditorPage() {
       return;
     }
 
+    // Suppress autosave during manual save to avoid race conditions
+    autoSaveSuppressedRef.current = true;
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
     const currentModule = selectedModule;
     setSaving(true);
     setMessage(null);
@@ -668,14 +676,14 @@ export function EditorPage() {
 
       if (result.draft) {
         const suffix = empty ? ' (empty screen)' : '';
-        showMsg('info', `Draft saved (v${result.version}). Approve to push live.${suffix}`);
+        showMsg('info', `Module draft saved.${suffix}`);
         setDraftInfo({ has_draft: true, version: result.version });
       } else {
         setHasPersistedScreen(true);
         updateModuleHasScreen(currentModule, true);
         setDraftInfo({ has_draft: false });
         const suffix = empty ? ' (empty screen)' : '';
-        showMsg('success', `Screen saved and pushed live!${suffix}`);
+        showMsg('success', `Module saved.${suffix}`);
       }
       markScreenSaved(screen);
     } catch (err) {
@@ -686,6 +694,7 @@ export function EditorPage() {
 
       showMsg('error', err instanceof Error ? err.message : 'Save failed');
     } finally {
+      autoSaveSuppressedRef.current = false;
       setSaving(false);
     }
   }, [canModifySelectedModule, selectedModule, getPersistableScreen, isEffectivelyEmptyScreen, showMsg, markScreenSaved, screenLoadError, updateModuleHasScreen]);
@@ -710,62 +719,31 @@ export function EditorPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo, handleSaveDraft]);
 
-  // Push live — uses versioning system (checkpoint + publish)
-  const handlePushLive = useCallback(async () => {
-    console.log('[Editor] handlePushLive() — button pressed');
-    if (!canModifySelectedModule) {
-      console.log('[Editor] handlePushLive() — blocked: cannot modify selected module');
-      showMsg('error', screenLoadError || 'Wait for the screen to finish loading.');
-      return;
+  // ── Debounced autosave (FF4-MOD-010, FF4-MOD-015) ──────────────────────────
+  useEffect(() => {
+    if (!canModifySelectedModule) return;
+    if (!hasUnsavedChanges) return;
+
+    // Clear any pending timer
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
     }
 
-    const currentModule = selectedModule;
-    setPushing(true);
-    setMessage(null);
-    try {
-      const screen = getPersistableScreen();
-      const empty = isEffectivelyEmptyScreen(screen);
-      console.log(`[Editor] handlePushLive() — screen data: ${screen.rows.length} rows, empty=${empty}`);
-      if (empty && !window.confirm('This will push an empty screen live with no content. Continue?')) {
-        console.log('[Editor] handlePushLive() — user cancelled empty screen push');
-        setPushing(false);
-        return;
+    // Don't set timer if manual save is in progress
+    if (autoSaveSuppressedRef.current) return;
+
+    // Debounce: wait 500ms after last edit
+    autoSaveTimerRef.current = setTimeout(() => {
+      handleSaveDraft();
+    }, 500);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
       }
-
-      // Step 1: Save draft
-      const saveResult = await api.post<any>(`/api/sdui/${currentModule}`, { screen });
-      console.log(`[Editor] handlePushLive() — save response: draft=${saveResult.draft}`);
-
-      // Step 2: Create checkpoint via versioning API
-      const checkpointResult = await api.post<any>(`/api/modules/${currentModule}/checkpoints`, {
-        change_summary: `Published from editor`,
-      });
-      console.log(`[Editor] handlePushLive() — checkpoint created: ${checkpointResult.id} (v${checkpointResult.version_number})`);
-
-      if (selectedModuleRef.current !== currentModule) return;
-
-      // Step 3: Publish the checkpoint version
-      await api.post<any>(`/api/modules/${currentModule}/versions/${checkpointResult.id}/publish`);
-      console.log(`[Editor] handlePushLive() — published: v${checkpointResult.version_number}`);
-
-      if (selectedModuleRef.current !== currentModule) return;
-
-      const versionNumber = checkpointResult.version_number || '?';
-      const suffix = empty ? ' (empty screen)' : '';
-      showMsg('success', `Published v${versionNumber}${suffix}`);
-      setDraftInfo({ has_draft: false });
-      setHasPersistedScreen(true);
-      updateModuleHasScreen(currentModule, true);
-      markScreenSaved(screen);
-      setLastCheckpointId(checkpointResult.id);
-    } catch (err) {
-      console.error('[Editor] handlePushLive() — error:', err instanceof Error ? err.message : err);
-      if (selectedModuleRef.current !== currentModule) return;
-      showMsg('error', `Push failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    } finally {
-      setPushing(false);
-    }
-  }, [canModifySelectedModule, selectedModule, getPersistableScreen, isEffectivelyEmptyScreen, showMsg, markScreenSaved, screenLoadError, updateModuleHasScreen]);
+    };
+  }, [hasUnsavedChanges, canModifySelectedModule, handleSaveDraft, saving]);
 
   // ── Versioning handlers (Phase 5) ───────────────────────────────────────
 
@@ -845,6 +823,19 @@ export function EditorPage() {
     }
 
     try {
+      // FF4-MOD-011: Auto-create checkpoint before restore
+      try {
+        const screen = getPersistableScreen();
+        await api.post<any>(`/api/sdui/${currentModule}`, { screen });
+        await api.post<any>(`/api/modules/${currentModule}/checkpoints`, {
+          change_summary: `Auto-checkpoint before restoring v${versionNumber}`,
+        });
+        console.log('[Editor] handleRestoreVersion() — auto-checkpoint created before restore');
+      } catch (checkpointErr) {
+        // Non-blocking: if checkpoint creation fails, continue with restore
+        console.warn('[Editor] handleRestoreVersion() — checkpoint creation failed, continuing:', checkpointErr);
+      }
+
       await api.post<any>(`/api/modules/${currentModule}/versions/${versionId}/restore-to-draft`);
       console.log('[Editor] handleRestoreVersion() — restored to draft');
 
@@ -853,12 +844,18 @@ export function EditorPage() {
       const normalized = normalizeScreenData(screenData?.screen ?? null);
       loadScreen(normalized ?? { rows: [] });
       setDraftInfo({ has_draft: true, version: 1 });
+
+      // FF4-MOD-014: Update saved snapshot so the UI doesn't show "Unsaved changes"
+      if (normalized) {
+        markScreenSaved(normalized);
+      }
+
       showMsg('success', `Version v${versionNumber} restored to working draft`);
     } catch (err) {
       console.error('[Editor] handleRestoreVersion() — error:', err instanceof Error ? err.message : err);
       showMsg('error', err instanceof Error ? err.message : 'Restore failed');
     }
-  }, [selectedModule, loadScreen, showMsg]);
+  }, [getPersistableScreen, loadScreen, markScreenSaved, selectedModule, showMsg]);
 
   const handlePublishVersion = useCallback(async (versionId: string, versionNumber: number) => {
     console.log('[Editor] handlePublishVersion() — publishing version:', versionId);
@@ -1100,7 +1097,26 @@ export function EditorPage() {
       return;
     }
 
+    const currentModule = selectedModule;
+    if (!currentModule) {
+      showMsg('error', 'No module selected to apply template to.');
+      return;
+    }
+
     try {
+      // FF4-MOD-011: Auto-create checkpoint before template apply
+      try {
+        const screen = getPersistableScreen();
+        await api.post<any>(`/api/sdui/${currentModule}`, { screen });
+        await api.post<any>(`/api/modules/${currentModule}/checkpoints`, {
+          change_summary: 'Auto-checkpoint before template apply',
+        });
+        console.log('[Editor] handleApplyTemplate() — auto-checkpoint created before template apply');
+      } catch (checkpointErr) {
+        // Non-blocking: if checkpoint creation fails, continue with template apply
+        console.warn('[Editor] handleApplyTemplate() — checkpoint creation failed, continuing:', checkpointErr);
+      }
+
       const detail = await api.get<TemplateDetail>(`/api/templates/${templateId}`);
       console.log(`[Editor] handleApplyTemplate() — fetched template: ${detail.name}`);
       const normalized = normalizeScreenData(detail.screen_json);
@@ -1117,7 +1133,7 @@ export function EditorPage() {
       showMsg('error', err instanceof Error ? err.message : 'Failed to load template');
     }
     setShowLoadTemplate(false);
-  }, [applyScreen, confirmDestructiveEditorAction, showMsg]);
+  }, [applyScreen, confirmDestructiveEditorAction, getPersistableScreen, selectedModule, showMsg]);
 
   const closeImportJsonModal = useCallback(() => {
     setShowImportJson(false);
@@ -1386,7 +1402,7 @@ export function EditorPage() {
           </button>
           <button onClick={() => setShowAppPreview(true)}
             className="flex items-center gap-1 px-2 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors">
-            <Smartphone size={11} /> Preview App
+            <Eye size={11} /> Preview in Web Admin
           </button>
 
           <div className="w-px h-4 bg-gray-200 mx-0.5" />
@@ -1399,10 +1415,7 @@ export function EditorPage() {
             className="flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors disabled:opacity-50">
             <Save size={11} /> {saving ? 'Saving...' : 'Save'}
           </button>
-          <button data-testid="btn-push-live" onClick={handlePushLive} disabled={pushing || !canModifySelectedModule}
-            className="flex items-center gap-1 px-3 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors disabled:opacity-50">
-            <Rocket size={11} /> {pushing ? 'Pushing...' : 'Push Live'}
-          </button>
+
         </div>
       </div>
 

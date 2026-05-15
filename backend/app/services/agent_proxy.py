@@ -709,6 +709,14 @@ def _get_tool_definitions() -> list[dict]:
         {
             "type": "function",
             "function": {
+                "name": "read_all_calendar",
+                "description": "Get all calendar events for the user across all dates.",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "create_event",
                 "description": "Create a new calendar event",
                 "parameters": {
@@ -723,6 +731,48 @@ def _get_tool_definitions() -> list[dict]:
                     },
                     "required": ["title", "start_time", "end_time"],
                 },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "update_event",
+                "description": "Update an existing calendar event. Only pass fields you want to change.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "event_id": {"type": "string"},
+                        "title": {"type": "string"},
+                        "start_time": {"type": "string", "format": "date-time"},
+                        "end_time": {"type": "string", "format": "date-time"},
+                        "description": {"type": "string"},
+                        "color": {"type": "string"},
+                        "location": {"type": "string"},
+                    },
+                    "required": ["event_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "delete_event",
+                "description": "Delete a single calendar event by ID.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "event_id": {"type": "string"},
+                    },
+                    "required": ["event_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "delete_all_events",
+                "description": "Delete ALL calendar events for the user in one call.",
+                "parameters": {"type": "object", "properties": {}},
             },
         },
         {
@@ -759,6 +809,19 @@ def _get_tool_definitions() -> list[dict]:
         {
             "type": "function",
             "function": {
+                "name": "get_form_data",
+                "description": "Get submitted form data. Leave form_id empty to get all forms.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "form_id": {"type": "string", "description": "Optional form ID to filter by"},
+                    },
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "get_chat_history",
                 "description": "Get recent chat messages",
                 "parameters": {
@@ -772,13 +835,27 @@ def _get_tool_definitions() -> list[dict]:
         {
             "type": "function",
             "function": {
+                "name": "send_chat_message",
+                "description": "Send a chat message to the user that appears in their chat tab.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "content": {"type": "string", "description": "The message content to send"},
+                    },
+                    "required": ["content"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "set_screen",
                 "description": (
                     "Set the Server-Driven UI screen for any app tab. "
                     "The frontend re-renders instantly via WebSocket. "
                     "Use the row-first contract: screen.rows[] -> row.cells[] -> cell.content. "
                     "Every cell.content MUST include a 'type' field — typeless content renders as a red 'Invalid component' box on the phone. "
-                    "Valid V2 component types (PascalCase): Text, Markdown, Button, Image, Icon, Container, "
+                    "Valid V2 component types (PascalCase): Text, Empty, Button, Image, Icon, Container, "
                     "CalendarModule, ChatModule, NotesModule, InputBar, Badge, Stat, List, Alert, "
                     "Todo, TodoModule, RichText, RichTextRenderer, ArticleCard, ArticleCardModule. "
                     "Stored payloads may omit metadata like schema_version, module_id, and title. "
@@ -1146,6 +1223,35 @@ def _get_tool_definitions() -> list[dict]:
         {
             "type": "function",
             "function": {
+                "name": "get_app",
+                "description": "Get detailed info for a specific app by ID.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_id": {"type": "string", "description": "The app UUID"},
+                    },
+                    "required": ["app_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "create_app",
+                "description": "Create a new app with the specified name.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "The app name"},
+                        "icon": {"type": "string", "description": "Optional emoji icon for the app"},
+                    },
+                    "required": ["name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "publish_app",
                 "description": "Publish an app version to all assigned mobile devices. If version_id is provided, publishes that specific version. Otherwise creates a checkpoint from the working draft and publishes it.",
                 "parameters": {
@@ -1237,6 +1343,20 @@ def _get_tool_definitions() -> list[dict]:
         {
             "type": "function",
             "function": {
+                "name": "exit_preview",
+                "description": "Exit preview mode for a preview session.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "The preview session UUID to exit"},
+                    },
+                    "required": ["session_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "start_device_preview",
                 "description": "Start a preview session on a specific mobile device. Creates a mobile device preview and marks the device as in preview mode.",
                 "parameters": {
@@ -1254,6 +1374,20 @@ def _get_tool_definitions() -> list[dict]:
             "function": {
                 "name": "get_device_status",
                 "description": "Get detailed status for a device including app version, preview session, and connection info.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "device_id": {"type": "string", "description": "The device UUID"},
+                    },
+                    "required": ["device_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "exit_device_preview",
+                "description": "Exit preview mode on a device and return it to its live version.",
                 "parameters": {
                     "type": "object",
                     "properties": {

@@ -14,11 +14,11 @@ This directory is the persistent, reusable source-of-truth product spec for Feat
 
 | Metric | Value |
 |--------|-------|
-| Total REQ-IDs | 124 |
-| Must-have | 101 |
-| Should | 14 |
-| Could | 5 |
-| Deferred | 4 |
+| Total REQ-IDs | 160 |
+| Must-have | ~139 |
+| Should | ~18 |
+| Could | 1 |
+| Deferred | 2 |
 | Implementation Slices | 10 |
 | Source Documents | 5+ |
 
@@ -46,3 +46,4 @@ This directory is the persistent, reusable source-of-truth product spec for Feat
 | FF4-SLICE-TEMPLATES | 6 | 8 | BACKEND, COMPONENTS, VERSIONING |
 | FF4-SLICE-WORKFLOWS | 2 | 9 | BACKEND |
 | FF4-SLICE-MCP-QA | 11 | 10 | BACKEND |
+| **Total** | **160** | | |

@@ -13,12 +13,14 @@ from sqlalchemy import select
 
 from app.mcp.tools import (
     approve_draft,
+    create_app as tools_create_app,
     create_event,
     create_checkpoint as tools_create_checkpoint,
     create_template_checkpoint as tools_create_template_checkpoint,
     delete_all_events,
     delete_event,
     delete_screen,
+    exit_device_preview as tools_exit_device_preview,
     exit_preview,
     get_app,
     get_chat_history,
@@ -690,6 +692,17 @@ async def helm_list_apps() -> dict:
 
 
 @mcp.tool()
+async def helm_create_app(name: str, icon: str = "") -> dict:
+    """Create a new app.
+
+    Args:
+        name: The app name.
+        icon: Optional emoji icon for the app.
+    """
+    return await tools_create_app(get_current_user_id(), name, icon or None)
+
+
+@mcp.tool()
 async def helm_get_app(app_id: str) -> dict:
     """Get detailed info for a specific app by ID.
 
@@ -811,6 +824,16 @@ async def helm_start_device_preview(app_id: str, device_id: str) -> dict:
         device_id: The device UUID to preview on.
     """
     return await tools_start_device_preview(get_current_user_id(), app_id, device_id)
+
+
+@mcp.tool()
+async def helm_exit_device_preview(device_id: str) -> dict:
+    """Exit preview mode on a device and return it to its live version.
+
+    Args:
+        device_id: The device UUID to exit preview on.
+    """
+    return await tools_exit_device_preview(get_current_user_id(), device_id)
 
 
 @mcp.tool()

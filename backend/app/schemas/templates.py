@@ -38,3 +38,5 @@ class TemplateDetailOut(TemplateOut):
 
 class ApplyTemplateRequest(BaseModel):
     module_id: str
+    version_id: str | None = None
+    auto_checkpoint: bool = True

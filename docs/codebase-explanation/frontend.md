@@ -1,6 +1,6 @@
 # Frontend — React Native (Expo) Mobile App + Web Admin
 
-> Last updated: 2026-05-15 (FF4 Reassessment: cell width engine, row context menu, version diff UI, calendar mobile, Empty container SDUI props)
+> Last updated: 2026-05-15 (FF4 Reassessment follow-up: Module Editor autosave/auto-checkpoint, App Editor phone preview/module versioning/publish expansion, Image simplification)
 
 ## Tier 1: TLDR
 
@@ -500,7 +500,7 @@ web/src/
 ├── pages/
 │   ├── LoginPage.tsx     → Auth against /auth/login
 │   ├── AppEditorPage.tsx → NEW Session 11: Multi-app management; 3-column layout with sidebar + iPhone mockup center + right panel
-│   ├── EditorPage.tsx    → Custom SDUI editor; ModulesTree sidebar using SDUIModule interface; draft save/push-live; session logs for debugging
+│   ├── EditorPage.tsx    → Custom SDUI editor; ModulesTree sidebar using SDUIModule interface; autosave (500ms debounce), checkpoints, version history; session logs for debugging
 │   ├── TemplatesPage.tsx → SDUI template CRUD + import/export + preview (Session 9)
 │   ├── WorkflowsPage.tsx → React Flow visual workflow builder with node inspector (Session 9)
 │   ├── VariablesPage.tsx → Custom variable management with React Hook Form + Zod (Session 10)
@@ -556,7 +556,9 @@ The editor page (`/editor`) is a custom React + Zustand SDUI editor built from `
 
 **Editing flow:**
 - Device preview supports presets, rotation, and custom width/height values with an explicit Apply action; the toolbar and status bar read actual `deviceWidth`/`deviceHeight` from the Zustand store
-- **Top bar overhaul (FF4):** Replaced `Draft v1 | Approve | Reject` with document-style autosave/checkpoints/version history: `[Module: {name} ▼] Saved {time} [Create Checkpoint] [Preview in Web Admin] [Version History]`
+- **Top bar overhaul (FF4):** Replaced `Draft v1 | Approve | Reject` with document-style versioning: `[Module: {name} ▼] Saved {time} [Checkpoint] [History] [Preview]` + device picker + Save button. "Push Live" button removed — publishing is now done via Checkpoint → Version History → Publish Version.
+- **Autosave (500ms debounce):** Working drafts are automatically saved 500ms after the last edit, via debounced `useEffect` on `hasUnsavedChanges`. Manual save temporarily suppresses autosave to prevent race conditions.
+- **Auto-checkpoint before destructive actions:** Before applying a template or restoring a version, the editor automatically creates a checkpoint of the current working draft (non-blocking — continues even if checkpoint creation fails).
 - **Versioning toolbar:** Creates checkpoints (snapshots) from the working draft. Preview before publishing. Full version history with restore-to-draft capability. See `module_versions` API for version CRUD.
 - The canvas provides component previews, add-row buttons, row drag handles, cell width resize handles, and direct row-height drag handles
 - Multi-step row dragging uses a 50px movement threshold and 300ms debounce to prevent overshoot; row drag handles moved to the LEFT of the row boundary
@@ -564,20 +566,27 @@ The editor page (`/editor`) is a custom React + Zustand SDUI editor built from `
 - **Row system (FF4):** `PropertyInspector` row properties simplified — no padding/gap/background controls. Cell widths are percentage-based with auto/fixed toggle. Pre-flight validation blocks invalid cell configurations. Minimum width enforced (80px).
 - `PropertyInspector` edits row height, cell count, cell widths, horizontal scrollability, and component props/actions
 - New actions limited to supported authorable set (`navigate`, `server_action`, `open_url`, `go_back`, `send_to_agent`, `dismiss`, `copy_text`)
-- Save stores a working draft; Create Checkpoint creates a version; Publish Version goes live
+- Save stores a working draft (also autosaved 500ms after changes); Create Checkpoint creates a version; Publish Version goes live
 - Delete Screen only enabled when module has a persisted live screen or pending draft
 
 ### App Editor (`/app-editor`)
 
 **NEW in Session 11:** Multi-app management page with 3-column layout.
 
-- **Left sidebar:** Bottom bar configuration with drag-and-drop slot management (5-slot cap)
-- **Center:** iPhone mockup preview showing bottom bar layout
-- **Right panel:** Launchpad section (modules not in bottom bar) + app properties (name, icon, dark mode)
-- **State:** `useAppEditorStore` — `App` type with id, user_id, name, icon, splash, theme, design_tokens, dark_mode, default_launch_module_instance_id, bottom_bar_config, launchpad_config
-- **Preview:** `usePreviewStore` with `startPreview()` launching browser-based iframe preview of app configuration
-- **Versioning (FF4):** Top bar shows `[App: {name} ▼] Saved {time} Live: {live version} [Preview ▼] [Publish to Mobile] [Version History]`. Preview dropdown: "Preview in Web Admin" | "Preview on Device...". Publish confirmation modal with validation results and device status.
-- **API calls:** `getApps()`, `createApp()`, `updateApp()`, `deleteApp()`, `updateAppBottomBar()` via `/api/apps` endpoints. Versioning endpoints via `/api/apps/{id}/versions`, `/api/apps/{id}/publish`.
+- **Left sidebar:** Bottom bar configuration with drag-and-drop slot management (5-slot cap) + **module version resolution** per module (radio: "Use newest" / "Use specific" with version dropdown)
+- **Center:** iPhone mockup preview showing **Launchpad grid** (4-column icon grid for modules not in bottom bar) + **bottom bar** with icons. Tapping a module in the phone preview selects it for properties.
+- **Right panel:** Launchpad section (modules not in bottom bar) with per-module **version resolution**, **per-module icon editing** (inline IconPicker, shown on hover), archived version warnings, + app properties (name, icon picker, dark mode toggle)
+- **State:** `useAppEditorStore` — `App` type with id, user_id, name, icon, splash, theme, design_tokens, dark_mode, default_launch_module_instance_id, bottom_bar_config, launchpad_config, module_icons (per-module icon overrides)
+- **Autosave (FF4-APP-006):** Working draft autosaved 500ms after last change, with status indicator (`Saving...` / `Saved HH:MM` / `Save failed`)
+- **Module version resolution (FF4-APP-007/008/009):** Each module in bottom bar and launchpad gets a version policy — "Use newest" (auto-follows the latest version) or "Use specific" (pinned to a specific version). Policies are saved with app draft and resolved at publish time via `resolve_module_references()`.
+- **Per-module icon editing (FF4-APP-001/013):** Hover over any module icon in Launchpad to show an edit button. Opens `IconPicker` inline for module-specific icon overrides. Overrides are persisted in `app.module_icons`.
+- **Expanded publish modal (FF4-APP-011/017, VER-006/007):** Shows: app info summary, all module version statuses (pass/warn/error with version labels), per-module validation results, device update status (total/updated/pending counts), final confirmation before publishing. Creates a checkpoint → publishes the version → broadcasts `app_version_published` WebSocket event to all assigned devices.
+- **Archived version detection (FF4-APP-022):** When a module's pinned version has status `archived`, a warning banner appears on the module card: "This app references an archived module version. Choose a different version or restore the archived version."
+- **Restore-to-draft (FF4-APP-026):** Each version in the history modal has a "Restore" button that restores the version to the working draft and reloads the app config.
+- **Version comparison:** Version History modal supports "Compare" mode (when ≥2 versions exist) — select two versions A and B for side-by-side diff.
+- **Preview:** `usePreviewStore` with `startPreview()` launching browser-based iframe preview of app configuration. Preview dropdown: "Preview in Web Admin" | "Preview on Device...".
+- **Top bar:** `[App: {name} ▼] [Saving.../Saved HH:MM/Save failed] [Live: v{N} — {name}] [Preview ▼] [Publish] [History icon] [Save]`
+- **API calls:** `getApps()`, `createApp()`, `updateApp()`, `deleteApp()`, `updateAppBottomBar()` via `/api/apps` endpoints. Versioning endpoints via `/api/apps/{id}/versions`, `/api/apps/{id}/publish`. Module instance endpoints via `/api/module-instances`.
 
 ---
 
@@ -624,8 +633,8 @@ App Editor top bar: `[App: {name} ▼] Saved {time} Live: {live version} [Previe
 ### Component Changes
 - **Text** merged with old **Markdown** — `SDUIText` now uses `react-native-markdown-display` and supports alignment. Old `SDUIMarkdown` removed.
 - **TextInput** removed — replaced by `InputBar` for input needs.
-- **Image** simplified — only `src`, `fitMode` (fitWidth/fitHeight), and `action` props.
-- **Icon** fixed — fills cell, icon picker popup enhanced.
+- **Image** simplified — only `src` and `fitMode` (fitWidth/fitHeight). `action`, `alt`, `width`, `height`, `aspectRatio`, `borderRadius`, `onPress`, and `placeholder` props removed per FF4-IMG-002. Image fills its cell with no interactive behavior.
+- **Icon** fixed — fills cell, icon picker popup enhanced. Used for per-module icon editing in App Editor.
 - **Button** — fills entire cell; icon mode renders centered icon.
 - **Empty Container** — simplified as vertical row; no gap/padding/background.
 - **Calendar** — 5 variants (month/week/day/eventList/compact), date navigation, unified event model.

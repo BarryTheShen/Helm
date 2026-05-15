@@ -31,6 +31,8 @@ export interface App {
   default_launch_module_instance_id: string | null;
   bottom_bar_config: BottomBarSlot[];
   launchpad_config: ModuleInstance[];
+  /** Per-module icon overrides keyed by module_instance_id (FF4-APP-001/013) */
+  module_icons?: Record<string, string>;
   created_at: string;
   updated_at: string;
 }
