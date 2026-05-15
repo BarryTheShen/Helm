@@ -331,6 +331,26 @@ For FF sessions, `helm-session-init` initializes these additional artifacts in `
 | `qa-plan.md` | Per-requirement QA coverage classification (automated-test, manual-flow-test, review-only, not-covered, or deferred) with concrete checks per REQ-ID |
 | `product-completeness-matrix.md` | REQ-ID → PASS/FAIL/PARTIAL/NOT_TESTED verdict (primary reviewer output) |
 | `coverage-gate.md` | Summary gate: must-have requirements must all be PASS before shipping |
+| `slices/` | Per-slice claim files. One `<SLICE-ID>.md` per implementation slice, containing ownership, status, evidence, and blockers |
+
+The full session artifact tree for FF/product-spec work:
+
+```
+.helm-sessions/current/
+├── source-index.md
+├── requirements-ledger.md
+├── requirements-audit.md
+├── implementation-slices.md
+├── qa-plan.md
+├── product-completeness-matrix.md
+├── coverage-gate.md
+└── slices/
+    ├── <SLICE-ID>.md
+    ├── <SLICE-ID>.md
+    └── ...
+```
+
+`slices/<SLICE-ID>.md` files are the per-slice claim files that individual implementation agents claim and update. See the Slice File Schema section below.
 
 ### Workflow Extension
 
@@ -346,17 +366,17 @@ Each step:
 
 1. **Session init** — `helm-session-init` archives stale sessions and initializes all FF artifacts (including stubs for source-index, ledger, audit, slices, qa-plan, matrix, coverage-gate).
 
-2. **Requirements auditor** — `helm-requirements-auditor` reads **full source documents** (never summaries), atomizes every requirement into the ledger, audits for gaps, and produces implementation slices. Must return APPROVED before planning begins.
+2. **Requirements auditor** — `helm-requirements-auditor` reads **full source documents** (never summaries), atomizes every requirement into the ledger, audits for gaps, produces implementation slices, and creates per-slice claim files in `slices/<SLICE-ID>.md`. Must return APPROVED before planning begins. APPROVED requires all `slices/<SLICE-ID>.md` files to exist for every slice in `implementation-slices.md`.
 
 3. **Plan (REQ-ID referenced)** — Planner references REQ-IDs, not paraphrases. Lists included and excluded REQ-IDs explicitly. Does not proceed without APPROVED ledger.
 
 4. **Plan critic (ledger-based)** — Critic validates the plan against the ledger. Rejects plans that paraphrase requirements or omit REQ-IDs.
 
-5. **Implementation (slice-claimed)** — Each implementation agent claims **one slice** from `implementation-slices.md` and implements only those REQ-IDs. Updates evidence per REQ-ID. No broad "all FF is fixed" claims.
+5. **Implementation (slice-claimed)** — Each implementation agent claims **exactly one slice** by writing to its corresponding `slices/<SLICE-ID>.md` file (updating status, owner, claimed-at). Implements only those REQ-IDs. Updates evidence per REQ-ID in the slice file and ledger. No broad "all FF is fixed" claims.
 
 6. **Requirement-derived QA** — Tester classifies every in-scope must-have REQ-ID by QA coverage mode (automated-test, manual-flow-test, review-only, not-covered, or deferred). Produces `qa-plan.md` with concrete checks per REQ-ID. Passing existing `qa/` scripts is not sufficient if must-have requirements are uncovered.
 
-7. **Product completeness review** — Reviewer produces `product-completeness-matrix.md` (PASS/FAIL/PARTIAL/NOT_TESTED per REQ-ID) and `coverage-gate.md`. Product completeness is the **primary** review concern — code quality is secondary for FF work.
+7. **Product completeness review** — Reviewer inspects BOTH `requirements-ledger.md` AND all `slices/<SLICE-ID>.md` files. Produces `product-completeness-matrix.md` (PASS/FAIL/PARTIAL/NOT_TESTED per REQ-ID) and `coverage-gate.md` broken down by slice AND by REQ-ID. Product completeness is the **primary** review concern — code quality is secondary for FF work. A slice cannot be marked `verified` unless every included must-have REQ-ID has implementation evidence, QA evidence, or explicit deferral. The reviewer updates the **Reviewer verdict** and **Remaining blockers** fields in each slice file.
 
 8. **Coverage gate** — Coverage gate must be OPEN before shipping. CLOSED gate = cannot ship. Coverage gate is CLOSED when must-have REQ-IDs are `not-covered` without explicit deferral reason.
 
@@ -390,7 +410,39 @@ The auditor groups requirements into **domain-cohesive slices** — groups of re
 - States dependencies on other slices (if any)
 - Is ordered for implementation
 
-Each implementation agent claims **one slice** and implements only those REQ-IDs. This prevents the "I fixed all FF" anti-pattern where an agent claims completion but only addressed a subset. After a slice is implemented, the agent updates evidence in the ledger (linking to files, commits, test names).
+Each implementation agent claims **one slice** and implements only those REQ-IDs. This prevents the "I fixed all FF" anti-pattern where an agent claims completion but only addressed a subset. After a slice is implemented, the agent updates evidence in the ledger and the corresponding slice file (linking to files, commits, test names).
+
+### Slice File Schema
+
+Each `.helm-sessions/current/slices/<SLICE-ID>.md` file follows this schema and is the authoritative per-slice claim document:
+
+```
+# Slice: <SLICE-ID>
+
+- **Slice ID:** <SLICE-ID>
+- **Status:** unclaimed | claimed | in-progress | implemented | verified | blocked
+- **Owner agent:** <agent-name or empty>
+- **Claimed at:** <timestamp or empty>
+- **Included REQ-IDs:** <list>
+- **Explicitly excluded REQ-IDs:** <list or "none">
+- **Source sections:** <references to source docs>
+- **Dependencies:** <list of other SLICE-IDs or "none">
+- **In-scope implementation notes:** <guidance>
+- **Out-of-scope notes:** <boundary>
+- **Acceptance checks:** <checklist>
+- **QA coverage classification/checks:** <per REQ-ID>
+- **Implementation evidence:** <links to commits, files, test names>
+- **QA evidence:** <test output, manual test results>
+- **Reviewer verdict:** <empty until reviewed>
+- **Remaining blockers:** <list or "none">
+```
+
+**Lifecycle:**
+1. **Created** by `helm-requirements-auditor` with status `unclaimed`, REQ-IDs populated, evidence fields empty.
+2. **Claimed** by implementation agent (e.g., `helm-build`) with status `claimed`, owner set, timestamp set.
+3. **Implemented** by agent updating status to `implemented` and filling in implementation evidence.
+4. **Verified** by `helm-reviewer` after inspecting evidence; updates **Reviewer verdict** field.
+5. **Blocked** if slice is too large or has unresolvable issues — marks `blocked` with blockers documented.
 
 ### Coverage Gate
 
@@ -420,3 +472,14 @@ These practices are not new — they are established industry techniques applied
 - **Playwright best practices:** Tests use resilient user-facing locators (`getByRole`, `getByLabel`, `getByText`), codegen for fast authoring, and trace viewer for failure diagnosis. Avoid fragile CSS/XPath selectors.
 
 - **Reality of "smart QA":** There is no magic one-button QA solution. "Smart QA" is a layered system: structural discovery (`discover.cjs`) + deterministic E2E tests + BDD scenario checks + manual test scripts + traceability review. Each layer catches different failure modes; no single layer is sufficient.
+
+### Persistent Product Spec Snapshot
+
+A persistent, reusable product spec snapshot is stored at `docs/product/feature-feedback/ff4/`:
+
+- **Relationship to session artifacts:**
+  - `.helm-sessions/current/` is the active working copy for the current session.
+  - `docs/product/feature-feedback/ff4/` is the canonical product spec snapshot.
+  - Session artifacts (ledger, slices, qa-plan, etc.) may be regenerated from this snapshot at the start of each FF4 session.
+  - After a session completes, improvements to the product spec should be merged back here.
+- The auditor should check for an existing product spec snapshot before generating the ledger from scratch. If the snapshot exists and is up-to-date, the auditor should use it as the source of truth rather than re-reading all source documents.

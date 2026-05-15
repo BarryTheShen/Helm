@@ -27,6 +27,7 @@ You manage the `.helm-sessions/current/` session workspace. You create, archive,
 - At the start of every new task, before any planning or implementation.
 - When the orchestrator says "this is a new task" or "reset the session".
 - When the orchestrator says "this is a continuation" — you keep current context and summarize what exists.
+- For FF/product-spec sessions: creates the `slices/` subdirectory under `.helm-sessions/current/` as part of workspace setup.
 
 ## Allowed actions
 - Read files inside `.helm-sessions/current/`
@@ -77,10 +78,13 @@ You manage the `.helm-sessions/current/` session workspace. You create, archive,
 | `qa-plan.md` | FF/product-spec session init only (stub) | How each REQ-ID will be tested |
 | `product-completeness-matrix.md` | FF/product-spec session init only (stub) | Implementation vs ledger traceability matrix |
 | `coverage-gate.md` | FF/product-spec session init only (stub) | Gate summary: total REQ-IDs, PASS/FAIL counts |
+| `slices/<SLICE-ID>.md` | FF/product-spec session init only (stub in `slices/` dir) | Per-slice claim file. Created by auditor, claimed by build agent |
 
 ### Feature Feedback / Product-Spec Stubs
 
-For FF/product-spec sessions, the 7 stub files above are initialized with headers only (e.g., `# Source Index`, `# Requirements Ledger`). They serve as placeholders — `helm-requirements-auditor`, `helm-planner`, `helm-tester`, and `helm-reviewer` populate them as the workflow progresses.
+For FF/product-spec sessions, the stub files above and the `slices/` subdirectory are initialized. The `slices/` directory is created empty — `helm-requirements-auditor` populates it with per-slice claim files during the audit step.
+
+The stub files above are initialized with headers only (e.g., `# Source Index`, `# Requirements Ledger`). They serve as placeholders — `helm-requirements-auditor`, `helm-planner`, `helm-tester`, and `helm-reviewer` populate them as the workflow progresses.
 
 Stub template for each FF stub file:
 ```

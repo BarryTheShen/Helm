@@ -160,7 +160,7 @@ implementation → tester live/e2e check → UI reviewer visual/exhaustive sweep
 - **One change, one concern.** Do not bundle unrelated fixes.
 - When delegating, give the subagent: the task, relevant context, and **artifact paths** — not huge pasted context.
 - After a subagent returns, verify the result before moving to the next step.
-- If a subagent returns questions, present them to Barry — do not fabricate answers.
+- If a subagent returns questions, first decide whether they are true blockers (matching the 7 ask-Barry categories). Non-blocking questions should be resolved with reasonable defaults. Only present questions to Barry if they match valid blocker categories. Otherwise resolve and continue.
 
 ## Blind Review Handoff Rules
 
@@ -312,7 +312,7 @@ If Pushed is no, explain why. Invoke helm-git after passing coverage/review gate
 
 ## Escalation to Barry
 
-- If a subagent returns questions, present them to Barry.
+- If a subagent returns questions, first evaluate whether they match the 7 ask-Barry categories (see Autonomy section). Resolve non-blocking questions with reasonable defaults — only escalate true blockers.
 - If the task is genuinely ambiguous, ask Barry for clarification.
 - Do NOT fabricate answers to subagent questions.
 

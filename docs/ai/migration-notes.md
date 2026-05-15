@@ -1,5 +1,45 @@
 # Migration Notes
 
+## 2026-05-15: Add Materialized Requirement Slices
+
+### What Changed
+
+Implements materialized per-slice claim files for the Feature Feedback workflow, creates a persistent FF4 product spec snapshot, and cleans up policy consistency after commit 3f91722:
+
+**Per-slice claim files:** Added `slices/<SLICE-ID>.md` files as materialized, claimable artifacts in the FF session workspace. Each slice file contains ownership, status, REQ-IDs, evidence, and reviewer verdict. This replaces the previous model where slices existed only as entries in `implementation-slices.md`.
+
+- Added `slices/` directory to the FF session artifact tree in `docs/ai/workflows.md`.
+- Added Slice File Schema section to `docs/ai/workflows.md` defining all 16 fields per slice file.
+- Updated workflow extension steps 2, 5, 7 to reference slice files for auditor creation, agent claiming, and reviewer inspection.
+- Updated `docs/ai/agents.md` with slice file creation responsibility for auditor, slice claiming for build.
+- Updated `.opencode/agents/helm-session-init.md` — creates `slices/` subdirectory for FF sessions.
+- Updated `.opencode/agents/helm-requirements-auditor.md` — must create `slices/` directory and per-slice `.md` files; APPROVED requires all slice files to exist.
+- Updated `.opencode/agents/helm-build.md` — must claim EXACTLY ONE slice file, update slice file evidence and status after implementing, mark blocked and report if slice is too broad.
+- Updated `.opencode/agents/helm-reviewer.md` — must inspect both ledger AND slice files; updates reviewer verdict and blockers per slice; slice cannot be verified without evidence for all must-have REQ-IDs.
+
+**Persistent FF4 product spec snapshot:** Created `docs/product/feature-feedback/ff4/` with template files for source-index, requirements-ledger, requirements-audit, implementation-slices, qa-plan, traceability, and per-slice placeholder files (FF4-SLICE-APP-EDITOR, FF4-SLICE-MODULE-EDITOR). Documented relationship between persistent snapshot and session artifacts.
+
+- Created `docs/product/feature-feedback/ff4/README.md` with status and file descriptions.
+- Created template files with headers and empty table structures ready for auditor population.
+- Created slice placeholder files using the standard slice schema with `unclaimed` status.
+- Added `.gitkeep` to the slices subdirectory.
+- Documented persistent snapshot in `docs/ai/workflows.md` and `docs/ai/agents.md`.
+
+**Policy consistency fixes (commit 3f91722 follow-up):**
+- Fixed orchestrator escalation wording: subagent questions are filtered through the 7 ask-Barry categories, not blindly presented.
+- Added no-op exception to helm-git: clean working tree = report no-op, not create empty commit.
+- Clarified helm-tester edit policy: may write QA artifacts, may not edit application source code.
+
+### Why
+
+A single `requirements-ledger.md` and `implementation-slices.md` were not enough for large FF work. Without materialized per-slice claim files, implementation agents had no structured way to claim ownership, track evidence per REQ-ID, or communicate blockers. The persistent product spec snapshot prevents redundant auditor work across sessions and provides a canonical source of truth independent of session artifacts. Policy fixes from the previous commit (3f91722) were needed to close gaps in orchestrator escalation, git no-op handling, and tester edit boundaries.
+
+### What was NOT changed
+
+- No app source files changed (backend, frontend, mobile, agent code untouched).
+- Existing frontmatter (model, mode, permission fields) preserved in all `.opencode/` files.
+- No secrets, API keys, or credentials added.
+
 ## 2026-05-15: Harden Unattended Workflow
 
 ### What Changed

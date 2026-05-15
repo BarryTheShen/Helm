@@ -40,7 +40,7 @@ The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/
 | `helm-session-init` | subagent | Session artifacts only | No | No | Session workspace lifecycle — archive, reset, initialize. For FF sessions, initializes additional artifact stubs (source-index, ledger, audit, slices, qa-plan, matrix, coverage-gate). | Edit app source, run tests, commit |
 | `helm-planner` | subagent | Session artifacts only | No | No | Produces plans, invokes plan-critic. For FF work, must invoke helm-requirements-auditor before planning; references REQ-IDs not paraphrases. | Edit app source, broadly explore codebase, run tests, spawn agents other than plan-critic |
 | `helm-plan-critic` | subagent | Session artifacts only | No | No | Targeted explorer + plan critic — verifies plan assumptions. For FF work, critiques against requirements-ledger.md; rejects plans without REQ-IDs. | Broad exploration (>8 files), edit source, run tests, spawn subagents (leaf node) |
-| `helm-build` | subagent | Yes (backend, frontend, mobile, config) | Yes | No | General implementation worker, routine fixes. For FF work, claims a slice from implementation-slices.md; updates evidence per REQ-ID. | Commit, edit docs/agent-prompts, blindly apply specialist suggestions |
+| `helm-build` | subagent | Yes (backend, frontend, mobile, config) | Yes | No | General implementation worker, routine fixes. For FF work, claims EXACTLY ONE slice from `slices/<SLICE-ID>.md`; implements only those REQ-IDs; updates evidence in the slice file and ledger. | Commit, edit docs/agent-prompts, blindly apply specialist suggestions |
 | `helm-backend` | subagent | Yes (backend/ only) | Yes | No | Backend implementation (FastAPI, models, schemas, services) | Edit frontend/mobile/docs, commit, add secrets |
 | `helm-frontend` | subagent | Yes (mobile/, web/ only) | Yes | No | Frontend implementation (React Native, web admin) | Edit backend/docs, commit, add secrets |
 | `helm-protocol` | subagent | Default: No. Yes if explicitly asked | No | No | API/WS/MCP/SDUI contract alignment | Implement unrelated behavior, edit application logic |
@@ -102,9 +102,10 @@ Advisory specialists. Produce findings, do not fix by default.
 #### `helm-requirements-auditor`
 - **Purpose:** Read-oriented. Reads full source documents (never summaries), atomizes every individual requirement into the requirements ledger, audits for completeness gaps, and produces implementation slices.
 - **Model:** `opencode-go/deepseek-v4-pro` (Reasoning tier)
-- **Leaf node:** Cannot spawn subagents.
+- **Leaf node:** Cannot spawn subagents (but may create directories and files).
 - **Output:** APPROVED (ledger complete and internally consistent) or OBJECTIONS (specific gaps found). Must return APPROVED before the planner may proceed.
-- **For FF work:** Compiles `source-index.md`, `requirements-ledger.md`, `requirements-audit.md`, and `implementation-slices.md`. Does not write plans or implement code.
+- **For FF work:** Compiles `source-index.md`, `requirements-ledger.md`, `requirements-audit.md`, and `implementation-slices.md`. Also creates the `slices/` subdirectory and per-slice claim files (`slices/<SLICE-ID>.md`) for every slice in `implementation-slices.md`. Does not write plans or implement code.
+- **APPROVED requires ALL of:** `requirements-ledger.md` exists and is complete; `implementation-slices.md` exists and is complete; `slices/<SLICE-ID>.md` files exist for EVERY slice listed in `implementation-slices.md`; every must-have REQ-ID belongs to EXACTLY ONE slice, unless explicitly deferred.
 
 ### Handoff Model
 
@@ -122,10 +123,16 @@ Specialist agents (tester, reviewer, security, ui-reviewer) are **advisory by de
 1. Auditor compiles requirements ledger → must return APPROVED before proceeding
 2. Planner reads approved ledger → produces plan referencing REQ-IDs
 3. Critic validates plan against ledger → rejects paraphrased requirements without REQ-IDs
-4. Implementation agent claims one slice from `implementation-slices.md` → implements only those REQ-IDs
+4. Implementation agent claims one slice from `slices/<SLICE-ID>.md` → implements only those REQ-IDs
 5. Tester runs requirement-derived QA per QA mode column in ledger
 6. Reviewer produces product-completeness matrix and coverage gate → PRIMARY review gate
 7. Coverage gate must be OPEN before shipping — orchestrator delegates fixes or defers requirements if CLOSED
+
+A persistent, reusable product spec snapshot is stored at `docs/product/feature-feedback/ff4/`:
+- Session artifacts (`.helm-sessions/current/`) are the active working copy.
+- The persistent snapshot is the canonical product spec source of truth.
+- Session artifacts may be regenerated from the persistent snapshot.
+- The auditor should check for an existing product spec snapshot before generating the ledger from scratch.
 
 ### Depth Policy
 

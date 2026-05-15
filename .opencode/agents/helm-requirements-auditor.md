@@ -23,6 +23,7 @@ You are the requirements auditor. You read full source documents — Feature Fee
 - When the orchestrator needs to ensure all requirements are captured, audited, and sliced before planning begins.
 - For complex multi-layer features where requirements span backend, frontend, protocol, and testing.
 - Not needed for tiny single-file bug fixes or docs-only changes.
+- For FF/product-spec work: MUST create the `slices/` directory under `.helm-sessions/current/` and generate one `.md` slice file per implementation slice defined in `implementation-slices.md`.
 
 ## Allowed actions
 
@@ -47,6 +48,7 @@ You are the requirements auditor. You read full source documents — Feature Fee
 - Do NOT delegate to any other agent (you are a leaf node)
 - Do NOT make assumptions not supported by the source documents
 - Do NOT write to `.helm-sessions/current/current-plan.md`
+- Do NOT leave any slice in `implementation-slices.md` without a corresponding `slices/<SLICE-ID>.md` file
 
 ## Edit policy
 
@@ -166,11 +168,34 @@ Format:
 | Blueprint: Workflows | `docs/.../blueprint-workflows.md` | REQ-BP-001 .. REQ-BP-015 |
 ```
 
-### Step 6: Backfill Slice IDs
+### Step 6: Create per-slice claim files
+
+Create the `slices/` subdirectory under `.helm-sessions/current/` and generate one `.md` file per slice defined in `implementation-slices.md`. Each slice file must follow the schema defined in `docs/ai/workflows.md` (Slice File Schema section):
+
+- **Slice ID** — matches the slice ID from `implementation-slices.md`
+- **Status** — set to `unclaimed`
+- **Owner agent** — empty (set when claimed)
+- **Claimed at** — empty
+- **Included REQ-IDs** — list of all REQ-IDs assigned to this slice
+- **Explicitly excluded REQ-IDs** — list if any REQ-IDs were explicitly excluded from this slice
+- **Source sections** — references to source documents
+- **Dependencies** — from `implementation-slices.md`
+- **In-scope implementation notes** — guidance
+- **Out-of-scope notes** — boundary
+- **Acceptance checks** — checklist derived from acceptance criteria
+- **QA coverage classification/checks** — per REQ-ID (initial classification from QA mode column)
+- **Implementation evidence** — empty (populated by build agent)
+- **QA evidence** — empty (populated by tester/reviewer)
+- **Reviewer verdict** — empty (populated by reviewer)
+- **Remaining blockers** — empty
+
+Slice sizing rule: If a slice is too large for one agent pass (too many REQ-IDs, too many source sections, or spans unrelated domains), split the slice into smaller slices before proceeding. A single slice should be completable in one agent session.
+
+### Step 7: Backfill Slice IDs
 
 Update the `Slice ID` column in `requirements-ledger.md` with the slice IDs assigned in Step 4.
 
-### Step 7: Append discovered sources to context-index.md
+### Step 8: Append discovered sources to context-index.md
 
 Append any newly discovered document paths, source document references, or contextual findings to `.helm-sessions/current/context-index.md`.
 
@@ -195,6 +220,12 @@ The requirements auditor IS responsible for:
 
 ### If ledger is complete and audit has no unresolvable blockers:
 
+APPROVED requires ALL of:
+- `requirements-ledger.md` exists and is complete
+- `implementation-slices.md` exists and is complete
+- `slices/<SLICE-ID>.md` files exist for EVERY slice listed in `implementation-slices.md`
+- Every must-have REQ-ID belongs to EXACTLY ONE slice, unless explicitly deferred
+
 Return `STATUS: APPROVED` with a summary of counts:
 
 ```
@@ -203,6 +234,7 @@ Requirements captured: 42
 Source documents read: 3
 Audit findings: 2 INSUFFICIENT_AC (non-blocking — flagged for planner awareness)
 Slices defined: 4
+Slice files created: 4
 ```
 
 ### If audit found unresolved blockers:

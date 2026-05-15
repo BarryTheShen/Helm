@@ -102,9 +102,18 @@ Rules for verdicts:
 - **NOT TESTED** — No QA or manual evidence could be gathered. Must include a reason (e.g., "needs live environment", "deferred from this slice").
 - If no evidence exists for a REQ-ID at all, the verdict is FAIL or NOT TESTED — never silently pass.
 
+### Slice file inspection
+
+In addition to `requirements-ledger.md`, the reviewer MUST inspect all `slices/<SLICE-ID>.md` files:
+
+- Verify that every must-have REQ-ID included in the slice has implementation evidence (commit, file, test name) AND QA evidence (test pass, manual test result, or reviewer confirmation), OR explicit deferral with documented reason.
+- A slice CANNOT be marked `verified` unless ALL of the above conditions are met.
+- Update the **Reviewer verdict** and **Remaining blockers** fields in each slice file after review.
+- `coverage-gate.md` must report status broken down by slice AND by REQ-ID.
+
 ### Artifact: coverage-gate.md
 
-After completing the matrix, write `.helm-sessions/current/coverage-gate.md`:
+After completing the matrix and slice file inspection, write `.helm-sessions/current/coverage-gate.md`:
 
 ```markdown
 # Coverage Gate
@@ -141,6 +150,7 @@ Use the highest reasoning effort available. Think carefully before acting. Do no
 
 ## Escalation / handoff rules
 - If you find critical issues, flag them clearly for the orchestrator.
-- For FF/product-spec work, if the product completeness review reveals missing requirements or broken implementation, flag it with the specific REQ-ID.
+- For FF/product-spec work, if the product completeness review reveals missing requirements or broken implementation, flag it with the specific REQ-ID and the slice file it belongs to.
+- A slice with any must-have REQ-ID that lacks implementation or QA evidence must be marked with `verified: false` in the **Reviewer verdict** field.
 - Do NOT fix issues yourself — the orchestrator will delegate fixes to the appropriate implementation agent.
 - If you need more context to complete the review, ask the orchestrator.

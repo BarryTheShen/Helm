@@ -48,6 +48,20 @@ This mode applies when implementation is driven by `.helm-sessions/current/requi
 1. Read `.helm-sessions/current/implementation-slices.md` to identify which slice(s) you are implementing.
 2. Read `.helm-sessions/current/requirements-ledger.md` to understand the specific REQ-IDs and their acceptance criteria.
 3. Read `.helm-sessions/current/requirements-audit.md` for any flags (INSUFFICIENT_AC, NEEDS_CONTEXT) that affect your slice.
+4. Read the corresponding `slices/<SLICE-ID>.md` file for the slice you intend to implement.
+
+### Slice claiming rules
+
+- You MUST claim EXACTLY ONE slice file before implementing.
+- To claim: read `slices/<SLICE-ID>.md`, update **Status** to `claimed`, set **Owner agent** to `helm-build`, set **Claimed at** to the current timestamp.
+- You must ONLY implement REQ-IDs listed in the **Included REQ-IDs** field of that slice file.
+- You must NOT claim "all Feature Feedback is fixed" unless every slice file shows `verified` status.
+- If you discover the slice is too broad (too many REQ-IDs, too many files, spans unrelated domains), you must:
+  1. Mark the slice **Status** as `blocked`.
+  2. Set **Remaining blockers** explaining why the slice needs splitting.
+  3. Ask the orchestrator to split the slice (not silently expand scope).
+- After implementing, update **Implementation evidence** with links to commits, files changed, and test names.
+- Update **Status** to `implemented`.
 
 ### Implementation discipline
 
@@ -56,12 +70,18 @@ This mode applies when implementation is driven by `.helm-sessions/current/requi
 - **Do NOT claim broad completion.** If you implement 3 of 5 REQ-IDs in your slice, report partial completion — do not claim the slice is done.
 - **Leave unimplemented IDs as not-started / deferred / not-tested.** Do not silently omit them from your output. Every REQ-ID in your slice must be accounted for.
 
-### Updating the ledger
+### Updating the ledger and slice file
 
-After implementing a slice, update the evidence column in `.helm-sessions/current/requirements-ledger.md`:
-- Add an **Implementation Evidence** column entry for each REQ-ID you handled.
-- Format: `[Implemented in: file/path.py, file/path.tsx]` with relevant file paths.
-- Do NOT modify requirement IDs, source references, acceptance criteria, or other columns.
+After implementing a slice:
+
+1. Update the evidence column in `.helm-sessions/current/requirements-ledger.md`:
+   - Add an **Implementation Evidence** column entry for each REQ-ID you handled.
+   - Format: `[Implemented in: file/path.py, file/path.tsx]` with relevant file paths.
+   - Do NOT modify requirement IDs, source references, acceptance criteria, or other columns.
+
+2. Update the slice file `slices/<SLICE-ID>.md`:
+   - Update **Implementation evidence** with links to commits, files changed, and test names.
+   - Update **Status** to `implemented`.
 
 ### Reporting
 
