@@ -31,6 +31,18 @@ When `$ARGUMENTS` involves a bug driven by a Feature Feedback document or produc
    - The fix does not break any other acceptance criteria (run regression checks on related REQ-IDs).
 4. **Update the ledger** — Add a note in the QA/manual evidence column in `requirements-ledger.md` for the affected REQ-IDs indicating the bug was fixed and verified.
 
+## Completion Contract
+
+Final output MUST include:
+```
+Branch: <branch-name>
+Commit: <commit-hash or "none">
+Pushed: yes/no
+Remaining blockers: <list or "none">
+```
+
+A bug fix is not complete until committed and pushed (or explicitly blocked).
+
 ## Rules
 
 - Write the failing test FIRST. The failing test IS the reproduction.

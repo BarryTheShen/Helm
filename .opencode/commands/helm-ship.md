@@ -44,6 +44,18 @@ git commit -m "<type>: <summary>"
 git push -u origin <current-branch>
 ```
 
+## Completion Contract
+
+Final output MUST include:
+```
+Branch: <branch-name>
+Commit: <commit-hash or "none">
+Pushed: yes/no
+Remaining blockers: <list or "none">
+```
+
+A task is not complete until committed and pushed (or explicitly blocked). If Pushed is no, explain why.
+
 ## Rules
 
 - **Never** commit directly to `main`. Always work on a feature branch.

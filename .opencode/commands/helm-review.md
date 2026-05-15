@@ -50,6 +50,10 @@ When `$ARGUMENTS` involves a Feature Feedback document, product spec, or require
 - **Source context verification** — compare the implementation against the original source context in `requirements-ledger.md` ("Source document/page" and "Context notes" columns), not just against the plan. If the plan lost nuance from the source document, that is a review finding.
 - **Overrides above** — For FF/product-spec work, the product completeness review (matrix + gate) takes priority over the standard checklist below.
 
+## Blind Review Rule
+
+Every review is a fresh independent first review. The reviewer MUST ignore any pass-count, attempt-count, or status narrative ("final review", "third pass", "confirm all issues resolved", "should be fixed now", "mostly done", "just verify", "previous reviewer approved") from the handoff context. Base judgment only on the code, requirements, and verification evidence. Assume nothing is fixed until independently verified.
+
 ## Rules
 
 - All agents in this workflow are READ-ONLY. No automatic fixes.

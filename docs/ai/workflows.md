@@ -76,6 +76,8 @@ Conditional — run only what the task warrants:
 - **React components/hooks changed** — run React Doctor diagnostics (see verification.md)
 - **Feature-level change** — verify implementation against `requirements-checklist.md`
 
+**Blind review rule:** When delegating to helm-reviewer or helm-ui-reviewer, the orchestrator and subagents MUST NOT include leading/status-biased framing. Forbidden phrases: "final review", "third pass" / "second pass" / "Nth pass", "confirm all issues resolved", "should be fixed now", "mostly done", "just verify", "previous reviewer approved", or any phrase implying expected outcome or pass count. Allowed contents only: task description, requirements ledger, changed files list, verification evidence, acceptance criteria. The orchestrator may track pass count internally but must NOT reveal it to reviewer agents.
+
 For UI-visible changes, the standard QA flow is:
 1. `helm-tester` runs automated/live e2e checks.
 2. `helm-ui-reviewer` performs visual/UX review and exhaustive page sweep for substantial UI pages.
@@ -95,6 +97,20 @@ Only when behavior, API contracts, architecture, or commands have changed. Deleg
 ### 8. helm-git
 
 Delegate to `helm-git` (requires user approval via `ask`). `helm-git` is the canonical final stage — it handles branch safety, diff review, verification, commit, and push.
+
+**Completion contract:** A task is not complete until one of these is true:
+1. Changes are committed and pushed to the correct branch.
+2. No changes were needed and the no-op is explicitly reported.
+3. A valid blocker prevents completion (documented).
+
+The final response MUST include:
+```
+Branch: <branch-name>
+Commit: <commit-hash or "none">
+Pushed: yes/no
+Remaining blockers: <list or "none">
+```
+If Pushed is no, explain why.
 
 `/helm-ship` may remain as an optional shortcut command for when Barry already knows the work is ready, but the canonical pipeline documentation refers to `helm-git`.
 
@@ -118,6 +134,20 @@ When QA, live-test, or review finds an issue within the loop:
 - If verification reveals a small localized mistake, fix it once — do not stack blind patches.
 - If a fix does not work, revert that fix and try another root-cause-based approach.
 
+### Retry/Fix Loop Budget
+
+For review/QA failures inside scope:
+- Reproduce or inspect evidence → diagnose root cause → fix → verify → blind review again.
+- Do not stack blind patches — each fix must address root cause.
+- If an attempted fix fails, revert that fix and try a root-cause-based alternative.
+- **After 3 failed attempts on the same issue**, stop with **BLOCKED** status.
+- Produce a concise blocker report with:
+  - The REQ-ID or issue reference
+  - What was attempted (3 distinct approaches)
+  - Why each attempt failed
+  - What is needed to unblock
+- Do not silently abandon the issue.
+
 The failure handling is inside the loop. Reproduce → diagnose → fix → verify, then continue the loop from where it was interrupted.
 
 ## Agent Handoff Model
@@ -126,19 +156,23 @@ Specialist agents are advisory by default. They produce findings — the orchest
 
 ### Orchestrator Autonomy
 
-The orchestrator is autonomous by default. It does NOT stop to ask Barry routine questions:
+The orchestrator is autonomous by default and operates in **continue-until-complete** mode. It does NOT stop to ask Barry routine questions:
 
 - It decides which agent to delegate to next without asking.
 - It continues after subagents return without asking "should I continue?"
 - It runs verification automatically when needed.
+- If QA/review finds issues inside the requested scope, it keeps fixing automatically — it does not ask "should I continue fixing?"
 - It delegates to docs agent automatically when behavior/API/commands changed.
 - It delegates to git agent at the end automatically.
 
 The orchestrator only asks Barry when:
-- The requested behavior is genuinely ambiguous.
-- The change requires product/design judgment.
-- Subagents found destructive/risky actions (data loss, schema migration with data loss, auth changes).
-- Repo/docs directly contradict each other.
+1. Product ambiguity not resolved by source docs.
+2. Scope expansion beyond the requested task.
+3. Destructive or irreversible actions (data loss, schema migration with data loss, auth changes).
+4. Secrets, credentials, or private data not already configured.
+5. Paid/external service usage.
+6. Non-trivial branch/merge conflict.
+7. Repeated failure after documented retry budget (3 attempts).
 
 When asking is unavoidable, the orchestrator asks ONE compact question with a recommended default.
 
@@ -182,7 +216,14 @@ When asking is unavoidable, the orchestrator asks ONE compact question with a re
 
 ## QA Discovery System
 
-The `qa/` directory contains an automatic bug discovery and test suite built on Playwright. It is **early-stage** — backend tests are functional, e2e selectors have known staleness. Triage failures rather than blindly treating them as regressions.
+The `qa/` directory contains the repo's deterministic test and discovery suite built on Playwright. "QA" in this project refers to these concrete scripts and tests — not an autonomous judge or magic verification layer. It is **early-stage** — backend tests are functional, e2e selectors have known staleness. Triage failures rather than blindly treating them as regressions.
+
+**Important boundaries:**
+- `helm-tester` runs and interprets QA evidence — it does NOT decide product completeness.
+- `helm-reviewer` checks product completeness against requirements and QA evidence.
+- Existing QA scripts are structural/discovery layers — they catch what they were designed to catch, not all product requirements.
+- A task must not be considered complete just because existing QA scripts pass.
+- QA is NOT an autonomous sub-agent or magic product verification gate. It is deterministic scripts and tests that produce evidence.
 
 ### What It Does
 
@@ -287,7 +328,7 @@ For FF sessions, `helm-session-init` initializes these additional artifacts in `
 | `requirements-ledger.md` | Atomic table: every individual requirement as a row with full traceability |
 | `requirements-audit.md` | Flags MISSING, AMBIGUOUS, DUPLICATE, NEEDS_CONTEXT, INSUFFICIENT_AC requirements |
 | `implementation-slices.md` | Cohesive groups of REQ-IDs with dependency ordering |
-| `qa-plan.md` | Per-requirement test approach (automated, manual, review-only, or deferred) |
+| `qa-plan.md` | Per-requirement QA coverage classification (automated-test, manual-flow-test, review-only, not-covered, or deferred) with concrete checks per REQ-ID |
 | `product-completeness-matrix.md` | REQ-ID → PASS/FAIL/PARTIAL/NOT_TESTED verdict (primary reviewer output) |
 | `coverage-gate.md` | Summary gate: must-have requirements must all be PASS before shipping |
 
@@ -313,11 +354,11 @@ Each step:
 
 5. **Implementation (slice-claimed)** — Each implementation agent claims **one slice** from `implementation-slices.md` and implements only those REQ-IDs. Updates evidence per REQ-ID. No broad "all FF is fixed" claims.
 
-6. **Requirement-derived QA** — Tester runs QA per the QA mode column in the ledger (automated-test, manual-flow-test, review-only, or deferred). Produces `qa-plan.md`.
+6. **Requirement-derived QA** — Tester classifies every in-scope must-have REQ-ID by QA coverage mode (automated-test, manual-flow-test, review-only, not-covered, or deferred). Produces `qa-plan.md` with concrete checks per REQ-ID. Passing existing `qa/` scripts is not sufficient if must-have requirements are uncovered.
 
 7. **Product completeness review** — Reviewer produces `product-completeness-matrix.md` (PASS/FAIL/PARTIAL/NOT_TESTED per REQ-ID) and `coverage-gate.md`. Product completeness is the **primary** review concern — code quality is secondary for FF work.
 
-8. **Coverage gate** — Coverage gate must be OPEN before shipping. CLOSED gate = cannot ship.
+8. **Coverage gate** — Coverage gate must be OPEN before shipping. CLOSED gate = cannot ship. Coverage gate is CLOSED when must-have REQ-IDs are `not-covered` without explicit deferral reason.
 
 9. **Docs + Git** — Standard docs update and git stage.
 
@@ -335,7 +376,7 @@ The ledger is a markdown table with the following columns:
 | Type | `functional` / `UI` / `data` / `validation` / `workflow` / `QA` / `docs` / `architecture` |
 | Priority | `must` / `should` / `could` / `deferred` |
 | Acceptance criteria | Concrete pass/fail criteria in Given-When-Then or checklist form |
-| QA mode | `automated-test` / `manual-flow-test` / `review-only` / `deferred` |
+| QA mode | `automated-test` / `manual-flow-test` / `review-only` / `not-covered` / `deferred` |
 | Slice ID | Which implementation slice this requirement belongs to |
 
 The ledger is the authoritative requirements source for the entire FF session. All plans, tests, and reviews reference REQ-IDs from this table.

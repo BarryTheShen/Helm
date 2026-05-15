@@ -45,8 +45,8 @@ The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/
 | `helm-frontend` | subagent | Yes (mobile/, web/ only) | Yes | No | Frontend implementation (React Native, web admin) | Edit backend/docs, commit, add secrets |
 | `helm-protocol` | subagent | Default: No. Yes if explicitly asked | No | No | API/WS/MCP/SDUI contract alignment | Implement unrelated behavior, edit application logic |
 | `helm-agent-runtime` | subagent | Yes (agent/, backend/app/mcp/) | Yes | No | PydanticAI, MCP tools, agent proxy | Alter secrets, add paid providers, edit frontend |
-| `helm-tester` | subagent | Test files only (if explicitly asked) | Yes | No | Run tests, diagnose failures, run React Doctor diagnostics on React component issues, recommend fixes. For FF work, runs requirement-derived QA per QA mode column in ledger; produces qa-plan.md. | Fix application code, auto-fix loops, edit source |
-| `helm-reviewer` | subagent | No | No | No | Code quality, architecture review, feature-completeness verification against requirements-checklist. For FF work, product completeness review is primary; produces product-completeness-matrix.md and coverage-gate.md. | Edit files, fix issues, run tests, apply patches |
+| `helm-tester` | subagent | Test files only (if explicitly asked) | Yes | No | Run the repo's deterministic QA scripts (pytest, Playwright, discover.cjs, React Doctor), diagnose failures, classify root causes, recommend fixes. Does NOT decide product completeness — produces evidence only. For FF work, classifies every in-scope must-have REQ-ID by QA coverage mode; produces qa-plan.md with concrete checks. | Fix application code, auto-fix loops, edit source, decide product completeness |
+| `helm-reviewer` | subagent | No | No | No | Code quality, architecture review, feature-completeness verification against requirements-checklist. Checks product completeness against requirements and QA evidence. Does NOT run QA — uses evidence produced by helm-tester. For FF work, product completeness review is primary; produces product-completeness-matrix.md and coverage-gate.md. | Edit files, fix issues, run tests, apply patches, run QA |
 | `helm-ui-reviewer` | subagent | No | No | No | Visual/UX review, layout consistency, exhaustive page sweep. Runs for all UI-visible changes. For FF work, adds red-team questions based on original complaint context; verifies realistic user flows. | Edit files, run commands, fix UI issues |
 | `helm-docs` | subagent | Yes (docs/, README, AGENTS, CLAUDE) | No | No | Documentation maintenance | Edit app source, run app tests, commit |
 | `helm-security` | subagent | Default: No. Narrow fix if asked | No | No | Security audit, secrets detection | Add credentials, add paid providers, fix issues by default |
@@ -88,6 +88,11 @@ Implementation agents. Each owns its domain. See [workflows.md](workflows.md) fo
 
 #### `helm-tester` / `helm-reviewer` / `helm-ui-reviewer` / `helm-security`
 Advisory specialists. Produce findings, do not fix by default.
+
+##### `helm-tester`
+- **Purpose:** Run the repo's deterministic QA scripts (pytest, Playwright, discover.cjs, React Doctor), diagnose failures, classify root causes, recommend fixes. Does NOT decide product completeness — produces evidence only.
+- **Default:** Read-only. Runs tests, inspects output, reports findings. Does not fix application code.
+- **For FF work:** Classifies every in-scope must-have REQ-ID by QA coverage mode (automated-test, manual-flow-test, review-only, not-covered, deferred). Produces `qa-plan.md` with concrete checks per REQ-ID.
 
 ##### `helm-reviewer`
 - **Purpose:** Code quality and architecture review. Verifies implementation completeness against `requirements-checklist.md` — classifies each requirement as PASS, FAIL, PARTIAL, or NOT TESTED. Tests passing is not enough if product requirements are missing.

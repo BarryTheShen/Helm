@@ -1,5 +1,62 @@
 # Migration Notes
 
+## 2026-05-15: Harden Unattended Workflow
+
+### What Changed
+
+Implements 6 policy areas for reliable unattended task completion after commit 099be9f:
+
+**Policy Area 1 — QA Boundaries:** Clarified that "QA" refers to the repo's deterministic scripts/tests (`qa/src/discover.cjs`, Playwright, pytest), not an autonomous judge. `helm-tester` runs/interprets evidence but does NOT decide product completeness. `helm-reviewer` checks completeness against requirements and evidence. A task must not be considered complete just because existing QA scripts pass.
+
+- Updated `docs/ai/workflows.md` QA Discovery System section with boundary clarifications.
+- Updated `docs/ai/agents.md` helm-tester and helm-reviewer descriptions.
+- Updated `docs/ai/verification.md` Layered Smart QA section.
+- Updated `.opencode/agents/helm-tester.md` Purpose section.
+- Updated `.opencode/agents/helm-reviewer.md` Purpose section.
+
+**Policy Area 2 — Requirement-Derived QA Coverage:** Every in-scope must-have REQ-ID must have a QA coverage classification (`automated-test`, `manual-flow-test`, `review-only`, `not-covered`, or `deferred`). Added `not-covered` mode which gates CLOSED unless deferred. Tester produces `qa-plan.md` with concrete checks per REQ-ID.
+
+- Updated `docs/ai/workflows.md` FF section step 6 and QA mode table.
+- Updated `docs/ai/verification.md` Requirement-Derived QA table.
+- Updated `docs/ai/agents.md` helm-tester section.
+- Updated `.opencode/agents/helm-tester.md` Requirement-Derived QA section.
+
+**Policy Area 3 — Blind Review Handoff Rules:** Orchestrator/subagents must NOT bias reviewers with leading context ("final review", "third pass", "should be fixed now", etc.). Allowed handoff contents only: task description, requirements, changed files, verification evidence, acceptance criteria. Every review is a fresh independent judgment.
+
+- Added Blind Review Handoff section to `.opencode/agents/helm-orchestrator.md`.
+- Added Review Independence section to `.opencode/agents/helm-reviewer.md`.
+- Updated `.opencode/agents/helm-ui-reviewer.md` Purpose with blind review rule.
+- Added Blind Review Rule to `.opencode/commands/helm-review.md`.
+- Added blind review guidance to `docs/ai/workflows.md` QA + Review section.
+
+**Policy Area 4 — Unattended Execution Policy:** Default mode is continue-until-complete. Orchestrator does NOT ask "should I continue fixing?" for issues inside scope. Asks Barry only for 7 specific categories (ambiguity, scope expansion, destructive actions, secrets, paid services, merge conflict, retry budget exhausted).
+
+- Expanded Autonomy/ask-less policy in `.opencode/agents/helm-orchestrator.md`.
+- Updated `docs/ai/workflows.md` Orchestrator Autonomy section.
+
+**Policy Area 5 — Retry/Fix Loop Budget:** After 3 failed attempts on the same issue, stop with BLOCKED status. Produce blocker report with issue reference, attempts, failure reasons, and what's needed to unblock.
+
+- Added Retry/Fix Loop Budget to `.opencode/agents/helm-orchestrator.md`.
+- Added Retry/Fix Loop Budget to `docs/ai/workflows.md` Failure Handling section.
+
+**Policy Area 6 — Mandatory Git Completion Contract:** Task not complete until committed and pushed (or explicitly blocked). Final response must include `Branch:`, `Commit:`, `Pushed:`, `Remaining blockers:` fields.
+
+- Added Completion Contract to `.opencode/agents/helm-orchestrator.md`.
+- Updated `.opencode/agents/helm-git.md` Purpose and Output format with completion contract.
+- Added Completion Contract to `.opencode/commands/helm-ship.md`.
+- Added Completion Contract to `.opencode/commands/helm-bug.md`.
+- Updated `docs/ai/workflows.md` helm-git section.
+
+### Why
+
+Tasks in unattended runs would stop to ask routine questions ("should I continue fixing?"), fail to push, or have reviewers biased by orchestrator context. These 6 policies close each failure mode.
+
+### What was NOT changed
+
+- No app source files changed (backend, frontend, mobile, agent code untouched).
+- Existing frontmatter (model, mode, permission fields) preserved in all `.opencode/` files.
+- No secrets, API keys, or credentials added.
+
 ## 2026-05-14: Add Requirements Traceability Workflow for Feature Feedback
 
 ### What Changed

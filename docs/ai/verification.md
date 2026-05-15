@@ -112,7 +112,7 @@ For Feature Feedback / product-spec work, verification extends beyond layer-spec
 
 ### Layered Smart QA
 
-"Smart QA" is a layered system, not magic. The layers are:
+"Smart QA" is a layered system, not magic. There is no one-button QA solution. The layers are:
 
 1. **Structural discovery** — automated endpoint/schema/component discovery (existing `qa/src/discover.cjs`)
 2. **Deterministic E2E tests** — Playwright tests with resilient user-facing locators (`getByRole`, `getByLabel`, `getByText`)
@@ -120,7 +120,7 @@ For Feature Feedback / product-spec work, verification extends beyond layer-spec
 4. **Manual test scripts** — for requirements where automation is impractical (produced in `qa-plan.md`)
 5. **Traceability review** — cross-reference every REQ-ID against implementation and test evidence
 
-No single layer catches all failure modes. Each is necessary.
+"QA" in this project refers to the repo's deterministic scripts and tests: `qa/src/discover.cjs`, Playwright tests, pytest, and related checks. `helm-tester` runs and interprets QA evidence but does NOT decide product completeness. `helm-reviewer` checks product completeness against requirements and QA evidence. Neither QA scripts nor agents are autonomous product verification gates — each layer catches different failure modes, and no single layer is sufficient.
 
 ### Requirement-Derived QA
 
@@ -131,6 +131,7 @@ For FF work, QA mode is set per requirement in the requirements ledger:
 | `automated-test` | Write Playwright/pytest tests with resilient user-facing locators. Verify passes before shipping. |
 | `manual-flow-test` | Produce step-by-step manual test script with expected outcomes. Include in `qa-plan.md`. |
 | `review-only` | Code inspection checklist. Reviewer verifies acceptance criteria manually. |
+| `not-covered` | No coverage. Gates CLOSED unless explicitly deferred with reason. Must be resolved before shipping must-have requirements. |
 | `deferred` | Intentionally skipped. Noted in coverage gate with reason. Must be explicitly approved. |
 
 ### Workflow-Aware QA Checklist
