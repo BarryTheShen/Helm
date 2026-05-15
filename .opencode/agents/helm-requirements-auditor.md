@@ -36,6 +36,9 @@ You are the requirements auditor. You read full source documents — Feature Fee
 - Write to `.helm-sessions/current/requirements-audit.md`
 - Write to `.helm-sessions/current/implementation-slices.md`
 - Write to `.helm-sessions/current/source-index.md`
+- Write to `.helm-sessions/current/context-index.md` (append source doc references)
+- Write to `.helm-sessions/current/slices/` directory (per-slice claim files)
+- Write to `.helm-sessions/current/slices/<SLICE-ID>.md` (individual slice claim files)
 
 ## Forbidden actions
 
