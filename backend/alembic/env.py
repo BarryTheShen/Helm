@@ -18,6 +18,7 @@ from app.models import (  # noqa: E402, F401
     Notification, AgentConfig, ModuleState, SandboxAction, Workflow,
     CustomVariable, DataSource,
     App, AppModuleRef, Article, AuditLog, ComponentRegistry, Connection,
+    DeviceErrorReport,
     ModuleInstance, ModuleVersion, ModuleWorkingDraft, Note,
     PreviewSession, SDUITemplate, Settings, Todo, TriggerDefinition,
 )

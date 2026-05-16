@@ -20,7 +20,7 @@ import type { LocalTemplateDefinition } from '../editor/templateLibrary';
 import {
   Save, Undo2, Redo2, FileText,
   RefreshCw, Monitor, RotateCw, ChevronDown, ChevronRight, ChevronUp, Code, Trash2, Smartphone,
-  Camera, History, Eye, Clock, Info, List
+  Camera, History, Eye, Clock, Info, List, Archive, FileJson, ExternalLink, CornerDownRight
 } from 'lucide-react';
 
 interface ModuleInfo {
@@ -245,12 +245,25 @@ export function EditorPage() {
     source: string;
     custom_name: string | null;
     default_timestamp_name: string;
+    parent_version_id: string | null;
+    status?: string;
   }[]>([]);
   const [expandedVersionId, setExpandedVersionId] = useState<string | null>(null);
   const [versionDetails, setVersionDetails] = useState<Record<string, { rowCount: number; compCount: number; componentTypes: string[] }>>({});
   const [loadingVersionDetail, setLoadingVersionDetail] = useState(false);
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [lastCheckpointId, setLastCheckpointId] = useState<string | null>(null);
+
+  // ── View JSON state (VER-008) ──────────────────────────────────────
+  const [versionJsonModal, setVersionJsonModal] = useState<{ json: any; versionLabel: string } | null>(null);
+
+  // ── Used-by state (VER-008) ──────────────────────────────────────
+  const [usedByApps, setUsedByApps] = useState<{ app_id: string; app_name: string }[]>([]);
+  const [showUsedByPanel, setShowUsedByPanel] = useState(false);
+  const [loadingUsedBy, setLoadingUsedBy] = useState(false);
+
+  // ── Archive state (VER-008) ─────────────────────────────────────
+  const [archivingVersionId, setArchivingVersionId] = useState<string | null>(null);
 
   // ── Version diff state (FF4-VERSIONING-UI) ────────────────────────────
   const [versionDiffMode, setVersionDiffMode] = useState(false);
@@ -309,8 +322,19 @@ export function EditorPage() {
   const deviceHeight = useEditorStore(s => s.deviceHeight);
   const rows = useEditorStore(s => s.rows);
 
-  const screenSnapshot = useMemo(() => buildScreenSnapshot(getScreen()), [getScreen]);
-  const hasUnsavedChanges = screenSnapshot !== lastSavedSnapshot;
+  // NOTE: `getPersistableScreen` and `getScreen` are stable references and
+  // read store state at call time, so they do NOT need to be in deps.
+  const hasUnsavedChanges = useMemo(() => {
+    // Use persistable screen (filters null cells, empty rows) to match what
+    // actually gets saved.  Fall back to raw comparison if validation fails.
+    let currentSnapshot: string;
+    try {
+      currentSnapshot = buildScreenSnapshot(getPersistableScreen());
+    } catch {
+      currentSnapshot = buildScreenSnapshot(getScreen());
+    }
+    return currentSnapshot !== lastSavedSnapshot;
+  }, [rows, lastSavedSnapshot]);
   const lastSavedLabel = useMemo(() => formatLastSaved(lastSavedAt), [lastSavedAt]);
   const visibleServerTemplates = useMemo(() => templates.slice(0, 6), [templates]);
   const selectedModuleInfo = useMemo(
@@ -792,6 +816,8 @@ export function EditorPage() {
 
     setShowVersionHistory(true);
     setLoadingVersions(true);
+    setShowUsedByPanel(false);
+    setVersionJsonModal(null);
     try {
       const data = await api.get<{ items: any[]; total: number }>(`/api/modules/${currentModule}/versions`);
       console.log(`[Editor] handleOpenVersionHistory() — loaded ${data.items.length} versions`);
@@ -802,6 +828,19 @@ export function EditorPage() {
       showMsg('error', err instanceof Error ? err.message : 'Failed to load versions');
     } finally {
       setLoadingVersions(false);
+    }
+
+    // Also fetch usage data
+    setLoadingUsedBy(true);
+    try {
+      const usageData = await api.get<{ module_id: string; used_by_apps: { app_id: string; app_name: string }[] }>(`/api/modules/${currentModule}/usage`);
+      setUsedByApps(usageData.used_by_apps || []);
+      console.log(`[Editor] handleOpenVersionHistory() — loaded ${usageData.used_by_apps?.length || 0} used-by apps`);
+    } catch (err) {
+      console.warn('[Editor] handleOpenVersionHistory() — failed to load usage:', err);
+      setUsedByApps([]);
+    } finally {
+      setLoadingUsedBy(false);
     }
   }, [selectedModule, showMsg]);
 
@@ -881,6 +920,37 @@ export function EditorPage() {
     }
   }, [selectedModule, showMsg]);
 
+  const handleArchiveVersion = useCallback(async (versionId: string, versionNumber: number) => {
+    console.log('[Editor] handleArchiveVersion() — archiving version:', versionId);
+    const currentModule = selectedModule;
+    if (!currentModule) return;
+
+    if (!window.confirm(
+      `Archive version v${versionNumber}? It will be hidden from the default version list but can still be accessed directly.`
+    )) {
+      console.log('[Editor] handleArchiveVersion() — user cancelled');
+      return;
+    }
+
+    setArchivingVersionId(versionId);
+    try {
+      await api.post<any>(`/api/modules/${currentModule}/versions/${versionId}/archive`);
+      console.log('[Editor] handleArchiveVersion() — archived:', versionId);
+
+      // Update local state to reflect archived status
+      setVersions(prev => prev.map(v =>
+        v.id === versionId ? { ...v, status: 'archived' } : v
+      ));
+
+      showMsg('success', `Version v${versionNumber} archived`);
+    } catch (err) {
+      console.error('[Editor] handleArchiveVersion() — error:', err instanceof Error ? err.message : err);
+      showMsg('error', err instanceof Error ? err.message : 'Archive failed');
+    } finally {
+      setArchivingVersionId(null);
+    }
+  }, [selectedModule, showMsg]);
+
   const handleToggleVersionDetail = useCallback(async (versionId: string) => {
     if (expandedVersionId === versionId) {
       setExpandedVersionId(null);
@@ -936,6 +1006,84 @@ export function EditorPage() {
       }
     }
   }, [expandedVersionId, selectedModule, versionDetails]);
+
+  // ── View Version JSON (VER-008) ──────────────────────────────────────
+  const handleViewVersionJson = useCallback((versionId: string, versionLabel: string) => {
+    const json = versionContentCache[versionId];
+    if (json) {
+      setVersionJsonModal({ json, versionLabel });
+    } else {
+      // Try to load it on demand
+      const currentModule = selectedModule;
+      if (!currentModule) return;
+      api.get<any>(`/api/modules/${currentModule}/versions/${versionId}`).then(detail => {
+        setVersionContentCache(prev => ({ ...prev, [versionId]: detail.sdui_json || {} }));
+        setVersionJsonModal({ json: detail.sdui_json || {}, versionLabel });
+      }).catch(err => {
+        console.error('[Editor] handleViewVersionJson() — error:', err);
+        showMsg('error', 'Failed to load version JSON');
+      });
+    }
+  }, [versionContentCache, selectedModule, showMsg]);
+
+  // ── Version Tree (VER-003) ───────────────────────────────────────────
+  interface VersionNode {
+    version: typeof versions[number];
+    children: VersionNode[];
+    depth: number;
+  }
+
+  const flatVersionTree = useMemo((): VersionNode[] => {
+    if (versions.length === 0) return [];
+
+    const nodeMap = new Map<string, VersionNode>();
+    for (const v of versions) {
+      nodeMap.set(v.id, { version: v, children: [], depth: 0 });
+    }
+
+    const roots: VersionNode[] = [];
+    for (const v of versions) {
+      const node = nodeMap.get(v.id)!;
+      if (v.parent_version_id && nodeMap.has(v.parent_version_id)) {
+        nodeMap.get(v.parent_version_id)!.children.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+
+    // Sort children by created_at (oldest first)
+    for (const node of nodeMap.values()) {
+      node.children.sort((a, b) =>
+        new Date(a.version.created_at).getTime() - new Date(b.version.created_at).getTime()
+      );
+    }
+
+    // Sort roots by created_at (oldest first for tree view)
+    roots.sort((a, b) =>
+      new Date(a.version.created_at).getTime() - new Date(b.version.created_at).getTime()
+    );
+
+    // Compute depths
+    function setDepth(nodes: VersionNode[], depth: number) {
+      for (const node of nodes) {
+        node.depth = depth;
+        setDepth(node.children, depth + 1);
+      }
+    }
+    setDepth(roots, 0);
+
+    // Flatten depth-first
+    const result: VersionNode[] = [];
+    function walk(nodes: VersionNode[]) {
+      for (const node of nodes) {
+        result.push(node);
+        walk(node.children);
+      }
+    }
+    walk(roots);
+
+    return result;
+  }, [versions]);
 
   // ── Version Diff (FF4-VERSIONING-UI) ──────────────────────────────────
 
@@ -1864,6 +2012,43 @@ export function EditorPage() {
               </div>
             )}
 
+            {/* Used-by panel (VER-008) */}
+            {!versionDiffMode && (
+              <div className="mb-3 border border-blue-200 bg-blue-50/50 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setShowUsedByPanel(!showUsedByPanel)}
+                  className="flex items-center justify-between w-full px-3 py-2 text-xs text-blue-800 hover:bg-blue-100/50 transition-colors"
+                >
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <ExternalLink size={11} />
+                    Used by ({loadingUsedBy ? '...' : usedByApps.length} app{usedByApps.length !== 1 ? 's' : ''})
+                  </span>
+                  <span>{showUsedByPanel ? <ChevronUp size={11} /> : <ChevronDown size={11} />}</span>
+                </button>
+                {showUsedByPanel && (
+                  <div className="px-3 pb-2">
+                    {loadingUsedBy ? (
+                      <div className="text-xs text-gray-400 flex items-center gap-1.5 py-1">
+                        <Clock size={10} className="animate-spin" />
+                        Loading...
+                      </div>
+                    ) : usedByApps.length === 0 ? (
+                      <div className="text-xs text-gray-400 py-1">This module is not used by any app.</div>
+                    ) : (
+                      <div className="space-y-1">
+                        {usedByApps.map(app => (
+                          <div key={app.app_id} className="flex items-center gap-2 text-xs text-gray-600 py-0.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+                            {app.app_name}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {loadingVersions ? (
               <div className="text-center py-8 text-gray-400 text-sm">Loading versions...</div>
             ) : versions.length === 0 ? (
@@ -1880,26 +2065,32 @@ export function EditorPage() {
                       : 'Click a version to select it as the first comparison:'}
                   </div>
                 )}
-                {versions.map((v) => {
+                {flatVersionTree.map((node) => {
+                  const v = node.version;
                   const isExpanded = expandedVersionId === v.id && !versionDiffMode;
                   const detail = versionDetails[v.id];
                   const isLoadingDetail = loadingVersionDetail && isExpanded && !detail;
                   const isDiffSelectedA = versionDiffA === v.id;
                   const isDiffSelectedB = versionDiffB === v.id;
+                  const isArchived = v.status === 'archived';
 
                   return (
                     <div
                       key={v.id}
+                      style={{ marginLeft: `${node.depth * 20}px` }}
                       className={`border rounded-lg overflow-hidden transition-colors ${
                         isDiffSelectedA ? 'border-purple-400 bg-purple-50/30'
                         : isDiffSelectedB ? 'border-purple-600 bg-purple-100/30'
                         : versionDiffMode ? 'border-gray-200 cursor-pointer hover:border-purple-300 hover:bg-gray-50'
+                        : isArchived ? 'border-gray-100 bg-gray-50/50'
                         : 'border-gray-200'
-                      }`}
+                      } ${node.depth > 0 ? 'border-l-2 border-l-gray-300' : ''}`}
                     >
                       {/* Collapsed header */}
                       <div
-                        className="flex items-center justify-between p-3 hover:bg-gray-50 transition-colors cursor-pointer"
+                        className={`flex items-center justify-between p-3 transition-colors cursor-pointer ${
+                          node.depth > 0 ? 'hover:bg-gray-50/80' : 'hover:bg-gray-50'
+                        }`}
                         onClick={() => {
                           if (versionDiffMode) {
                             if (!versionDiffA) {
@@ -1919,6 +2110,9 @@ export function EditorPage() {
                                 {isExpanded ? <ChevronUp size={12} /> : <ChevronRight size={12} />}
                               </button>
                             )}
+                            {node.depth > 0 && !versionDiffMode && (
+                              <CornerDownRight size={12} className="text-gray-300 shrink-0" />
+                            )}
                             {versionDiffMode && (
                               <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center text-[8px] font-bold ${
                                 isDiffSelectedA ? 'border-purple-500 bg-purple-500 text-white'
@@ -1937,6 +2131,11 @@ export function EditorPage() {
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 capitalize">
                               {v.source}
                             </span>
+                            {isArchived && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
+                                Archived
+                              </span>
+                            )}
                           </div>
                           <div className="text-[11px] text-gray-400 mt-0.5 ml-5">
                             {new Date(v.created_at).toLocaleString()}
@@ -1948,6 +2147,14 @@ export function EditorPage() {
                         <div className="flex items-center gap-1.5 shrink-0 ml-3" onClick={(e) => e.stopPropagation()}>
                           {!versionDiffMode && (
                             <>
+                              <button
+                                onClick={() => { handleViewVersionJson(v.id, `v${v.version_number}`); }}
+                                className="px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                                title="View JSON"
+                              >
+                                <FileJson size={11} className="inline mr-0.5" />
+                                JSON
+                              </button>
                               <button
                                 data-testid={`btn-restore-v${v.version_number}`}
                                 onClick={() => { void handleRestoreVersion(v.id, v.version_number); setShowVersionHistory(false); }}
@@ -1964,6 +2171,17 @@ export function EditorPage() {
                               >
                                 Publish
                               </button>
+                              {!isArchived && (
+                                <button
+                                  onClick={() => { void handleArchiveVersion(v.id, v.version_number); }}
+                                  disabled={archivingVersionId === v.id}
+                                  className="px-2 py-1 text-[11px] text-orange-600 hover:bg-orange-50 rounded transition-colors disabled:opacity-50"
+                                  title="Archive version"
+                                >
+                                  <Archive size={11} className="inline mr-0.5" />
+                                  {archivingVersionId === v.id ? '...' : 'Archive'}
+                                </button>
+                              )}
                             </>
                           )}
                         </div>
@@ -1988,6 +2206,14 @@ export function EditorPage() {
                                   <Info size={11} />
                                   {detail.compCount} component{detail.compCount !== 1 ? 's' : ''}
                                 </span>
+                                <button
+                                  onClick={() => { handleViewVersionJson(v.id, `v${v.version_number}`); }}
+                                  className="ml-auto flex items-center gap-1 px-2 py-0.5 text-[10px] text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-colors"
+                                  title="View raw SDUI JSON"
+                                >
+                                  <FileJson size={10} />
+                                  View JSON
+                                </button>
                               </div>
                               {detail.componentTypes.length > 0 && (
                                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -2010,6 +2236,24 @@ export function EditorPage() {
                 })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Version JSON View Modal (VER-008) ──────────────────────────── */}
+      {versionJsonModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setVersionJsonModal(null)}>
+          <div className="bg-white rounded-lg p-4 w-[600px] max-h-[75vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                <FileJson size={14} />
+                Version JSON — {versionJsonModal.versionLabel}
+              </h3>
+              <button onClick={() => setVersionJsonModal(null)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+            </div>
+            <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-[11px] font-mono text-gray-700 overflow-auto max-h-[60vh] leading-relaxed whitespace-pre-wrap break-all">
+              {JSON.stringify(versionJsonModal.json, null, 2)}
+            </pre>
           </div>
         </div>
       )}

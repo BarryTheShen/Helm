@@ -1,6 +1,7 @@
 """Devices router — device registration and app assignment endpoints."""
 
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -17,7 +18,9 @@ from app.schemas.device import (
     DeviceUpdate,
 )
 from app.models.device import Device
+from app.models.device_error import DeviceErrorReport
 from app.models.preview_session import PreviewSession
+from app.schemas.device_error import DeviceErrorCreate, DeviceErrorReportOut
 from app.services import device_service
 from app.services.audit import log_audit
 from app.services.websocket_manager import manager
@@ -211,6 +214,42 @@ async def get_device_status(
         update_status=device.update_status if device.update_status else "up_to_date",
         last_seen_at=device.last_seen,
     )
+
+
+@router.post("/{device_id}/error", response_model=DeviceErrorReportOut, status_code=201)
+async def report_device_error(
+    device_id: str,
+    body: DeviceErrorCreate,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Report a render/runtime error from a device.
+
+    Devices call this when they encounter a render failure, runtime crash,
+    or other errors during normal operation or preview mode.
+    """
+    # Verify device belongs to user
+    result = await db.execute(
+        select(Device).where(Device.id == device_id, Device.user_id == user_id)
+    )
+    device = result.scalar_one_or_none()
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    error_report = DeviceErrorReport(
+        id=str(uuid4()),
+        user_id=user_id,
+        device_id=device_id,
+        preview_session_id=None,
+        error_type=body.error_type,
+        error_message=body.error_message,
+        error_details=body.error_details,
+        source="device",
+    )
+    db.add(error_report)
+    await db.commit()
+    await db.refresh(error_report)
+    return DeviceErrorReportOut.model_validate(error_report)
 
 
 @router.post("/{device_id}/exit-preview", status_code=200)

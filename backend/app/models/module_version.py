@@ -48,6 +48,11 @@ class ModuleVersion(Base):
     )  # unknown | valid | invalid
     validation_errors: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
+    # Lifecycle status
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="active"
+    )  # active | archived
+
     # Schema tracking
     schema_version: Mapped[str] = mapped_column(String(20), nullable=False, default="2.0")
 

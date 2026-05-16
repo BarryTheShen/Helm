@@ -123,8 +123,27 @@ async def list_templates(
     query = query.offset(pagination.offset).limit(pagination.limit)
     results = (await db.execute(query)).scalars().all()
 
+    # Batch-load version counts
+    version_counts: dict[str, int] = {}
+    if results:
+        template_ids = [t.id for t in results]
+        count_q = (
+            select(TemplateVersion.template_id, func.count().label("cnt"))
+            .where(TemplateVersion.template_id.in_(template_ids))
+            .group_by(TemplateVersion.template_id)
+        )
+        count_rows = (await db.execute(count_q)).all()
+        for row in count_rows:
+            version_counts[row.template_id] = row.cnt
+
+    items = []
+    for t in results:
+        item = TemplateOut.model_validate(t)
+        item.version_count = version_counts.get(t.id, 0)
+        items.append(item)
+
     return PaginatedResponse[TemplateOut](
-        items=[TemplateOut.model_validate(t) for t in results],
+        items=items,
         total=total,
         limit=pagination.limit,
         offset=pagination.offset,

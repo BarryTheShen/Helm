@@ -21,6 +21,8 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import PaginationParams, get_current_user, get_current_user_id
+from app.models.device import Device
+from app.models.device_error import DeviceErrorReport
 from app.models.module_instance import ModuleInstance
 from app.models.module_state import ModuleState
 from app.models.module_version import ModuleVersion
@@ -30,6 +32,7 @@ from app.models.app import App
 from app.models.app_module_ref import AppModuleRef
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
+from app.schemas.device_error import DeviceErrorReportOut, PreviewSessionErrorCreate
 from app.schemas.module_version import (
     ModuleCheckpointCreate,
     ModuleCheckpointOut,
@@ -37,6 +40,7 @@ from app.schemas.module_version import (
     ModuleVersionDetailOut,
     ModuleVersionOut,
     ModuleVersionRename,
+    ModuleVersionWithStatusOut,
     ModuleWorkingDraftOut,
     ModuleWorkingDraftUpdate,
 )
@@ -611,6 +615,85 @@ async def extend_preview_session(
     await db.commit()
     await db.refresh(session)
     return PreviewSessionOut.model_validate(session)
+
+
+@router.post("/preview-sessions/{session_id}/error", response_model=DeviceErrorReportOut, status_code=201)
+async def report_preview_session_error(
+    session_id: str,
+    body: PreviewSessionErrorCreate,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Report an error from a preview session.
+
+    Devices call this when a preview session encounters a render failure.
+    The error is stored for admin review.
+    """
+    # Verify preview session belongs to user
+    result = await db.execute(
+        select(PreviewSession).where(
+            PreviewSession.id == session_id,
+            PreviewSession.user_id == user_id,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status_code=404, detail="Preview session not found")
+
+    device_id = body.device_id or session.device_id
+
+    error_report = DeviceErrorReport(
+        id=str(uuid4()),
+        user_id=user_id,
+        device_id=device_id,
+        preview_session_id=session_id,
+        error_type=body.error_type,
+        error_message=body.error_message,
+        error_details=body.error_details,
+        source="preview_session",
+    )
+    db.add(error_report)
+    await db.commit()
+    await db.refresh(error_report)
+    return DeviceErrorReportOut.model_validate(error_report)
+
+
+@router.post("/{module_id}/versions/{version_id}/archive", response_model=ModuleVersionWithStatusOut)
+async def archive_module_version(
+    module_id: str,
+    version_id: str,
+    request: Request,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Archive a module version — marks it as archived (soft-delete).
+
+    Archived versions are hidden from the default version list but
+    can still be accessed directly and restored if needed.
+    """
+    result = await db.execute(
+        select(ModuleVersion).where(
+            ModuleVersion.id == version_id,
+            ModuleVersion.module_id == module_id,
+            ModuleVersion.user_id == user_id,
+        )
+    )
+    version = result.scalar_one_or_none()
+    if version is None:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    if version.status == "archived":
+        raise HTTPException(status_code=400, detail="Version is already archived")
+
+    version.status = "archived"
+
+    await log_audit(
+        db, user_id, "VERSION_ARCHIVED", "module_version",
+        version_id, ip=request.client.host if request.client else None,
+    )
+    await db.commit()
+    await db.refresh(version)
+    return ModuleVersionWithStatusOut.model_validate(version)
 
 
 # ── Backward Compat: keep old approve/reject endpoints working ─────────────

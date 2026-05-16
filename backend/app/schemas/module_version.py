@@ -78,3 +78,8 @@ class ModuleUsageOut(BaseModel):
     """Schema for module usage info showing which apps use this module."""
     module_id: str
     used_by_apps: list[dict[str, str]] = Field(default_factory=list, description="List of {app_id, app_name}")
+
+
+class ModuleVersionWithStatusOut(ModuleVersionOut):
+    """Version detail including lifecycle status (active/archived)."""
+    status: str = "active"

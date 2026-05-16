@@ -30,6 +30,7 @@ class TemplateOut(BaseModel):
     created_by: str
     created_at: datetime
     updated_at: datetime | None = None
+    version_count: int = 0
 
 
 class TemplateDetailOut(TemplateOut):

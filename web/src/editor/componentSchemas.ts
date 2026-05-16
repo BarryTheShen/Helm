@@ -181,6 +181,38 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
       placeholder: '{"dataSourceId":"calendar_events","refreshInterval":60000}',
       defaultValue: ''
     },
+    {
+      key: 'sourceTypes',
+      label: 'Source Types (comma-separated)',
+      type: 'text',
+      placeholder: 'local, caldav, notion, custom',
+      defaultValue: ''
+    },
+    {
+      key: 'categoryFilter',
+      label: 'Category Filter',
+      type: 'text',
+      placeholder: 'e.g. meeting, birthday',
+      defaultValue: ''
+    },
+    {
+      key: 'showSourceBadges',
+      label: 'Show Source Badges',
+      type: 'toggle',
+      defaultValue: true
+    },
+    {
+      key: 'showNotes',
+      label: 'Show Notes',
+      type: 'toggle',
+      defaultValue: true
+    },
+    {
+      key: 'compactThreshold',
+      label: 'Compact Threshold (px)',
+      type: 'number',
+      defaultValue: 200
+    },
   ],
   Calendar: [
     {
@@ -214,6 +246,38 @@ export const COMPONENT_SCHEMAS: Record<string, FieldSchema[]> = {
       type: 'textarea',
       placeholder: '{"dataSourceId":"calendar_events","refreshInterval":60000}',
       defaultValue: ''
+    },
+    {
+      key: 'sourceTypes',
+      label: 'Source Types (comma-separated)',
+      type: 'text',
+      placeholder: 'local, caldav, notion, custom',
+      defaultValue: ''
+    },
+    {
+      key: 'categoryFilter',
+      label: 'Category Filter',
+      type: 'text',
+      placeholder: 'e.g. meeting, birthday',
+      defaultValue: ''
+    },
+    {
+      key: 'showSourceBadges',
+      label: 'Show Source Badges',
+      type: 'toggle',
+      defaultValue: true
+    },
+    {
+      key: 'showNotes',
+      label: 'Show Notes',
+      type: 'toggle',
+      defaultValue: true
+    },
+    {
+      key: 'compactThreshold',
+      label: 'Compact Threshold (px)',
+      type: 'number',
+      defaultValue: 200
     },
   ],
   Todo: [

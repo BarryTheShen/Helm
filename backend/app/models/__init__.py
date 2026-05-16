@@ -13,6 +13,7 @@ from app.models.connection import Connection
 from app.models.custom_variable import CustomVariable
 from app.models.data_source import DataSource
 from app.models.device import Device
+from app.models.device_error import DeviceErrorReport
 from app.models.module_instance import ModuleInstance
 from app.models.module_state import ModuleState
 from app.models.module_version import ModuleVersion
@@ -41,6 +42,7 @@ __all__ = [
     "AuditLog",
     "User",
     "Device",
+    "DeviceErrorReport",
     "Session",
     "ChatMessage",
     "CalendarEvent",

@@ -53,8 +53,10 @@ import {
   ScrollView,
   FlatList,
   Dimensions,
+  Modal,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { themeColors } from '@/theme/tokens';
 import { useAuthStore } from '@/stores/authStore';
 import { useDataSource, clearDataSourceCache } from '@/hooks/useDataSource';
@@ -85,6 +87,7 @@ interface CalendarEvent {
   color?: string;
   sourceType?: string;  // FF4-CAL-026
   notes?: string;       // FF4-CAL-027
+  category?: string;    // FF4-CAL-016/CAL-019: event category for filtering
   properties?: Record<string, unknown>;
 }
 
@@ -94,6 +97,12 @@ interface CalendarModuleProps {
   events?: CalendarEvent[];
   dataBinding?: SDUIDataBinding;
   maxEvents?: number;
+  // FF4-CAL-016/CAL-019: Admin filtering controls
+  sourceTypes?: string;
+  categoryFilter?: string;
+  showSourceBadges?: boolean;
+  showNotes?: boolean;
+  compactThreshold?: number;
   onDataRefresh?: () => void;
   onEventPress?: (event: CalendarEvent) => void;
 }
@@ -109,6 +118,38 @@ const SOURCE_TYPE_CONFIG: Record<string, { label: string; color: string; bg: str
   notion: { label: 'Notion', color: '#7C3AED', bg: '#EDE9FE' },
   custom: { label: 'Custom', color: '#0D9488', bg: '#CCFBF1' },
 };
+
+// ── Local Cache Layer (FF4-CAL-013) ───────────────────────────────────────────
+// Cache key prefix + TTL. Cache is a JSON blob with timestamp and events array.
+// Loaded on mount for instant display; API fetch runs in background to refresh.
+
+const CALENDAR_CACHE_PREFIX = 'calendar_events_';
+
+interface CacheEntry {
+  timestamp: number;
+  events: CalendarEvent[];
+}
+
+async function loadCachedEvents(cacheKey: string): Promise<CalendarEvent[] | null> {
+  try {
+    const raw = await AsyncStorage.getItem(cacheKey);
+    if (!raw) return null;
+    const entry: CacheEntry = JSON.parse(raw);
+    if (!Array.isArray(entry.events)) return null;
+    return entry.events;
+  } catch {
+    return null;
+  }
+}
+
+async function saveCachedEvents(cacheKey: string, events: CalendarEvent[]): Promise<void> {
+  try {
+    const entry: CacheEntry = { timestamp: Date.now(), events };
+    await AsyncStorage.setItem(cacheKey, JSON.stringify(entry));
+  } catch {
+    // Silently fail — cache is a non-critical optimization
+  }
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -186,6 +227,30 @@ function getDayName(d: Date): string {
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
+// ── CAL-009: Time positioning constants and helpers ──────────────────────────
+
+const HOUR_HEIGHT = 60;
+
+function getHourMinutes(iso: string): { hours: number; minutes: number } {
+  const d = new Date(iso);
+  return { hours: d.getHours(), minutes: d.getMinutes() };
+}
+
+function getDurationHours(start: string, end: string): number {
+  const s = new Date(start);
+  const e = new Date(end);
+  return Math.max((e.getTime() - s.getTime()) / (1000 * 60 * 60), 0.5);
+}
+
+function timeToTop(iso: string): number {
+  const { hours, minutes } = getHourMinutes(iso);
+  return (hours + minutes / 60) * HOUR_HEIGHT;
+}
+
+function eventHeight(start: string, end: string): number {
+  return Math.max(getDurationHours(start, end) * HOUR_HEIGHT, 30);
+}
+
 // ── Date Navigation Bar ──────────────────────────────────────────────────────
 
 function DateNavBar({
@@ -220,10 +285,14 @@ const EventItem = React.memo(function EventItem({
   event,
   onPress,
   showDate,
+  showSourceBadges = true,
+  showNotes = true,
 }: {
   event: CalendarEvent;
   onPress?: (e: CalendarEvent) => void;
   showDate?: boolean;
+  showSourceBadges?: boolean;
+  showNotes?: boolean;
 }) {
   const color = getEventColor(event);
   const st = event.sourceType ? SOURCE_TYPE_CONFIG[event.sourceType] : undefined;
@@ -238,8 +307,8 @@ const EventItem = React.memo(function EventItem({
           <Text style={styles.eventItemTitle} numberOfLines={1}>
             {event.allDay ? '📅 ' : ''}{event.title}
           </Text>
-          {/* FF4-CAL-026: sourceType badge */}
-          {st ? (
+          {/* FF4-CAL-026: sourceType badge — hidden when showSourceBadges is false */}
+          {st && showSourceBadges ? (
             <View style={[styles.sourceBadge, { backgroundColor: st.bg }]}>
               <Text style={[styles.sourceBadgeText, { color: st.color }]}>{st.label}</Text>
             </View>
@@ -249,8 +318,8 @@ const EventItem = React.memo(function EventItem({
           {showDate ? `${formatDateLong(event.start)} · ` : ''}
           {event.allDay ? 'All day' : `${formatTime(event.start)} – ${formatTime(event.end)}`}
         </Text>
-        {/* FF4-CAL-027: notes display */}
-        {event.notes ? (
+        {/* FF4-CAL-027: notes display — hidden when showNotes is false */}
+        {event.notes && showNotes ? (
           <Text style={styles.eventNotes} numberOfLines={2}>{event.notes}</Text>
         ) : null}
       </View>
@@ -264,10 +333,14 @@ function MonthView({
   events,
   onEventPress,
   cellWidth,
+  showSourceBadges = true,
+  showNotes = true,
 }: {
   events: CalendarEvent[];
   onEventPress?: (e: CalendarEvent) => void;
   cellWidth?: number;
+  showSourceBadges?: boolean;
+  showNotes?: boolean;
 }) {
   const [selectedDate, setSelectedDate] = useState<string>('');
 
@@ -317,7 +390,7 @@ function MonthView({
             <Text style={styles.noEvents}>No events</Text>
           ) : (
             selectedEvents.map((e) => (
-              <EventItem key={e.id} event={e} onPress={onEventPress} />
+              <EventItem key={e.id} event={e} onPress={onEventPress} showSourceBadges={showSourceBadges} showNotes={showNotes} />
             ))
           )}
         </View>
@@ -326,14 +399,18 @@ function MonthView({
   );
 }
 
-// ── Week Variant ─────────────────────────────────────────────────────────────
+// ── Week Variant (CAL-009: time-based positioning) ──────────────────────────
 
 function WeekView({
   events,
   onEventPress,
+  showSourceBadges = true,
+  showNotes = true,
 }: {
   events: CalendarEvent[];
   onEventPress?: (e: CalendarEvent) => void;
+  showSourceBadges?: boolean;
+  showNotes?: boolean;
 }) {
   const [baseDate, setBaseDate] = useState(new Date());
   const today = new Date();
@@ -361,46 +438,118 @@ function WeekView({
 
   const goToday = useCallback(() => setBaseDate(new Date()), []);
 
+  // CAL-009: Hour labels from 12 AM to 11 PM
+  const hourLabels = useMemo(() => {
+    const labels: { hour: number; label: string }[] = [];
+    for (let h = 0; h < 24; h++) {
+      const ampm = h < 12 ? 'AM' : 'PM';
+      const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      labels.push({ hour: h, label: `${display} ${ampm}` });
+    }
+    return labels;
+  }, []);
+
+  // Tick every 60s to keep current-time line updated
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  const currentTimeTop = useMemo(() => {
+    const now = new Date();
+    return (now.getHours() + now.getMinutes() / 60) * HOUR_HEIGHT;
+  }, [weekDates, setTick]); // Re-render when tick state changes via interval
+
   return (
     <View>
       <DateNavBar label={weekLabel} onPrev={goPrev} onNext={goNext} onToday={goToday} />
+      {/* Day header row with time-column spacer */}
       <View style={styles.weekGrid}>
-        {/* Day headers */}
+        <View style={styles.weekTimeColSpacer} />
         {weekDates.map((d) => {
           const dateStr = formatDate(d);
-          const isToday = isSameDay(d, today);
+          const isTodayView = isSameDay(d, today);
+          const dayAllDay = getEventsForDate(events, dateStr).filter(e => e.allDay);
           return (
             <View key={dateStr} style={styles.weekDayCol}>
-              <Text style={[styles.weekDayName, isToday && styles.weekDayNameToday]}>
+              <Text style={[styles.weekDayName, isTodayView && styles.weekDayNameToday]}>
                 {getDayName(d)}
               </Text>
-              <View style={[styles.weekDayNumWrap, isToday && styles.weekDayNumToday]}>
-                <Text style={[styles.weekDayNum, isToday && styles.weekDayNumTodayText]}>
+              <View style={[styles.weekDayNumWrap, isTodayView && styles.weekDayNumToday]}>
+                <Text style={[styles.weekDayNum, isTodayView && styles.weekDayNumTodayText]}>
                   {d.getDate()}
                 </Text>
               </View>
-            </View>
-          );
-        })}
-      </View>
-      <ScrollView style={styles.weekEventsContainer} nestedScrollEnabled>
-        {weekDates.map((d) => {
-          const dateStr = formatDate(d);
-          const dayEvents = getEventsForDate(events, dateStr);
-          if (dayEvents.length === 0) return null;
-          return (
-            <View key={dateStr} style={styles.weekDaySection}>
-              <Text style={styles.weekDaySectionTitle}>
-                {d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-                {' '}
-                <Text style={styles.weekDayCount}>{dayEvents.length} events</Text>
-              </Text>
-              {dayEvents.map((e) => (
-                <EventItem key={e.id} event={e} onPress={onEventPress} showDate={false} />
+              {/* All-day event banners */}
+              {dayAllDay.map(e => (
+                <TouchableOpacity
+                  key={e.id}
+                  style={[styles.allDayBanner, { backgroundColor: getEventColor(e) + '22' }]}
+                  onPress={() => onEventPress?.(e)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.allDayBannerText} numberOfLines={1}>{e.title}</Text>
+                </TouchableOpacity>
               ))}
             </View>
           );
         })}
+      </View>
+      {/* Time grid: hour labels + 7 day columns with absolutely positioned events */}
+      <ScrollView style={styles.weekEventsContainer} nestedScrollEnabled>
+        <View style={styles.timeGridBody}>
+          <View style={styles.timeGridRow}>
+            <View style={styles.timeColumn}>
+              {hourLabels.map(h => (
+                <View key={h.hour} style={styles.timeTick}>
+                  <Text style={styles.timeTickLabel}>{h.label}</Text>
+                </View>
+              ))}
+            </View>
+            <View style={styles.timeDayColumnsRow}>
+              {weekDates.map((d) => {
+                const dateStr = formatDate(d);
+                const dayEvents = getEventsForDate(events, dateStr).filter(e => !e.allDay);
+                const isTodayView = isSameDay(d, today);
+                return (
+                  <View key={dateStr} style={styles.timeDayCol}>
+                    {/* Hour grid lines */}
+                    {hourLabels.map(h => (
+                      <View key={h.hour} style={styles.timeDayColTick} />
+                    ))}
+                    {/* Timed events positioned absolutely by time */}
+                    {dayEvents.map(e => {
+                      const color = getEventColor(e);
+                      return (
+                        <TouchableOpacity
+                          key={e.id}
+                          style={[
+                            styles.timeBlockEvent,
+                            {
+                              top: timeToTop(e.start),
+                              height: eventHeight(e.start, e.end),
+                              borderLeftColor: color,
+                            },
+                          ]}
+                          onPress={() => onEventPress?.(e)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.timeBlockTitle} numberOfLines={1}>{e.title}</Text>
+                          <Text style={styles.timeBlockTime}>{formatTime(e.start)}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                    {/* CAL-009: Red current-time line for today */}
+                    {isTodayView ? (
+                      <View style={[styles.currentTimeLine, { top: currentTimeTop }]} />
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        </View>
         {events.length === 0 && (
           <Text style={styles.noEvents}>No events this week</Text>
         )}
@@ -409,25 +558,26 @@ function WeekView({
   );
 }
 
-// ── Day Variant ──────────────────────────────────────────────────────────────
+// ── Day Variant (CAL-009: time-based positioning) ────────────────────────────
 
 function DayView({
   events,
   onEventPress,
+  showSourceBadges = true,
+  showNotes = true,
 }: {
   events: CalendarEvent[];
   onEventPress?: (e: CalendarEvent) => void;
+  showSourceBadges?: boolean;
+  showNotes?: boolean;
 }) {
   const [baseDate, setBaseDate] = useState(new Date());
   const today = new Date();
 
   const dateStr = useMemo(() => formatDate(baseDate), [baseDate]);
   const dayEvents = useMemo(() => getEventsForDate(events, dateStr), [events, dateStr]);
-
-  // Sort events by start time
-  const sortedEvents = useMemo(() => {
-    return [...dayEvents].sort((a, b) => a.start.localeCompare(b.start));
-  }, [dayEvents]);
+  const timedEvents = useMemo(() => dayEvents.filter(e => !e.allDay), [dayEvents]);
+  const allDayEvents = useMemo(() => dayEvents.filter(e => e.allDay), [dayEvents]);
 
   const label = useMemo(
     () => baseDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
@@ -448,76 +598,118 @@ function DayView({
 
   const goToday = useCallback(() => setBaseDate(new Date()), []);
 
-  // Generate time slots from 6 AM to 10 PM
-  const timeSlots = useMemo(() => {
-    const slots: { hour: number; label: string }[] = [];
-    for (let h = 6; h <= 22; h++) {
+  // CAL-009: Hour labels from 12 AM to 11 PM
+  const hourLabels = useMemo(() => {
+    const labels: { hour: number; label: string }[] = [];
+    for (let h = 0; h < 24; h++) {
       const ampm = h < 12 ? 'AM' : 'PM';
       const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
-      slots.push({ hour: h, label: `${display}:00 ${ampm}` });
+      labels.push({ hour: h, label: `${display} ${ampm}` });
     }
-    return slots;
+    return labels;
   }, []);
 
-  const isToday = isSameDay(baseDate, today);
+  // Tick every 60s to keep current-time line updated
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  const isTodayView = isSameDay(baseDate, today);
+
+  const currentTimeTop = useMemo(() => {
+    const now = new Date();
+    return (now.getHours() + now.getMinutes() / 60) * HOUR_HEIGHT;
+  }, [isTodayView, setTick]); // Re-render when tick state changes
 
   return (
     <View>
       <DateNavBar
-        label={`${isToday ? '📌 ' : ''}${label}`}
+        label={`${isTodayView ? '📌 ' : ''}${label}`}
         onPrev={goPrev}
         onNext={goNext}
         onToday={goToday}
       />
+      {/* All-day events section */}
+      {allDayEvents.length > 0 ? (
+        <View style={styles.dayAllDaySection}>
+          {allDayEvents.map(e => (
+            <TouchableOpacity
+              key={e.id}
+              style={[styles.dayAllDayItem, { borderLeftColor: getEventColor(e) }]}
+              onPress={() => onEventPress?.(e)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.dayAllDayItemText}>📅 {e.title}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+      {/* Time grid: hour labels + single event column with absolutely positioned events */}
       <ScrollView style={styles.dayTimeline} nestedScrollEnabled>
-        {timeSlots.map((slot) => {
-          const slotStart = `${dateStr}T${String(slot.hour).padStart(2, '0')}:00:00`;
-          const slotEnd = `${dateStr}T${String(slot.hour + 1).padStart(2, '0')}:00:00`;
-          const slotEvents = sortedEvents.filter(
-            (e) => e.start >= slotStart && e.start < slotEnd,
-          );
-          return (
-            <View key={slot.hour} style={styles.timeSlot}>
-              <Text style={styles.timeSlotLabel}>{slot.label}</Text>
-              <View style={styles.timeSlotContent}>
-                {slotEvents.length === 0 && (
-                  <View style={styles.timeSlotEmpty} />
-                )}
-                {slotEvents.map((e) => {
+        <View style={styles.timeGridBody}>
+          <View style={styles.timeGridRow}>
+            <View style={styles.timeColumn}>
+              {hourLabels.map(h => (
+                <View key={h.hour} style={styles.timeTick}>
+                  <Text style={styles.timeTickLabel}>{h.label}</Text>
+                </View>
+              ))}
+            </View>
+            <View style={styles.timeDayColumnsRow}>
+              <View style={styles.timeDayColSingle}>
+                {/* Hour grid lines */}
+                {hourLabels.map(h => (
+                  <View key={h.hour} style={styles.timeDayColTick} />
+                ))}
+                {/* Timed events positioned absolutely by time */}
+                {timedEvents.map(e => {
+                  const color = getEventColor(e);
                   const st = e.sourceType ? SOURCE_TYPE_CONFIG[e.sourceType] : undefined;
                   return (
                     <TouchableOpacity
                       key={e.id}
-                      style={[styles.timeSlotEvent, { borderLeftColor: getEventColor(e) }]}
+                      style={[
+                        styles.timeBlockEvent,
+                        styles.timeBlockEventDay,
+                        {
+                          top: timeToTop(e.start),
+                          height: eventHeight(e.start, e.end),
+                          borderLeftColor: color,
+                        },
+                      ]}
                       onPress={() => onEventPress?.(e)}
                       activeOpacity={0.7}
                     >
-                      <View style={styles.slotEventTitleRow}>
-                        <Text style={styles.slotEventTitle}>{e.title}</Text>
-                        {/* FF4-CAL-026: sourceType badge */}
-                        {st ? (
-                          <View style={[styles.slotSourceBadge, { backgroundColor: st.bg }]}>
-                            <Text style={[styles.slotSourceBadgeText, { color: st.color }]}>{st.label}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <Text style={styles.slotEventTime}>
-                        {e.allDay ? 'All day' : `${formatTime(e.start)} – ${formatTime(e.end)}`}
+                      <Text style={styles.timeBlockTitle} numberOfLines={1}>{e.title}</Text>
+                      <Text style={styles.timeBlockTime}>
+                        {formatTime(e.start)} – {formatTime(e.end)}
                       </Text>
-                      {/* FF4-CAL-027: notes display (2 lines truncated) */}
-                      {e.notes ? (
-                        <Text style={styles.slotEventNotes} numberOfLines={2}>{e.notes}</Text>
+                      {/* FF4-CAL-026: sourceType badge */}
+                      {st && showSourceBadges ? (
+                        <View style={[styles.timeBlockBadge, { backgroundColor: st.bg }]}>
+                          <Text style={[styles.timeBlockBadgeText, { color: st.color }]}>{st.label}</Text>
+                        </View>
+                      ) : null}
+                      {/* FF4-CAL-027: notes (2 lines truncated) */}
+                      {e.notes && showNotes ? (
+                        <Text style={styles.timeBlockNotes} numberOfLines={2}>{e.notes}</Text>
                       ) : null}
                     </TouchableOpacity>
                   );
                 })}
+                {/* CAL-009: Red current-time line for today */}
+                {isTodayView ? (
+                  <View style={[styles.currentTimeLine, { top: currentTimeTop }]} />
+                ) : null}
+                {timedEvents.length === 0 && allDayEvents.length === 0 && (
+                  <Text style={styles.noEvents}>No events this day</Text>
+                )}
               </View>
             </View>
-          );
-        })}
-        {sortedEvents.length === 0 && (
-          <Text style={styles.noEvents}>No events this day</Text>
-        )}
+          </View>
+        </View>
       </ScrollView>
     </View>
   );
@@ -529,10 +721,14 @@ function EventListView({
   events,
   onEventPress,
   maxEvents,
+  showSourceBadges = true,
+  showNotes = true,
 }: {
   events: CalendarEvent[];
   onEventPress?: (e: CalendarEvent) => void;
   maxEvents?: number;
+  showSourceBadges?: boolean;
+  showNotes?: boolean;
 }) {
   const today = todayStr();
 
@@ -574,7 +770,7 @@ function EventListView({
             {formatDateFull(item.date)}
           </Text>
           {item.events.map((e) => (
-            <EventItem key={e.id} event={e} onPress={onEventPress} showDate={false} />
+            <EventItem key={e.id} event={e} onPress={onEventPress} showDate={false} showSourceBadges={showSourceBadges} showNotes={showNotes} />
           ))}
         </View>
       )}
@@ -644,6 +840,45 @@ function CompactView({
   );
 }
 
+// ── Event Detail Modal (CAL-011) ─────────────────────────────────────────────
+
+function EventDetailModal({
+  visible,
+  event,
+  onClose,
+}: {
+  visible: boolean;
+  event: CalendarEvent | null;
+  onClose: () => void;
+}) {
+  if (!event) return null;
+  const st = event.sourceType ? SOURCE_TYPE_CONFIG[event.sourceType] : undefined;
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>{event.title}</Text>
+          <Text style={styles.modalTime}>
+            {event.allDay ? 'All day' : `${formatTime(event.start)} – ${formatTime(event.end)}`}
+          </Text>
+          <Text style={styles.modalDate}>{formatDateFull(event.start)}</Text>
+          {st ? (
+            <View style={[styles.modalSourceBadge, { backgroundColor: st.bg }]}>
+              <Text style={[styles.modalSourceBadgeText, { color: st.color }]}>{st.label}</Text>
+            </View>
+          ) : null}
+          {event.notes ? (
+            <Text style={styles.modalNotes}>{event.notes}</Text>
+          ) : null}
+          <TouchableOpacity style={styles.modalCloseBtn} onPress={onClose} activeOpacity={0.7}>
+            <Text style={styles.modalCloseBtnText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // ── Main CalendarModule ──────────────────────────────────────────────────────
 
 export function CalendarModule({
@@ -652,6 +887,11 @@ export function CalendarModule({
   events: eventsProp = [],
   dataBinding,
   maxEvents,
+  sourceTypes,
+  categoryFilter,
+  showSourceBadges = true,
+  showNotes = true,
+  compactThreshold = 200,
   onDataRefresh,
   onEventPress,
 }: CalendarModuleProps) {
@@ -664,9 +904,35 @@ export function CalendarModule({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // FF4-CAL-013: Local cache data source indicator
+  //   'none'   → no cached data, awaiting API
+  //   'cached' → showing cached data, API fetch in background
+  //   'live'   → showing fresh API data
+  //   'error'  → showing cached data, API fetch failed
+  type CacheSource = 'none' | 'cached' | 'live' | 'error';
+  const [cacheSource, setCacheSource] = useState<CacheSource>('none');
+
+  // Stable cache key derived from dataBinding dataSourceId, or a fallback
+  const cacheKey = useMemo(() => {
+    const id = dataBinding?.dataSourceId ?? 'default';
+    return `${CALENDAR_CACHE_PREFIX}${id}`;
+  }, [dataBinding?.dataSourceId]);
+
   const { data: dataSourceData, refresh: dsRefresh } = useDataSource(dataBinding);
 
+  // CAL-011: Event detail modal state
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const handleEventPress = useCallback((event: CalendarEvent) => {
+    setSelectedEvent(event);
+    setModalVisible(true);
+    onEventPress?.(event);
+  }, [onEventPress]);
+
   // Auto-fetch from backend API when no dataBinding is provided
+  // On success: updates cache + sets source to 'live'
+  // On failure: keeps cached data (if any) + sets source to 'error'
   const fetchFromApi = useCallback(async () => {
     if (!token || !serverUrl) return;
     try {
@@ -677,28 +943,51 @@ export function CalendarModule({
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const raw = (data.events ?? []) as any[];
-      setFetchedEvents(
-        raw.map((e: any) => ({
-          id: e.id,
-          title: e.title,
-          start: e.start ?? e.start_time ?? '',
-          end: e.end ?? e.end_time ?? '',
-          allDay: e.allDay ?? e.is_all_day ?? e.all_day ?? false,
-          sourceColor: e.color ?? e.sourceColor,
-          color: e.color,
-          sourceType: e.sourceType ?? e.source_type ?? 'local',  // FF4-CAL-026
-          notes: e.notes ?? undefined,                            // FF4-CAL-027
-          description: e.description,
-          location: e.location,
-        })),
-      );
+      const mapped: CalendarEvent[] = raw.map((e: any) => ({
+        id: e.id,
+        title: e.title,
+        start: e.start ?? e.start_time ?? '',
+        end: e.end ?? e.end_time ?? '',
+        allDay: e.allDay ?? e.is_all_day ?? e.all_day ?? false,
+        sourceColor: e.color ?? e.sourceColor,
+        color: e.color,
+        sourceType: e.sourceType ?? e.source_type ?? 'local',  // FF4-CAL-026
+        notes: e.notes ?? undefined,                            // FF4-CAL-027
+        category: e.category ?? undefined,                      // FF4-CAL-016
+        description: e.description,
+        location: e.location,
+      }));
+      setFetchedEvents(mapped);
+      setCacheSource('live');
+      // Save fresh data to local cache (fire-and-forget)
+      saveCachedEvents(cacheKey, mapped);
     } catch (err) {
       console.warn('CalendarModule: failed to fetch events:', err);
+      // If we were showing cached data, tag it as stale/error
+      setCacheSource(prev => prev === 'cached' ? 'error' : 'none');
     } finally {
       setLoading(false);
     }
-  }, [token, serverUrl]);
+  }, [token, serverUrl, cacheKey]);
 
+  // FF4-CAL-013: Load from local cache immediately for instant display
+  useEffect(() => {
+    if (dataBinding) return;
+    let cancelled = false;
+
+    loadCachedEvents(cacheKey).then((cached) => {
+      if (cancelled) return;
+      if (cached && cached.length > 0) {
+        setFetchedEvents(cached);
+        setCacheSource('cached');
+        setLoading(false); // data available now, stop spinner
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [dataBinding, cacheKey]);
+
+  // Fetch fresh data from API in background (replaces cached data on success)
   useEffect(() => {
     if (!dataBinding) {
       fetchFromApi();
@@ -717,6 +1006,7 @@ export function CalendarModule({
         sourceColor: (row.sourceColor ?? row.color) as string | undefined,
         sourceType: String(row.sourceType ?? row.source_type ?? 'local'),  // FF4-CAL-026
         notes: row.notes as string | undefined,                            // FF4-CAL-027
+        category: row.category as string | undefined,                      // FF4-CAL-016
         color: row.color as string | undefined,
         properties: row.properties as Record<string, unknown> | undefined,
       }));
@@ -725,8 +1015,30 @@ export function CalendarModule({
     return fetchedEvents;
   }, [dataSourceData, eventsProp, fetchedEvents]);
 
+  // FF4-CAL-016: Filter events by source types and category
+  const filteredEvents = useMemo<CalendarEvent[]>(() => {
+    let result = events;
+
+    if (sourceTypes && sourceTypes.trim()) {
+      const types = sourceTypes.split(',').map(t => t.trim().toLowerCase());
+      result = result.filter(e => e.sourceType && types.includes(e.sourceType.toLowerCase()));
+    }
+
+    if (categoryFilter && categoryFilter.trim()) {
+      const filter = categoryFilter.trim().toLowerCase();
+      result = result.filter(e =>
+        (e.title && e.title.toLowerCase().includes(filter)) ||
+        (e.category && e.category.toLowerCase().includes(filter)) ||
+        (e.notes && e.notes.toLowerCase().includes(filter))
+      );
+    }
+
+    return result;
+  }, [events, sourceTypes, categoryFilter]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
+    setCacheSource('none'); // clear stale cache indicator, show fresh state after fetch
     if (dataBinding) {
       clearDataSourceCache(dataBinding.dataSourceId);
       dsRefresh();
@@ -744,50 +1056,85 @@ export function CalendarModule({
   }, []);
 
   // FF4-CAL-013: Auto-adapt — if cell is too small for Month/Week/Day, fall back to Compact
+  // FF4-CAL-019: compactThreshold is admin-controlled
   const effectiveVariant = useMemo<ValidVariant>(() => {
-    if (cellWidth < 200 && (validVariant === 'month' || validVariant === 'week' || validVariant === 'day')) {
+    if (cellWidth < compactThreshold && (validVariant === 'month' || validVariant === 'week' || validVariant === 'day')) {
       return 'compact';
     }
     return validVariant;
-  }, [cellWidth, validVariant]);
+  }, [cellWidth, validVariant, compactThreshold]);
 
   const renderVariant = () => {
     switch (effectiveVariant) {
       case 'month':
-        return <MonthView events={events} onEventPress={onEventPress} cellWidth={cellWidth} />;
+        return <MonthView events={filteredEvents} onEventPress={handleEventPress} cellWidth={cellWidth} showSourceBadges={showSourceBadges} showNotes={showNotes} />;
       case 'week':
-        return <WeekView events={events} onEventPress={onEventPress} />;
+        return <WeekView events={filteredEvents} onEventPress={handleEventPress} showSourceBadges={showSourceBadges} showNotes={showNotes} />;
       case 'day':
-        return <DayView events={events} onEventPress={onEventPress} />;
+        return <DayView events={filteredEvents} onEventPress={handleEventPress} showSourceBadges={showSourceBadges} showNotes={showNotes} />;
       case 'eventList':
-        return <EventListView events={events} onEventPress={onEventPress} maxEvents={maxEvents} />;
+        return <EventListView events={filteredEvents} onEventPress={handleEventPress} maxEvents={maxEvents} showSourceBadges={showSourceBadges} showNotes={showNotes} />;
       case 'compact':
-        return <CompactView events={events} onEventPress={onEventPress} cellWidth={cellWidth} />;
+        return <CompactView events={filteredEvents} onEventPress={handleEventPress} cellWidth={cellWidth} />;
     }
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={themeColors.primary} />
-      }
-    >
-      {title ? (
-        <Text style={styles.moduleTitle}>{title}</Text>
-      ) : null}
+    <>
+      <ScrollView
+        style={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={themeColors.primary} />
+        }
+      >
+        {title ? (
+          <Text style={styles.moduleTitle}>{title}</Text>
+        ) : null}
 
-      {/* FF4-CAL-005: NO variant switcher on mobile — variant is admin-controlled via SDUI payload */}
-      {/* Only time navigation is available within the chosen variant */}
+        {/* FF4-CAL-013: Cache source indicator — "Live", "Cached", or "Offline data" */}
+        {cacheSource !== 'none' ? (
+          <View style={styles.cacheIndicator}>
+            <View
+              style={[
+                styles.cacheDot,
+                cacheSource === 'live'
+                  ? styles.cacheDotLive
+                  : cacheSource === 'cached'
+                    ? styles.cacheDotCached
+                    : styles.cacheDotError,
+              ]}
+            />
+            <Text style={styles.cacheText}>
+              {cacheSource === 'live'
+                ? 'Live'
+                : cacheSource === 'cached'
+                  ? 'Cached'
+                  : 'Offline data'}
+            </Text>
+          </View>
+        ) : null}
 
-      {cellWidth < 200 && validVariant !== effectiveVariant && (
-        <Text style={styles.autoAdaptNotice}>
-          Auto-adapted to compact view (cell too small)
-        </Text>
-      )}
+        {/* FF4-CAL-005: NO variant switcher on mobile — variant is admin-controlled via SDUI payload */}
+        {/* Only time navigation is available within the chosen variant */}
 
-      {renderVariant()}
-    </ScrollView>
+        {cellWidth < compactThreshold && validVariant !== effectiveVariant && (
+          <Text style={styles.autoAdaptNotice}>
+            Auto-adapted to compact view (cell too small)
+          </Text>
+        )}
+
+        {renderVariant()}
+      </ScrollView>
+      {/* CAL-011: Event detail modal */}
+      <EventDetailModal
+        visible={modalVisible}
+        event={selectedEvent}
+        onClose={() => {
+          setModalVisible(false);
+          setSelectedEvent(null);
+        }}
+      />
+    </>
   );
 }
 
@@ -944,89 +1291,152 @@ const styles = StyleSheet.create({
   weekDayNumTodayText: {
     color: '#fff',
   },
+
+  // CAL-009: Time grid (shared by WeekView and DayView)
   weekEventsContainer: {
     maxHeight: 400,
-    paddingHorizontal: 12,
+    paddingHorizontal: 4,
   },
-  weekDaySection: {
-    marginTop: 8,
-  },
-  weekDaySectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#555',
-    marginBottom: 4,
-  },
-  weekDayCount: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#8E8E93',
-  },
-  // Day variant
   dayTimeline: {
     maxHeight: 500,
-    paddingHorizontal: 12,
+    paddingHorizontal: 4,
   },
-  timeSlot: {
+  weekTimeColSpacer: {
+    width: 50,
+  },
+  timeGridBody: {
+    height: 24 * HOUR_HEIGHT,
+  },
+  timeGridRow: {
     flexDirection: 'row',
-    minHeight: 48,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E5EA',
   },
-  timeSlotLabel: {
-    width: 60,
-    fontSize: 10,
+  timeColumn: {
+    width: 50,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: '#E5E5EA',
+  },
+  timeTick: {
+    height: HOUR_HEIGHT,
+    justifyContent: 'flex-start',
+    paddingTop: 1,
+  },
+  timeTickLabel: {
+    fontSize: 9,
     color: '#8E8E93',
-    paddingTop: 4,
     textAlign: 'right',
-    paddingRight: 8,
+    paddingRight: 4,
   },
-  timeSlotContent: {
+  timeDayColumnsRow: {
     flex: 1,
-    paddingLeft: 4,
+    flexDirection: 'row',
   },
-  timeSlotEmpty: {
-    height: 10,
+  timeDayCol: {
+    flex: 1,
+    position: 'relative',
   },
-  timeSlotEvent: {
+  timeDayColSingle: {
+    flex: 1,
+    position: 'relative',
+    minHeight: 24 * HOUR_HEIGHT,
+  },
+  timeDayColTick: {
+    height: HOUR_HEIGHT,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#F0F0F0',
+  },
+  timeBlockEvent: {
+    position: 'absolute',
+    left: 2,
+    right: 2,
     borderLeftWidth: 3,
-    paddingLeft: 8,
-    paddingVertical: 4,
-    marginBottom: 2,
     backgroundColor: '#FAFAFA',
     borderRadius: 3,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    overflow: 'hidden',
+    zIndex: 5,
   },
-  slotEventTitle: {
-    fontSize: 13,
+  timeBlockEventDay: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  timeBlockTitle: {
+    fontSize: 11,
     fontWeight: '600',
     color: '#000',
   },
-  slotEventTime: {
-    fontSize: 11,
+  timeBlockTime: {
+    fontSize: 9,
     color: '#8E8E93',
   },
-  // FF4-CAL-026: sourceType badge for DayView
-  slotEventTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  slotSourceBadge: {
+  timeBlockBadge: {
+    alignSelf: 'flex-start',
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderRadius: 3,
+    marginTop: 2,
   },
-  slotSourceBadgeText: {
-    fontSize: 9,
+  timeBlockBadgeText: {
+    fontSize: 8,
     fontWeight: '600',
   },
-  // FF4-CAL-027: notes text for DayView
-  slotEventNotes: {
-    fontSize: 11,
+  timeBlockNotes: {
+    fontSize: 10,
     color: '#8E8E93',
     fontStyle: 'italic',
     marginTop: 2,
-    lineHeight: 14,
+    lineHeight: 12,
+  },
+  currentTimeLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: '#FF3B30',
+    zIndex: 10,
+  },
+  // All-day event banners (WeekView)
+  allDayBanner: {
+    width: '100%',
+    paddingHorizontal: 2,
+    paddingVertical: 1,
+    borderRadius: 2,
+    marginTop: 2,
+  },
+  allDayBannerText: {
+    fontSize: 8,
+    fontWeight: '500',
+    color: '#555',
+  },
+  // All-day section (DayView)
+  dayAllDaySection: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E5EA',
+  },
+  dayAllDayItem: {
+    borderLeftWidth: 3,
+    paddingLeft: 8,
+    paddingVertical: 4,
+    marginBottom: 4,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 3,
+  },
+  dayAllDayItemText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#555',
+  },
+  noEventsTimeGrid: {
+    position: 'absolute',
+    top: 60,
+    left: 0,
+    right: 0,
+    fontSize: 13,
+    color: '#8E8E93',
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
   // Event List variant
   eventListGroup: {
@@ -1088,5 +1498,97 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 4,
     paddingHorizontal: 12,
+  },
+  // CAL-011: Event detail modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000',
+    marginBottom: 8,
+  },
+  modalTime: {
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 4,
+  },
+  modalDate: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginBottom: 12,
+  },
+  modalSourceBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    marginBottom: 12,
+  },
+  modalSourceBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  modalNotes: {
+    fontSize: 14,
+    color: '#555',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  modalCloseBtn: {
+    alignSelf: 'center',
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 32,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  modalCloseBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  // FF4-CAL-013: Cache source indicator
+  cacheIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 2,
+    gap: 4,
+  },
+  cacheDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  cacheDotLive: {
+    backgroundColor: '#34C759',
+  },
+  cacheDotCached: {
+    backgroundColor: '#FF9500',
+  },
+  cacheDotError: {
+    backgroundColor: '#FF3B30',
+  },
+  cacheText: {
+    fontSize: 11,
+    color: '#8E8E93',
+    fontWeight: '500',
   },
 });

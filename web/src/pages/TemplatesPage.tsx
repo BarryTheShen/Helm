@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
-import { Globe, Trash2, Search, Eye, Upload, Smartphone } from 'lucide-react';
+import { Globe, Trash2, Search, Eye, Upload, Smartphone, Layers } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { SDUIPreview } from '../components/SDUIPreview';
 import { AppPreview } from '../components/AppPreview';
@@ -13,6 +13,15 @@ interface Template {
   description: string | null;
   category: string;
   is_public: boolean;
+  created_at: string;
+  version_count: number;
+}
+
+interface TemplateVersion {
+  id: string;
+  template_id: string;
+  version_number: number;
+  display_name: string;
   created_at: string;
 }
 
@@ -29,6 +38,11 @@ interface TemplateDetail extends Template {
 
 interface PaginatedResponse<T> {
   items: T[];
+  total: number;
+}
+
+interface PaginatedVersions {
+  items: TemplateVersion[];
   total: number;
 }
 
@@ -50,8 +64,14 @@ export function TemplatesPage() {
 
   // Apply modal
   const [applyingTemplate, setApplyingTemplate] = useState<string | null>(null);
+  const [versions, setVersions] = useState<TemplateVersion[]>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState<string>('');
+  const [targetMode, setTargetMode] = useState<'existing' | 'new'>('existing');
   const [applyModuleId, setApplyModuleId] = useState('');
   const [modules, setModules] = useState<ModuleInfo[]>([]);
+  const [newModuleName, setNewModuleName] = useState('');
+  const [autoCheckpoint, setAutoCheckpoint] = useState(true);
+  const [applying, setApplying] = useState(false);
 
   // App preview modal
   const [showAppPreview, setShowAppPreview] = useState(false);
@@ -72,11 +92,26 @@ export function TemplatesPage() {
 
   const templates = templateData?.items ?? [];
 
+  // Fetch module list and versions when the apply modal opens
   useEffect(() => {
     if (!applyingTemplate) return;
+    setSelectedVersionId('');
+    setTargetMode('existing');
+    setApplyModuleId('');
+    setNewModuleName('');
+    setAutoCheckpoint(true);
+    setVersions([]);
+
     api.get<{ items: ModuleInfo[] }>('/api/sdui/modules')
       .then(data => setModules(data.items || []))
       .catch(() => setModules([]));
+
+    // Fetch versions for this template
+    api.get<PaginatedVersions>(`/api/templates/${applyingTemplate}/versions?limit=50&offset=0`)
+      .then(data => {
+        setVersions(data.items || []);
+      })
+      .catch(() => setVersions([]));
   }, [applyingTemplate]);
 
   const handleDelete = useCallback(async (id: string, name: string) => {
@@ -99,15 +134,57 @@ export function TemplatesPage() {
     }
   }, []);
 
-  const handleApply = useCallback(async (templateId: string, moduleId: string) => {
+  const handleApply = useCallback(async () => {
+    if (!applyingTemplate) return;
+
+    let targetModuleId = applyModuleId;
+
+    // If "Create new module", create it first
+    if (targetMode === 'new') {
+      const name = newModuleName.trim();
+      if (!name) {
+        toast.error('Please enter a module name');
+        return;
+      }
+      try {
+        setApplying(true);
+        const newModule = await api.post<{ module_id: string; name: string; icon: string }>(
+          '/api/sdui/modules',
+          { name, icon: '📦' },
+        );
+        targetModuleId = newModule.module_id;
+        toast.success(`Module "${name}" created`);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to create module');
+        setApplying(false);
+        return;
+      }
+    } else {
+      if (!targetModuleId) {
+        toast.error('Please select a target module');
+        return;
+      }
+    }
+
+    // Apply template
     try {
-      await api.post(`/api/templates/${templateId}/apply`, { module_id: moduleId });
-      toast.success(`Template applied to ${moduleId} as draft`);
+      setApplying(true);
+      await api.post(`/api/templates/${applyingTemplate}/apply`, {
+        module_id: targetModuleId,
+        version_id: selectedVersionId || null,
+        auto_checkpoint: autoCheckpoint,
+      });
+      const moduleName = targetMode === 'new'
+        ? newModuleName.trim()
+        : modules.find(m => m.module_id === targetModuleId)?.name || targetModuleId;
+      toast.success(`Template applied to "${moduleName}" as draft`);
       setApplyingTemplate(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Apply failed');
+    } finally {
+      setApplying(false);
     }
-  }, []);
+  }, [applyingTemplate, targetMode, applyModuleId, newModuleName, selectedVersionId, autoCheckpoint, modules]);
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', {
@@ -208,6 +285,10 @@ export function TemplatesPage() {
                       Public
                     </span>
                   )}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-50 text-gray-500 rounded-full text-xs font-medium">
+                    <Layers size={11} />
+                    {t.version_count} {t.version_count === 1 ? 'version' : 'versions'}
+                  </span>
                 </div>
                 <span className="text-xs text-gray-400">{formatDate(t.created_at)}</span>
               </div>
@@ -228,6 +309,10 @@ export function TemplatesPage() {
               </div>
             </div>
             <p className="text-sm text-gray-500 mb-4">{previewTemplate.description || 'No description'}</p>
+            <p className="text-xs text-gray-400 mb-3">
+              <Layers size={12} className="inline mr-1" />
+              {previewTemplate.version_count} {previewTemplate.version_count === 1 ? 'version' : 'versions'}
+            </p>
             {showJson ? (
               <pre className="mt-2 text-xs font-mono bg-gray-50 p-3 rounded overflow-auto max-h-96 mb-4">{JSON.stringify(previewTemplate.screen_json, null, 2)}</pre>
             ) : (
@@ -255,42 +340,135 @@ export function TemplatesPage() {
         </div>
       )}
 
-      {/* Apply to Module Modal */}
+      {/* Apply Template Modal */}
       {applyingTemplate && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-[400px]">
-            <h3 className="text-lg font-semibold mb-4">Apply Template to Module</h3>
+          <div className="bg-white rounded-lg p-6 w-[480px] max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4">Apply Template</h3>
+
+            {/* Version selector */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Target Module</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Version</label>
               <select
-                value={applyModuleId}
-                onChange={(e) => setApplyModuleId(e.target.value)}
+                value={selectedVersionId}
+                onChange={(e) => setSelectedVersionId(e.target.value)}
                 className="w-full px-3 py-2 border rounded-md text-sm"
               >
-                <option value="">Select a module...</option>
-                {modules.map(m => (
-                  <option key={m.module_id} value={m.module_id}>
-                    {m.icon ? `${m.icon} ` : ''}{m.name}
+                <option value="">Latest (current template)</option>
+                {versions.map(v => (
+                  <option key={v.id} value={v.id}>
+                    {v.display_name}
                   </option>
                 ))}
               </select>
+              {versions.length === 0 && (
+                <p className="text-xs text-gray-400 mt-1">No saved versions — the current template will be applied.</p>
+              )}
             </div>
+
+            {/* Target selector */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Target</label>
+              <div className="flex gap-3 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setTargetMode('existing')}
+                  className={`flex-1 px-3 py-2 text-sm rounded-md border transition-colors ${
+                    targetMode === 'existing'
+                      ? 'bg-blue-50 border-blue-300 text-blue-700'
+                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  Apply to Existing Module
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTargetMode('new')}
+                  className={`flex-1 px-3 py-2 text-sm rounded-md border transition-colors ${
+                    targetMode === 'new'
+                      ? 'bg-blue-50 border-blue-300 text-blue-700'
+                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  Create New Module
+                </button>
+              </div>
+
+              {targetMode === 'existing' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Target Module</label>
+                  <select
+                    value={applyModuleId}
+                    onChange={(e) => setApplyModuleId(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md text-sm"
+                  >
+                    <option value="">Select a module...</option>
+                    {modules.map(m => (
+                      <option key={m.module_id} value={m.module_id}>
+                        {m.icon ? `${m.icon} ` : ''}{m.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">New Module Name</label>
+                  <input
+                    type="text"
+                    value={newModuleName}
+                    onChange={(e) => setNewModuleName(e.target.value)}
+                    placeholder="Enter module name..."
+                    className="w-full px-3 py-2 border rounded-md text-sm"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Auto-checkpoint checkbox */}
+            <div className="mb-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoCheckpoint}
+                  onChange={(e) => setAutoCheckpoint(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700">
+                  Create auto-checkpoint before applying
+                </span>
+              </label>
+              <p className="text-xs text-gray-400 mt-1 ml-6">
+                Saves the current working draft as a checkpoint before applying the template, so you can restore
+                the previous state if needed.
+              </p>
+            </div>
+
             <p className="text-xs text-gray-500 mb-4">
               This will create a draft on the selected module. The draft must be approved on the mobile app before going live.
             </p>
+
             <div className="flex gap-2 justify-end">
               <button
                 onClick={() => setApplyingTemplate(null)}
                 className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
+                disabled={applying}
               >
                 Cancel
               </button>
               <button
-                onClick={() => handleApply(applyingTemplate, applyModuleId)}
-                disabled={!applyModuleId}
-                className={`px-4 py-2 text-sm rounded-md ${applyModuleId ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                onClick={handleApply}
+                disabled={
+                  applying ||
+                  (targetMode === 'existing' && !applyModuleId) ||
+                  (targetMode === 'new' && !newModuleName.trim())
+                }
+                className={`px-4 py-2 text-sm rounded-md ${
+                  applying || (targetMode === 'existing' && !applyModuleId) || (targetMode === 'new' && !newModuleName.trim())
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-green-600 hover:bg-green-700 text-white'
+                }`}
               >
-                Apply as Draft
+                {applying ? 'Applying...' : 'Apply as Draft'}
               </button>
             </div>
           </div>

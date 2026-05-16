@@ -32,6 +32,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
           <Route path="/" element={<Navigate to="/editor" replace />} />
+          <Route path="/dashboard" element={<Navigate to="/editor" replace />} />
           <Route path="/editor" element={<EditorPage />} />
           <Route path="/app-editor" element={<AppEditorPage />} />
           <Route path="/templates" element={<TemplatesPage />} />

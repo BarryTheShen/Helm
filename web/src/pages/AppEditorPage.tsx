@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Smartphone, Plus, Save, ChevronDown, Eye, Rocket, History, Clock, CheckCircle, AlertTriangle, AlertOctagon, RotateCcw } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Smartphone, Plus, Save, ChevronDown, Eye, Rocket, History, Clock, CheckCircle, AlertTriangle, AlertOctagon, RotateCcw, CornerDownRight } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAppEditorStore } from '../stores/useAppEditorStore';
 import { usePreviewStore } from '../stores/usePreviewStore';
@@ -18,6 +18,7 @@ interface AppVersion {
   source: string;
   change_summary: string | null;
   created_at: string;
+  parent_version_id: string | null;
 }
 
 interface ModuleVersion {
@@ -85,6 +86,58 @@ export function AppEditorPage() {
   const [versionDiffMode, setVersionDiffMode] = useState(false);
   const [versionDiffA, setVersionDiffA] = useState<string | null>(null);
   const [versionDiffB, setVersionDiffB] = useState<string | null>(null);
+
+  // ── App Version Tree (VER-003) ────────────────────────────────────────
+  interface AppVersionNode {
+    version: AppVersion;
+    children: AppVersionNode[];
+    depth: number;
+  }
+
+  const appVersionTree = useMemo((): AppVersionNode[] => {
+    if (appVersions.length === 0) return [];
+    const nodeMap = new Map<string, AppVersionNode>();
+    for (const v of appVersions) {
+      nodeMap.set(v.id, { version: v, children: [], depth: 0 });
+    }
+    const roots: AppVersionNode[] = [];
+    for (const v of appVersions) {
+      const node = nodeMap.get(v.id)!;
+      if (v.parent_version_id && nodeMap.has(v.parent_version_id)) {
+        nodeMap.get(v.parent_version_id)!.children.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+    for (const node of nodeMap.values()) {
+      node.children.sort((a, b) =>
+        new Date(a.version.created_at).getTime() - new Date(b.version.created_at).getTime()
+      );
+    }
+    roots.sort((a, b) =>
+      new Date(a.version.created_at).getTime() - new Date(b.version.created_at).getTime()
+    );
+    function setDepth(nodes: AppVersionNode[], depth: number) {
+      for (const node of nodes) {
+        node.depth = depth;
+        setDepth(node.children, depth + 1);
+      }
+    }
+    setDepth(roots, 0);
+    return roots;
+  }, [appVersions]);
+
+  const flatAppVersionTree = useMemo((): AppVersionNode[] => {
+    const result: AppVersionNode[] = [];
+    function walk(nodes: AppVersionNode[]) {
+      for (const node of nodes) {
+        result.push(node);
+        walk(node.children);
+      }
+    }
+    walk(appVersionTree);
+    return result;
+  }, [appVersionTree]);
 
   // ── Autosave state (FF4-APP-006) ───────────────────────────────────
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
@@ -447,14 +500,6 @@ export function AppEditorPage() {
     );
 
     setShowBrowserPreview(true);
-  };
-
-  const handlePreviewDevice = () => {
-    if (!currentApp) return;
-    setShowPreviewPicker(false);
-    console.log('[AppEditor] handlePreviewDevice() — clicked (not yet implemented)');
-    showMsg('info', 'Device preview coming soon');
-    // TODO: Implement device preview
   };
 
   const handlePublishApp = async () => {
@@ -1148,8 +1193,8 @@ export function AppEditorPage() {
       {/* Preview Picker Modal */}
       {showPreviewPicker && currentApp && (
         <PreviewPicker
+          appId={currentApp.id}
           onSelectBrowser={handlePreviewBrowser}
-          onSelectDevice={handlePreviewDevice}
           onClose={() => setShowPreviewPicker(false)}
         />
       )}
@@ -1371,19 +1416,21 @@ export function AppEditorPage() {
                       : 'Click a version to select it as the first comparison:'}
                   </div>
                 )}
-                {appVersions.map((v) => {
+                {flatAppVersionTree.map((node) => {
+                  const v = node.version;
                   const isPublished = v.source === 'publish';
                   const isDiffSelectedA = versionDiffA === v.id;
                   const isDiffSelectedB = versionDiffB === v.id;
                   return (
                     <div
                       key={v.id}
+                      style={{ marginLeft: `${node.depth * 20}px` }}
                       className={`border rounded-lg overflow-hidden transition-colors ${
                         isDiffSelectedA ? 'border-purple-400 bg-purple-50/30'
                         : isDiffSelectedB ? 'border-purple-600 bg-purple-100/30'
                         : versionDiffMode ? 'border-gray-200 cursor-pointer hover:border-purple-300'
                         : isPublished ? 'border-green-200' : 'border-gray-200'
-                      }`}
+                      } ${node.depth > 0 ? 'border-l-2 border-l-gray-300' : ''}`}
                       onClick={() => {
                         if (versionDiffMode) {
                           if (!versionDiffA) {
@@ -1405,6 +1452,9 @@ export function AppEditorPage() {
                               }`}>
                                 {isDiffSelectedA ? 'A' : isDiffSelectedB ? 'B' : ''}
                               </span>
+                            )}
+                            {node.depth > 0 && !versionDiffMode && (
+                              <CornerDownRight size={12} className="text-gray-300 shrink-0" />
                             )}
                             <div className="text-sm font-medium text-gray-800">
                               {/* FF4-VERSIONING-APP-001: avoid "v11 — v11" duplicate when display_name matches version prefix */}
