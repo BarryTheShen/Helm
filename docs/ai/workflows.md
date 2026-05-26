@@ -296,7 +296,7 @@ Issues are classified by severity:
 
 The original 16-agent pipeline (Requirements → Due Diligence → Plan → Plan-Critic → Implement → Tester → Live-Test → Feature-Validator → Reviewer → Feature-Critic → Docs-Updater) is **legacy**. It was Claude Code-specific and ran all agents regardless of task size. The single canonical loop above replaces it.
 
-The legacy agent definitions remain in `.claude/agents/` for Claude Code sessions. They are not portable to OpenCode.
+The legacy 16-agent Claude Code stack was removed in favor of the `helm-*` roster in `.cursor/agents/` (migrated from OpenCode).
 
 ## MCP Guidance
 

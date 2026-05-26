@@ -1,0 +1,20 @@
+---
+description: Feature Feedback traceability — REQ-IDs, slices, auditor gate, coverage gate
+alwaysApply: false
+---
+
+For Feature Feedback / product-spec work, read `docs/ai/workflows.md` (Feature Feedback section).
+
+**Source of truth:** Full FF docs + `requirements-ledger.md` — never an AI summary alone.
+
+**Gates:**
+
+1. `helm-requirements-auditor` → APPROVED before planning.
+2. `helm-planner` + `helm-plan-critic` — plans must reference REQ-IDs.
+3. `helm-build` claims **one** slice from `slices/<SLICE-ID>.md`.
+4. `helm-tester` → `qa-plan.md` with coverage per must-have REQ-ID.
+5. `helm-reviewer` → `product-completeness-matrix.md`, `coverage-gate.md` must be OPEN before ship.
+
+Persistent snapshot: `docs/product/feature-feedback/ff4/` (session artifacts in `.helm-sessions/current/`).
+
+**Blind review:** Do not bias reviewers with pass counts or "should be fixed now" framing.

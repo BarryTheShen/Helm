@@ -1,9 +1,8 @@
-// OpenCode project-local config for Helm
+// OpenCode project-local config for Helm (legacy — Cursor is canonical)
 // Official schema: https://opencode.ai/config.json
 //
-// Per-agent model routing lives in `.opencode/agents/*.md`.
-// Provider credentials and model availability are user-managed.
-// Local Qwen remains available as a fallback/private model.
+// Canonical agents: `.cursor/agents/*.md` — update those for prompt changes.
+// Per-agent model routing here: `.opencode/agents/*.md` (transition only).
 
 {
   "$schema": "https://opencode.ai/config.json",

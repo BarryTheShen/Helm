@@ -1,0 +1,17 @@
+---
+description: Web admin and mobile React/React Native conventions
+globs:
+  - web/**/*
+  - mobile/**/*
+alwaysApply: false
+---
+
+Read `docs/codebase-explanation/frontend.md` before editing.
+
+- TypeScript strict mode; functional components; named exports only.
+- Web SDUI editor: `web/src/editor/`. Mobile renderer: `mobile/src/`.
+- Run `cd web && npm run lint` for web changes.
+- UI-visible changes: delegate `helm-ui-reviewer` and run proportional Playwright e2e (`qa/`).
+- New SDUI components: follow skill `add-sdui-component`.
+
+Protocol-first: if API/WS/SDUI contracts change, `helm-protocol` must define them before UI implementation.

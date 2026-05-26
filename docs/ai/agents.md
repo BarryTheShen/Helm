@@ -1,36 +1,14 @@
 # Agent Definitions
 
-## Legacy/Current Claude Code Agent Stack (16 Agents)
+## Cursor Agent Roster (canonical)
 
-These are the active Claude Code sub-agents defined in `.claude/agents/`. They are **Claude Code-specific** — not portable to other tools. Sub-agents cannot spawn other sub-agents.
+Subagent prompts live in **`.cursor/agents/helm-*.md`**. Project rules: **`.cursor/rules/`**. Slash commands: **`.cursor/commands/`**. See `docs/ai/cursor-setup.md`.
 
-| Agent | Model | Scope |
-|-------|-------|-------|
-| `session-init` | haiku | Session folder creation/archiving |
-| `requirements` | sonnet | Maps tasks to affected files via docs |
-| `due-diligence` | sonnet | Reads source, outputs compressed context |
-| `planner` | sonnet | Generates implementation plans |
-| `plan-critic` | sonnet | Challenges plan assumptions |
-| `protocol-dev` | sonnet | API/WS/MCP contract definitions |
-| `backend-dev` | sonnet | Python FastAPI implementation |
-| `frontend-dev` | sonnet | React Native + Web admin |
-| `agent-dev` | sonnet | PydanticAI + MCP implementation |
-| `tester` | sonnet | pytest-asyncio test writing |
-| `live-tester` | sonnet | Playwright functional verification |
-| `ui-reviewer` | sonnet | Visual quality review |
-| `reviewer` | sonnet | Code quality gate |
-| `feature-critic` | sonnet | Large-feature checklist only, not a default agent |
-| `docs-updater` | sonnet | Living documentation maintenance — conditional |
+The main Cursor Agent (with `helm-core` rules) classifies tasks and delegates subagents. **`helm-orchestrator`** is the dedicated delegation prompt — it does not read or edit application source.
 
-These are **not portable** to OpenCode. They remain for Claude Code sessions.
+**Final git stage:** `helm-git` — branch safety, commit, push. `/helm-ship` is an optional shortcut.
 
-## OpenCode Agent Roster
-
-The OpenCode config lives in `opencode.jsonc` (project settings) and `.opencode/` (agents, commands), following official OpenCode docs.
-
-**Default agent:** `helm-orchestrator` (primary agent, set in `opencode.jsonc`). The orchestrator classifies the task, delegates subagents conditionally, verifies, reviews, documents when needed, and reports completion.
-
-**Final git stage:** `helm-git` is the canonical agent for branch safety, diff review, commit, and push. `/helm-ship` remains as an optional shortcut command but is not the canonical reference.
+**Legacy OpenCode:** `.opencode/agents/` mirrors this roster during transition; do not edit OpenCode copies for new behavior — update `.cursor/agents/` instead.
 
 ### Agent Roster
 
@@ -136,7 +114,7 @@ A persistent, reusable product spec snapshot is stored at `docs/product/feature-
 
 ### Depth Policy
 
-The OpenCode agent hierarchy has three layers:
+The agent hierarchy has three layers:
 
 ```
 Layer 0: helm-orchestrator (primary)

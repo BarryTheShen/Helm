@@ -9,9 +9,10 @@ Detailed guidance for AI coding agents working on the Helm project.
 | [project-map.md](project-map.md) | Codebase structure, current file counts, port map, tech stack |
 | [workflows.md](workflows.md) | Development workflow, bug fix loop, commit discipline |
 | [verification.md](verification.md) | Testing strategy, QA pipeline, verification checklist |
-| [agents.md](agents.md) | Claude Code agent definitions, orchestration patterns |
+| [agents.md](agents.md) | Subagent roster, orchestration patterns |
+| [cursor-setup.md](cursor-setup.md) | Cursor rules, MCP, commands, subagents |
 | [migration-notes.md](migration-notes.md) | Migration history — what changed and why |
-| [opencode-models.md](opencode-models.md) | Local-first model policy, provider routing, env var examples |
+| [opencode-models.md](opencode-models.md) | OpenCode model policy (legacy transition) |
 
 ## How to Use
 

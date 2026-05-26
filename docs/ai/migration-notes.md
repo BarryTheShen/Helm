@@ -1,5 +1,21 @@
 # Migration Notes
 
+## 2026-05-26: OpenCode → Cursor (local agents)
+
+### What Changed
+
+- Added `.cursor/` — `rules/`, `agents/` (16 helm-* prompts from `.opencode/agents/`), `commands/` (8), `skills/` (6 from former `.claude/skills/`), `mcp.json` (Playwright + Context7).
+- Added `docs/ai/cursor-setup.md`.
+- Updated `AGENTS.md`, `CLAUDE.md`, `docs/ai/agents.md`, `docs/ai/README.md` for Cursor-first orchestration.
+- Removed legacy `.claude/` (agents + skills) and `.github/agents/`, `.github/prompts/`, `.github/instructions/`, `.github/skills/`.
+- Kept `.opencode/` and `opencode.jsonc` for transition; Cursor is canonical for new work.
+
+### What Was NOT Changed
+
+- No application source (backend, web, mobile, agent).
+- No cloud agent config (`.cursor/environment.json` not added — local Agent + git push only).
+- mem0 not configured.
+
 ## 2026-05-15: Add Materialized Requirement Slices
 
 ### What Changed

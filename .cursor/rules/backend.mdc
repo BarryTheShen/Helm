@@ -1,0 +1,15 @@
+---
+description: Backend FastAPI and Python conventions
+globs: backend/**/*
+alwaysApply: false
+---
+
+Read `docs/codebase-explanation/backend.md` before editing.
+
+- Work in `backend/app/` — one route per file, one model per file, focused services.
+- Async SQLAlchemy, Pydantic V2 schemas, type hints on all new code.
+- JWT auth and `require_admin` where existing patterns use them.
+- Run `cd backend && pytest -q` before considering backend work done.
+- MCP tool changes require 3-file sync: `tools.py`, `agent_proxy.py`, `server.py` — see skill `add-mcp-tool`.
+
+Delegate cross-layer contract changes to `helm-protocol` before frontend implementation.

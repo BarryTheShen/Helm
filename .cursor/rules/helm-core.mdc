@@ -1,0 +1,51 @@
+---
+description: Helm core engineering rules and orchestration loop
+alwaysApply: true
+---
+
+Read `AGENTS.md` first, then `docs/ai/workflows.md` for the full canonical loop.
+
+## Non-negotiables
+
+- Root-cause fixes only — no masking patches or "fix later" TODOs.
+- One change, one concern per commit.
+- Never commit or push to `main`. Work on `dev` or a feature branch Barry specifies.
+- No hardcoded secrets — use environment variables.
+- TypeScript strict (web/mobile). Python type hints (backend).
+- Functional components only; named exports; one component per file; one route per file.
+
+## Canonical loop
+
+```
+session init → context artifact → plan ↔ plan critic until approved → implementation → QA + review → live test → docs → helm-git
+```
+
+Depth scales by task size; never skip steps out of order — make each step shallow or deep as needed.
+
+## Delegation
+
+You are the workflow owner. Classify the task, delegate to `.cursor/agents/helm-*` subagents (or built-in explore/bash/browser when appropriate), verify summaries, and report completion.
+
+- **Orchestrator behavior:** See `.cursor/agents/helm-orchestrator.md` — delegate implementation; do not read source or edit app code yourself unless the task is trivial.
+- **Session:** `helm-session-init` on every new task.
+- **Git:** `helm-git` for commit/push after verification.
+- **Slash shortcuts:** `.cursor/commands/` (`/helm-ship`, `/helm-bug`, etc.) when scope is already known.
+
+## Verification (proportional)
+
+| Layer | Check |
+|-------|--------|
+| Backend | `cd backend && pytest -q` |
+| Web | `cd web && npm run lint` |
+| Mobile | `cd mobile && npx expo start` smoke |
+| UI behavior | `cd qa && npx playwright test --project e2e` when warranted |
+| React changes | React Doctor per `AGENTS.md` |
+
+## MCP
+
+- **Context7** — library/API docs; use instead of guessing syntax.
+- **Playwright** — browser verification for UI work (`helm-tester`, `helm-ui-reviewer`).
+
+## Ports
+
+Backend **8000**, Web Admin **5174**, Agent **7860**. See `docs/codebase-explanation/OPERATIONS.md`.

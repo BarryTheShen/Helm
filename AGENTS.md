@@ -2,7 +2,7 @@
 
 **Primary source of truth for all AI coding agents working on this project.**
 
-For Claude Code: this file replaces the monolithic CLAUDE.md. For other tools: see `docs/ai/` for full context.
+**Cursor** is the primary AI environment. See `docs/ai/cursor-setup.md` and `.cursor/` for rules, subagents, commands, and MCP. OpenCode (`.opencode/`, `opencode.jsonc`) remains during transition.
 
 ---
 
@@ -27,7 +27,8 @@ Helm is a self-hosted AI super app — a React Native (Expo) mobile frontend tha
 | QA test suite | `docs/codebase-explanation/qa.md` |
 | Blueprint specs | `docs/Agentic AI Super App — Project Hub/Blueprint — Production Spec Documents/` |
 | AI workflow details | `docs/ai/` |
-| OpenCode model policy | `docs/ai/opencode-models.md` |
+| Cursor setup | `docs/ai/cursor-setup.md` |
+| OpenCode model policy (legacy) | `docs/ai/opencode-models.md` |
 | Feature Feedback workflow | `docs/ai/workflows.md` (Feature Feedback section) |
 
 ---
@@ -61,21 +62,23 @@ Helm is a self-hosted AI super app — a React Native (Expo) mobile frontend tha
 
 ---
 
-## Default OpenCode Orchestration
+## Default Cursor Orchestration
 
-OpenCode is the default AI tool for Helm. The canonical development loop is:
+The canonical development loop is:
 
 ```
 session init → context artifact → plan ↔ plan critic until approved → implementation → QA + review → live test → docs → helm-git
 ```
 
-See `docs/ai/workflows.md` for full detail on the canonical loop and how it scales internally.
+See `docs/ai/workflows.md` for full detail. Project rules in `.cursor/rules/helm-core.mdc` apply to every Agent session.
 
 For features with blueprint specs, a `requirements-checklist.md` artifact tracks completeness. The reviewer compares implementation against it.
 
-`helm-orchestrator` is the default primary agent (set in `opencode.jsonc`). Barry does not manually route every step — the orchestrator classifies the task, delegates subagents conditionally, verifies, reviews, documents when needed, and reports completion. The orchestrator is autonomous by default and only asks Barry for genuine blockers.
+**Subagents** live in `.cursor/agents/helm-*.md`. The main Agent (with `helm-core` rules) classifies work and delegates — or invoke `/helm-orchestrator` / specialist subagents directly. `helm-orchestrator` does not edit app source; it delegates, verifies, and reports. It is autonomous by default and only asks Barry for genuine blockers (see orchestrator prompt).
 
-Slash commands are optional shortcuts for when Barry already knows the scope.
+**Slash commands** in `.cursor/commands/` are optional shortcuts when scope is already known.
+
+**MCP:** Playwright and Context7 — see `.cursor/mcp.json`.
 
 ### Session Init / Reset
 
