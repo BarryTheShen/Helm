@@ -12,7 +12,7 @@ export const TemplatesPage = {
   previewJsonToggle: 'button.font-mono',
   previewClose: 'button:has-text("Close")',
   previewApplyToModule: 'button:has-text("Apply to Module")',
-  applyModalHeading: 'text=Apply Template to Module',
+  applyModalHeading: 'text=Apply Template',
   applyModuleSelect: 'select:has(option:has-text("Select a module..."))',
   applyAsDraftBtn: 'button:has-text("Apply as Draft")',
   applyCancelBtn: 'button:has-text("Cancel")',

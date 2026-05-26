@@ -17,8 +17,216 @@ from sqlalchemy.orm import selectinload
 
 from app.models.app import App
 from app.models.app_module_ref import AppModuleRef
+from app.models.app_version import AppVersion
 from app.models.device import Device
-from app.models.module_instance import ModuleInstance
+from app.models.preview_session import PreviewSession
+
+
+def _module_icon_for(
+    module_instance_id: str,
+    module_icons: dict,
+    fallback: str | None = None,
+) -> str:
+    """Resolve icon from app draft/version overrides, then module metadata."""
+    if module_instance_id in module_icons and module_icons[module_instance_id]:
+        return str(module_icons[module_instance_id])
+    if fallback:
+        return fallback
+    return "home"
+
+
+def _config_field(config: dict | None, *keys: str, default=None):
+    """Read first present key from a config_json snapshot."""
+    if not config:
+        return default
+    for key in keys:
+        if key in config and config[key] is not None:
+            return config[key]
+    return default
+
+
+async def _resolve_active_config_json(
+    db: AsyncSession,
+    device: Device,
+    app: App,
+) -> dict | None:
+    """Pick the config snapshot mobile should render (preview > published > live app)."""
+    now = datetime.now(timezone.utc)
+
+    if device.preview_session_id:
+        result = await db.execute(
+            select(PreviewSession).where(PreviewSession.id == device.preview_session_id)
+        )
+        session = result.scalar_one_or_none()
+        if (
+            session is not None
+            and session.status == "active"
+            and session.expires_at >= now
+            and session.resolved_config_json
+        ):
+            return session.resolved_config_json
+
+    version_id = device.active_app_version_id or app.current_published_version_id
+    if version_id:
+        result = await db.execute(
+            select(AppVersion).where(
+                AppVersion.id == version_id,
+                AppVersion.app_id == app.id,
+            )
+        )
+        version = result.scalar_one_or_none()
+        if version is not None and version.config_json:
+            return version.config_json
+
+    return None
+
+
+def _enrich_bottom_bar(
+    bottom_bar_raw: list,
+    module_refs: list[AppModuleRef],
+    module_icons: dict,
+) -> list[dict]:
+    """Build mobile bottom_bar_config from snapshot + module instances."""
+    enriched: list[dict] = []
+    refs_by_id = {ref.module_instance_id: ref for ref in module_refs}
+
+    for index, config_item in enumerate(bottom_bar_raw):
+        if not isinstance(config_item, dict):
+            continue
+
+        module_instance_id = config_item.get("module_instance_id")
+        if not module_instance_id:
+            continue
+
+        slot_position = config_item.get("slot_position", index)
+        preset_name = config_item.get("name")
+        preset_icon = config_item.get("icon")
+        preset_type = config_item.get("module_type")
+
+        module_ref = refs_by_id.get(module_instance_id)
+        if module_ref and module_ref.module_instance.status == "active":
+            instance = module_ref.module_instance
+            enriched.append({
+                "module_instance_id": module_instance_id,
+                "module_type": preset_type or instance.module_type,
+                "name": preset_name or instance.name,
+                "icon": _module_icon_for(
+                    module_instance_id,
+                    module_icons,
+                    preset_icon,
+                ),
+                "slot_position": slot_position,
+            })
+        elif preset_type and preset_name:
+            # Draft snapshot may include full slot objects before refs exist
+            enriched.append({
+                "module_instance_id": module_instance_id,
+                "module_type": preset_type,
+                "name": preset_name,
+                "icon": _module_icon_for(module_instance_id, module_icons, preset_icon),
+                "slot_position": slot_position,
+            })
+
+    return enriched
+
+
+def _enrich_launchpad(
+    launchpad_raw: list,
+    module_refs: list[AppModuleRef],
+    module_icons: dict,
+) -> list[dict]:
+    """Build mobile launchpad_config from snapshot (ids or full module objects)."""
+    enriched: list[dict] = []
+    refs_by_id = {ref.module_instance_id: ref for ref in module_refs}
+
+    for item in launchpad_raw:
+        if isinstance(item, str):
+            module_instance_id = item
+            preset_name = None
+            preset_icon = None
+            preset_type = None
+        elif isinstance(item, dict):
+            module_instance_id = item.get("module_instance_id") or item.get("id")
+            preset_name = item.get("name")
+            preset_icon = item.get("icon")
+            preset_type = item.get("module_type")
+        else:
+            continue
+
+        if not module_instance_id:
+            continue
+
+        module_ref = refs_by_id.get(module_instance_id)
+        if module_ref and module_ref.module_instance.status == "active":
+            instance = module_ref.module_instance
+            enriched.append({
+                "module_instance_id": module_instance_id,
+                "module_type": preset_type or instance.module_type,
+                "name": preset_name or instance.name,
+                "icon": _module_icon_for(
+                    module_instance_id,
+                    module_icons,
+                    preset_icon,
+                ),
+            })
+        elif preset_type and preset_name:
+            enriched.append({
+                "module_instance_id": module_instance_id,
+                "module_type": preset_type,
+                "name": preset_name,
+                "icon": _module_icon_for(module_instance_id, module_icons, preset_icon),
+            })
+
+    return enriched
+
+
+def sync_app_shell_from_config(app: App, config_json: dict) -> None:
+    """Mirror published/draft app shell onto the App row for admin APIs."""
+    if isinstance(config_json.get("name"), str) and config_json["name"].strip():
+        app.name = config_json["name"].strip()
+    if "icon" in config_json:
+        app.icon = config_json.get("icon")
+    if "splash" in config_json:
+        app.splash = config_json.get("splash")
+    if isinstance(config_json.get("theme"), dict):
+        app.theme = config_json["theme"]
+    if isinstance(config_json.get("design_tokens"), dict):
+        app.design_tokens = config_json["design_tokens"]
+    if "dark_mode" in config_json:
+        app.dark_mode = bool(config_json["dark_mode"])
+
+    default_launch = _config_field(
+        config_json,
+        "default_launch_module_instance_id",
+        "default_launch_module_id",
+    )
+    if default_launch is not None:
+        app.default_launch_module_id = default_launch
+
+    bottom_bar = config_json.get("bottom_bar_config")
+    if isinstance(bottom_bar, list):
+        normalized_bb = []
+        for index, item in enumerate(bottom_bar):
+            if not isinstance(item, dict):
+                continue
+            module_id = item.get("module_instance_id")
+            if not module_id:
+                continue
+            normalized_bb.append({
+                "module_instance_id": module_id,
+                "slot_position": item.get("slot_position", index),
+            })
+        app.bottom_bar_config = normalized_bb
+
+    launchpad = config_json.get("launchpad_config")
+    if isinstance(launchpad, list):
+        normalized_lp: list[str] = []
+        for item in launchpad:
+            if isinstance(item, str):
+                normalized_lp.append(item)
+            elif isinstance(item, dict) and item.get("module_instance_id"):
+                normalized_lp.append(str(item["module_instance_id"]))
+        app.launchpad_config = normalized_lp
 
 
 async def register_device(
@@ -110,6 +318,12 @@ async def assign_app_to_device(
 async def get_device_app_config(db: AsyncSession, device_id: str) -> dict | None:
     """Get full app configuration for a device (for mobile consumption).
 
+    Serves config from (in order):
+    1. Active mobile preview session (temporary App Editor preview)
+    2. Device active_app_version_id (published AppVersion snapshot)
+    3. App.current_published_version_id
+    4. Legacy live App row columns
+
     Returns enriched app config with:
     - App metadata (name, icon, theme, etc.)
     - Enriched bottom_bar_config (with module_type, name, icon)
@@ -138,54 +352,53 @@ async def get_device_app_config(db: AsyncSession, device_id: str) -> dict | None
         return None
 
     app = device.app
+    config_json = await _resolve_active_config_json(db, device, app)
 
-    # Enrich bottom_bar_config with module metadata
-    enriched_bottom_bar = []
-    for config_item in app.bottom_bar_config:
-        module_instance_id = config_item.get("module_instance_id")
-        slot_position = config_item.get("slot_position")
+    module_icons = {}
+    if config_json:
+        raw_icons = config_json.get("module_icons")
+        if isinstance(raw_icons, dict):
+            module_icons = raw_icons
 
-        # Find the corresponding module_instance via AppModuleRef
-        module_ref = next(
-            (ref for ref in app.module_refs if ref.module_instance_id == module_instance_id),
-            None
-        )
+    bottom_bar_raw = (
+        _config_field(config_json, "bottom_bar_config")
+        if config_json is not None
+        else app.bottom_bar_config
+    ) or []
 
-        if module_ref and module_ref.module_instance.status == "active":
-            enriched_bottom_bar.append({
-                "module_instance_id": module_instance_id,
-                "module_type": module_ref.module_instance.module_type,
-                "name": module_ref.module_instance.name,
-                "icon": "home",  # TODO: Add icon field to ModuleInstance model
-                "slot_position": slot_position,
-            })
+    launchpad_raw = (
+        _config_field(config_json, "launchpad_config")
+        if config_json is not None
+        else app.launchpad_config
+    ) or []
 
-    # Enrich launchpad_config with module metadata
-    enriched_launchpad = []
-    for module_instance_id in app.launchpad_config:
-        # Find the corresponding module_instance via AppModuleRef
-        module_ref = next(
-            (ref for ref in app.module_refs if ref.module_instance_id == module_instance_id),
-            None
-        )
+    enriched_bottom_bar = _enrich_bottom_bar(
+        bottom_bar_raw, list(app.module_refs), module_icons,
+    )
+    enriched_launchpad = _enrich_launchpad(
+        launchpad_raw, list(app.module_refs), module_icons,
+    )
 
-        if module_ref and module_ref.module_instance.status == "active":
-            enriched_launchpad.append({
-                "module_instance_id": module_instance_id,
-                "module_type": module_ref.module_instance.module_type,
-                "name": module_ref.module_instance.name,
-                "icon": "home",  # TODO: Add icon field to ModuleInstance model
-            })
+    default_launch_module_id = _config_field(
+        config_json,
+        "default_launch_module_instance_id",
+        "default_launch_module_id",
+        default=app.default_launch_module_id,
+    )
 
     return {
         "app_id": app.id,
-        "name": app.name,
-        "icon": app.icon,
-        "splash": app.splash,
-        "theme": app.theme,
-        "design_tokens": app.design_tokens,
-        "dark_mode": app.dark_mode,
-        "default_launch_module_id": app.default_launch_module_id,
+        "name": _config_field(config_json, "name", default=app.name),
+        "icon": _config_field(config_json, "icon", default=app.icon),
+        "splash": _config_field(config_json, "splash", default=app.splash),
+        "theme": _config_field(config_json, "theme", default=app.theme) or {},
+        "design_tokens": _config_field(
+            config_json, "design_tokens", default=app.design_tokens,
+        ) or {},
+        "dark_mode": bool(
+            _config_field(config_json, "dark_mode", default=app.dark_mode),
+        ),
+        "default_launch_module_id": default_launch_module_id,
         "bottom_bar_config": enriched_bottom_bar,
         "launchpad_config": enriched_launchpad,
     }

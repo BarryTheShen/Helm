@@ -479,6 +479,110 @@ async def test_get_device_config_device_not_found(auth_client):
     assert resp.status_code == 404
 
 
+async def test_get_device_config_uses_published_version_and_module_icons(
+    auth_client, db_session,
+):
+    """Mobile config must come from published AppVersion, including module_icons (FF4-APP-002)."""
+    from app.models.app_module_ref import AppModuleRef
+    from app.models.app_version import AppVersion
+    from app.models.device import Device
+    from app.models.module_instance import ModuleInstance
+    from app.models.user import User
+    from sqlalchemy import select
+
+    result = await db_session.execute(select(User))
+    user = result.scalar_one()
+
+    module = ModuleInstance(
+        id="module-icons-test",
+        user_id=user.id,
+        module_type="home",
+        name="Home Module",
+        status="active",
+    )
+    db_session.add(module)
+    await db_session.commit()
+
+    app_resp = await auth_client.post(
+        "/api/apps",
+        json={"name": "Versioned App", "dark_mode": False},
+    )
+    app_id = app_resp.json()["id"]
+
+    ref = AppModuleRef(
+        id="ref-icons-test",
+        app_id=app_id,
+        module_instance_id="module-icons-test",
+    )
+    db_session.add(ref)
+
+    published_config = {
+        "name": "Published Name",
+        "icon": "🚀",
+        "theme": {"primary": "#111111"},
+        "design_tokens": {},
+        "dark_mode": True,
+        "module_icons": {"module-icons-test": "🏠"},
+        "bottom_bar_config": [
+            {
+                "module_instance_id": "module-icons-test",
+                "module_type": "home",
+                "name": "Home",
+                "icon": "ignored",
+                "slot_position": 0,
+            }
+        ],
+        "launchpad_config": [],
+        "default_launch_module_instance_id": "module-icons-test",
+    }
+
+    version = AppVersion(
+        id="app-version-icons-test",
+        app_id=app_id,
+        user_id=user.id,
+        version_number=1,
+        display_name="2026-05-15 12:00",
+        default_timestamp_name="2026-05-15 12:00",
+        config_json=published_config,
+        resolved_module_versions=[],
+        module_reference_policies=[],
+        source="publish",
+        validation_status="valid",
+    )
+    db_session.add(version)
+
+    from app.models.app import App
+    app_row = await db_session.get(App, app_id)
+    app_row.current_published_version_id = version.id
+
+    device = Device(
+        id="device-icons-test",
+        user_id=user.id,
+        device_id="device-uuid-icons",
+        device_name="Icons Device",
+        config_json={"device_type": "mobile"},
+        assigned_app_id=app_id,
+        active_app_version_id=version.id,
+    )
+    db_session.add(device)
+    await db_session.commit()
+
+    # Stale App row should not override published snapshot
+    app_row.name = "Stale App Name"
+    app_row.dark_mode = False
+    app_row.bottom_bar_config = []
+    await db_session.commit()
+
+    resp = await auth_client.get(f"{DEVICES}/{device.id}/config")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["name"] == "Published Name"
+    assert data["dark_mode"] is True
+    assert len(data["bottom_bar_config"]) == 1
+    assert data["bottom_bar_config"][0]["icon"] == "🏠"
+    assert data["bottom_bar_config"][0]["name"] == "Home"
+
+
 # ── Authorization Tests ────────────────────────────────────────────────────
 
 

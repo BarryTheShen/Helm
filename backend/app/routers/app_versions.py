@@ -41,6 +41,7 @@ from app.schemas.preview import (
     PreviewSessionOut,
 )
 from app.services.audit import log_audit
+from app.services.device_service import sync_app_shell_from_config
 from app.services.validation_service import validate_app_config, validate_publish_config
 from app.services.version_service import make_timestamp_name, resolve_module_references
 from app.services.websocket_manager import manager
@@ -472,6 +473,8 @@ async def publish_app_version(
 
     # Update app's current published version
     app.current_published_version_id = version.id
+    # Keep App row shell in sync for admin APIs and legacy fallback (FF4-APP-002)
+    sync_app_shell_from_config(app, config_json)
 
     # Update all devices assigned to this app
     result = await db.execute(

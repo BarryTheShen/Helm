@@ -2163,14 +2163,6 @@ export function EditorPage() {
                               >
                                 Restore
                               </button>
-                              <button
-                                data-testid={`btn-publish-v${v.version_number}`}
-                                onClick={() => { void handlePublishVersion(v.id, v.version_number); setShowVersionHistory(false); }}
-                                className="px-2 py-1 text-[11px] text-green-600 hover:bg-green-50 rounded transition-colors"
-                                title="Publish as live"
-                              >
-                                Publish
-                              </button>
                               {!isArchived && (
                                 <button
                                   onClick={() => { void handleArchiveVersion(v.id, v.version_number); }}
