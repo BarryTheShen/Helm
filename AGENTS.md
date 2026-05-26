@@ -74,7 +74,7 @@ See `docs/ai/workflows.md` for full detail. Project rules in `.cursor/rules/helm
 
 For features with blueprint specs, a `requirements-checklist.md` artifact tracks completeness. The reviewer compares implementation against it.
 
-**Subagents** live in `.cursor/agents/helm-*.md`. The main Agent (with `helm-core` rules) classifies work and delegates — or invoke `/helm-orchestrator` / specialist subagents directly. `helm-orchestrator` does not edit app source; it delegates, verifies, and reports. It is autonomous by default and only asks Barry for genuine blockers (see orchestrator prompt).
+**Subagents** live in `.cursor/agents/helm-*.md`. The main Agent (with `helm-core` rules) **is the orchestrator** — classify, delegate, verify, complete. Optional: `/helm-orchestrate <task>`. Do not ask Barry “should I continue?” between steps; run independent subagents **in parallel** when safe (tester + reviewer, separate layers after protocol, etc.). See `.cursor/agents/helm-orchestrator.md`.
 
 **Slash commands** in `.cursor/commands/` are optional shortcuts when scope is already known.
 

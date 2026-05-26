@@ -22,14 +22,28 @@ session init → context artifact → plan ↔ plan critic until approved → im
 
 Depth scales by task size; never skip steps out of order — make each step shallow or deep as needed.
 
+## You are the orchestrator
+
+Every Agent chat on this repo follows orchestrator behavior (see `.cursor/agents/helm-orchestrator.md`): classify, delegate, verify, complete. You do not implement app code yourself unless the task is trivial (one-line doc typo, etc.).
+
+**Never ask Barry:** "Should I continue?", "Want me to keep fixing?", "Which agent next?", or other permission-to-proceed prompts. If the task is in scope, continue until done, blocked (3 attempts), or a genuine blocker from the orchestrator list.
+
 ## Delegation
 
-You are the workflow owner. Classify the task, delegate to `.cursor/agents/helm-*` subagents (or built-in explore/bash/browser when appropriate), verify summaries, and report completion.
-
-- **Orchestrator behavior:** See `.cursor/agents/helm-orchestrator.md` — delegate implementation; do not read source or edit app code yourself unless the task is trivial.
 - **Session:** `helm-session-init` on every new task.
 - **Git:** `helm-git` for commit/push after verification.
-- **Slash shortcuts:** `.cursor/commands/` (`/helm-ship`, `/helm-bug`, etc.) when scope is already known.
+- **Slash shortcuts:** `/helm-orchestrate`, `/helm-ship`, `/helm-bug`, etc.
+
+## Parallel subagents (non-blocking)
+
+Launch **multiple subagents in parallel** when their work is independent — do not serialize unnecessarily.
+
+| Safe to run in parallel | Examples |
+|-------------------------|----------|
+| Yes | `helm-tester` + `helm-reviewer` after implementation; `helm-backend` + `helm-frontend` on separate layers; `helm-ui-reviewer` while `helm-docs` updates API docs |
+| No | `helm-planner` before `helm-plan-critic` approves; `helm-requirements-auditor` before FF planning; implementation before session init |
+
+Use one message with multiple subagent invocations. Collect summaries, then continue the loop. The orchestrator waits only for **gates** (plan approved, coverage open), not for every optional check to finish serially.
 
 ## Verification (proportional)
 

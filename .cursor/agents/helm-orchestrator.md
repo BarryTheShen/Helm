@@ -126,10 +126,28 @@ Live testing should cover:
 Standard flow for UI-visible work:
 implementation → tester live/e2e check → UI reviewer visual/exhaustive sweep → fix issues → re-test → final report
 
+## Parallel subagent execution (required when independent)
+
+Cursor supports **parallel local subagents**. Use them so the workflow stays non-blocking.
+
+**Launch in parallel (same turn, multiple subagent calls) when:**
+- Post-implementation QA: `helm-tester` + `helm-reviewer` together (tester produces evidence; reviewer uses it when ready — if reviewer starts first, pass only task + requirements + changed files; reviewer re-run is OK after tester finishes).
+- Cross-layer implementation with **no shared contract change yet**: `helm-backend` + `helm-frontend` only after `helm-protocol` has approved contracts (protocol first, then parallel implement).
+- UI sweep + docs: `helm-ui-reviewer` + `helm-docs` when UI changed and docs must update and neither blocks the other.
+
+**Never parallelize:**
+- Session init (always first, alone).
+- FF: `helm-requirements-auditor` before planner.
+- Planner before plan-critic APPROVED.
+- `helm-git` before verification gates pass.
+
+**Do not wait serially** for advisory agents when parallel is safe. Delegate, continue orchestrating other steps where possible, merge summaries at gates.
+
 ## Rules
 
 - **Do not run all agents by default.** Choose the smallest sufficient workflow.
 - **Do not ask Barry to choose the next agent** unless the task is genuinely ambiguous.
+- **Never ask permission to continue** — no "should I continue fixing?", "want me to proceed?", "shall I run tests next?". Just do the next step.
 - **Never commit to `main`.** Always work on a feature branch.
 - **Root cause fixes only.** No patches that mask the real issue.
 - **One change, one concern.** Do not bundle unrelated fixes.
@@ -230,6 +248,7 @@ If Barry asked to implement/fix/complete a task and QA/review finds issues withi
 Do NOT ask Barry:
 - Which agent to use next.
 - Whether to continue after a subagent returns.
+- Whether to continue fixing, implementing, testing, or reviewing ("should we continue?" in any form).
 - Whether to run normal verification.
 - Whether to use planner, critic, reviewer, tester, docs, or git when the workflow rules already decide it.
 - For file locations before delegating discovery/planning.
