@@ -66,9 +66,35 @@ Invoke via “use helm-backend subagent”, the subagent picker, or parallel lau
 | `helm-docs` | Documentation |
 | `helm-git` | Branch, commit, push |
 
-## Models
+## Models (per subagent)
 
-Subagents use `model: inherit` (your Cursor model). Adjust per-agent frontmatter if you want a specific model for UI review or planning.
+**Yes.** Each file in `.cursor/agents/*.md` can set a different model in YAML frontmatter:
+
+```yaml
+---
+name: helm-ui-reviewer
+description: ...
+model: inherit   # use parent chat model (default today)
+readonly: true
+---
+```
+
+| Value | Meaning |
+|-------|---------|
+| `inherit` | Same model as the parent Agent chat (all Helm agents use this today). |
+| A Cursor model id / name | That subagent run uses the named model (exact string depends on your plan — e.g. a faster model for `helm-build`, a stronger multimodal model for `helm-ui-reviewer`). |
+
+Example override for visual review only:
+
+```yaml
+model: claude-sonnet-4-20250514
+```
+
+(Use the model picker in Cursor → copy the id your account exposes.)
+
+There is **no** central `opencode.jsonc`-style default model list in Cursor — routing is **per subagent file** (or whatever model you pick for the main chat). `docs/ai/opencode-models.md` is legacy reference only.
+
+**MCP Context7:** set `CONTEXT7_API_KEY` in repo-root `.env` (gitignored). `.cursor/mcp.json` loads it via `envFile`. Reload Window after changing `.env`.
 
 ## OpenCode (legacy)
 
