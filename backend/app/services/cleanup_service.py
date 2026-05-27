@@ -4,7 +4,8 @@ This service supports the FF4-INTRO-001 requirement: after testing, all test
 apps, modules, and templates must be removable to restore a clean state.
 
 Naming convention: content with names starting with "test" or "Test", OR
-content explicitly flagged as test data, is eligible for cleanup.
+content explicitly flagged as test data (e.g. default "New Module" from QA
+clicks, "QA Test Module" / "QA Module" prefixes), is eligible for cleanup.
 
 CASCADE SCOPE:
   - Deleting an App cascades to: all app_versions, screens, published_screens,
@@ -12,6 +13,8 @@ CASCADE SCOPE:
   - Deleting a ModuleInstance cascades to: screen_instance entries and
     references from workflow triggers.
   - Deleting an SDUITemplate cascades to: published_template_screens.
+  - Deleting a Workflow unregisters it from the workflow engine.
+  - Custom SDUI modules remove associated module_states draft/live rows.
   - The admin UI shows a confirmation dialog before calling this endpoint,
     so the operator is aware of the broad deletion scope.
   - This service deletes test artifacts one entity type at a time. If a
@@ -28,9 +31,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.app import App
 from app.models.module_instance import ModuleInstance
+from app.models.module_state import ModuleState
 from app.models.template import SDUITemplate
+from app.models.workflow import Workflow
+from app.services.sdui_state import delete_module_states, module_state_keys_to_clear
 
 logger = logging.getLogger(__name__)
+
+# Must match backend/app/routers/modules.py _CUSTOM_MODULES_KEY
+_CUSTOM_MODULES_KEY = "_custom_modules"
 
 
 @dataclass
@@ -40,6 +49,8 @@ class CleanupResult:
     apps_deleted: int = 0
     module_instances_deleted: int = 0
     templates_deleted: int = 0
+    custom_modules_deleted: int = 0
+    workflows_deleted: int = 0
     errors: list[str] = field(default_factory=list)
     details: list[str] = field(default_factory=list)
 
@@ -49,6 +60,111 @@ def _is_test_name(name: str | None) -> bool:
     if not name:
         return False
     return name.lower().startswith("test")
+
+
+def _is_cleanup_eligible_name(name: str | None) -> bool:
+    """Return True if a human-visible name looks like QA/test junk."""
+    if not name:
+        return False
+    if _is_test_name(name):
+        return True
+    if name == "New Module":
+        return True
+    lowered = name.lower()
+    if lowered.startswith("qa test") or lowered.startswith("qa module"):
+        return True
+    return False
+
+
+async def _preview_custom_modules(db: AsyncSession, result: CleanupResult) -> None:
+    """Count custom SDUI modules that would be removed."""
+    states = (
+        await db.execute(
+            select(ModuleState).where(ModuleState.module_type == _CUSTOM_MODULES_KEY)
+        )
+    ).scalars().all()
+
+    for state in states:
+        for mod in (state.state_json or {}).get("modules", []):
+            name = mod.get("name")
+            if _is_cleanup_eligible_name(name):
+                result.custom_modules_deleted += 1
+                result.details.append(
+                    f"CustomModule: {name!r} id={mod.get('id')} (user={state.user_id})"
+                )
+
+
+async def _execute_custom_modules_cleanup(db: AsyncSession, result: CleanupResult) -> None:
+    """Remove eligible custom SDUI modules and their module_states rows."""
+    states = (
+        await db.execute(
+            select(ModuleState).where(ModuleState.module_type == _CUSTOM_MODULES_KEY)
+        )
+    ).scalars().all()
+
+    for state in states:
+        modules: list[dict] = list((state.state_json or {}).get("modules", []))
+        kept: list[dict] = []
+        removed: list[dict] = []
+
+        for mod in modules:
+            if _is_cleanup_eligible_name(mod.get("name")):
+                removed.append(mod)
+            else:
+                kept.append(mod)
+
+        if not removed:
+            continue
+
+        for mod in removed:
+            module_id = mod.get("id")
+            if module_id:
+                await delete_module_states(
+                    db, state.user_id, module_state_keys_to_clear(module_id)
+                )
+            result.custom_modules_deleted += 1
+            result.details.append(
+                f"Deleted CustomModule: {mod.get('name')!r} id={module_id} (user={state.user_id})"
+            )
+            logger.info(
+                "Cleanup: deleted custom module %r id=%s user=%s",
+                mod.get("name"),
+                module_id,
+                state.user_id,
+            )
+
+        state.state_json = {"modules": kept}
+        state.version += 1
+
+
+async def _preview_workflows(db: AsyncSession, result: CleanupResult) -> None:
+    """Count test-prefixed workflows that would be removed."""
+    workflows = (
+        await db.execute(select(Workflow).where(Workflow.name.ilike("test%")))
+    ).scalars().all()
+
+    for wf in workflows:
+        result.workflows_deleted += 1
+        result.details.append(f"Workflow: {wf.name!r} (id={wf.id}, user={wf.user_id})")
+
+
+async def _execute_workflows_cleanup(db: AsyncSession, result: CleanupResult) -> None:
+    """Remove test-prefixed workflows and unregister them from the engine."""
+    from app.services.workflow_engine import unregister_workflow
+
+    workflows = (
+        await db.execute(select(Workflow).where(Workflow.name.ilike("test%")))
+    ).scalars().all()
+
+    for wf in workflows:
+        try:
+            await unregister_workflow(str(wf.id))
+        except Exception as exc:
+            logger.warning("Cleanup: unregister_workflow failed for %s: %s", wf.id, exc)
+        await db.delete(wf)
+        result.workflows_deleted += 1
+        result.details.append(f"Deleted Workflow: {wf.name!r} (id={wf.id})")
+        logger.info("Cleanup: deleted Workflow %r (id=%s)", wf.name, wf.id)
 
 
 async def preview_cleanup(db: AsyncSession) -> CleanupResult:
@@ -96,6 +212,9 @@ async def preview_cleanup(db: AsyncSession) -> CleanupResult:
         result.details.append(
             f"Template: {tmpl.name!r} (id={tmpl.id})"
         )
+
+    await _preview_custom_modules(db, result)
+    await _preview_workflows(db, result)
 
     return result
 
@@ -201,6 +320,22 @@ async def execute_cleanup(db: AsyncSession) -> CleanupResult:
         result.errors.append(msg)
         logger.error(msg, exc_info=True)
 
+    # --- Delete test custom SDUI modules ---
+    try:
+        await _execute_custom_modules_cleanup(db, result)
+    except Exception as exc:
+        msg = f"Error deleting test custom modules: {exc}"
+        result.errors.append(msg)
+        logger.error(msg, exc_info=True)
+
+    # --- Delete test workflows ---
+    try:
+        await _execute_workflows_cleanup(db, result)
+    except Exception as exc:
+        msg = f"Error deleting test workflows: {exc}"
+        result.errors.append(msg)
+        logger.error(msg, exc_info=True)
+
     # Commit all successful deletions together; rollback if any still fail
     try:
         await db.commit()
@@ -212,10 +347,13 @@ async def execute_cleanup(db: AsyncSession) -> CleanupResult:
 
     if not result.errors:
         logger.info(
-            "Cleanup complete: %d apps, %d module instances, %d templates deleted",
+            "Cleanup complete: %d apps, %d module instances, %d templates, "
+            "%d custom modules, %d workflows deleted",
             result.apps_deleted,
             result.module_instances_deleted,
             result.templates_deleted,
+            result.custom_modules_deleted,
+            result.workflows_deleted,
         )
     else:
         logger.warning(

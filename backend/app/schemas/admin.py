@@ -42,6 +42,8 @@ class CleanupPreviewOut(BaseModel):
     apps_deleted: int = 0
     module_instances_deleted: int = 0
     templates_deleted: int = 0
+    custom_modules_deleted: int = 0
+    workflows_deleted: int = 0
     details: list[str] = []
     errors: list[str] = []
 

@@ -2,6 +2,7 @@ import { test, expect } from '../fixtures';
 import { TemplatesPage } from '../page-objects/templates';
 import { EditorPage, waitForEditorReady } from '../page-objects/editor';
 import { addComponentToFirstCell, createFreshEditorModule } from '../editor-helpers';
+import { cleanupCustomModuleFromEditorUrl } from '../test-artifact-cleanup';
 
 async function openApplyModalForTemplate(page: import('@playwright/test').Page, templateName: string) {
   await page.goto('/templates');
@@ -35,6 +36,10 @@ test.describe('FF4 Phase 6 — calendar, templates, empty container', () => {
     test.beforeEach(async ({ page, login }) => {
       await login();
       await createFreshEditorModule(page);
+    });
+
+    test.afterEach(async ({ page, request }) => {
+      await cleanupCustomModuleFromEditorUrl(request, page.url());
     });
 
     test('FF4-CAL-019: calendar inspector exposes required fields', async ({ page }) => {

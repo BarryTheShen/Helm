@@ -244,6 +244,30 @@ async def _seed_cleanup_test_data(db: AsyncSession, user_id: str) -> None:
         created_by=user_id,
     ))
 
+    # QA junk custom SDUI modules (stored in module_states)
+    db.add(ModuleState(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        module_type="_custom_modules",
+        state_json={
+            "modules": [
+                {"id": "custom-new-module-abc123", "name": "New Module", "icon": "📦"},
+                {"id": "custom-real-module-xyz789", "name": "Production Module", "icon": "⭐"},
+            ]
+        },
+        version=1,
+    ))
+
+    # Test workflows (should be deleted) + real workflow (should survive)
+    db.add(Workflow(
+        id=str(uuid.uuid4()), user_id=user_id, name="Test Issue 38",
+        trigger_type="manual", graph={}, trigger_config={},
+    ))
+    db.add(Workflow(
+        id=str(uuid.uuid4()), user_id=user_id, name="Real Workflow",
+        trigger_type="manual", graph={}, trigger_config={},
+    ))
+
     await db.commit()
 
 
@@ -298,10 +322,12 @@ async def test_cleanup_preview_shows_counts(auth_client: AsyncClient, db_session
     assert data["apps_deleted"] == 2  # "Test App" + "test_work_app"
     assert data["module_instances_deleted"] == 2  # "Test Module" + "test_calendar"
     assert data["templates_deleted"] == 1  # "Test Template"
+    assert data["custom_modules_deleted"] == 1  # "New Module"
+    assert data["workflows_deleted"] == 1  # "Test Issue 38"
     assert data["errors"] == []
 
     # Preview should NOT actually delete anything
-    assert len(data["details"]) == 5  # 2 apps + 2 modules + 1 template
+    assert len(data["details"]) == 7  # 2 apps + 2 modules + 1 template + 1 custom + 1 workflow
 
 
 async def test_cleanup_preview_does_not_delete(auth_client: AsyncClient, db_session: AsyncSession):
@@ -367,6 +393,8 @@ async def test_cleanup_execute_deletes_test_items(auth_client: AsyncClient, db_s
     assert data["apps_deleted"] == 2
     assert data["module_instances_deleted"] == 2
     assert data["templates_deleted"] == 1
+    assert data["custom_modules_deleted"] == 1
+    assert data["workflows_deleted"] == 1
     assert data["errors"] == []
 
     # Verify items are actually gone from the database
@@ -405,6 +433,27 @@ async def test_cleanup_execute_preserves_non_test_items(auth_client: AsyncClient
     result = await db_session.execute(
         select(func.count(SDUITemplate.id)).where(
             SDUITemplate.created_by == user_id, SDUITemplate.name == "Real Template"
+        )
+    )
+    assert result.scalar() == 1
+
+    # Custom module "Production Module" should survive
+    custom_state = (
+        await db_session.execute(
+            select(ModuleState).where(
+                ModuleState.user_id == user_id,
+                ModuleState.module_type == "_custom_modules",
+            )
+        )
+    ).scalar_one()
+    surviving_names = [m["name"] for m in (custom_state.state_json or {}).get("modules", [])]
+    assert "Production Module" in surviving_names
+    assert "New Module" not in surviving_names
+
+    # Workflow "Real Workflow" should survive
+    result = await db_session.execute(
+        select(func.count(Workflow.id)).where(
+            Workflow.user_id == user_id, Workflow.name == "Real Workflow"
         )
     )
     assert result.scalar() == 1

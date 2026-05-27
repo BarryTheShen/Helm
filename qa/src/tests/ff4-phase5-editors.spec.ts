@@ -7,6 +7,7 @@ import {
   waitForAppEditorModules,
 } from '../page-objects/app-editor';
 import { addComponentToFirstCell } from '../editor-helpers';
+import { cleanupCustomModuleFromEditorUrl } from '../test-artifact-cleanup';
 
 test.describe('FF4 Phase 5 — editor surfaces', () => {
   test.describe('Module Editor (FF4-MOD-004, MOD-015, CELL-002, TEXT-002/003, VER-008)', () => {
@@ -14,6 +15,10 @@ test.describe('FF4 Phase 5 — editor surfaces', () => {
       await login();
       await page.goto('/editor');
       await waitForEditorReady(page);
+    });
+
+    test.afterEach(async ({ page, request }) => {
+      await cleanupCustomModuleFromEditorUrl(request, page.url());
     });
 
     test('FF4-MOD-004: new module save button enabled and persists', async ({ page }) => {

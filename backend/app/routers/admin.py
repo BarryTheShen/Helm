@@ -151,6 +151,8 @@ async def preview_cleanup_endpoint(
         apps_deleted=result.apps_deleted,
         module_instances_deleted=result.module_instances_deleted,
         templates_deleted=result.templates_deleted,
+        custom_modules_deleted=result.custom_modules_deleted,
+        workflows_deleted=result.workflows_deleted,
         details=result.details,
         errors=result.errors,
     )
@@ -161,12 +163,14 @@ async def execute_cleanup_endpoint(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> CleanupResultOut:
-    """Remove all test artifacts (apps/modules/templates with 'test'/'Test' prefix)."""
+    """Remove test artifacts (test-prefixed apps/modules/templates/workflows and QA junk)."""
     result = await execute_cleanup(db)
     return CleanupResultOut(
         apps_deleted=result.apps_deleted,
         module_instances_deleted=result.module_instances_deleted,
         templates_deleted=result.templates_deleted,
+        custom_modules_deleted=result.custom_modules_deleted,
+        workflows_deleted=result.workflows_deleted,
         details=result.details,
         errors=result.errors,
     )

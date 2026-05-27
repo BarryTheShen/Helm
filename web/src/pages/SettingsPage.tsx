@@ -33,6 +33,8 @@ export function SettingsPage() {
     apps_deleted: number;
     module_instances_deleted: number;
     templates_deleted: number;
+    custom_modules_deleted: number;
+    workflows_deleted: number;
     details: string[];
     errors: string[];
   } | null>(null);
@@ -45,6 +47,8 @@ export function SettingsPage() {
         apps_deleted: number;
         module_instances_deleted: number;
         templates_deleted: number;
+        custom_modules_deleted: number;
+        workflows_deleted: number;
         details: string[];
         errors: string[];
       }>('/api/admin/cleanup/preview');
@@ -52,7 +56,13 @@ export function SettingsPage() {
       if (result.errors.length > 0) {
         toast.error(`Preview errors: ${result.errors.join(', ')}`);
       }
-      if (result.apps_deleted === 0 && result.module_instances_deleted === 0 && result.templates_deleted === 0) {
+      const total =
+        result.apps_deleted
+        + result.module_instances_deleted
+        + result.templates_deleted
+        + result.custom_modules_deleted
+        + result.workflows_deleted;
+      if (total === 0) {
         toast.info('No test artifacts found — system is clean');
       }
     } catch (e) {
@@ -70,11 +80,18 @@ export function SettingsPage() {
         apps_deleted: number;
         module_instances_deleted: number;
         templates_deleted: number;
+        custom_modules_deleted: number;
+        workflows_deleted: number;
         details: string[];
         errors: string[];
       }>('/api/admin/cleanup/execute', {});
       setCleanupPreview(result);
-      const total = result.apps_deleted + result.module_instances_deleted + result.templates_deleted;
+      const total =
+        result.apps_deleted
+        + result.module_instances_deleted
+        + result.templates_deleted
+        + result.custom_modules_deleted
+        + result.workflows_deleted;
       if (total > 0) {
         toast.success(`Cleanup complete — removed ${total} test artifact${total === 1 ? '' : 's'}`);
       } else {
@@ -264,7 +281,7 @@ export function SettingsPage() {
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Clean State</h2>
             <p className="text-sm text-gray-500 mt-0.5">
-              Find and remove test artifacts (apps, modules, templates with names starting with &ldquo;test&rdquo;)
+              Find and remove test artifacts (test-prefixed apps/modules/templates/workflows and QA junk like &ldquo;New Module&rdquo;)
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -275,7 +292,13 @@ export function SettingsPage() {
             >
               {cleaning ? 'Scanning...' : 'Preview'}
             </button>
-            {cleanupPreview && (cleanupPreview.apps_deleted > 0 || cleanupPreview.module_instances_deleted > 0 || cleanupPreview.templates_deleted > 0) && !cleanConfirm && (
+            {cleanupPreview && (
+              cleanupPreview.apps_deleted > 0
+              || cleanupPreview.module_instances_deleted > 0
+              || cleanupPreview.templates_deleted > 0
+              || cleanupPreview.custom_modules_deleted > 0
+              || cleanupPreview.workflows_deleted > 0
+            ) && !cleanConfirm && (
               <button
                 onClick={() => setCleanConfirm(true)}
                 disabled={cleaning}
@@ -289,16 +312,28 @@ export function SettingsPage() {
 
         {cleanupPreview && (
           <div className="bg-white rounded-lg border border-gray-200 p-4">
-            {(cleanupPreview.apps_deleted > 0 || cleanupPreview.module_instances_deleted > 0 || cleanupPreview.templates_deleted > 0) ? (
+            {(cleanupPreview.apps_deleted > 0
+              || cleanupPreview.module_instances_deleted > 0
+              || cleanupPreview.templates_deleted > 0
+              || cleanupPreview.custom_modules_deleted > 0
+              || cleanupPreview.workflows_deleted > 0) ? (
               <>
-                <div className="grid grid-cols-3 gap-4 mb-3">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-3">
                   <div className="text-center p-3 bg-red-50 rounded-lg">
                     <div className="text-2xl font-bold text-red-700">{cleanupPreview.apps_deleted}</div>
                     <div className="text-xs text-red-600 mt-0.5">Apps</div>
                   </div>
                   <div className="text-center p-3 bg-orange-50 rounded-lg">
                     <div className="text-2xl font-bold text-orange-700">{cleanupPreview.module_instances_deleted}</div>
-                    <div className="text-xs text-orange-600 mt-0.5">Modules</div>
+                    <div className="text-xs text-orange-600 mt-0.5">Instances</div>
+                  </div>
+                  <div className="text-center p-3 bg-amber-50 rounded-lg">
+                    <div className="text-2xl font-bold text-amber-700">{cleanupPreview.custom_modules_deleted}</div>
+                    <div className="text-xs text-amber-600 mt-0.5">Editor Modules</div>
+                  </div>
+                  <div className="text-center p-3 bg-purple-50 rounded-lg">
+                    <div className="text-2xl font-bold text-purple-700">{cleanupPreview.workflows_deleted}</div>
+                    <div className="text-xs text-purple-600 mt-0.5">Workflows</div>
                   </div>
                   <div className="text-center p-3 bg-yellow-50 rounded-lg">
                     <div className="text-2xl font-bold text-yellow-700">{cleanupPreview.templates_deleted}</div>

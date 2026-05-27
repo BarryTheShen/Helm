@@ -48,8 +48,9 @@ async function setComponentInEmptyCell(
 
 /**
  * Create a fresh empty module in the editor and wait until the store is loaded.
+ * Returns the new custom module id (for teardown via deleteCustomModule).
  */
-export async function createFreshEditorModule(page: Page) {
+export async function createFreshEditorModule(page: Page): Promise<string> {
   await page.goto('/editor');
   await waitForEditorReady(page);
 
@@ -71,6 +72,7 @@ export async function createFreshEditorModule(page: Page) {
     const store = (window as unknown as { __editorStore?: { getState: () => EditorStoreState } }).__editorStore;
     return store?.getState().rows.length ?? -1;
   }), { timeout: 15000 }).toBe(0);
+  return created.module_id ?? '';
 }
 
 /**

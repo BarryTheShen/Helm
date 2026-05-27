@@ -1,12 +1,17 @@
 import { test, expect } from '../fixtures';
 import { EditorPage, waitForEditorReady, addRowViaStructureTree, saveModuleAndWait } from '../page-objects/editor';
 import { addComponentToFirstCell } from '../editor-helpers';
+import { cleanupCustomModuleFromEditorUrl } from '../test-artifact-cleanup';
 
 test.describe('FF4 Phase 8 — module editor, versioning, rows', () => {
   test.beforeEach(async ({ page, login }) => {
     await login();
     await page.goto('/editor');
     await waitForEditorReady(page);
+  });
+
+  test.afterEach(async ({ page, request }) => {
+    await cleanupCustomModuleFromEditorUrl(request, page.url());
   });
 
   test('FF4-MOD-009: top bar shows FF4 labels and no publish/approve controls', async ({ page }) => {
