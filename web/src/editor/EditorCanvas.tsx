@@ -469,11 +469,14 @@ function clampProgress(percent: number): number {
 
 function IconButtonPreview(props: Record<string, unknown>) {
   const label = getPreviewText(props, ['label', 'text', 'title'], 'Icon Button');
-  const icon = getPreviewText(props, ['icon', 'name', 'symbol'], '⭐');
+  const icon = getPreviewText(props, ['icon', 'name', 'symbol'], 'star');
 
   return (
-    <button className="flex h-full w-full items-center justify-center gap-2 rounded-md border border-gray-200 bg-white text-sm font-medium text-gray-700 shadow-sm">
-      <span>{icon}</span>
+    <button
+      data-testid="icon-button-preview"
+      className="flex h-full w-full items-center justify-center gap-2 rounded-md border border-gray-200 bg-white text-sm font-medium text-gray-700 shadow-sm"
+    >
+      {renderLucideIcon(icon, 18, 'shrink-0')}
       <span>{label}</span>
     </button>
   );
@@ -1045,6 +1048,10 @@ function CellResizeHandle({
     leftCellRef.current = leftCell;
     rightCellRef.current = rightCell;
 
+    const rowContainer = leftCell.parentElement;
+    const measuredRowWidth = rowContainer?.getBoundingClientRect().width ?? 0;
+    const dragRowWidthPx = measuredRowWidth > 0 ? measuredRowWidth : (rowWidthPx || 390);
+
     startXRef.current = e.clientX;
     startLeftWidthRef.current = leftWidth;
     totalWidthRef.current = leftWidth + rightWidth;
@@ -1058,7 +1065,7 @@ function CellResizeHandle({
     const handleMouseMove = (ev: MouseEvent) => {
       // Convert pixel delta to percentage of row width
       const pxDelta = ev.clientX - startXRef.current;
-      const rowWidth = rowWidthPx || 390; // Fallback to default if 0
+      const rowWidth = dragRowWidthPx;
       const pctDelta = (pxDelta / rowWidth) * 100;
 
       const minPct = MIN_CELL_PERCENT_FOR_DRAG;
