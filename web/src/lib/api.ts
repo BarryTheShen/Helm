@@ -110,6 +110,10 @@ export interface ModuleInstanceUpdate {
 export interface ModuleInstanceUsage {
   apps: Array<{ id: string; name: string }>;
 }
+export interface ModuleInstallRequest {
+  template_id: string;
+  name?: string;
+}
 
 // --- Connections ---
 export interface Connection {
@@ -371,6 +375,9 @@ class ApiClient {
   // --- Module Instances ---
   getModuleInstances(params?: PaginationParams) {
     return this.get<PaginatedResponse<ModuleInstance>>(`/api/modules/instances${this.buildQuery(params)}`);
+  }
+  installModule(data: ModuleInstallRequest) {
+    return this.post<ModuleInstance>('/api/modules/install', data);
   }
   getModuleInstance(id: string) {
     return this.get<ModuleInstance>(`/api/modules/instances/${id}`);

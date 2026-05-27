@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { Smartphone, Plus, Save, ChevronDown, Eye, Rocket, History, Clock, CheckCircle, AlertTriangle, AlertOctagon, RotateCcw, CornerDownRight } from 'lucide-react';
 import { api } from '../lib/api';
+import { ensureDefaultHomeModuleInstance } from '../lib/ensureDefaultModuleInstance';
 import { formatVersionOptionLabel, getVersionPrimaryLabel } from '../lib/utils';
 import { useAppEditorStore } from '../stores/useAppEditorStore';
 import { usePreviewStore } from '../stores/usePreviewStore';
@@ -297,11 +299,12 @@ export function AppEditorPage() {
     };
   }, [currentApp, currentAppId]);
 
-  // Load available modules
+  // Load available modules (installed instances — not Module Editor tab list)
   useEffect(() => {
     console.log('[AppEditor] mount — loading modules');
     const loadModules = async () => {
       try {
+        await ensureDefaultHomeModuleInstance();
         const response = await api.getModuleInstances();
         const activeCount = response.items.filter(m => m.status === 'active').length;
         console.log(`[AppEditor] loadModules() — loaded ${response.items.length} modules, ${activeCount} active`);
@@ -1060,8 +1063,23 @@ export function AppEditorPage() {
           {currentApp.bottom_bar_config.length === 0 && launchpadModules.length === 0 ? (
             <div className="w-[375px] h-[812px] bg-white rounded-[3rem] shadow-2xl border-8 border-gray-900 overflow-hidden flex flex-col items-center justify-center text-center text-gray-400 px-6">
               <Smartphone size={36} className="mx-auto mb-2 opacity-50" />
-              <p className="text-xs">No modules configured</p>
-              <p className="text-[10px] text-gray-300 mt-1">Add modules from the right sidebar</p>
+              {availableModules.length === 0 ? (
+                <>
+                  <p className="text-xs">No module instances yet</p>
+                  <p className="text-[10px] text-gray-300 mt-1">
+                    Install a module from{' '}
+                    <Link to="/templates" className="text-blue-500 hover:underline">
+                      Templates
+                    </Link>{' '}
+                    to populate the launchpad
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs">No modules configured</p>
+                  <p className="text-[10px] text-gray-300 mt-1">Add modules from the right sidebar</p>
+                </>
+              )}
             </div>
           ) : (
             <AppPhoneShell
@@ -1228,7 +1246,22 @@ export function AppEditorPage() {
                     </div>
                   );
                 })}
-                {launchpadModules.length === 0 && (
+                {launchpadModules.length === 0 && availableModules.length === 0 && (
+                  <div
+                    className="px-3 py-4 text-center text-xs text-gray-500 border-2 border-dashed border-gray-200 rounded-lg"
+                    data-testid="launchpad-empty-no-instances"
+                  >
+                    <p>No module instances yet.</p>
+                    <p className="mt-1">
+                      Install a module from{' '}
+                      <Link to="/templates" className="text-blue-600 hover:underline">
+                        Templates
+                      </Link>{' '}
+                      to add it to the launchpad.
+                    </p>
+                  </div>
+                )}
+                {launchpadModules.length === 0 && availableModules.length > 0 && (
                   <div className="px-3 py-4 text-center text-xs text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
                     All modules are in the bottom bar
                   </div>
