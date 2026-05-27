@@ -40,6 +40,8 @@ interface SDUIPreviewProps {
   className?: string;
   maxWidth?: number;
   maxHeight?: number;
+  /** When true, render module content only (no outer phone chrome). Used inside AppPhoneShell. */
+  embedded?: boolean;
 }
 
 // Component preview renderers (simplified versions from EditorCanvas)
@@ -276,7 +278,11 @@ const PREVIEW_RENDERERS: Record<string, (props: any) => React.JSX.Element> = {
 function ComponentPreview({ component }: { component: SDUIComponent }) {
   const Renderer = PREVIEW_RENDERERS[component.type];
   if (Renderer) {
-    return <Renderer {...component.props} children={component.children} />;
+    return (
+      <div className="h-full w-full min-h-0 flex flex-1 flex-col">
+        <Renderer {...component.props} children={component.children} />
+      </div>
+    );
   }
   return <div className="text-xs text-gray-400 italic p-2">Unknown: {component.type}</div>;
 }
@@ -360,7 +366,13 @@ function getCellStyle(row: SDUIRow, cellWidth: SDUICell['width'], totalWidth: nu
   };
 }
 
-export function SDUIPreview({ json, className = '', maxWidth = 375, maxHeight = 667 }: SDUIPreviewProps) {
+export function SDUIPreview({
+  json,
+  className = '',
+  maxWidth = 375,
+  maxHeight = 667,
+  embedded = false,
+}: SDUIPreviewProps) {
   let screen: SDUIScreen;
 
   try {
@@ -382,6 +394,46 @@ export function SDUIPreview({ json, className = '', maxWidth = 375, maxHeight = 
     );
   }
 
+  const rowContent = screen.rows.length === 0 ? (
+    <div className="text-center text-gray-400 py-8 text-sm">No content</div>
+  ) : (
+    screen.rows.map((row, rowIdx) => {
+      const totalWidth = row.cells.reduce((sum, cell) => sum + getNumericCellWidth(cell.width), 0);
+
+      return (
+        <div
+          key={row.id || rowIdx}
+          className="mb-1 rounded"
+          style={getRowStyle(row)}
+        >
+          {row.cells.map((cell, cellIdx) => (
+            <div
+              key={cell.id || cellIdx}
+              className="rounded p-1 flex min-h-0 flex-col"
+              style={getCellStyle(row, cell.width, totalWidth)}
+            >
+              {cell.content ? (
+                <ComponentPreview component={cell.content} />
+              ) : (
+                <div className="flex items-center justify-center h-full min-h-[40px] bg-gray-50 border border-dashed border-gray-200 rounded text-gray-300 text-xs">
+                  Empty
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    })
+  );
+
+  if (embedded) {
+    return (
+      <div className={`h-full w-full overflow-y-auto ${className}`} data-testid="sdui-preview-embedded">
+        {rowContent}
+      </div>
+    );
+  }
+
   return (
     <div className={`bg-gray-100 rounded-lg p-4 ${className}`}>
       <div
@@ -395,37 +447,7 @@ export function SDUIPreview({ json, className = '', maxWidth = 375, maxHeight = 
 
         {/* Content */}
         <div className="overflow-y-auto p-2" style={{ maxHeight: maxHeight - 40 }}>
-          {screen.rows.length === 0 ? (
-            <div className="text-center text-gray-400 py-8 text-sm">No content</div>
-          ) : (
-            screen.rows.map((row, rowIdx) => {
-              const totalWidth = row.cells.reduce((sum, cell) => sum + getNumericCellWidth(cell.width), 0);
-
-              return (
-                <div
-                  key={row.id || rowIdx}
-                  className="mb-1 rounded"
-                  style={getRowStyle(row)}
-                >
-                  {row.cells.map((cell, cellIdx) => (
-                    <div
-                      key={cell.id || cellIdx}
-                      className="rounded p-1"
-                      style={getCellStyle(row, cell.width, totalWidth)}
-                    >
-                      {cell.content ? (
-                        <ComponentPreview component={cell.content} />
-                      ) : (
-                        <div className="flex items-center justify-center h-full min-h-[40px] bg-gray-50 border border-dashed border-gray-200 rounded text-gray-300 text-xs">
-                          Empty
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              );
-            })
-          )}
+          {rowContent}
         </div>
 
         {/* Phone home indicator mock */}
