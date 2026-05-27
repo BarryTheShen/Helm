@@ -1,4 +1,4 @@
-export const colors = {
+const lightPalette = {
   primary: '#007AFF',
   secondary: '#5856D6',
   success: '#34C759',
@@ -16,17 +16,52 @@ export const colors = {
 
   border: '#C6C6C8',
   divider: '#E5E5EA',
+} as const;
 
-  // Dark mode variants (for future)
-  dark: {
-    background: '#000000',
-    surface: '#1C1C1E',
-    card: '#2C2C2E',
-    text: '#FFFFFF',
-    textSecondary: '#8E8E93',
-    border: '#38383A',
-  },
+const darkPalette = {
+  primary: '#0A84FF',
+  secondary: '#5E5CE6',
+  success: '#30D158',
+  warning: '#FF9F0A',
+  error: '#FF453A',
+  info: '#64D2FF',
+
+  background: '#000000',
+  surface: '#1C1C1E',
+  card: '#2C2C2E',
+
+  text: '#FFFFFF',
+  textSecondary: '#8E8E93',
+  textTertiary: '#636366',
+
+  border: '#38383A',
+  divider: '#2C2C2E',
+} as const;
+
+export type AppColorPalette = {
+  primary: string;
+  secondary: string;
+  success: string;
+  warning: string;
+  error: string;
+  info: string;
+  background: string;
+  surface: string;
+  card: string;
+  text: string;
+  textSecondary: string;
+  textTertiary: string;
+  border: string;
+  divider: string;
 };
+
+/** Static light palette — prefer `getAppColors()` / `useAppTheme()` for app-driven dark mode. */
+export const colors: AppColorPalette = lightPalette;
+
+/** Resolve the active palette from the published app config's dark_mode flag. */
+export function getAppColors(darkMode: boolean): AppColorPalette {
+  return darkMode ? darkPalette : lightPalette;
+}
 
 export const spacing = {
   xs: 4,

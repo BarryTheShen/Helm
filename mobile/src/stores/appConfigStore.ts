@@ -34,7 +34,7 @@ interface AppConfigState {
   isOffline: boolean;
 
   loadAppConfig: (serverUrl: string, token: string, deviceId: string) => Promise<void>;
-  updateFromWebSocket: (config: AppConfig) => void;
+  updateFromWebSocket: (config: Partial<AppConfig> & Record<string, unknown>) => void;
   clearAppConfig: () => void;
   /** Retrieve the cached config from AsyncStorage on app startup. */
   hydrateFromCache: () => Promise<void>;
@@ -153,14 +153,19 @@ export const useAppConfigStore = create<AppConfigState>((set, get) => ({
     }
   },
 
-  updateFromWebSocket: (config: AppConfig) => {
+  updateFromWebSocket: (config: Partial<AppConfig> & Record<string, unknown>) => {
     const now = new Date().toISOString();
+    const current = get().appConfig;
+    const merged = current
+      ? { ...current, ...config, dark_mode: config.dark_mode ?? current.dark_mode }
+      : (config as AppConfig);
+
     // Also cache WebSocket-updated config for offline use
     AsyncStorage.setItem(
       CACHED_CONFIG_KEY,
-      JSON.stringify({ config, syncedAt: now })
+      JSON.stringify({ config: merged, syncedAt: now })
     ).catch((err) => console.warn('Failed to cache WS config:', err));
-    set({ appConfig: config, error: null, isOffline: false, lastSyncedAt: now });
+    set({ appConfig: merged, error: null, isOffline: false, lastSyncedAt: now });
   },
 
   clearAppConfig: () => {

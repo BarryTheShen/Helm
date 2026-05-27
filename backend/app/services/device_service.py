@@ -180,6 +180,19 @@ def _enrich_launchpad(
     return enriched
 
 
+def normalize_app_config_snapshot(config_json: dict | None, app: App) -> dict:
+    """Ensure required app shell keys exist in a version/draft snapshot."""
+    normalized = dict(config_json or {})
+    normalized.setdefault("dark_mode", app.dark_mode)
+    normalized.setdefault("name", app.name)
+    normalized.setdefault("icon", app.icon)
+    normalized.setdefault("theme", app.theme or {})
+    normalized.setdefault("design_tokens", app.design_tokens or {})
+    normalized.setdefault("bottom_bar_config", app.bottom_bar_config or [])
+    normalized.setdefault("launchpad_config", app.launchpad_config or [])
+    return normalized
+
+
 def sync_app_shell_from_config(app: App, config_json: dict) -> None:
     """Mirror published/draft app shell onto the App row for admin APIs."""
     if isinstance(config_json.get("name"), str) and config_json["name"].strip():

@@ -1,22 +1,30 @@
 import '../global.css';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
+import { ThemeProvider } from '@react-navigation/native';
+import { StatusBar } from 'expo-status-bar';
 import Toast from 'react-native-toast-message';
 import { WebSocketProvider } from '@/contexts/WebSocketContext';
 import { useAuthStore } from '@/stores/authStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useAppConfigStore } from '@/stores/appConfigStore';
+import { buildNavigationTheme } from '@/theme/navigationTheme';
 
 export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const { token, serverUrl, deviceId, isLoading, initialize } = useAuthStore();
   const initializeSettings = useSettingsStore((state) => state.initialize);
-  const { loadAppConfig, appConfig } = useAppConfigStore();
+  const { loadAppConfig, hydrateFromCache, appConfig } = useAppConfigStore();
+  const darkMode = appConfig?.dark_mode ?? false;
+  const navigationTheme = useMemo(() => buildNavigationTheme(darkMode), [darkMode]);
 
   useEffect(() => {
     initialize();
     initializeSettings();
+    hydrateFromCache().catch((error) => {
+      console.warn('Failed to hydrate app config from cache:', error);
+    });
   }, []);
 
   // Derive a stable boolean so the effect doesn't re-fire on every render
@@ -55,9 +63,17 @@ export default function RootLayout() {
   }, [token, inAuthGroup, isLoading, serverUrl, deviceId, appConfig, inUnassigned]);
 
   return (
-    <WebSocketProvider>
-      <Stack screenOptions={{ headerShown: false }} />
-      <Toast />
-    </WebSocketProvider>
+    <ThemeProvider value={navigationTheme}>
+      <WebSocketProvider>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: navigationTheme.colors.background },
+          }}
+        />
+        <StatusBar style={darkMode ? 'light' : 'dark'} />
+        <Toast />
+      </WebSocketProvider>
+    </ThemeProvider>
   );
 }
