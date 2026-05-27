@@ -897,30 +897,6 @@ export function EditorPage() {
     }
   }, [getPersistableScreen, loadScreen, markScreenSaved, selectedModule, showMsg]);
 
-  const handlePublishVersion = useCallback(async (versionId: string, versionNumber: number) => {
-    console.log('[Editor] handlePublishVersion() — publishing version:', versionId);
-    const currentModule = selectedModule;
-    if (!currentModule) return;
-
-    if (!window.confirm(
-      `This will publish version ${versionNumber} as the live screen. All mobile users will see this version immediately.\n\nContinue?`
-    )) {
-      console.log('[Editor] handlePublishVersion() — user cancelled');
-      return;
-    }
-
-    try {
-      const result = await api.post<any>(`/api/modules/${currentModule}/versions/${versionId}/publish`);
-      console.log('[Editor] handlePublishVersion() — published:', result);
-
-      setDraftInfo({ has_draft: false });
-      showMsg('success', `Version v${versionNumber} published to live!`);
-    } catch (err) {
-      console.error('[Editor] handlePublishVersion() — error:', err instanceof Error ? err.message : err);
-      showMsg('error', err instanceof Error ? err.message : 'Publish failed');
-    }
-  }, [selectedModule, showMsg]);
-
   const handleArchiveVersion = useCallback(async (versionId: string, versionNumber: number) => {
     console.log('[Editor] handleArchiveVersion() — archiving version:', versionId);
     const currentModule = selectedModule;
