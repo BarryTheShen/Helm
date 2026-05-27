@@ -1,12 +1,16 @@
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
-import { colors } from '@/theme/colors';
+import { useAppTheme } from '@/theme/useAppTheme';
+import type { AppColorPalette } from '@/theme/colors';
 import { useAppConfigStore, type ModuleInstanceConfig } from '@/stores/appConfigStore';
 import { getRouteForModuleInstance } from '@/constants/moduleRoutes';
 
 export default function LaunchpadScreen() {
   const router = useRouter();
   const appConfig = useAppConfigStore((s) => s.appConfig);
+  const appColors = useAppTheme();
+  const styles = useMemo(() => createStyles(appColors), [appColors]);
 
   const launchpadModules = appConfig?.launchpad_config || [];
 
@@ -59,80 +63,82 @@ export default function LaunchpadScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    padding: 20,
-    paddingTop: 60,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: colors.textSecondary,
-  },
-  grid: {
-    padding: 16,
-  },
-  moduleCard: {
-    flex: 1,
-    margin: 8,
-    padding: 16,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    minHeight: 120,
-    maxWidth: '30%',
-  },
-  iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  icon: {
-    fontSize: 28,
-  },
-  moduleName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text,
-    textAlign: 'center',
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 100,
-  },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-});
+function createStyles(appColors: AppColorPalette) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: appColors.background,
+    },
+    header: {
+      padding: 20,
+      paddingTop: 60,
+      backgroundColor: appColors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: appColors.border,
+    },
+    title: {
+      fontSize: 28,
+      fontWeight: '700',
+      color: appColors.text,
+      marginBottom: 4,
+    },
+    subtitle: {
+      fontSize: 15,
+      color: appColors.textSecondary,
+    },
+    grid: {
+      padding: 16,
+    },
+    moduleCard: {
+      flex: 1,
+      margin: 8,
+      padding: 16,
+      backgroundColor: appColors.surface,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: appColors.border,
+      alignItems: 'center',
+      minHeight: 120,
+      maxWidth: '30%',
+    },
+    iconContainer: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: appColors.card,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 8,
+    },
+    icon: {
+      fontSize: 28,
+    },
+    moduleName: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: appColors.text,
+      textAlign: 'center',
+    },
+    emptyContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingTop: 100,
+    },
+    emptyIcon: {
+      fontSize: 64,
+      marginBottom: 16,
+    },
+    emptyText: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: appColors.text,
+      marginBottom: 8,
+    },
+    emptySubtext: {
+      fontSize: 15,
+      color: appColors.textSecondary,
+      textAlign: 'center',
+    },
+  });
+}

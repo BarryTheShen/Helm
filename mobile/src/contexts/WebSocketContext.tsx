@@ -102,11 +102,16 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         // Admin ended the preview session
         usePreviewStore.getState().exitPreview();
       } else if (message.type === 'app_version_published' && message.version_number) {
-        // A new app version was published — show a toast and reload config
+        // A new app version was published — reload config immediately (FF4-APP-004)
         // NOTE: Backend sends version_number (int), not a "version" string.
         // The display_name contains the full human-readable version label.
         const versionLabel = message.version_number;
         const displayName: string | undefined = message.display_name;
+        if (serverUrl && token && deviceId) {
+          loadAppConfig(serverUrl, token, deviceId).catch((err) =>
+            console.error('Failed to reload app config after publish:', err)
+          );
+        }
         if (lastPublishedVersion !== String(versionLabel)) {
           lastPublishedVersion = String(versionLabel);
           Toast.show({
@@ -114,14 +119,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
             text1: displayName
               ? `🔄 ${displayName}`
               : `🔄 App updated to v${versionLabel}`,
-            text2: 'Tap to refresh',
-            onPress: () => {
-              if (serverUrl && token && deviceId) {
-                loadAppConfig(serverUrl, token, deviceId).catch((err) =>
-                  console.error('Failed to reload app config after publish:', err)
-                );
-              }
-            },
+            text2: 'Your app has been updated',
             visibilityTime: 5000,
           });
         }

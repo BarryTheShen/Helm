@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Tabs, useRouter, Redirect } from 'expo-router';
 import { Text, TouchableOpacity } from 'react-native';
-import { colors } from '@/theme/colors';
+import { useAppTheme } from '@/theme/useAppTheme';
 import { useWebSocket } from '@/contexts/WebSocketContext';
 import { useAuthStore } from '@/stores/authStore';
 import { useTabsStore } from '@/stores/tabsStore';
@@ -107,6 +107,7 @@ export default function TabsLayout() {
   const moduleConfigs = useTabsStore((s) => s.moduleConfigs);
   const enabledTabIds = useTabsStore((s) => s.enabledTabIds);
   const appConfig = useAppConfigStore((s) => s.appConfig);
+  const appColors = useAppTheme();
 
   // Defensive auth guard: if token was cleared (e.g. 401 → logout), redirect
   // to the login screen immediately. This catches cases where the root layout's
@@ -176,13 +177,19 @@ export default function TabsLayout() {
       <TabsConfigSync />
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: colors.primary,
-          tabBarInactiveTintColor: colors.textSecondary,
+          tabBarActiveTintColor: appColors.primary,
+          tabBarInactiveTintColor: appColors.textSecondary,
+          tabBarStyle: {
+            backgroundColor: appColors.card,
+            borderTopColor: appColors.border,
+          },
           // Show a minimal header with the settings gear on every tab.
           headerShown: true,
-          headerStyle: { backgroundColor: colors.background },
+          headerStyle: { backgroundColor: appColors.background },
           headerShadowVisible: false,
-          headerTitleStyle: { color: colors.text, fontSize: 17, fontWeight: '600' },
+          headerTitleStyle: { color: appColors.text, fontSize: 17, fontWeight: '600' },
+          headerTintColor: appColors.text,
+          sceneStyle: { backgroundColor: appColors.background },
           headerRight,
         }}
       >

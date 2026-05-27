@@ -41,7 +41,7 @@ from app.schemas.preview import (
     PreviewSessionOut,
 )
 from app.services.audit import log_audit
-from app.services.device_service import sync_app_shell_from_config
+from app.services.device_service import normalize_app_config_snapshot, sync_app_shell_from_config
 from app.services.validation_service import validate_app_config, validate_publish_config
 from app.services.version_service import make_timestamp_name, resolve_module_references
 from app.services.websocket_manager import manager
@@ -227,7 +227,7 @@ async def create_app_checkpoint(
     app = await get_app_or_404(db, app_id, user_id)
     draft = await get_or_create_working_draft(db, app, user_id)
 
-    config_json = draft.config_json
+    config_json = normalize_app_config_snapshot(draft.config_json, app)
 
     version_number = await get_next_app_version_number(db, app_id)
     timestamp_name = make_timestamp_name()
@@ -464,7 +464,8 @@ async def publish_app_version(
     version.source = "publish"
 
     # ── FF4-VER-005: Resolve module references to concrete version IDs ──
-    config_json = version.config_json or {}
+    config_json = normalize_app_config_snapshot(version.config_json or {}, app)
+    version.config_json = config_json
     resolved, policies = await resolve_module_references(
         db, config_json, user_id,
     )
