@@ -2,6 +2,7 @@
 import { type CSSProperties } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { renderLucideIcon } from '../lib/lucideIcon';
+import { CalendarPreview } from './calendar/CalendarPreview';
 
 interface SDUIComponent {
   id: string;
@@ -140,18 +141,21 @@ function IconPreview({ name, size, color }: any) {
   );
 }
 
-function CalendarPreview() {
+function EmptyPreview({ children }: { children?: SDUIComponent[] }) {
   return (
-    <div className="bg-white rounded-lg border p-3">
-      <div className="text-sm font-bold mb-2">📅 Calendar</div>
-      <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] text-gray-500">
-        {['S','M','T','W','T','F','S'].map((d,i) => <div key={i} className="font-medium">{d}</div>)}
-      </div>
-      <div className="grid grid-cols-7 gap-0.5 text-center text-xs mt-1">
-        {Array.from({length: 28}, (_,i) => (
-          <div key={i} className={`py-0.5 rounded ${i === 4 ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'}`}>{i+1}</div>
-        ))}
-      </div>
+    <div
+      className="flex min-h-[48px] w-full flex-1 flex-col rounded border border-dashed border-gray-200"
+      data-testid="empty-container-preview"
+    >
+      {children && children.length > 0 ? (
+        children.map((child, index) => (
+          <div key={child.id || index} className="w-full flex-1" style={{ minHeight: 0 }}>
+            <ComponentPreview component={child} />
+          </div>
+        ))
+      ) : (
+        <div className="flex flex-1 items-center justify-center text-xs italic text-gray-400">Empty container</div>
+      )}
     </div>
   );
 }
@@ -273,6 +277,8 @@ const PREVIEW_RENDERERS: Record<string, (props: any) => React.JSX.Element> = {
   article_card: ArticleCardPreview,
   RichTextRenderer: RichTextRendererPreview,
   rich_text_renderer: RichTextRendererPreview,
+  Empty: EmptyPreview,
+  empty: EmptyPreview,
 };
 
 function ComponentPreview({ component }: { component: SDUIComponent }) {

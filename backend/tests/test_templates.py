@@ -5,6 +5,8 @@ from sqlalchemy import select
 import pytest
 
 from app.models.template import SDUITemplate
+from app.services.sdui_state import validate_sdui_screen_payload
+from app.services.template_seed import SEED_TEMPLATES
 
 
 LEGACY_SAMPLE_SCREEN = {
@@ -587,3 +589,36 @@ async def test_history_filter_by_source(auth_client):
 async def test_templates_require_auth(client):
     resp = await client.get("/api/templates")
     assert resp.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_seed_templates_are_valid_and_applyable(auth_client):
+    """FF4-TPL-001: seed template JSON validates and applies to a module draft."""
+    create_module = await auth_client.post("/api/sdui/modules", json={"name": "Seed Target", "icon": "📦"})
+    assert create_module.status_code == 201, create_module.text
+    module_id = create_module.json()["module_id"]
+
+    for seed in SEED_TEMPLATES:
+        _, errors = validate_sdui_screen_payload(seed["screen_json"])
+        assert errors == [], f"Seed template {seed['name']} has validation errors: {errors}"
+
+        create = await auth_client.post("/api/templates", json={
+            "name": f"QA {seed['name']} {seed['category']}",
+            "category": seed["category"],
+            "screen_json": seed["screen_json"],
+        })
+        assert create.status_code == 201, create.text
+        tid = create.json()["id"]
+
+        apply_resp = await auth_client.post(f"/api/templates/{tid}/apply", json={
+            "module_id": module_id,
+            "auto_checkpoint": False,
+        })
+        assert apply_resp.status_code == 200, apply_resp.text
+        assert apply_resp.json()["applied"] is True
+
+        draft = await auth_client.get(f"/api/sdui/{module_id}/draft")
+        assert draft.status_code == 200
+        assert draft.json()["has_draft"] is True
+        assert isinstance(draft.json()["screen"], dict)
+        assert len(draft.json()["screen"].get("rows", [])) > 0

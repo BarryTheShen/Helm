@@ -342,7 +342,7 @@ export function TemplatesPage() {
 
       {/* Apply Template Modal */}
       {applyingTemplate && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" data-testid="template-apply-modal">
           <div className="bg-white rounded-lg p-6 w-[480px] max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">Apply Template</h3>
 
@@ -350,6 +350,7 @@ export function TemplatesPage() {
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">Version</label>
               <select
+                data-testid="template-version-select"
                 value={selectedVersionId}
                 onChange={(e) => setSelectedVersionId(e.target.value)}
                 className="w-full px-3 py-2 border rounded-md text-sm"
@@ -372,6 +373,7 @@ export function TemplatesPage() {
               <div className="flex gap-3 mb-3">
                 <button
                   type="button"
+                  data-testid="template-target-existing"
                   onClick={() => setTargetMode('existing')}
                   className={`flex-1 px-3 py-2 text-sm rounded-md border transition-colors ${
                     targetMode === 'existing'
@@ -383,6 +385,7 @@ export function TemplatesPage() {
                 </button>
                 <button
                   type="button"
+                  data-testid="template-target-new"
                   onClick={() => setTargetMode('new')}
                   className={`flex-1 px-3 py-2 text-sm rounded-md border transition-colors ${
                     targetMode === 'new'
@@ -398,6 +401,7 @@ export function TemplatesPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Target Module</label>
                   <select
+                    data-testid="template-module-select"
                     value={applyModuleId}
                     onChange={(e) => setApplyModuleId(e.target.value)}
                     className="w-full px-3 py-2 border rounded-md text-sm"
@@ -429,6 +433,7 @@ export function TemplatesPage() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
+                  data-testid="template-auto-checkpoint"
                   checked={autoCheckpoint}
                   onChange={(e) => setAutoCheckpoint(e.target.checked)}
                   className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -449,6 +454,7 @@ export function TemplatesPage() {
 
             <div className="flex gap-2 justify-end">
               <button
+                data-testid="template-apply-cancel"
                 onClick={() => setApplyingTemplate(null)}
                 className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
                 disabled={applying}
@@ -456,6 +462,7 @@ export function TemplatesPage() {
                 Cancel
               </button>
               <button
+                data-testid="template-apply-submit"
                 onClick={handleApply}
                 disabled={
                   applying ||

@@ -26,6 +26,7 @@ import { Plus, Grip, X, Edit2, Eye, Copy, Trash2, ArrowUp, ArrowDown, Clipboard 
 import { resolveVariables } from './variableResolver';
 import { renderLucideIcon } from '../lib/lucideIcon';
 import ReactMarkdown from 'react-markdown';
+import { CalendarPreview } from '../components/calendar/CalendarPreview';
 
 // cell width validation constants — SLICE-CELL-WIDTH (FF4-ROW-004..021, FF4-ROW-024)
 // NOTE: MIN_CELL_WIDTH_PERCENT, MIN_CELL_WIDTH_PX, and MIN_ROW_HEIGHT imported from cellWidthEngine
@@ -246,21 +247,6 @@ function IconPreview({ name, size, color }: any) {
   );
 }
 
-function CalendarPreview() {
-  return (
-    <div className="flex h-full w-full flex-col overflow-hidden rounded-lg border bg-white p-2">
-      <div className="text-sm font-bold mb-2">📅 Calendar</div>
-      <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] text-gray-500">
-        {['S','M','T','W','T','F','S'].map((d,i) => <div key={i} className="font-medium">{d}</div>)}
-      </div>
-      <div className="grid grid-cols-7 gap-0.5 text-center text-xs mt-1">
-        {Array.from({length: 28}, (_,i) => (
-          <div key={i} className={`py-0.5 rounded ${i === 4 ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'}`}>{i+1}</div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function ChatPreview() {
   return (
@@ -815,7 +801,10 @@ function ContainerPreview({
 // FF4-EC-001: Vertical flex container with component fitting.
 function EmptyPreview({ children }: { gap?: number; padding?: number; backgroundColor?: string; children?: EditorComponent[] }) {
   return (
-    <div className="flex flex-col min-h-[48px] flex-1 w-full border border-dashed border-gray-200 rounded">
+    <div
+      className="flex flex-col min-h-[48px] flex-1 w-full border border-dashed border-gray-200 rounded"
+      data-testid="empty-container-preview"
+    >
       {children && children.length > 0 ? (
         children.map((child) => (
           <div key={child.id} className="flex-1 w-full" style={{ minHeight: 0 }}>
