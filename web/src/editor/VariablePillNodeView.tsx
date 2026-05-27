@@ -18,7 +18,8 @@ export function VariablePillNodeView({ node }: NodeViewProps) {
   return (
     <NodeViewWrapper
       as="span"
-      className="inline-flex items-center gap-1 px-2 py-0.5 mx-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-medium cursor-default select-none"
+      data-testid="variable-pill"
+      className="inline-flex max-w-fit items-center gap-0.5 px-1.5 py-px mx-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-medium cursor-default select-none align-baseline"
       contentEditable={false}
       draggable={false}
     >

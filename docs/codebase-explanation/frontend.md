@@ -606,6 +606,7 @@ The editor page (`/editor`) is a custom React + Zustand SDUI editor built from `
 - OAuth and API key management
 - Fernet encryption for sensitive credentials
 - Provider-based connection storage
+- **End-to-end usage:** Admin creates a connection under `/connections` → credentials stored encrypted via `POST /api/connections` → workflows and server actions reference `connection.*` variables → MCP agents can read connection metadata through the backend API. See `docs/codebase-explanation/backend.md` (Connections section) for REST paths and audit logging.
 
 **TemplatesPage:**
 - Added SDUIPreview component for template preview

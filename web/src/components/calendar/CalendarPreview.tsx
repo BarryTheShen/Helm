@@ -8,13 +8,27 @@ export interface CalendarPreviewEvent {
   start: string;
   end: string;
   sourceColor?: string;
+  sourceType?: 'local' | 'caldav' | 'notion' | 'custom';
+  notes?: string;
 }
 
 export interface CalendarPreviewProps {
   variant?: CalendarPreviewVariant;
   title?: string;
   maxEvents?: number;
+  showSourceBadges?: boolean;
+  showNotes?: boolean;
+  compactThreshold?: number;
+  sourceTypes?: string;
+  categoryFilter?: string;
 }
+
+const SOURCE_BADGE_COLORS: Record<string, string> = {
+  local: '#6B7280',
+  caldav: '#2563EB',
+  notion: '#7C3AED',
+  custom: '#0D9488',
+};
 
 const SAMPLE_EVENTS: CalendarPreviewEvent[] = [
   {
@@ -23,6 +37,8 @@ const SAMPLE_EVENTS: CalendarPreviewEvent[] = [
     start: `${todayIso()}T09:00:00`,
     end: `${todayIso()}T09:30:00`,
     sourceColor: '#2563EB',
+    sourceType: 'local',
+    notes: 'Daily sync with engineering. Review blockers and sprint goals for the week ahead.',
   },
   {
     id: 'evt-2',
@@ -30,6 +46,8 @@ const SAMPLE_EVENTS: CalendarPreviewEvent[] = [
     start: `${todayIso()}T14:00:00`,
     end: `${todayIso()}T15:00:00`,
     sourceColor: '#7C3AED',
+    sourceType: 'notion',
+    notes: 'Review FF4 calendar mockups and mobile parity checklist.',
   },
   {
     id: 'evt-3',
@@ -37,6 +55,8 @@ const SAMPLE_EVENTS: CalendarPreviewEvent[] = [
     start: `${offsetDateIso(1)}T10:00:00`,
     end: `${offsetDateIso(1)}T11:00:00`,
     sourceColor: '#0D9488',
+    sourceType: 'custom',
+    notes: 'Plan tomorrow tasks and calendar blocks.',
   },
 ];
 
@@ -70,16 +90,99 @@ function eventsForDate(events: CalendarPreviewEvent[], dateIso: string): Calenda
   return events.filter((event) => event.start.startsWith(dateIso));
 }
 
+function truncateNotes(notes: string, maxLines = 2): string {
+  const lines = notes.split('\n').slice(0, maxLines);
+  const joined = lines.join('\n');
+  if (notes.split('\n').length > maxLines) {
+    return `${joined}…`;
+  }
+  return joined.length > 120 ? `${joined.slice(0, 117)}…` : joined;
+}
+
+function filterEvents(
+  events: CalendarPreviewEvent[],
+  sourceTypes?: string,
+  categoryFilter?: string,
+): CalendarPreviewEvent[] {
+  let filtered = events;
+  if (sourceTypes?.trim()) {
+    const allowed = new Set(
+      sourceTypes.split(',').map((value) => value.trim().toLowerCase()).filter(Boolean),
+    );
+    if (allowed.size > 0) {
+      filtered = filtered.filter((event) => allowed.has((event.sourceType ?? 'local').toLowerCase()));
+    }
+  }
+  if (categoryFilter?.trim()) {
+    filtered = filtered.filter((event) =>
+      event.title.toLowerCase().includes(categoryFilter.trim().toLowerCase()),
+    );
+  }
+  return filtered;
+}
+
+function DateNavBar({
+  label,
+  onPrev,
+  onNext,
+  onToday,
+}: {
+  label: string;
+  onPrev: () => void;
+  onNext: () => void;
+  onToday: () => void;
+}) {
+  return (
+    <div
+      className="mb-2 flex items-center justify-between gap-1 text-[10px] text-gray-600"
+      data-testid="calendar-date-nav"
+    >
+      <button type="button" data-testid="calendar-nav-prev" className="rounded px-1 hover:bg-gray-100" onClick={onPrev}>
+        ◀
+      </button>
+      <span data-testid="calendar-range-label" className="flex-1 text-center font-medium">
+        {label}
+      </span>
+      <button type="button" data-testid="calendar-nav-next" className="rounded px-1 hover:bg-gray-100" onClick={onNext}>
+        ▶
+      </button>
+      <button
+        type="button"
+        data-testid="calendar-nav-today"
+        className="rounded bg-gray-100 px-2 py-0.5 font-semibold hover:bg-gray-200"
+        onClick={onToday}
+      >
+        Today
+      </button>
+    </div>
+  );
+}
+
+function SourceBadge({ sourceType }: { sourceType?: string }) {
+  const resolved = sourceType ?? 'local';
+  return (
+    <span
+      data-testid={`calendar-source-badge-${resolved}`}
+      className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white"
+      style={{ backgroundColor: SOURCE_BADGE_COLORS[resolved] ?? SOURCE_BADGE_COLORS.local }}
+    >
+      {resolved}
+    </span>
+  );
+}
+
 function MonthPreview({
   events,
   selectedDate,
   onSelectDate,
   onSelectEvent,
+  showSourceBadges,
 }: {
   events: CalendarPreviewEvent[];
   selectedDate: string;
   onSelectDate: (dateIso: string) => void;
   onSelectEvent: (event: CalendarPreviewEvent) => void;
+  showSourceBadges?: boolean;
 }) {
   const today = todayIso();
   const startOfMonth = new Date();
@@ -121,13 +224,12 @@ function MonthPreview({
             <button
               key={cell.dateIso}
               type="button"
-              data-testid={`calendar-date-${cell.day}`}
+              data-testid={isToday ? 'calendar-today' : `calendar-date-${cell.day}`}
               data-date={cell.dateIso}
               onClick={() => onSelectDate(cell.dateIso!)}
               className={`relative rounded py-1 transition-colors ${
                 isToday ? 'bg-blue-600 text-white' : isSelected ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'
               }`}
-              {...(isToday ? { 'data-testid': 'calendar-today' } : {})}
             >
               {cell.day}
               {dayEvents.length > 0 && (
@@ -136,7 +238,7 @@ function MonthPreview({
                     <span
                       key={event.id}
                       className="inline-block h-1 w-1 rounded-full"
-                      style={{ backgroundColor: event.sourceColor ?? '#2563EB' }}
+                      style={{ backgroundColor: event.sourceColor ?? SOURCE_BADGE_COLORS[event.sourceType ?? 'local'] }}
                     />
                   ))}
                 </span>
@@ -160,10 +262,11 @@ function MonthPreview({
             >
               <span
                 className="inline-block h-2 w-2 rounded-full"
-                style={{ backgroundColor: event.sourceColor ?? '#2563EB' }}
+                style={{ backgroundColor: event.sourceColor ?? SOURCE_BADGE_COLORS[event.sourceType ?? 'local'] }}
               />
               <span className="font-medium">{formatTime(event.start)}</span>
-              <span>{event.title}</span>
+              <span className="flex-1">{event.title}</span>
+              {showSourceBadges && <SourceBadge sourceType={event.sourceType} />}
             </button>
           ))
         )}
@@ -176,24 +279,17 @@ function TimeGridPreview({
   events,
   onSelectEvent,
   mode,
+  showSourceBadges,
 }: {
   events: CalendarPreviewEvent[];
   onSelectEvent: (event: CalendarPreviewEvent) => void;
   mode: 'week' | 'day';
+  showSourceBadges?: boolean;
 }) {
   const hours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
 
   return (
     <div data-testid={`calendar-${mode}-view`}>
-      <div className="mb-2 flex items-center justify-between text-[10px] text-gray-500">
-        <button type="button" data-testid="calendar-nav-prev" className="rounded px-1 hover:bg-gray-100">
-          ◀
-        </button>
-        <span>{mode === 'week' ? 'Week view' : 'Day view'}</span>
-        <button type="button" data-testid="calendar-nav-next" className="rounded px-1 hover:bg-gray-100">
-          ▶
-        </button>
-      </div>
       <div className="relative" data-testid="calendar-time-grid">
         {hours.map((hour) => (
           <div key={hour} className="grid grid-cols-[40px_1fr] border-t border-gray-100 text-[10px]">
@@ -207,10 +303,13 @@ function TimeGridPreview({
                     type="button"
                     data-testid={`calendar-time-event-${event.id}`}
                     onClick={() => onSelectEvent(event)}
-                    className="mb-1 block w-full rounded px-2 py-1 text-left text-[10px] text-white"
-                    style={{ backgroundColor: event.sourceColor ?? '#2563EB' }}
+                    className="mb-1 flex w-full items-center gap-1 rounded px-2 py-1 text-left text-[10px] text-white"
+                    style={{ backgroundColor: event.sourceColor ?? SOURCE_BADGE_COLORS[event.sourceType ?? 'local'] }}
                   >
-                    {formatTime(event.start)} — {event.title}
+                    <span className="flex-1">
+                      {formatTime(event.start)} — {event.title}
+                    </span>
+                    {showSourceBadges && <SourceBadge sourceType={event.sourceType} />}
                   </button>
                 ))}
             </div>
@@ -222,20 +321,35 @@ function TimeGridPreview({
 }
 
 function CompactPreview({ events, maxEvents }: { events: CalendarPreviewEvent[]; maxEvents: number }) {
+  const todayEvents = eventsForDate(events, todayIso());
   const visible = events.slice(0, maxEvents);
+  const nextEvent = visible[0];
+
   return (
     <div data-testid="calendar-compact-view" className="space-y-1 text-xs">
-      <div className="font-semibold">📅 {eventsForDate(events, todayIso()).length} events today</div>
-      {visible.map((event) => (
-        <div key={event.id} className="truncate text-gray-600">
-          Next: {formatTime(event.start)} — {event.title}
+      <div className="font-semibold" data-testid="calendar-compact-count">
+        📅 {todayEvents.length} events today
+      </div>
+      {nextEvent && (
+        <div className="truncate text-gray-600" data-testid="calendar-compact-next">
+          Next: {formatTime(nextEvent.start)} — {nextEvent.title}
         </div>
-      ))}
+      )}
     </div>
   );
 }
 
-function EventListPreview({ events, maxEvents }: { events: CalendarPreviewEvent[]; maxEvents: number }) {
+function EventListPreview({
+  events,
+  maxEvents,
+  showSourceBadges,
+  showNotes,
+}: {
+  events: CalendarPreviewEvent[];
+  maxEvents: number;
+  showSourceBadges?: boolean;
+  showNotes?: boolean;
+}) {
   const visible = [...events]
     .sort((a, b) => a.start.localeCompare(b.start))
     .slice(0, maxEvents);
@@ -243,24 +357,58 @@ function EventListPreview({ events, maxEvents }: { events: CalendarPreviewEvent[
   return (
     <div data-testid="calendar-event-list-view" className="space-y-1 text-xs">
       {visible.map((event) => (
-        <div key={event.id} className="flex items-center gap-2 rounded border border-gray-100 px-2 py-1">
-          <span
-            className="inline-block h-2 w-2 rounded-full"
-            style={{ backgroundColor: event.sourceColor ?? '#2563EB' }}
-          />
-          <span className="font-medium">{formatTime(event.start)}</span>
-          <span>{event.title}</span>
+        <div key={event.id} className="flex flex-col gap-0.5 rounded border border-gray-100 px-2 py-1">
+          <div className="flex items-center gap-2">
+            <span
+              className="inline-block h-2 w-2 rounded-full"
+              style={{ backgroundColor: event.sourceColor ?? SOURCE_BADGE_COLORS[event.sourceType ?? 'local'] }}
+            />
+            <span className="font-medium">{formatTime(event.start)}</span>
+            <span className="flex-1">{event.title}</span>
+            {showSourceBadges && <SourceBadge sourceType={event.sourceType} />}
+          </div>
+          {showNotes && event.notes && (
+            <p className="line-clamp-2 text-[10px] text-gray-500" data-testid={`calendar-event-notes-${event.id}`}>
+              {truncateNotes(event.notes)}
+            </p>
+          )}
         </div>
       ))}
     </div>
   );
 }
 
-export function CalendarPreview({ variant = 'month', title, maxEvents = 10 }: CalendarPreviewProps) {
+export function CalendarPreview({
+  variant = 'month',
+  title,
+  maxEvents = 10,
+  showSourceBadges = true,
+  showNotes = true,
+  compactThreshold = 200,
+  sourceTypes,
+  categoryFilter,
+}: CalendarPreviewProps) {
   const resolvedVariant = normalizeVariant(variant);
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [selectedEvent, setSelectedEvent] = useState<CalendarPreviewEvent | null>(null);
-  const events = useMemo(() => SAMPLE_EVENTS, []);
+  const [rangeOffset, setRangeOffset] = useState(0);
+  const events = useMemo(
+    () => filterEvents(SAMPLE_EVENTS, sourceTypes, categoryFilter),
+    [sourceTypes, categoryFilter],
+  );
+
+  const rangeLabel = useMemo(() => {
+    if (resolvedVariant === 'week') return `Week +${rangeOffset}`;
+    if (resolvedVariant === 'day') return selectedDate;
+    if (resolvedVariant === 'compact' || resolvedVariant === 'eventList') return 'Upcoming';
+    const d = new Date();
+    d.setMonth(d.getMonth() + rangeOffset);
+    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }, [resolvedVariant, rangeOffset, selectedDate]);
+
+  const showFitWarning =
+    (resolvedVariant === 'month' || resolvedVariant === 'week' || resolvedVariant === 'day')
+    && compactThreshold >= 200;
 
   return (
     <div
@@ -270,32 +418,72 @@ export function CalendarPreview({ variant = 'month', title, maxEvents = 10 }: Ca
     >
       <div className="mb-2 text-sm font-bold">{title?.trim() ? title : '📅 Calendar'}</div>
 
+      <DateNavBar
+        label={rangeLabel}
+        onPrev={() => setRangeOffset((value) => value - 1)}
+        onNext={() => setRangeOffset((value) => value + 1)}
+        onToday={() => {
+          setRangeOffset(0);
+          setSelectedDate(todayIso());
+        }}
+      />
+
+      {showFitWarning && (
+        <div
+          className="mb-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800"
+          data-testid="calendar-fit-warning"
+        >
+          Cells narrower than {compactThreshold}px auto-adapt to Compact or Event List on mobile.
+        </div>
+      )}
+
       {resolvedVariant === 'month' && (
         <MonthPreview
           events={events}
           selectedDate={selectedDate}
           onSelectDate={setSelectedDate}
           onSelectEvent={setSelectedEvent}
+          showSourceBadges={showSourceBadges}
         />
       )}
 
       {(resolvedVariant === 'week' || resolvedVariant === 'day') && (
-        <TimeGridPreview events={events} onSelectEvent={setSelectedEvent} mode={resolvedVariant} />
+        <TimeGridPreview
+          events={events}
+          onSelectEvent={setSelectedEvent}
+          mode={resolvedVariant}
+          showSourceBadges={showSourceBadges}
+        />
       )}
 
       {resolvedVariant === 'compact' && <CompactPreview events={events} maxEvents={maxEvents} />}
 
-      {resolvedVariant === 'eventList' && <EventListPreview events={events} maxEvents={maxEvents} />}
+      {resolvedVariant === 'eventList' && (
+        <EventListPreview
+          events={events}
+          maxEvents={maxEvents}
+          showSourceBadges={showSourceBadges}
+          showNotes={showNotes}
+        />
+      )}
 
       {selectedEvent && (
         <div
           className="mt-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs"
           data-testid="calendar-event-detail"
         >
-          <div className="font-semibold">{selectedEvent.title}</div>
+          <div className="flex items-center gap-2">
+            <div className="font-semibold">{selectedEvent.title}</div>
+            {showSourceBadges && <SourceBadge sourceType={selectedEvent.sourceType} />}
+          </div>
           <div className="text-gray-600">
             {formatTime(selectedEvent.start)} – {formatTime(selectedEvent.end)}
           </div>
+          {showNotes && selectedEvent.notes && (
+            <p className="mt-1 line-clamp-2 text-gray-600" data-testid="calendar-event-detail-notes">
+              {truncateNotes(selectedEvent.notes)}
+            </p>
+          )}
           <button
             type="button"
             className="mt-1 text-[10px] text-blue-600"

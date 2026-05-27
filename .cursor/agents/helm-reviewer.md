@@ -166,6 +166,16 @@ After the product completeness review is complete, perform a standard code quali
 
 Code quality findings are advisory and do not block the coverage gate unless they are critical (data loss, security risk).
 
+### React Doctor (FF4-QA-004)
+
+When reviewing React or React Native diffs, require `helm-tester` evidence from:
+
+```bash
+npx -y react-doctor@latest <web-or-mobile-path> --diff origin/dev --offline --json
+```
+
+Treat hook-rule violations, stale closures, and render regressions reported by React Doctor as **Major** findings unless the orchestrator documents an explicit waiver.
+
 ## Expected State Verification
 
 When .helm/features.db exists, compare the implementation against expected_state_spec entries for affected features. Flag any divergence between implementation and expected state as a finding.

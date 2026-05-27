@@ -23,9 +23,11 @@
 .ProseMirror span[data-type="variable-pill"] {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  margin: 0 2px;
+  gap: 2px;
+  padding: 1px 6px;
+  margin: 0 1px;
+  max-width: fit-content;
+  vertical-align: baseline;
   background-color: #dbeafe;
   color: #1e40af;
   border-radius: 9999px;

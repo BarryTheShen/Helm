@@ -219,9 +219,12 @@ function ButtonPreview({ label, variant, size, icon, iconPosition = 'left' }: an
 }
 
 function ImagePreview({ src, fitMode }: any) {
-  const objectFit = fitMode === 'fitHeight' ? 'contain' : 'cover';
+  const resolvedFitMode = fitMode === 'fitHeight' ? 'fitHeight' : 'fitWidth';
+  const objectFit = resolvedFitMode === 'fitHeight' ? 'contain' : 'cover';
   return (
     <img
+      data-testid="image-preview"
+      data-fit-mode={resolvedFitMode}
       src={src || 'https://via.placeholder.com/300x200'}
       alt=""
       style={{
@@ -264,11 +267,11 @@ function ChatPreview() {
 
 function NotesPreview() {
   return (
-    <div className="bg-white rounded-lg border p-3">
-      <div className="text-sm font-bold mb-2">📓 Notes</div>
-      <div className="text-xs text-gray-400 space-y-1">
-        <p>Meeting notes from today...</p>
-        <p className="text-gray-300">Start typing to edit...</p>
+    <div className="flex h-full w-full flex-col rounded-lg border bg-white p-3" data-testid="notes-preview">
+      <div className="mb-2 text-sm font-bold">📓 Notes</div>
+      <div className="space-y-1 text-xs text-gray-600">
+        <p className="font-medium">Meeting notes from today</p>
+        <p className="line-clamp-2 text-gray-400">Markdown preview with title, author, and timestamp from backend feed.</p>
       </div>
     </div>
   );
@@ -276,9 +279,9 @@ function NotesPreview() {
 
 function InputBarPreview({ placeholder }: any) {
   return (
-    <div className="flex h-full w-full gap-1.5 rounded-lg border bg-white p-1">
+    <div className="flex h-full w-full gap-1.5 rounded-lg border bg-white p-1" data-testid="input-bar-preview">
       <input type="text" placeholder={placeholder || 'Type a message...'} className="min-w-0 flex-1 rounded border border-gray-200 px-2 text-xs" readOnly />
-      <button className="rounded bg-blue-600 px-3 text-xs text-white">Send</button>
+      <button type="button" data-testid="input-bar-send" className="rounded bg-blue-600 px-3 text-xs text-white">Send</button>
     </div>
   );
 }
