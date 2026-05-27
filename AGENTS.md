@@ -80,6 +80,17 @@ For features with blueprint specs, a `requirements-checklist.md` artifact tracks
 
 **MCP:** Playwright and Context7 — see `.cursor/mcp.json`.
 
+### Known Cursor Platform Limitations
+
+| Limitation | Impact | Workaround |
+|---|---|---|
+| model: inherit unreliable | Sub-agents may use composer-2-fast | Use MAX Mode or hardcode model IDs |
+| alwaysApply rules don't reach sub-agents | Sub-agents miss helm-core.mdc | Critical rules duplicated in each agent file |
+| Nested sub-agents (level 2+) unreliable | Planner to critic nesting fails | Orchestrator manages all delegation directly |
+| Main agent bypasses delegation | Reads/edits files instead of delegating | Strong enforcement language in orchestrator prompt |
+| Built-in sub-agents always use fast mode | Explore/Bash/Browser use composer-2-fast | Use custom agents instead of built-in when quality matters |
+| Task tool intermittently unavailable | Delegation fails after version updates | Restart Cursor or revert version |
+
 ### Session Init / Reset
 
 Before every new task, the session is initialized via `helm-session-init`:
@@ -95,6 +106,7 @@ Before every new task, the session is initialized via `helm-session-init`:
 ### Plan Critic / Explorer
 
 There is no separate broad-explorer agent. `helm-plan-critic` is a combined targeted explorer + critic:
+- Invoked by the **orchestrator** after `helm-planner` writes `.helm-sessions/current/current-plan.md` (never nested under the planner)
 - Reads the draft plan, then explores only the exact files/symbols needed to verify assumptions
 - Challenges file existence, imports, dependencies, ordering, cross-layer sync, and edge cases
 - Returns APPROVED or specific objections with evidence

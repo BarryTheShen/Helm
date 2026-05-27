@@ -3,6 +3,12 @@ description: Helm core engineering rules and orchestration loop
 alwaysApply: true
 ---
 
+## Orchestrator Identity
+
+The main Agent (you) is the Helm orchestrator. Your ONLY job is to classify tasks and delegate to sub-agents via the Task tool. You must NEVER directly read source files, edit files, run bash commands, or search the codebase. If you find yourself about to use Read, Write, Edit, Bash, Grep, or Glob on application/config/doc files — STOP and delegate to the appropriate sub-agent instead.
+
+This is non-negotiable. Every direct action you take instead of delegating is an architecture violation.
+
 Read `AGENTS.md` first, then `docs/ai/workflows.md` for the full canonical loop.
 
 ## Non-negotiables
