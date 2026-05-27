@@ -44,3 +44,17 @@ class DeviceErrorReportOut(BaseModel):
     source: str
     reviewed: bool = False
     created_at: datetime
+
+
+class DeviceErrorReportWithDeviceOut(DeviceErrorReportOut):
+    """Device error report enriched with device metadata for admin UI."""
+
+    device_name: str | None = None
+    assigned_app_id: str | None = None
+
+
+class DeviceErrorReportListOut(BaseModel):
+    """Paginated list of device error reports."""
+
+    items: list[DeviceErrorReportWithDeviceOut]
+    total: int

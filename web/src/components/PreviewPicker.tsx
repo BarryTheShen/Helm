@@ -187,6 +187,7 @@ export function PreviewPicker({ appId, onSelectBrowser, onClose }: PreviewPicker
             <div className="grid grid-cols-2 gap-4">
               {/* Browser Preview Option */}
               <button
+                data-testid="preview-web-admin"
                 onClick={onSelectBrowser}
                 onMouseEnter={() => setHoveredOption('browser')}
                 onMouseLeave={() => setHoveredOption(null)}
@@ -211,7 +212,7 @@ export function PreviewPicker({ appId, onSelectBrowser, onClose }: PreviewPicker
                   </div>
                   <div>
                     <h3 className="text-base font-semibold text-gray-900 mb-1">
-                      Browser Preview
+                      Preview in Web Admin
                     </h3>
                     <p className="text-xs text-gray-600 leading-relaxed">
                       Quick preview in your browser. Instant feedback with component rendering and navigation.
@@ -236,6 +237,7 @@ export function PreviewPicker({ appId, onSelectBrowser, onClose }: PreviewPicker
 
               {/* Device Preview Option */}
               <button
+                data-testid="preview-on-device"
                 onClick={() => setStep('devices')}
                 onMouseEnter={() => setHoveredOption('device')}
                 onMouseLeave={() => setHoveredOption(null)}
@@ -260,7 +262,7 @@ export function PreviewPicker({ appId, onSelectBrowser, onClose }: PreviewPicker
                   </div>
                   <div>
                     <h3 className="text-base font-semibold text-gray-900 mb-1">
-                      Device Preview
+                      Preview on Device...
                     </h3>
                     <p className="text-xs text-gray-600 leading-relaxed">
                       Push preview to a connected device. Full interactivity with real native components.

@@ -42,7 +42,7 @@ export const AppEditorPage = {
   btnPreview: 'button:has-text("Preview")',
   btnPublishToolbar: 'button:has-text("Publish to Mobile")',
   previewPickerHeading: 'role=heading[name="Preview App"]',
-  browserPreviewOption: 'role=heading[name="Browser Preview"]',
+  browserPreviewOption: 'role=heading[name="Preview in Web Admin"]',
   browserPreviewHeading: 'role=heading[name="Preview in Web Admin"]',
   publishModalHeading: 'role=heading[name=/Publish App/]',
 };
