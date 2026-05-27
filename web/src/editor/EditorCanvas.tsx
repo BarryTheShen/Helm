@@ -19,7 +19,7 @@ import { useEditorStore } from './useEditorStore';
 import { getComponentDefinition } from './types';
 import type { EditorCell, EditorComponent, EditorRow, EditorRowHeight } from './types';
 import { assertRegisteredComponentType } from './typeGuards';
-import { MIN_CELL_WIDTH_PERCENT, MIN_CELL_WIDTH_PX, MIN_ROW_HEIGHT, calculateSidePadding } from './cellWidthEngine';
+import { MIN_CELL_WIDTH_PERCENT, MIN_CELL_WIDTH_PX, MIN_ROW_HEIGHT, calculateSidePadding, calculateCellWidths } from './cellWidthEngine';
 
 import { ComponentPicker } from './ComponentPicker';
 import { Plus, Grip, X, Edit2, Eye, Copy, Trash2, ArrowUp, ArrowDown, Clipboard } from 'lucide-react';
@@ -117,6 +117,20 @@ const MAX_PREVIEW_WIDTH = 960;
 const MAX_PREVIEW_HEIGHT = 1200;
 const MIN_CELL_PERCENT_FOR_DRAG = 5; // Minimum percentage for drag resize
 
+/** FF4-ROW-012 / FF4-CELL-004: host wrapper so atomic previews fill the cell */
+const FIT_CELL_CLASS = 'flex flex-1 flex-col min-h-0 w-full h-full';
+const FIT_CELL_STYLE: CSSProperties = { width: '100%', height: '100%', flex: 1, minHeight: 0 };
+
+function applyCellWidthStyles(element: HTMLElement, percent: number) {
+  element.style.flex = `0 0 ${percent}%`;
+  element.style.width = `${percent}%`;
+}
+
+function clearCellWidthStyles(element: HTMLElement) {
+  element.style.flex = '';
+  element.style.width = '';
+}
+
 // ── Component Preview Renderers ──────────────────────────────────────────────
 
 function TextPreview({ content, variant, fontSize, fontWeight, color, align, bold, italic }: any) {
@@ -170,11 +184,15 @@ function ButtonPreview({ label, variant, size, icon }: any) {
   };
 
   if (variant === 'icon') {
-    return <button className="rounded-full border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-600">{icon || '⭐'}</button>;
+    return (
+      <button className="flex h-full w-full items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-blue-600">
+        {icon || '⭐'}
+      </button>
+    );
   }
 
   return (
-    <button className={`w-full rounded-md font-medium ${variants[variant] || variants.primary} ${sizes[size] || sizes.md}`}>
+    <button className={`flex h-full w-full items-center justify-center rounded-md font-medium ${variants[variant] || variants.primary} ${sizes[size] || sizes.md}`}>
       {label || 'Button'}
     </button>
   );
@@ -205,7 +223,7 @@ function IconPreview({ name, size, color }: any) {
 
 function CalendarPreview() {
   return (
-    <div className="bg-white rounded-lg border p-3">
+    <div className="flex h-full w-full flex-col overflow-hidden rounded-lg border bg-white p-2">
       <div className="text-sm font-bold mb-2">📅 Calendar</div>
       <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] text-gray-500">
         {['S','M','T','W','T','F','S'].map((d,i) => <div key={i} className="font-medium">{d}</div>)}
@@ -245,9 +263,9 @@ function NotesPreview() {
 
 function InputBarPreview({ placeholder }: any) {
   return (
-    <div className="bg-white rounded-lg border p-2 flex gap-1.5">
-      <input type="text" placeholder={placeholder || 'Type a message...'} className="flex-1 px-2 py-1.5 border border-gray-200 rounded text-xs" readOnly />
-      <button className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs">Send</button>
+    <div className="flex h-full w-full gap-1.5 rounded-lg border bg-white p-1">
+      <input type="text" placeholder={placeholder || 'Type a message...'} className="min-w-0 flex-1 rounded border border-gray-200 px-2 text-xs" readOnly />
+      <button className="rounded bg-blue-600 px-3 text-xs text-white">Send</button>
     </div>
   );
 }
@@ -438,7 +456,7 @@ function IconButtonPreview(props: Record<string, unknown>) {
   const icon = getPreviewText(props, ['icon', 'name', 'symbol'], '⭐');
 
   return (
-    <button className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm">
+    <button className="flex h-full w-full items-center justify-center gap-2 rounded-md border border-gray-200 bg-white text-sm font-medium text-gray-700 shadow-sm">
       <span>{icon}</span>
       <span>{label}</span>
     </button>
@@ -754,6 +772,9 @@ function ContainerPreview({
         borderRadius: borderRadius || 0,
         boxShadow: shadow ? shadowStyles[shadow] : undefined,
         minHeight: 48,
+        width: '100%',
+        height: '100%',
+        flex: 1,
       }}
     >
       {children && children.length > 0 ? (
@@ -824,7 +845,11 @@ function ComponentPreview({ component }: { component: EditorComponent }) {
 
   const Renderer = PREVIEW_RENDERERS[component.type];
   if (Renderer) {
-    return <Renderer {...component.props} children={component.children} />;
+    return (
+      <div className={FIT_CELL_CLASS} style={FIT_CELL_STYLE}>
+        <Renderer {...component.props} children={component.children} />
+      </div>
+    );
   }
   return <div className="text-xs text-gray-400 italic p-2">Unknown: {component.type}</div>;
 }
@@ -972,7 +997,6 @@ function CellResizeHandle({
   cellIndex,
   leftWidth,
   rightWidth,
-  onPreview,
   onCommit,
   rowWidthPx,
 }: {
@@ -980,7 +1004,6 @@ function CellResizeHandle({
   cellIndex: number;
   leftWidth: number;
   rightWidth: number;
-  onPreview: (rowId: string, cellIndex: number, leftWidth: number, rightWidth: number) => void;
   onCommit: (rowId: string, cellIndex: number, leftWidth: number, rightWidth: number) => void;
   rowWidthPx: number;
 }) {
@@ -989,11 +1012,19 @@ function CellResizeHandle({
   const totalWidthRef = useRef(2);
   const hasMovedRef = useRef(false);
   const nextWidthsRef = useRef({ left: 1, right: 1 });
-  const rafIdRef = useRef<number | undefined>(undefined);
+  const leftCellRef = useRef<HTMLElement | null>(null);
+  const rightCellRef = useRef<HTMLElement | null>(null);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    const leftCell = e.currentTarget.parentElement;
+    const rightCell = leftCell?.nextElementSibling as HTMLElement | null;
+    if (!leftCell || !rightCell) return;
+
+    leftCellRef.current = leftCell;
+    rightCellRef.current = rightCell;
 
     startXRef.current = e.clientX;
     startLeftWidthRef.current = leftWidth;
@@ -1020,16 +1051,13 @@ function CellResizeHandle({
       const nextRight = Math.round((totalWidthRef.current - nextLeft) * 100) / 100;
 
       hasMovedRef.current = true;
-
       nextWidthsRef.current = { left: nextLeft, right: nextRight };
 
-      // Use RAF to throttle updates and prevent cursor lag
-      if (rafIdRef.current) {
-        cancelAnimationFrame(rafIdRef.current);
+      // FF4-CELL-001: Direct DOM updates — React state on pointermove caused divider lag/jumps
+      if (leftCellRef.current && rightCellRef.current) {
+        applyCellWidthStyles(leftCellRef.current, nextLeft);
+        applyCellWidthStyles(rightCellRef.current, nextRight);
       }
-      rafIdRef.current = requestAnimationFrame(() => {
-        onPreview(rowId, cellIndex, nextLeft, nextRight);
-      });
     };
 
     const handleMouseUp = () => {
@@ -1037,9 +1065,11 @@ function CellResizeHandle({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
 
-      if (rafIdRef.current) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = undefined;
+      if (leftCellRef.current && rightCellRef.current) {
+        clearCellWidthStyles(leftCellRef.current);
+        clearCellWidthStyles(rightCellRef.current);
+        leftCellRef.current = null;
+        rightCellRef.current = null;
       }
 
       if (hasMovedRef.current) {
@@ -1049,14 +1079,15 @@ function CellResizeHandle({
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-  }, [cellIndex, leftWidth, onCommit, onPreview, rightWidth, rowId, rowWidthPx]);
+  }, [cellIndex, leftWidth, onCommit, rightWidth, rowId, rowWidthPx]);
 
   return (
     <div
-      className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-400 transition-colors z-10 group"
+      data-testid={`cell-resize-handle-${rowId}-${cellIndex}`}
+      className="absolute top-0 -right-1.5 z-10 h-full w-3 cursor-col-resize group"
       onMouseDown={handleMouseDown}
     >
-      <div className="absolute top-1/2 -translate-y-1/2 -right-0.5 w-2 h-8 bg-blue-400 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+      <div className="absolute top-0 right-1.5 h-full w-1 transition-colors hover:bg-blue-400" />
     </div>
   );
 }
@@ -1103,11 +1134,9 @@ function RowDragHandle({
 
 function RowHeightResizeHandle({
   rowId,
-  onPreview,
   onCommit,
 }: {
   rowId: string;
-  onPreview: (rowId: string, height: number) => void;
   onCommit: (rowId: string, height: number) => void;
 }) {
   const startYRef = useRef(0);
@@ -1147,15 +1176,8 @@ function RowHeightResizeHandle({
 
       hasMovedRef.current = true;
       nextHeightRef.current = rawHeight;
-      onPreview(rowId, rawHeight);
 
-      // A3: Direct DOM manipulation — intentionally bypasses React re-render for smooth
-      // drag resize performance. React state updates (onPreview) would cause re-render
-      // of the entire row tree every frame, causing jank. Direct style mutations are
-      // cleared on mouseup (below) so React can resume control of the row height.
-      // Risk: if a React re-render occurs during drag (e.g. from another state change),
-      // React may overwrite the DOM style. This is acceptable because the drag is
-      // short-lived and the final height is committed via onCommit.
+      // FF4-ROW-002: Direct DOM manipulation only — onPreview/React state caused full-canvas re-renders and lag
       if (rowRef.current) {
         rowRef.current.style.height = rawHeight + 'px';
         rowRef.current.style.minHeight = rawHeight + 'px';
@@ -1181,10 +1203,11 @@ function RowHeightResizeHandle({
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-  }, [rowId, onPreview, onCommit]);
+  }, [rowId, onCommit]);
 
   return (
     <div
+      data-testid="row-height-resize-handle"
       className="absolute inset-x-0 bottom-0 z-20 flex h-4 cursor-row-resize items-end justify-center hover:bg-blue-50/30 transition-colors"
       onMouseDown={handleMouseDown}
       title="Resize row height"
@@ -1233,10 +1256,9 @@ function RowInsertionControl({
 
 function SortableRow({
   row, rowIdx, isRowSelected, isCellSelected,
-  rowResizePreview, getDisplayedCellWidth,
   handleEmptyCellClick, handleComponentClick,
-  handleCellResizePreview, handleCellResizeCommit,
-  handleRowResizePreview, handleRowResizeCommit,
+  handleCellResizeCommit,
+  handleRowResizeCommit,
   addRow, deleteRow, setSelection, copySelection, removeComponent,
   deviceWidth,
 }: {
@@ -1244,13 +1266,9 @@ function SortableRow({
   rowIdx: number;
   isRowSelected: boolean;
   isCellSelected: (rowId: string, cellIdx: number) => boolean;
-  rowResizePreview: { rowId: string; height: number } | null;
-  getDisplayedCellWidth: (rowId: string, cellIndex: number, width: EditorCell['width']) => EditorCell['width'];
   handleEmptyCellClick: (rowId: string, cellIndex: number, e: React.MouseEvent) => void;
   handleComponentClick: (rowId: string, cellIndex: number, e: React.MouseEvent) => void;
-  handleCellResizePreview: (rowId: string, cellIndex: number, leftWidth: number, rightWidth: number) => void;
   handleCellResizeCommit: (rowId: string, cellIndex: number, leftWidth: number, rightWidth: number) => void;
-  handleRowResizePreview: (rowId: string, height: number) => void;
   handleRowResizeCommit: (rowId: string, height: number) => void;
   addRow: (cellCount?: number, index?: number) => void;
   deleteRow: (rowId: string) => void;
@@ -1305,10 +1323,7 @@ function SortableRow({
             ? 'ring-2 ring-blue-500 border-blue-300 bg-white'
             : `border-gray-300 hover:border-gray-400 hover:ring-1 hover:ring-gray-300 bg-white`
         }`}
-        style={getRowContainerStyle(
-          row,
-          rowResizePreview?.rowId === row.id ? rowResizePreview.height : undefined,
-        )}
+        style={getRowContainerStyle(row)}
         onClick={(e) => { e.stopPropagation(); setSelection({ type: 'row', rowId: row.id }); }}
         onContextMenu={handleContextMenu}
       >
@@ -1365,22 +1380,30 @@ function SortableRow({
 
             // content type — render cells normally
             return row.cells.map((cell, cellIdx) => {
-              const displayedCellWidths = row.cells.map((entry, index) => getDisplayedCellWidth(row.id, index, entry.width));
-              const totalWidth = displayedCellWidths.reduce<number>((sum, width) => sum + getNumericCellWidth(width), 0);
-              const displayedWidth = displayedCellWidths[cellIdx] ?? cell.width;
-              const adjacentDisplayedWidth = displayedCellWidths[cellIdx + 1] ?? row.cells[cellIdx + 1]?.width ?? 1;
+              const resolvedWidths = calculateCellWidths(
+                row.cells.map((entry) => ({ id: entry.id, width: entry.width })),
+                deviceWidth,
+              );
+              const leftResolved = resolvedWidths.find((entry) => entry.cellId === cell.id)?.widthPercent
+                ?? getNumericCellWidth(cell.width);
+              const rightCell = row.cells[cellIdx + 1];
+              const rightResolved = rightCell
+                ? resolvedWidths.find((entry) => entry.cellId === rightCell.id)?.widthPercent
+                  ?? getNumericCellWidth(rightCell.width)
+                : 1;
+              const displayedWidth = cell.width;
               const componentInfo = cell.content ? getComponentDefinition(cell.content.type) : undefined;
               const isReadOnlyRuntimeComponent = componentInfo?.readOnly === true;
 
               return (
                 <div
                   key={cell.id}
-                  className={`relative rounded transition-all p-2 flex flex-col ${
+                  className={`relative flex min-h-0 flex-col rounded transition-all ${
                     isCellSelected(row.id, cellIdx)
                       ? 'ring-2 ring-blue-400 bg-blue-50/50'
-                      : cell.content ? 'bg-white shadow-sm' : 'bg-gray-50 border border-dashed border-gray-300'
+                      : cell.content ? 'bg-white shadow-sm' : 'bg-gray-50 border border-dashed border-gray-300 p-2'
                   }`}
-                  style={getCellStyle(row, displayedWidth, totalWidth)}
+                  style={getCellStyle(row, displayedWidth, resolvedWidths.reduce((sum, entry) => sum + entry.widthPercent, 0))}
                 >
                   {cell.content ? (
                     <div
@@ -1423,7 +1446,7 @@ function SortableRow({
                       </div>
 
                       {/* Component preview — FF4-ROW-012/FF4-CELL-004: fill entire cell */}
-                      <div className="pointer-events-none overflow-hidden flex-1 min-h-0" style={{ width: '100%', height: '100%' }}>
+                      <div className={`pointer-events-none overflow-hidden ${FIT_CELL_CLASS}`} style={FIT_CELL_STYLE}>
                         <ComponentPreview component={cell.content} />
                       </div>
                     </div>
@@ -1441,9 +1464,8 @@ function SortableRow({
                     <CellResizeHandle
                       rowId={row.id}
                       cellIndex={cellIdx}
-                      leftWidth={getNumericCellWidth(displayedWidth)}
-                      rightWidth={getNumericCellWidth(adjacentDisplayedWidth)}
-                      onPreview={handleCellResizePreview}
+                      leftWidth={leftResolved}
+                      rightWidth={rightResolved}
                       onCommit={handleCellResizeCommit}
                       rowWidthPx={deviceWidth}
                     />
@@ -1458,7 +1480,6 @@ function SortableRow({
 
         <RowHeightResizeHandle
           rowId={row.id}
-          onPreview={handleRowResizePreview}
           onCommit={handleRowResizeCommit}
         />
       </div>
@@ -1500,41 +1521,13 @@ export function EditorCanvas() {
   const deviceHeight = useEditorStore(s => s.deviceHeight);
 
   const [pickerState, setPickerState] = useState<{ rowId: string; cellIndex: number; position: { x: number; y: number } } | null>(null);
-  const [rowResizePreview, setRowResizePreview] = useState<{ rowId: string; height: number } | null>(null);
-  const [cellResizePreview, setCellResizePreview] = useState<{
-    rowId: string;
-    cellIndex: number;
-    leftWidth: number;
-    rightWidth: number;
-  } | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
-  const handleCellResizePreview = useCallback((rowId: string, cellIndex: number, leftWidth: number, rightWidth: number) => {
-    setCellResizePreview({ rowId, cellIndex, leftWidth, rightWidth });
-  }, []);
-
   const handleCellResizeCommit = useCallback((rowId: string, cellIndex: number, leftWidth: number, rightWidth: number) => {
-    setCellResizePreview(null);
     updateAdjacentCellWidths(rowId, cellIndex, leftWidth, rightWidth);
   }, [updateAdjacentCellWidths]);
-
-  const getDisplayedCellWidth = useCallback((rowId: string, cellIndex: number, width: EditorCell['width']): EditorCell['width'] => {
-    if (!cellResizePreview || cellResizePreview.rowId !== rowId) {
-      return width;
-    }
-
-    if (cellResizePreview.cellIndex === cellIndex) {
-      return cellResizePreview.leftWidth;
-    }
-
-    if (cellResizePreview.cellIndex + 1 === cellIndex) {
-      return cellResizePreview.rightWidth;
-    }
-
-    return width;
-  }, [cellResizePreview]);
 
   const isRowSelected = (rowId: string) => selection?.rowId === rowId && selection?.type === 'row';
   const isCellSelected = (rowId: string, cellIdx: number) =>
@@ -1561,12 +1554,7 @@ export function EditorCanvas() {
     setPickerState(null);
   };
 
-  const handleRowResizePreview = useCallback((rowId: string, height: number) => {
-    setRowResizePreview({ rowId, height });
-  }, []);
-
   const handleRowResizeCommit = useCallback((rowId: string, height: number) => {
-    setRowResizePreview(null);
     updateRowHeight(rowId, height);
   }, [updateRowHeight]);
 
@@ -1625,13 +1613,9 @@ export function EditorCanvas() {
                     rowIdx={rowIdx}
                     isRowSelected={isRowSelected(row.id)}
                     isCellSelected={isCellSelected}
-                    rowResizePreview={rowResizePreview}
-                    getDisplayedCellWidth={getDisplayedCellWidth}
                     handleEmptyCellClick={handleEmptyCellClick}
                     handleComponentClick={handleComponentClick}
-                    handleCellResizePreview={handleCellResizePreview}
                     handleCellResizeCommit={handleCellResizeCommit}
-                    handleRowResizePreview={handleRowResizePreview}
                     handleRowResizeCommit={handleRowResizeCommit}
                     addRow={addRow}
                     deleteRow={deleteRow}

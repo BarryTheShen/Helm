@@ -101,3 +101,110 @@ test('Issue 10: divider shows visual border-bottom on row', async ({ page, login
     }
   }
 });
+
+test('FF4-ROW-002: row height resize handle increases row height on drag', async ({ page, login }) => {
+  await login();
+  await page.goto('/editor');
+  await ensureEmptyCellExists(page);
+
+  const row = page.locator('[data-testid="editor-canvas"] .group.rounded-lg').first();
+  await expect(row).toBeVisible();
+
+  const initialBox = await row.boundingBox();
+  expect(initialBox, 'row should have measurable height').not.toBeNull();
+
+  const handle = page.locator('[data-testid="row-height-resize-handle"]').first();
+  await expect(handle).toBeVisible();
+
+  const handleBox = await handle.boundingBox();
+  expect(handleBox, 'resize handle should exist').not.toBeNull();
+
+  const startX = handleBox!.x + handleBox!.width / 2;
+  const startY = handleBox!.y + handleBox!.height / 2;
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX, startY + 80, { steps: 12 });
+  await page.mouse.up();
+
+  const resizedBox = await row.boundingBox();
+  expect(resizedBox, 'row should still be measurable after resize').not.toBeNull();
+  expect(
+    resizedBox!.height,
+    'row height should increase after dragging the bottom resize handle'
+  ).toBeGreaterThan(initialBox!.height + 40);
+});
+
+test('FF4-CELL-001: cell divider drag changes adjacent cell widths', async ({ page, login }) => {
+  await login();
+  await page.goto('/editor');
+  await ensureEmptyCellExists(page);
+
+  // Use first row with multiple cells (Home module seed has 3-cell row 1)
+  await page.locator(EditorPage.rowInTree).first().click();
+  await expect(page.locator(EditorPage.propertyInspector)).toBeVisible();
+
+  const rowCanvas = page.locator('[data-testid="editor-canvas"] .group.rounded-lg').first();
+  const handle = rowCanvas.locator('[data-testid^="cell-resize-handle-"]').first();
+  await expect(handle).toBeVisible();
+
+  const cells = rowCanvas.locator(':scope > .flex.min-h-\\[48px\\] > div.rounded');
+  const leftCell = cells.first();
+  const rightCell = cells.nth(1);
+
+  const leftBefore = (await leftCell.boundingBox())!.width;
+  const rightBefore = (await rightCell.boundingBox())!.width;
+
+  const handleBox = await handle.boundingBox();
+  expect(handleBox).not.toBeNull();
+
+  const startX = handleBox!.x + handleBox!.width / 2;
+  const startY = handleBox!.y + handleBox!.height / 2;
+
+  await handle.scrollIntoViewIfNeeded();
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 80, startY, { steps: 15 });
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+
+  const leftAfter = (await leftCell.boundingBox())!.width;
+  const rightAfter = (await rightCell.boundingBox())!.width;
+
+  expect(leftAfter - leftBefore, 'left cell should grow when divider moves right').toBeGreaterThan(15);
+  expect(rightBefore - rightAfter, 'right cell should shrink when divider moves right').toBeGreaterThan(15);
+});
+
+test('FF4-ROW-012 / FF4-CELL-004: button preview fills its cell bounds', async ({ page, login }) => {
+  await login();
+  await page.goto('/editor');
+  await ensureEmptyCellExists(page);
+
+  await page.locator('[data-testid="editor-canvas"] .bg-gray-50.border-dashed').first().click();
+  const picker = page.locator('.shadow-xl').filter({ has: page.getByText('Add Component') });
+  await expect(picker).toBeVisible({ timeout: 5000 });
+  await picker.locator('button').filter({ has: page.locator('.font-medium', { hasText: 'Button' }) }).click();
+  await page.waitForLoadState('networkidle');
+
+  const cell = page.locator('[data-testid="editor-canvas"] .shadow-sm').filter({
+    has: page.locator('button.flex.h-full.w-full'),
+  }).first();
+  const button = cell.locator('button.flex.h-full.w-full').first();
+
+  await expect(cell).toBeVisible();
+  await expect(button).toBeVisible();
+
+  const cellBox = await cell.boundingBox();
+  const buttonBox = await button.boundingBox();
+  expect(cellBox).not.toBeNull();
+  expect(buttonBox).not.toBeNull();
+
+  expect(
+    Math.abs(buttonBox!.width - cellBox!.width),
+    'button width should match cell width (fit-the-cell)'
+  ).toBeLessThan(4);
+  expect(
+    Math.abs(buttonBox!.height - cellBox!.height),
+    'button height should match cell height (fit-the-cell)'
+  ).toBeLessThan(4);
+});
