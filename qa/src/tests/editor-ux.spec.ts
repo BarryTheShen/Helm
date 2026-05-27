@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures';
 import { EditorPage } from '../page-objects/editor';
-import { ensureEmptyCellExists, addComponentToFirstCell } from '../editor-helpers';
+import { ensureEmptyCellExists, addComponentToFirstCell, ensureMultiCellRow } from '../editor-helpers';
 import { addRowViaStructureTree } from '../page-objects/editor';
 
 test('Issue 1: drag handles should be positioned inside the canvas area', async ({ page, login }) => {
@@ -139,13 +139,7 @@ test('FF4-ROW-002: row height resize handle increases row height on drag', async
 test('FF4-CELL-001: cell divider drag changes adjacent cell widths', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  await ensureEmptyCellExists(page);
-
-  // Home seed: Row 1 is single-cell; pick first tree row with 2+ cells (e.g. Row 4 Text + Button)
-  const multiCellRow = page.locator(EditorPage.rowInTree).filter({ hasText: / \([2-9]\d* cells?\)/ }).first();
-  await expect(multiCellRow, 'module should have at least one multi-cell row').toBeVisible({ timeout: 10000 });
-  await multiCellRow.click();
-  await expect(page.locator(EditorPage.propertyInspector)).toBeVisible();
+  await ensureMultiCellRow(page);
 
   const rowCanvas = page.locator('[data-testid="editor-canvas"] .group.rounded-lg').filter({
     has: page.locator('[data-testid^="cell-resize-handle-"]'),
@@ -184,20 +178,14 @@ test('FF4-ROW-012 / FF4-CELL-004: button preview fills its cell bounds', async (
   await login();
   await page.goto('/editor');
   await ensureEmptyCellExists(page);
+  await addRowViaStructureTree(page);
+  await addComponentToFirstCell(page, 'Button', { emptyCell: 'last' });
 
-  await page.locator('[data-testid="editor-canvas"] .bg-gray-50.border-dashed').first().click();
-  const picker = page.locator('.shadow-xl').filter({ has: page.getByText('Add Component') });
-  await expect(picker).toBeVisible({ timeout: 5000 });
-  await picker.locator('button').filter({ has: page.locator('.font-medium', { hasText: 'Button' }) }).click();
-  await page.waitForLoadState('networkidle');
-
-  const cell = page.locator('[data-testid="editor-canvas"] .shadow-sm').filter({
-    has: page.locator('button.flex.h-full.w-full'),
-  }).first();
-  const button = cell.locator('button.flex.h-full.w-full').first();
-
-  await expect(cell).toBeVisible();
+  const button = page.locator('[data-testid="editor-canvas"] button.flex.h-full.w-full').last();
   await expect(button).toBeVisible();
+
+  const cell = button.locator('xpath=ancestor::div[contains(@class,"group/cell")][1]');
+  await expect(cell).toBeVisible();
 
   const cellBox = await cell.boundingBox();
   const buttonBox = await button.boundingBox();

@@ -36,17 +36,22 @@ export async function waitForEditorReady(page: import('@playwright/test').Page) 
   }
 }
 
-/** Add a 1-column row via structure tree + button */
+/** Add a 1-column row via structure tree + button (works from 0-row empty modules). */
 export async function addRowViaStructureTree(page: import('@playwright/test').Page) {
   const rows = page.locator(EditorPage.rowInTree);
-  await page.locator(EditorPage.btnAddRow).waitFor({ state: 'visible', timeout: 10000 });
-  await expect.poll(async () => rows.count(), { timeout: 15000 }).toBeGreaterThan(0);
+  const addRowBtn = page.locator(EditorPage.btnAddRow);
+  await addRowBtn.waitFor({ state: 'visible', timeout: 10000 });
   const rowsBefore = await rows.count();
-  await page.locator(EditorPage.btnAddRow).click();
-  await expect.poll(async () => rows.count(), { timeout: 10000 }).toBeGreaterThan(rowsBefore);
-  await expect(
-    page.locator('[data-testid="editor-canvas"] .bg-gray-50.border-dashed').last(),
-  ).toBeVisible({ timeout: 10000 });
+  await addRowBtn.click();
+  await expect.poll(async () => rows.count(), { timeout: 15000 }).toBeGreaterThan(rowsBefore);
+  await expect.poll(async () => page.evaluate(() => {
+    const store = (window as unknown as { __editorStore?: { getState: () => { rows: Array<{ cells: Array<{ content: unknown | null }> }> } } }).__editorStore;
+    if (!store) return 0;
+    return store.getState().rows.reduce(
+      (count, row) => count + row.cells.filter((cell) => !cell.content).length,
+      0,
+    );
+  }), { timeout: 10000 }).toBeGreaterThan(0);
 }
 
 /** Click save and wait for legacy SDUI POST (accepts empty-screen confirm) */

@@ -96,7 +96,7 @@ test.describe('FF4 Phase 9 — App Editor PARTIAL closure', () => {
     await page.locator(AppEditorPage.btnPreview).click();
     await page.locator('[data-testid="preview-on-device"]').click();
     await expect(page.getByRole('heading', { name: 'Select Device' })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('E2E Preview Phone')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('E2E Preview Phone').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('FF4-APP-001/013: module icon picker updates launchpad icon', async ({ page }) => {

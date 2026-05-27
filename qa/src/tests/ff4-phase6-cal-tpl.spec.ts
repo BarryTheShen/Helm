@@ -1,7 +1,7 @@
 import { test, expect } from '../fixtures';
 import { TemplatesPage } from '../page-objects/templates';
 import { EditorPage, waitForEditorReady } from '../page-objects/editor';
-import { addComponentToFirstCell } from '../editor-helpers';
+import { addComponentToFirstCell, createFreshEditorModule } from '../editor-helpers';
 
 async function openApplyModalForTemplate(page: import('@playwright/test').Page, templateName: string) {
   await page.goto('/templates');
@@ -34,18 +34,7 @@ test.describe('FF4 Phase 6 — calendar, templates, empty container', () => {
   test.describe('Calendar inspector and preview (FF4-CAL-008/009/019)', () => {
     test.beforeEach(async ({ page, login }) => {
       await login();
-      await page.goto('/editor');
-      await waitForEditorReady(page);
-      const createResponse = page.waitForResponse(
-        (resp) =>
-          resp.url().includes('/api/sdui/modules')
-          && resp.request().method() === 'POST'
-          && resp.status() === 201,
-        { timeout: 15000 },
-      );
-      await page.locator('[data-testid="btn-new-module"]').click();
-      await createResponse;
-      await waitForEditorReady(page);
+      await createFreshEditorModule(page);
     });
 
     test('FF4-CAL-019: calendar inspector exposes required fields', async ({ page }) => {
