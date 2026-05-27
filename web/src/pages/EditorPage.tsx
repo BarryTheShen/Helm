@@ -21,7 +21,7 @@ import type { LocalTemplateDefinition } from '../editor/templateLibrary';
 import {
   Save, Undo2, Redo2, FileText,
   RefreshCw, Monitor, RotateCw, ChevronDown, ChevronRight, ChevronUp, Code, Trash2, Smartphone,
-  Camera, History, Eye, Clock, Info, List, Archive, FileJson, ExternalLink, CornerDownRight
+  Camera, History, Eye, Clock, Info, List, Archive, FileJson, ExternalLink, CornerDownRight, AlertTriangle
 } from 'lucide-react';
 
 interface ModuleInfo {
@@ -896,30 +896,6 @@ export function EditorPage() {
       showMsg('error', err instanceof Error ? err.message : 'Restore failed');
     }
   }, [getPersistableScreen, loadScreen, markScreenSaved, selectedModule, showMsg]);
-
-  const handlePublishVersion = useCallback(async (versionId: string, versionNumber: number) => {
-    console.log('[Editor] handlePublishVersion() — publishing version:', versionId);
-    const currentModule = selectedModule;
-    if (!currentModule) return;
-
-    if (!window.confirm(
-      `This will publish version ${versionNumber} as the live screen. All mobile users will see this version immediately.\n\nContinue?`
-    )) {
-      console.log('[Editor] handlePublishVersion() — user cancelled');
-      return;
-    }
-
-    try {
-      const result = await api.post<any>(`/api/modules/${currentModule}/versions/${versionId}/publish`);
-      console.log('[Editor] handlePublishVersion() — published:', result);
-
-      setDraftInfo({ has_draft: false });
-      showMsg('success', `Version v${versionNumber} published to live!`);
-    } catch (err) {
-      console.error('[Editor] handlePublishVersion() — error:', err instanceof Error ? err.message : err);
-      showMsg('error', err instanceof Error ? err.message : 'Publish failed');
-    }
-  }, [selectedModule, showMsg]);
 
   const handleArchiveVersion = useCallback(async (versionId: string, versionNumber: number) => {
     console.log('[Editor] handleArchiveVersion() — archiving version:', versionId);
@@ -2305,6 +2281,17 @@ export function EditorPage() {
                 ) : null;
               })()}
 
+              {/* Inline validation warnings (FF4-MOD-012) */}
+              {(() => {
+                const previewValidationError = getEditorPersistenceValidationError(rows);
+                return previewValidationError ? (
+                  <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-start gap-2">
+                    <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                    <span>{previewValidationError}</span>
+                  </div>
+                ) : null;
+              })()}
+
               {/* Embedded preview of current screen */}
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="bg-gray-100 px-3 py-1.5 text-[10px] text-gray-500 font-medium border-b border-gray-200 flex items-center gap-1.5">
@@ -2314,8 +2301,13 @@ export function EditorPage() {
                 {rows.length === 0 ? (
                   <div className="text-center text-gray-400 py-8 text-sm bg-white">No content to preview</div>
                 ) : (
-                  <div className="bg-white p-2">
-                    <SDUIPreview json={getScreen()} maxWidth={Math.min(deviceWidth, 500)} maxHeight={400} />
+                  <div className="bg-white p-2" data-testid="module-editor-preview">
+                    <SDUIPreview
+                      json={getScreen()}
+                      embedded
+                      maxWidth={Math.min(deviceWidth, 500)}
+                      maxHeight={400}
+                    />
                   </div>
                 )}
               </div>

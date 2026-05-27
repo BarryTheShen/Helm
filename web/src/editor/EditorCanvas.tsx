@@ -1396,7 +1396,6 @@ function SortableRow({
             return row.cells.map((cell, cellIdx) => {
               const resolvedWidths = calculateCellWidths(
                 row.cells.map((entry) => ({ id: entry.id, width: entry.width })),
-                deviceWidth,
               );
               const leftResolved = resolvedWidths.find((entry) => entry.cellId === cell.id)?.widthPercent
                 ?? getNumericCellWidth(cell.width);

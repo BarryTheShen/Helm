@@ -20,7 +20,7 @@ test.describe('Editor Sequence', () => {
     await expect(page.locator(EditorPage.canvas)).toBeVisible();
 
     await addRowViaStructureTree(page);
-    await addComponentToFirstCell(page, 'Button');
+    await addComponentToFirstCell(page, 'Button', { emptyCell: 'last' });
     await saveModuleAndWait(page);
 
     await page.reload();
@@ -36,7 +36,7 @@ test.describe('Editor Sequence', () => {
     await expect(page.locator(EditorPage.canvas)).toBeVisible();
 
     await addRowViaStructureTree(page);
-    await addComponentToFirstCell(page, 'Button');
+    await addComponentToFirstCell(page, 'Button', { emptyCell: 'last' });
     await saveModuleAndWait(page);
 
     const hasToken = await page.evaluate(() => {

@@ -7,6 +7,9 @@ import { usePreviewStore } from '../stores/usePreviewStore';
 import { BottomBarConfig } from '../components/AppEditor/BottomBarConfig';
 import { PreviewPicker } from '../components/PreviewPicker';
 import { BrowserPreview } from '../components/BrowserPreview';
+import { AppPhoneShell } from '../components/AppPhoneShell';
+import { SDUIPreview } from '../components/SDUIPreview';
+import { resolveModuleScreenForApp } from '../lib/previewResolver';
 import { IconPicker } from '../editor/IconPicker';
 import type { ModuleInstance, BottomBarSlot, App } from '../stores/useAppEditorStore';
 
@@ -72,6 +75,8 @@ export function AppEditorPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [showPreviewPicker, setShowPreviewPicker] = useState(false);
   const [showBrowserPreview, setShowBrowserPreview] = useState(false);
+  const [modulePreviewScreen, setModulePreviewScreen] = useState<Record<string, unknown> | null>(null);
+  const [modulePreviewLoading, setModulePreviewLoading] = useState(false);
 
   const { startPreview } = usePreviewStore();
   const currentApp = apps?.find(app => app.id === currentAppId);
@@ -719,9 +724,59 @@ export function AppEditorPage() {
     }
   };
 
-  const launchpadModules = availableModules.filter(
-    module => !currentApp?.bottom_bar_config.some(s => s.module_instance_id === module.module_instance_id)
+  const launchpadModules = useMemo(
+    () => availableModules.filter(
+      module => !currentApp?.bottom_bar_config.some(
+        s => s.module_instance_id === module.module_instance_id,
+      ),
+    ),
+    [availableModules, currentApp?.bottom_bar_config],
   );
+
+  const previewModuleReferences = useMemo(
+    () => Object.entries(versionPolicies).map(([modId, policy]) => ({
+      moduleId: modId,
+      policy: policy.useNewest ? 'use_newest' as const : 'specific_version' as const,
+      selectedModuleVersionId: policy.pinnedVersionId,
+    })),
+    [versionPolicies],
+  );
+
+  useEffect(() => {
+    if (!selectedModuleId || !currentApp) {
+      setModulePreviewScreen(null);
+      setModulePreviewLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setModulePreviewLoading(true);
+
+    const slot = currentApp.bottom_bar_config.find(s => s.module_instance_id === selectedModuleId);
+    const launchpadMod = launchpadModules.find(m => m.module_instance_id === selectedModuleId);
+    const moduleType = slot?.module_type ?? launchpadMod?.module_type;
+
+    void resolveModuleScreenForApp(selectedModuleId, moduleType, previewModuleReferences)
+      .then((screen) => {
+        if (!cancelled) {
+          setModulePreviewScreen(screen);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setModulePreviewScreen(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setModulePreviewLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedModuleId, currentApp, launchpadModules, previewModuleReferences]);
 
   if (loading) {
     return (
@@ -950,98 +1005,54 @@ export function AppEditorPage() {
 
         {/* Center - iPhone Mockup */}
         <div className="flex-1 flex items-center justify-center bg-gray-50 p-8 overflow-auto">
-          <div className="relative">
-            {/* iPhone Frame */}
-            <div className="w-[375px] h-[812px] bg-white rounded-[3rem] shadow-2xl border-8 border-gray-900 overflow-hidden">
-              {/* Status Bar */}
-              <div className="h-11 bg-gray-50 border-b border-gray-200 flex items-center justify-center">
-                <div className="text-xs text-gray-500">9:41</div>
-              </div>
-
-              {/* Content Area — Live Launchpad (FF4-APP-003, FF4-APP-014) */}
-              <div className="flex-1 h-[calc(812px-44px-88px)] bg-white overflow-y-auto p-4">
-                {selectedModuleId ? (
-                  /* When a module is selected from bottom bar or launchpad, show module preview */
-                  <div className="space-y-3">
-                    <div className="text-center">
-                      {(() => {
-                        const allMods = [
-                          ...currentApp.bottom_bar_config.map(s => ({
-                            id: s.module_instance_id, name: s.name,
-                            icon: moduleIconOverrides[s.module_instance_id] || s.icon,
-                          })),
-                          ...launchpadModules.map(m => ({
-                            id: m.module_instance_id, name: m.name, moduleType: m.module_type,
-                            icon: getModuleEffectiveIcon(m.module_instance_id, m.module_type, m.icon),
-                          })),
-                        ];
-                        const mod = allMods.find(m => m.id === selectedModuleId);
-                        return mod ? (
-                          <div className="flex flex-col items-center gap-2 py-6">
-                            <span className="text-5xl">{mod.icon}</span>
-                            <span className="text-sm font-medium text-gray-800">{mod.name}</span>
-                            <span className="text-[10px] text-gray-400">Tap to open</span>
-                          </div>
-                        ) : null;
-                      })()}
-                    </div>
-                  </div>
-                ) : launchpadModules.length > 0 ? (
-                  /* Launchpad grid — show modules not in bottom bar */
-                  <div>
-                    <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3 px-1">
-                      Launchpad
-                    </h4>
-                    <div className="grid grid-cols-4 gap-3">
-                      {launchpadModules.map((mod) => (
-                        <button
-                          key={mod.module_instance_id}
-                          onClick={() => setSelectedModule(mod.module_instance_id)}
-                          className="flex flex-col items-center gap-1.5 p-2 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors"
-                        >
-                          <span className="text-3xl">{getModuleEffectiveIcon(mod.module_instance_id, mod.module_type, mod.icon)}</span>
-                          <span className="text-[10px] text-gray-600 text-center leading-tight line-clamp-2">
-                            {mod.name}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  /* Empty state */
-                  <div className="flex flex-col items-center justify-center h-full text-center text-gray-400">
-                    <Smartphone size={36} className="mx-auto mb-2 opacity-50" />
-                    <p className="text-xs">No modules configured</p>
-                    <p className="text-[10px] text-gray-300 mt-1">Add modules from the right sidebar</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Bottom Bar */}
-              <div className="h-[88px] bg-white border-t border-gray-200 px-4 pb-6 pt-2">
-                <div className="flex items-center justify-around h-full">
-                  {currentApp.bottom_bar_config.length === 0 ? (
-                    <div className="text-xs text-gray-400">No modules in bottom bar</div>
-                  ) : (
-                    currentApp.bottom_bar_config
-                      .sort((a, b) => a.slot_position - b.slot_position)
-                      .map((slot) => (
-                        <button
-                          key={slot.module_instance_id}
-                          className="flex flex-col items-center gap-1 min-w-0"
-                          onClick={() => setSelectedModule(slot.module_instance_id)}
-                        >
-                          <span className="text-2xl">{moduleIconOverrides[slot.module_instance_id] || slot.icon}</span>
-                          <span className="text-[10px] text-gray-600 truncate max-w-[60px]">
-                            {slot.name}
-                          </span>
-                        </button>
-                      ))
-                  )}
-                </div>
-              </div>
+          {currentApp.bottom_bar_config.length === 0 && launchpadModules.length === 0 ? (
+            <div className="w-[375px] h-[812px] bg-white rounded-[3rem] shadow-2xl border-8 border-gray-900 overflow-hidden flex flex-col items-center justify-center text-center text-gray-400 px-6">
+              <Smartphone size={36} className="mx-auto mb-2 opacity-50" />
+              <p className="text-xs">No modules configured</p>
+              <p className="text-[10px] text-gray-300 mt-1">Add modules from the right sidebar</p>
             </div>
-          </div>
+          ) : (
+            <AppPhoneShell
+              darkMode={currentApp.dark_mode}
+              bottomBar={[...currentApp.bottom_bar_config]
+                .sort((a, b) => a.slot_position - b.slot_position)
+                .map(slot => ({
+                  ...slot,
+                  icon: moduleIconOverrides[slot.module_instance_id] || slot.icon,
+                }))}
+              launchpadModules={launchpadModules.map(mod => ({
+                module_instance_id: mod.module_instance_id,
+                module_type: mod.module_type,
+                name: mod.name,
+                icon: getModuleEffectiveIcon(mod.module_instance_id, mod.module_type, mod.icon),
+              }))}
+              activeModuleId={selectedModuleId}
+              onSelectModule={setSelectedModule}
+              resolveIcon={(moduleId, fallback) => {
+                const slot = currentApp.bottom_bar_config.find(s => s.module_instance_id === moduleId);
+                if (slot) {
+                  return moduleIconOverrides[moduleId] || slot.icon;
+                }
+                const mod = launchpadModules.find(m => m.module_instance_id === moduleId);
+                if (mod) {
+                  return getModuleEffectiveIcon(mod.module_instance_id, mod.module_type, mod.icon);
+                }
+                return fallback;
+              }}
+            >
+              {modulePreviewLoading ? (
+                <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+                  Loading module preview...
+                </div>
+              ) : modulePreviewScreen ? (
+                <SDUIPreview json={modulePreviewScreen as never} embedded className="h-full" />
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-400 text-sm px-6 text-center">
+                  No SDUI content resolved for this module yet
+                </div>
+              )}
+            </AppPhoneShell>
+          )}
         </div>
 
         {/* Right Sidebar - Launchpad & Properties */}

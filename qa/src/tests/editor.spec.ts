@@ -1,81 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
-import { EditorPage } from '../page-objects/editor';
-
-// ---------------------------------------------------------------------------
-// Helper: add a component to the first empty cell on the canvas
-// ---------------------------------------------------------------------------
-async function addComponentToFirstCell(page: Page, componentName: string) {
-  // Wait for canvas to be populated
-  await expect(page.locator(EditorPage.canvas)).toBeVisible();
-
-  // Find the first empty cell: it has bg-gray-50 + border-dashed and lives inside the canvas
-  // Using canvas scope avoids matching other border-dashed elements (row insertion lines, spacers)
-  const canvasEmptyCells = page.locator('[data-testid="editor-canvas"] .bg-gray-50.border-dashed');
-
-  // Component picker doesn't have a data-testid; identify it by its heading text
-  const componentPicker = page.getByText('Add Component').first();
-
-  if (await canvasEmptyCells.count() > 0) {
-    await canvasEmptyCells.first().click();
-    await expect(componentPicker).toBeVisible({ timeout: 5000 });
-  } else {
-    // If no empty cell found, add a row first
-    const addRowBtn = page.locator(EditorPage.addRowByText);
-    if (await addRowBtn.count() > 0) {
-      await addRowBtn.first().click();
-      // Wait for the new row's empty cell to appear
-      await expect(canvasEmptyCells.first()).toBeVisible({ timeout: 5000 });
-    }
-    // Now try again
-    if (await canvasEmptyCells.count() > 0) {
-      await canvasEmptyCells.first().click();
-      await expect(componentPicker).toBeVisible({ timeout: 5000 });
-    }
-  }
-
-  // Component picker popover should appear - find the component in the list
-  // The picker shows display names which may differ from type names:
-  // e.g. type="InputBar" → displayName="Input Bar"
-  // Try exact match first, then fall back to CamelCase→spaced conversion
-  let componentBtn = page.getByText(componentName, { exact: true }).first();
-  if (await componentBtn.count() === 0) {
-    // Convert CamelCase type names to display names: "InputBar" → "Input Bar"
-    const spacedName = componentName
-      .replace(/([a-z])([A-Z])/g, '$1 $2')
-      .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2');
-    if (spacedName !== componentName) {
-      componentBtn = page.getByText(spacedName, { exact: true }).first();
-    }
-  }
-  if (await componentBtn.count() === 0) {
-    // Last resort: search within the picker container for buttons containing the name
-    const picker = page.locator('.shadow-xl').filter({ hasText: 'Add Component' });
-    componentBtn = picker.locator('button').filter({ hasText: componentName }).first();
-  }
-
-  if (await componentBtn.count() > 0) {
-    await componentBtn.click();
-    await page.waitForLoadState('networkidle');
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Helper: ensure there is at least one row with an empty cell
-// ---------------------------------------------------------------------------
-async function ensureEmptyCellExists(page: Page) {
-  // Empty cells are inside the editor canvas with bg-gray-50 + border-dashed
-  // Spacer previews also use bg-gray-50 + border-dashed but shouldn't exist on fresh load
-  const emptyCellLocator = page.locator('[data-testid="editor-canvas"] .bg-gray-50.border-dashed');
-  let emptyCellCount = await emptyCellLocator.count();
-  if (emptyCellCount === 0) {
-    const addRowBtn = page.locator(EditorPage.addRowByText);
-    if (await addRowBtn.count() > 0) {
-      await addRowBtn.first().click();
-      await expect(emptyCellLocator.first()).toBeVisible({ timeout: 5000 });
-    }
-  }
-}
+import { EditorPage, addRowViaStructureTree } from '../page-objects/editor';
+import { ensureEmptyCellExists, addComponentToFirstCell } from '../editor-helpers';
 
 // ---------------------------------------------------------------------------
 // Helper: click the save button and wait for the response
@@ -106,7 +32,8 @@ test('Calendar variant persists after re-selecting row', async ({ page, login })
 
   // Ensure we have a row to work with
   await ensureEmptyCellExists(page);
-  await addComponentToFirstCell(page, 'CalendarModule');
+  await addRowViaStructureTree(page);
+  await addComponentToFirstCell(page, 'CalendarModule', { emptyCell: 'last' });
 
   // Click on the calendar component to select it in inspector
   const calendarPreview = page.locator('text=Calendar').first();
@@ -198,7 +125,8 @@ test('Empty component renders without Unknown label', async ({ page, login }) =>
   await page.waitForLoadState('networkidle');
 
   await ensureEmptyCellExists(page);
-  await addComponentToFirstCell(page, 'Empty');
+  await addRowViaStructureTree(page);
+  await addComponentToFirstCell(page, 'Empty', { emptyCell: 'last' });
 
   // Look for "Unknown" text in the canvas area - should not exist
   const unknownText = page.locator(EditorPage.canvas).locator('text=Unknown: Empty');
@@ -295,7 +223,8 @@ test('Button fills the cell width', async ({ page, login }) => {
   await page.waitForLoadState('networkidle');
 
   await ensureEmptyCellExists(page);
-  await addComponentToFirstCell(page, 'Button');
+  await addRowViaStructureTree(page);
+  await addComponentToFirstCell(page, 'Button', { emptyCell: 'last' });
 
   // ButtonPreview has w-full class — verify the button element has width matching its container
   // Look for the button inside the canvas
@@ -348,7 +277,8 @@ async function testComponentSave(page: Page, componentName: string, expectedStat
   }
 
   await ensureEmptyCellExists(page);
-  await addComponentToFirstCell(page, componentName);
+  await addRowViaStructureTree(page);
+  await addComponentToFirstCell(page, componentName, { emptyCell: 'last' });
 
   page.once('dialog', (d) => d.accept());
   const savePromise = page.waitForResponse(async resp => {

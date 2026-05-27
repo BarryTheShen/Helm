@@ -1,3 +1,5 @@
+import { expect } from '@playwright/test';
+
 export const EditorPage = {
   toolbar: '[data-testid="toolbar"]',
   btnSave: '[data-testid="btn-save"]',
@@ -16,13 +18,9 @@ export const EditorPage = {
   btnSaveAsTemplate: 'button:has-text("Save as Template")',
   btnPreviewApp: 'button:has-text("Preview App")',
   unknownLabel: 'text=Unknown',
-  // Added: toggle switch button (used for Show Divider)
   toggleSwitch: '[data-testid="toggle-switch"]',
-  // Added: add row button (exact text match to avoid matching preset buttons)
   addRowByText: 'button:text-is("Add Row")',
-  // Added: divider color label in inspector
   dividerColorLabel: 'text=Divider Color',
-  // Added: view type label in inspector
   viewTypeLabel: 'text=View Type',
   rowInTree: '[data-testid="row-in-tree"]',
 };
@@ -32,7 +30,6 @@ export async function waitForEditorReady(page: import('@playwright/test').Page) 
   await page.waitForLoadState('networkidle');
   await page.locator(EditorPage.btnSave).waitFor({ state: 'visible', timeout: 15000 });
   await page.locator(EditorPage.btnSave).waitFor({ state: 'attached' });
-  // Save is disabled while loading
   for (let i = 0; i < 30; i++) {
     if (await page.locator(EditorPage.btnSave).isEnabled()) return;
     await page.waitForTimeout(300);
@@ -41,8 +38,15 @@ export async function waitForEditorReady(page: import('@playwright/test').Page) 
 
 /** Add a 1-column row via structure tree + button */
 export async function addRowViaStructureTree(page: import('@playwright/test').Page) {
+  const rows = page.locator(EditorPage.rowInTree);
+  await page.locator(EditorPage.btnAddRow).waitFor({ state: 'visible', timeout: 10000 });
+  await expect.poll(async () => rows.count(), { timeout: 15000 }).toBeGreaterThan(0);
+  const rowsBefore = await rows.count();
   await page.locator(EditorPage.btnAddRow).click();
-  await page.locator(EditorPage.rowInTree).first().waitFor({ state: 'visible', timeout: 5000 });
+  await expect.poll(async () => rows.count(), { timeout: 10000 }).toBeGreaterThan(rowsBefore);
+  await expect(
+    page.locator('[data-testid="editor-canvas"] .bg-gray-50.border-dashed').last(),
+  ).toBeVisible({ timeout: 10000 });
 }
 
 /** Click save and wait for legacy SDUI POST (accepts empty-screen confirm) */
