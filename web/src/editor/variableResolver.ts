@@ -20,6 +20,7 @@ interface MockVariableContext {
 const MOCK_CONTEXT: MockVariableContext = {
   user: {
     name: 'John Doe',
+    username: 'John Doe',
     email: 'john@example.com',
     id: '1',
   },

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -95,6 +95,12 @@ export function PillEditor({
   screenComponents,
   className,
 }: PillEditorProps) {
+  const valueRef = useRef(value);
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
   const [pickerState, setPickerState] = useState<{
     isOpen: boolean;
     position?: { x: number; y: number };
@@ -135,9 +141,8 @@ export function PillEditor({
     onUpdate: ({ editor }) => {
       const json = editor.getJSON();
       const serialized = serializeEditorContent(json);
-      // Only notify parent when value actually changed to prevent
-      // unnecessary re-renders that cause cursor snap during typing.
-      if (serialized !== value) {
+      // Compare against latest value prop (useEditor onUpdate closes over stale value).
+      if (serialized !== valueRef.current) {
         onChange(serialized);
       }
     },
@@ -254,7 +259,8 @@ export function PillEditor({
       editor.commands.deleteRange({ from: deleteFrom, to: from });
     }
 
-    // Insert the pill
+    const beforeInsert = serializeEditorContent(editor.getJSON());
+
     editor
       .chain()
       .focus()
@@ -264,6 +270,15 @@ export function PillEditor({
         displayName: `${namespace}.${key}`,
       })
       .run();
+
+    // Sync store for canvas preview (FF4-VAR-001). TipTap may not include the atom in
+    // getJSON() synchronously — fall back to the known mustache token.
+    let next = serializeEditorContent(editor.getJSON());
+    if (!next.includes(variable)) {
+      const spacer = beforeInsert.length > 0 && !beforeInsert.endsWith(' ') ? ' ' : '';
+      next = `${beforeInsert}${spacer}${variable}`;
+    }
+    onChange(next);
 
     handleClosePicker();
   };

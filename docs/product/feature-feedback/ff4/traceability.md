@@ -68,11 +68,11 @@ Cross-reference: REQ-ID → source → implementation → test → verdict.
 | FF4-CELL-002 | FF4 doc lines 198-199 | | | NOT TESTED |
 | FF4-CELL-003 | FF4 doc lines 39, 186-187 | | | NOT TESTED |
 | FF4-CELL-004 | FF4 doc lines 258-259, 291-298 | | | NOT TESTED |
-| FF4-VAR-001 | FF4 doc lines 200-202 | | | NOT TESTED |
+| FF4-VAR-001 | FF4 doc lines 200-202 | | | PASS (qa/ff4-phase10-components.spec.ts) |
 | FF4-VAR-002 | FF4 doc lines 202-203 | | | NOT TESTED |
 | FF4-VAR-003 | FF4 doc lines 570-572 | | | NOT TESTED |
 | FF4-TEXT-001 | FF4 doc lines 204-208 | | | NOT TESTED |
-| FF4-TEXT-002 | FF4 doc lines 210-214 | | | NOT TESTED |
+| FF4-TEXT-002 | FF4 doc lines 210-214 | | | PASS (qa/ff4-phase5-editors.spec.ts) |
 | FF4-TEXT-003 | FF4 doc lines 214-215 | | | NOT TESTED |
 | FF4-TEXT-004 | FF4 doc lines 214-215 | | | NOT TESTED |
 | FF4-TEXT-005 | FF4 doc lines 214 | | | NOT TESTED |

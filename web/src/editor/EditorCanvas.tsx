@@ -24,6 +24,7 @@ import { MIN_CELL_WIDTH_PERCENT, MIN_CELL_WIDTH_PX, MIN_ROW_HEIGHT, calculateSid
 import { ComponentPicker } from './ComponentPicker';
 import { Plus, Grip, X, Edit2, Eye, Copy, Trash2, ArrowUp, ArrowDown, Clipboard } from 'lucide-react';
 import { resolveVariables } from './variableResolver';
+import { hasMarkdownSyntax, markdownWithHardBreaks } from '../lib/sduiTextContent';
 import { renderLucideIcon } from '../lib/lucideIcon';
 import ReactMarkdown from 'react-markdown';
 import { CalendarPreview } from '../components/calendar/CalendarPreview';
@@ -144,7 +145,7 @@ function TextPreview({ content, variant, fontSize, fontWeight, color, align, bol
       : { fontSize: 16, fontWeight: '400', lineHeight: 1.5 };
 
   const resolvedContent = resolveVariables(content || 'Text');
-  const hasMarkdownSyntax = /[*#_`[\]!>-]/.test(resolvedContent);
+  const useMarkdown = hasMarkdownSyntax(resolvedContent);
 
   const resolvedFontSize = typeof fontSize === 'number' ? fontSize : semanticStyle.fontSize;
   const resolvedFontWeight = (typeof fontWeight === 'string' && fontWeight.length > 0) || typeof fontWeight === 'number'
@@ -164,9 +165,9 @@ function TextPreview({ content, variant, fontSize, fontWeight, color, align, bol
   };
 
   // Plain text (FF4-TEXT-002: preserve single newlines from inspector Enter key)
-  if (!hasMarkdownSyntax) {
+  if (!useMarkdown) {
     return (
-      <div style={{ ...baseStyle, whiteSpace: 'pre-wrap' }}>
+      <div data-testid="text-preview" style={{ ...baseStyle, whiteSpace: 'pre-wrap' }}>
         {resolvedContent}
       </div>
     );
@@ -181,8 +182,8 @@ function TextPreview({ content, variant, fontSize, fontWeight, color, align, bol
   };
 
   return (
-    <div style={markdownStyle}>
-      <ReactMarkdown>{resolvedContent}</ReactMarkdown>
+    <div data-testid="text-preview" style={markdownStyle}>
+      <ReactMarkdown>{markdownWithHardBreaks(resolvedContent)}</ReactMarkdown>
     </div>
   );
 }

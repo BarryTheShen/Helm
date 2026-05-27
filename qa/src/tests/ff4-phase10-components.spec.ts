@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures';
 import { EditorPage, waitForEditorReady } from '../page-objects/editor';
-import { addComponentToFirstCell, ensureEmptyCellExists } from '../editor-helpers';
+import { addComponentToFirstCell, createFreshEditorModule, ensureEmptyCellExists } from '../editor-helpers';
 
 test.describe('FF4 Phase 10 — components and variables', () => {
   test.beforeEach(async ({ page, login }) => {
@@ -10,25 +10,28 @@ test.describe('FF4 Phase 10 — components and variables', () => {
   });
 
   test('FF4-VAR-001: variable pill has compact hit box and resolves in preview', async ({ page }) => {
+    await createFreshEditorModule(page);
     await ensureEmptyCellExists(page);
-    await addComponentToFirstCell(page, 'Text');
+    await addComponentToFirstCell(page, 'Text', { emptyCell: 'last' });
 
-    const cell = page.locator('[data-testid="editor-canvas"] .bg-white.shadow-sm').first();
-    await cell.click();
     const editor = page.locator('[data-testid="property-inspector"] .ProseMirror').first();
     await expect(editor).toBeVisible();
     await editor.click();
     await page.keyboard.type('Hello ');
     await page.keyboard.press('@');
 
-    const option = page.locator('.shadow-xl button:has(.font-mono)').first();
-    if (await option.count() > 0) {
-      await option.click();
-      const pill = editor.locator('[data-testid="variable-pill"]').first();
-      await expect(pill).toBeVisible();
-      const box = await pill.boundingBox();
-      expect(box?.width ?? 999).toBeLessThan(180);
-    }
+    const option = page.locator('.shadow-xl button').filter({ hasText: 'user.email' }).first();
+    await expect(option).toBeVisible({ timeout: 10000 });
+    await option.click();
+
+    const pill = editor.locator('[data-testid="variable-pill"]').first();
+    await expect(pill).toBeVisible();
+    const box = await pill.boundingBox();
+    expect(box?.width ?? 999).toBeLessThan(180);
+
+    const preview = page.locator('[data-testid="editor-canvas"] [data-testid="text-preview"]').last();
+    await expect(preview).toContainText('john@example.com', { timeout: 10000 });
+    await expect(preview).not.toContainText('{{user.email}}');
   });
 
   test('FF4-IMG-001: image preview fills cell with fitMode attribute', async ({ page }) => {

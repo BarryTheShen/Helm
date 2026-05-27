@@ -74,18 +74,24 @@ test.describe('FF4 Phase 5 — editor surfaces', () => {
     });
 
     test('FF4-TEXT-002: Enter in Text inspector creates newline in canvas preview', async ({ page }) => {
-      await addComponentToFirstCell(page, 'Text');
-      const lineOne = `LineA-${Date.now()}`;
-      const lineTwo = `LineB-${Date.now()}`;
+      await addComponentToFirstCell(page, 'Text', { emptyCell: 'last' });
+      const lineOne = `LineA${Date.now()}`;
+      const lineTwo = `LineB${Date.now()}`;
 
       const editor = page.locator(EditorPage.propertyInspector).locator('.ProseMirror').first();
       await editor.click();
+      await page.keyboard.press('Control+a');
+      await page.keyboard.press('Backspace');
       await page.keyboard.type(lineOne);
       await page.keyboard.press('Enter');
       await page.keyboard.type(lineTwo);
 
-      await expect(page.locator('[data-testid="editor-canvas"]').getByText(lineOne)).toBeVisible({ timeout: 10000 });
-      await expect(page.locator('[data-testid="editor-canvas"]').getByText(lineTwo)).toBeVisible();
+      const preview = page.locator('[data-testid="editor-canvas"] [data-testid="text-preview"]').last();
+      await expect(preview).toBeVisible({ timeout: 10000 });
+      const previewText = await preview.innerText();
+      expect(previewText).toContain(lineOne);
+      expect(previewText).toContain(lineTwo);
+      expect(previewText.indexOf(lineTwo)).toBeGreaterThan(previewText.indexOf(lineOne));
     });
 
     test('FF4-TEXT-003: Text alignment center applies in preview', async ({ page }) => {

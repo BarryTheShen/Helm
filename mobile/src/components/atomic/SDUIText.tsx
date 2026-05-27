@@ -10,6 +10,7 @@ import Markdown from 'react-native-markdown-display';
 import { resolveColor } from '@/theme/tokens';
 import { useVariableContext } from '@/hooks/useVariableContext';
 import { resolveExpression } from '@/utils/variableResolver';
+import { hasMarkdownSyntax, markdownWithHardBreaks } from '@/utils/sduiTextContent';
 
 interface SDUITextProps {
   content: string;
@@ -74,9 +75,9 @@ const markdownStyles = {
   paragraph: { marginVertical: 2 },
 };
 
-/** Check if content is simple (no markdown syntax) — if so, render as plain Text */
+/** Check if content is simple (no markdown syntax) — multiline plain text is allowed. */
 function isPlainText(content: string): boolean {
-  return !/[#*_`\[\]!>-]/.test(content) && !content.includes('\n');
+  return !hasMarkdownSyntax(content);
 }
 
 export function SDUIText({
@@ -138,7 +139,7 @@ export function SDUIText({
   return (
     <View style={align ? { alignItems: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start' } : undefined}>
       <Markdown style={mergedStyles} mergeStyle={true}>
-        {resolvedContent}
+        {markdownWithHardBreaks(resolvedContent)}
       </Markdown>
     </View>
   );
