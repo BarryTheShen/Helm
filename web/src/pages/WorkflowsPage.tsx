@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { toast } from 'sonner';
 import ReactFlow, {
   Controls,
@@ -10,11 +10,13 @@ import ReactFlow, {
   Panel,
   Handle,
   Position,
+  useUpdateNodeInternals,
+  useNodeId,
 } from 'reactflow';
 import type { Node, Connection } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { api, type Workflow, type WorkflowCreate, type WorkflowUpdate } from '../lib/api';
-import { Plus, Save, Play, Upload, Trash2 } from 'lucide-react';
+import { Plus, Save, Play, Upload, Trash2, Repeat } from 'lucide-react';
 import { useResource } from '../hooks/useResource';
 import { TriggerNode } from '../components/workflow/TriggerNode';
 import { NodeInspector } from '../components/workflow/NodeInspector';
@@ -47,21 +49,31 @@ function ConditionNode({ data }: { data: any }) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function SwitchNode({ data }: { data: any }) {
-  const cases = data.cases || [];
+  const nodeId = useNodeId();
+  const updateNodeInternals = useUpdateNodeInternals();
+  const cases: string[] = data.cases || [];
   const totalHandles = cases.length + 1; // cases + default
 
+  useEffect(() => {
+    if (nodeId) {
+      updateNodeInternals(nodeId);
+    }
+  }, [nodeId, cases.length, cases.join('|'), updateNodeInternals]);
+
   return (
-    <div className="px-4 py-3 bg-purple-50 border-2 border-purple-500 rounded-lg shadow-sm min-w-[180px]">
+    <div
+      data-testid="switch-node"
+      className="px-4 py-3 bg-purple-50 border-2 border-purple-500 rounded-lg shadow-sm min-w-[180px]"
+    >
       <Handle type="target" position={Position.Top} className="!bg-purple-500" />
       <div className="font-semibold text-sm text-purple-900">{data.label || 'Switch'}</div>
       {cases.length > 0 && <div className="text-xs text-purple-600 mt-1">{cases.length} cases</div>}
 
-      {/* Generate handles for each case */}
       {cases.map((caseValue: string, index: number) => {
         const leftPercent = ((index + 1) / (totalHandles + 1)) * 100;
         return (
           <Handle
-            key={caseValue}
+            key={`${caseValue}-${index}`}
             type="source"
             position={Position.Bottom}
             id={caseValue}
@@ -71,12 +83,11 @@ function SwitchNode({ data }: { data: any }) {
         );
       })}
 
-      {/* Default handle */}
       <Handle
         type="source"
         position={Position.Bottom}
         id="default"
-        style={{ left: `${((totalHandles) / (totalHandles + 1)) * 100}%` }}
+        style={{ left: `${(totalHandles / (totalHandles + 1)) * 100}%` }}
         className="!bg-purple-500"
       />
     </div>
@@ -86,13 +97,22 @@ function SwitchNode({ data }: { data: any }) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function LoopNode({ data }: { data: any }) {
   return (
-    <div className="px-4 py-3 bg-green-50 border-2 border-green-500 rounded-lg shadow-sm min-w-[180px]">
-      <Handle type="target" position={Position.Top} className="!bg-green-500" />
-      <div className="font-semibold text-sm text-green-900 text-center">{data.label || 'Loop'}</div>
+    <div
+      data-testid="loop-node"
+      className="relative px-5 py-4 bg-green-50 border-2 border-green-500 shadow-sm min-w-[200px]"
+      style={{ borderRadius: '999px' }}
+    >
+      <Handle type="target" position={Position.Top} className="!bg-green-500" style={{ top: -6 }} />
+      <div className="flex items-center justify-center gap-2">
+        <Repeat className="w-4 h-4 text-green-700 shrink-0" />
+        <div className="font-semibold text-sm text-green-900">{data.label || 'Loop'}</div>
+      </div>
       {data.items && <div className="text-xs text-green-600 mt-1 text-center truncate">{data.items}</div>}
-      {!data.items && data.iterations && <div className="text-xs text-green-600 mt-1 text-center">{data.iterations}x</div>}
-      <Handle type="source" position={Position.Bottom} id="body" className="!bg-green-500 !left-[30%]" />
-      <Handle type="source" position={Position.Bottom} id="next" className="!bg-blue-500 !left-[70%]" />
+      {!data.items && data.iterations && (
+        <div className="text-xs text-green-600 mt-1 text-center">{data.iterations}x</div>
+      )}
+      <Handle type="source" position={Position.Bottom} id="body" className="!bg-green-500 !left-[30%]" style={{ bottom: -6 }} />
+      <Handle type="source" position={Position.Bottom} id="next" className="!bg-blue-500 !left-[70%]" style={{ bottom: -6 }} />
     </div>
   );
 }
@@ -290,7 +310,7 @@ export function WorkflowsPage() {
         ...(type === 'trigger' && { triggerType: 'manual' }),
         ...(type === 'action' && { action: '', params: {} }),
         ...(type === 'condition' && { condition: '' }),
-        ...(type === 'switch' && { value: '', cases: [] }),
+        ...(type === 'switch' && { value: '', cases: [], casesText: '' }),
         ...(type === 'loop' && { items: '', iterations: 1, variable: 'item' }),
       },
     };
@@ -300,11 +320,11 @@ export function WorkflowsPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateNodeData = useCallback((nodeId: string, data: any) => {
     setNodes((nds) =>
-      nds.map((node) => (node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node))
+      nds.map((node) => (node.id === nodeId ? { ...node, data } : node))
     );
     setSelectedNode((prev) => {
       if (!prev || prev.id !== nodeId) return prev;
-      return { ...prev, data: { ...prev.data, ...data } };
+      return { ...prev, data };
     });
   }, [setNodes]);
 

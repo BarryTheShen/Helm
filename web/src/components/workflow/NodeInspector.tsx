@@ -64,8 +64,7 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setLocalData((prev: any) => {
       const newData = { ...prev, ...updates };
-      // Defer parent update to avoid re-render during typing
-      setTimeout(() => onUpdate(node.id, newData), 0);
+      onUpdate(node.id, newData);
       return newData;
     });
   };
@@ -76,7 +75,7 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
     setLocalData((prev: any) => {
       const config = prev.config || {};
       const newData = { ...prev, config: { ...config, [key]: value } };
-      setTimeout(() => onUpdate(node.id, newData), 0);
+      onUpdate(node.id, newData);
       return newData;
     });
   };
@@ -86,6 +85,7 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Trigger Type</label>
         <select
+          data-testid="trigger-type-select"
           value={localData.triggerType || 'manual'}
           onChange={(e) => updateData({ triggerType: e.target.value })}
           className="w-full px-3 py-2 border rounded-md text-sm"
@@ -197,6 +197,7 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
       <input
+        data-testid="condition-input"
         type="text"
         value={localData.condition || ''}
         onChange={(e) => updateData({ condition: e.target.value })}
@@ -231,9 +232,20 @@ export function NodeInspector({ node, onClose, onUpdate, onDelete }: NodeInspect
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Cases (comma-separated)</label>
         <input
+          data-testid="switch-cases-input"
           type="text"
-          value={(localData.cases || []).join(', ')}
-          onChange={(e) => updateData({ cases: e.target.value.split(',').map((c) => c.trim()).filter(Boolean) })}
+          value={
+            typeof localData.casesText === 'string'
+              ? localData.casesText
+              : (localData.cases || []).join(', ')
+          }
+          onChange={(e) => {
+            const text = e.target.value;
+            updateData({
+              casesText: text,
+              cases: text.split(',').map((c: string) => c.trim()).filter(Boolean),
+            });
+          }}
           placeholder="success, error, pending"
           className="w-full px-3 py-2 border rounded-md text-sm"
         />
