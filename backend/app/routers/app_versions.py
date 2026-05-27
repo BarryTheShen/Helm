@@ -42,7 +42,11 @@ from app.schemas.preview import (
 )
 from app.services.audit import log_audit
 from app.services.device_service import normalize_app_config_snapshot, sync_app_shell_from_config
-from app.services.validation_service import validate_app_config, validate_publish_config
+from app.services.validation_service import (
+    validate_app_config,
+    validate_autosave_config,
+    validate_publish_full,
+)
 from app.services.version_service import make_timestamp_name, resolve_module_references
 from app.services.websocket_manager import manager
 
@@ -155,6 +159,9 @@ async def update_app_draft(
     )
     draft = result.scalar_one_or_none()
 
+    is_valid, validation_errors = validate_autosave_config(body.config_json)
+    validation_status = "valid" if is_valid else "invalid"
+
     if draft is None:
         draft = AppWorkingDraft(
             id=str(uuid4()),
@@ -164,7 +171,8 @@ async def update_app_draft(
             last_autosaved_at=datetime.now(timezone.utc),
             base_version_id=body.base_version_id,
             dirty=body.dirty,
-            validation_status="valid",
+            validation_status=validation_status,
+            validation_errors=validation_errors,
         )
         db.add(draft)
     else:
@@ -172,7 +180,8 @@ async def update_app_draft(
         draft.dirty = body.dirty
         draft.base_version_id = body.base_version_id
         draft.last_autosaved_at = datetime.now(timezone.utc)
-        draft.validation_status = "valid"
+        draft.validation_status = validation_status
+        draft.validation_errors = validation_errors
 
     await log_audit(
         db, user_id, "APP_DRAFT_UPDATED", "app_draft",
@@ -460,32 +469,21 @@ async def publish_app_version(
     if version is None:
         raise HTTPException(status_code=404, detail="Version not found")
 
-    # Mark as published
-    version.source = "publish"
-
-    # ── FF4-VER-005: Resolve module references to concrete version IDs ──
     config_json = normalize_app_config_snapshot(version.config_json or {}, app)
-    version.config_json = config_json
     resolved, policies = await resolve_module_references(
         db, config_json, user_id,
     )
-    version.resolved_module_versions = resolved
-    version.module_reference_policies = policies
 
-    # Update app's current published version
-    app.current_published_version_id = version.id
-    # Keep App row shell in sync for admin APIs and legacy fallback (FF4-APP-002)
-    sync_app_shell_from_config(app, config_json)
-
-    # Update all devices assigned to this app
     result = await db.execute(
         select(Device).where(Device.assigned_app_id == app_id)
     )
     devices = list(result.scalars().all())
 
-    # Validate device compatibility before publishing
-    is_valid, validation_errors = validate_publish_config(
+    is_valid, validation_errors = await validate_publish_full(
+        db,
         config_json,
+        user_id,
+        resolved,
         devices=devices,
     )
     if not is_valid:
@@ -496,6 +494,18 @@ async def publish_app_version(
                 "errors": validation_errors,
             },
         )
+
+    # ── FF4-VER-005: Persist resolved module references at publish time ──
+    version.source = "publish"
+    version.config_json = config_json
+    version.resolved_module_versions = resolved
+    version.module_reference_policies = policies
+    version.validation_status = "valid"
+    version.validation_errors = []
+
+    app.current_published_version_id = version.id
+    sync_app_shell_from_config(app, config_json)
+
     for device in devices:
         device.active_app_version_id = version.id
         # Mark device as having a pending update (FF4-EDGE-005)
