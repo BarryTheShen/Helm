@@ -36,9 +36,10 @@
 2. **Vite detection:** Checks `http://127.0.0.1:5174`. If not running, starts `npx vite dev` as a detached process. Writes PID to `qa/.vite-pid.txt`.
 3. **Setup verification:** Checks `/auth/setup_complete`. If not set, creates first user via `/auth/setup`.
 4. **Auth login:** Logs in via `/auth/login` using credentials from `qa/.qa-env.json`. Writes session token + user info to `qa/src/.qa-auth.json`.
-5. **Discovery:** Runs `discover.cjs` to scan backend routes, actions, components, templates; writes `qa/src/discovered.json`.
+5. **Admin cleanup:** Calls `POST /api/admin/cleanup/execute` via `admin-cleanup.cjs` to remove stale test artifacts (e.g. duplicate sidebar **New Module** entries) before the suite runs.
+6. **Discovery:** Runs `discover.cjs` to scan backend routes, actions, components, templates; writes `qa/src/discovered.json`.
 
-`globalTeardown.cjs` kills auto-started servers by PID file (only if QA started them).
+`globalTeardown.cjs` runs the same admin cleanup after all tests, then kills auto-started servers by PID file (only if QA started them).
 
 ### Auth Injection
 
@@ -62,6 +63,18 @@ export const test = base.extend<{ login: () => Promise<void> }>({
 Tests call `await login()` at the start of each test. Auth is injected via `addInitScript` before page navigation, so the web admin sees the user as already authenticated.
 
 Security tests use a separate fixture (`security.spec.ts`) with a clean browser context and a secondary token to avoid contaminating the shared auth state.
+
+### Editor module teardown (automatic)
+
+E2E tests that create custom modules (click **New Module** or `createFreshEditorModule()`) must not leave sidebar junk behind.
+
+| Layer | Mechanism |
+|-------|-----------|
+| **Per test** | `fixtures.ts` auto-fixture `_editorModuleCleanup` listens for `POST /api/sdui/modules` (201) and deletes every `custom-*` module after each e2e test; also deletes the module in the editor URL if present. |
+| **Per suite** | `globalSetup.cjs` and `globalTeardown.cjs` call `admin-cleanup.cjs` → `POST /api/admin/cleanup/execute`. |
+| **Manual (one-time / dev)** | Web Admin **Settings → Clean State** — preview then execute removes test-prefixed apps/modules/templates/workflows and QA junk (`New Module`, `QA Module …`). Same backend endpoint as QA global cleanup. |
+
+Helpers live in `qa/src/test-artifact-cleanup.ts` (`deleteCustomModule`, `cleanupCustomModuleFromEditorUrl`, `executeAdminTestCleanup`). Individual specs may still use explicit `afterEach` cleanup; the auto-fixture is the safety net.
 
 ### Discovery (`discover.cjs`)
 
@@ -111,10 +124,12 @@ Most test files use `qaPath()` instead of `__dirname` for file path resolution (
 |------|---------|
 | `qa/playwright.config.ts` | Playwright config: 2 projects, Chrome, retries=1, reporters |
 | `qa/package.json` | ESM package, scripts: `test`, `test:backend`, `test:e2e`; deps: `@playwright/test`, `execa` |
-| `qa/src/globalSetup.cjs` | Auto-starts backend + Vite, handles auth setup, runs discovery |
-| `qa/src/globalTeardown.cjs` | Kills auto-started servers |
+| `qa/src/globalSetup.cjs` | Auto-starts backend + Vite, handles auth setup, admin cleanup, runs discovery |
+| `qa/src/globalTeardown.cjs` | Admin cleanup, kills auto-started servers |
+| `qa/src/admin-cleanup.cjs` | Shared `POST /api/admin/cleanup/execute` helper for setup/teardown |
+| `qa/src/test-artifact-cleanup.ts` | Per-test module/workflow delete helpers |
 | `qa/src/discover.cjs` | Scans backend routes, actions, components, templates, validation whitelist, mobile/web registry types, web schemas, preview renderers, local template types |
-| `qa/src/fixtures.ts` | Extended test fixture with `login()` via `addInitScript` |
+| `qa/src/fixtures.ts` | Extended test fixture with `login()` and automatic editor module teardown |
 | `qa/src/utils.ts` | `qaPath()` for ESM-safe path resolution |
 | `qa/run.sh` | Convenience script: installs deps, runs backend pytest, then Playwright |
 

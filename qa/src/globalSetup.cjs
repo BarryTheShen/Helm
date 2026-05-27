@@ -117,6 +117,10 @@ async function main() {
   }));
   console.log(`Auth credentials written to ${authFile}`);
 
+  // Remove stale QA artifacts (e.g. leaked "New Module" sidebar entries) before tests run
+  const { runAdminCleanup } = require('./admin-cleanup.cjs');
+  await runAdminCleanup({ label: 'Global setup cleanup' });
+
   // Check if Vite is already running
   let viteRunning = false;
   try {
