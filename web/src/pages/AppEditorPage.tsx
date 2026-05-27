@@ -11,6 +11,7 @@ import { AppPhoneShell } from '../components/AppPhoneShell';
 import { SDUIPreview } from '../components/SDUIPreview';
 import { resolveModuleScreenForApp } from '../lib/previewResolver';
 import { IconPicker } from '../editor/IconPicker';
+import { renderLucideIcon } from '../lib/lucideIcon';
 import type { ModuleInstance, BottomBarSlot, App } from '../stores/useAppEditorStore';
 
 interface AppVersion {
@@ -442,15 +443,14 @@ export function AppEditorPage() {
 
   // ── Per-module icon helpers (FF4-APP-001,013) ─────────────────────
   const getModuleEffectiveIcon = (moduleInstanceId: string, moduleType: string, apiIcon?: string): string => {
-    // Check for override stored in moduleIconOverrides state
     if (moduleIconOverrides[moduleInstanceId]) return moduleIconOverrides[moduleInstanceId];
-    // Check for override stored in app config (persisted)
     if (currentApp?.module_icons?.[moduleInstanceId]) return currentApp.module_icons[moduleInstanceId];
-    // Try the module's own icon field
     if (apiIcon) return apiIcon;
-    // Default by type
     return DEFAULT_MODULE_ICONS[moduleType] || 'package';
   };
+
+  const renderAppIcon = (iconName: string | undefined, size: number) =>
+    renderLucideIcon(iconName, size, 'shrink-0', iconName || '⭐');
 
   const handleModuleIconChange = (moduleInstanceId: string, newIcon: string) => {
     setModuleIconOverrides(prev => ({ ...prev, [moduleInstanceId]: newIcon }));
@@ -810,7 +810,7 @@ export function AppEditorPage() {
               onClick={() => setShowAppSwitcher(!showAppSwitcher)}
               className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
             >
-              <span className="text-lg">{currentApp.icon}</span>
+              <span className="flex items-center">{renderAppIcon(currentApp.icon, 18)}</span>
               <span className="text-sm font-medium">{currentApp.name}</span>
               <ChevronDown size={14} className="text-gray-400" />
             </button>
@@ -828,7 +828,7 @@ export function AppEditorPage() {
                       app.id === currentAppId ? 'bg-blue-50 text-blue-700' : ''
                     }`}
                   >
-                    <span className="text-lg">{app.icon}</span>
+                    <span className="flex items-center">{renderAppIcon(app.icon, 18)}</span>
                     <span>{app.name}</span>
                   </button>
                 ))}
@@ -902,6 +902,7 @@ export function AppEditorPage() {
 
           <button
             onClick={handleOpenVersionHistory}
+            data-testid="btn-version-history"
             className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
             title="Version History"
           >
@@ -950,7 +951,7 @@ export function AppEditorPage() {
                     return (
                       <div key={slot.module_instance_id} className="text-[11px] bg-gray-50 rounded-lg p-2 space-y-1">
                         <div className="flex items-center gap-1.5 mb-1">
-                          <span className="text-base">{slot.icon}</span>
+                          <span className="flex items-center">{renderAppIcon(slot.icon, 16)}</span>
                           <span className="text-xs font-medium text-gray-800 truncate">{slot.name}</span>
                           <span className="text-[9px] text-gray-400 ml-auto">Slot {slot.slot_position + 1}</span>
                         </div>
@@ -1090,10 +1091,16 @@ export function AppEditorPage() {
                             </div>
                           ) : (
                             <>
-                              <span className="text-lg cursor-default">{getModuleEffectiveIcon(module.module_instance_id, module.module_type, module.icon)}</span>
+                              <span className="flex h-5 w-5 items-center justify-center">
+                                {renderAppIcon(
+                                  getModuleEffectiveIcon(module.module_instance_id, module.module_type, module.icon),
+                                  16,
+                                )}
+                              </span>
                               <button
+                                data-testid="module-icon-edit"
                                 onClick={() => setEditingModuleIcon(module.module_instance_id)}
-                                className="ml-0.5 p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                className="ml-0.5 p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
                                 title="Change module icon"
                               >
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

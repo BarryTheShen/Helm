@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { PreviewBottomBarSlot, PreviewLaunchpadModule } from '../lib/previewResolver';
+import { renderLucideIcon } from '../lib/lucideIcon';
 
 interface AppPhoneShellProps {
   darkMode?: boolean;
@@ -38,6 +39,11 @@ export function AppPhoneShell({
   const getIcon = (moduleId: string, fallback: string) =>
     resolveIcon?.(moduleId, fallback) ?? fallback;
 
+  const renderModuleIcon = (moduleId: string, fallback: string, size: number): ReactNode => {
+    const iconName = getIcon(moduleId, fallback);
+    return renderLucideIcon(iconName, size, 'shrink-0', iconName);
+  };
+
   const showLaunchpad = activeModuleId === null;
 
   return (
@@ -67,8 +73,8 @@ export function AppPhoneShell({
                         darkMode ? 'hover:bg-gray-800 active:bg-gray-700' : 'hover:bg-gray-50 active:bg-gray-100'
                       }`}
                     >
-                      <span className="text-3xl">
-                        {getIcon(mod.module_instance_id, mod.icon)}
+                      <span className="flex h-9 w-9 items-center justify-center">
+                        {renderModuleIcon(mod.module_instance_id, mod.icon, 28)}
                       </span>
                       <span className={`text-[10px] ${labelText} text-center leading-tight line-clamp-2`}>
                         {mod.name}
@@ -108,8 +114,8 @@ export function AppPhoneShell({
                       isActive ? activeTab : inactiveTab
                     }`}
                   >
-                    <span className="text-2xl">
-                      {getIcon(slot.module_instance_id, slot.icon)}
+                    <span className="flex h-7 w-7 items-center justify-center">
+                      {renderModuleIcon(slot.module_instance_id, slot.icon, 22)}
                     </span>
                     <span className={`text-[10px] truncate max-w-[60px] ${isActive ? activeTab : labelText}`}>
                       {slot.name}

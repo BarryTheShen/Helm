@@ -213,6 +213,7 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
           Modules
         </button>
         <button
+          data-testid="btn-new-module"
           onClick={handleNewModule}
           type="button"
           className="inline-flex items-center gap-1 px-2 py-1 hover:bg-gray-100 rounded transition-colors text-xs text-gray-600"

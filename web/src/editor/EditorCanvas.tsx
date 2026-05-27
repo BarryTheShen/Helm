@@ -142,18 +142,29 @@ function TextPreview({ content, variant, fontSize, fontWeight, color, align, bol
       : { fontSize: 16, fontWeight: '400', lineHeight: 1.5 };
 
   const resolvedContent = resolveVariables(content || 'Text');
+  const hasMarkdownSyntax = /[*#_`[\]!>-]/.test(resolvedContent);
 
-  // Simple content (no markdown) — render as plain text with variant styling
-  if (!/[*#_`[\]!>-]/.test(resolvedContent) && !resolvedContent.includes('\n')) {
-    const resolvedFontSize = typeof fontSize === 'number' ? fontSize : semanticStyle.fontSize;
-    const resolvedFontWeight = (typeof fontWeight === 'string' && fontWeight.length > 0) || typeof fontWeight === 'number'
-      ? String(fontWeight)
-      : bold
-        ? '700'
-        : semanticStyle.fontWeight;
+  const resolvedFontSize = typeof fontSize === 'number' ? fontSize : semanticStyle.fontSize;
+  const resolvedFontWeight = (typeof fontWeight === 'string' && fontWeight.length > 0) || typeof fontWeight === 'number'
+    ? String(fontWeight)
+    : bold
+      ? '700'
+      : semanticStyle.fontWeight;
 
+  const baseStyle: React.CSSProperties = {
+    fontSize: resolvedFontSize,
+    fontWeight: resolvedFontWeight,
+    fontStyle: italic ? 'italic' : 'normal',
+    lineHeight: semanticStyle.lineHeight,
+    color: color || '#000',
+    textAlign: (align || 'left') as React.CSSProperties['textAlign'],
+    padding: '4px 0',
+  };
+
+  // Plain text (FF4-TEXT-002: preserve single newlines from inspector Enter key)
+  if (!hasMarkdownSyntax) {
     return (
-      <div style={{ fontSize: resolvedFontSize, fontWeight: resolvedFontWeight, fontStyle: italic ? 'italic' : 'normal', lineHeight: semanticStyle.lineHeight, color: color || '#000', textAlign: align || 'left', padding: '4px 0' }}>
+      <div style={{ ...baseStyle, whiteSpace: 'pre-wrap' }}>
         {resolvedContent}
       </div>
     );
@@ -1347,6 +1358,7 @@ function SortableRow({
         {/* Delete row button - top-LEFT outside content area (moved from right to prevent overlap with cell delete) */}
         {/* m3: Use -left-1 instead of -left-2.5 to prevent clipping by phone frame overflow-hidden */}
         <button
+          data-testid={`btn-delete-row-${row.id}`}
           className="absolute -left-1 -top-2.5 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-red-600 shadow-md"
           onClick={(e) => { e.stopPropagation(); deleteRow(row.id); }}
           title="Delete row"
@@ -1425,6 +1437,7 @@ function SortableRow({
                     >
                       {/* Delete cell button - top-left corner (FF4-CELL-002: both row and cell delete on left, no overlap) */}
                       <button
+                        data-testid={`btn-delete-cell-${row.id}-${cellIdx}`}
                         className="absolute -left-1.5 -top-1.5 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover/cell:opacity-100 transition-opacity z-30 hover:bg-red-600 shadow-md"
                         onClick={(e) => { e.stopPropagation(); removeComponent(row.id, cellIdx); }}
                         title="Delete component"

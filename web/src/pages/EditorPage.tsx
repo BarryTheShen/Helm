@@ -475,10 +475,30 @@ export function EditorPage() {
   }, []);
 
   const modulesLoadedRef = useRef(false);
+  const refreshedModuleRef = useRef<string | null>(null);
 
-  const loadModules = useCallback(async () => {
-    // Only load once. Never recreate to avoid stale closure cascade.
-    if (modulesLoadedRef.current) return;
+  const refreshModulesList = useCallback(async () => {
+    console.log('[Editor] refreshModulesList() — fetching module list');
+    try {
+      const data = await api.get<{ items: ModuleInfo[] }>('/api/sdui/modules');
+      const mods = data.items || [];
+      setModules(mods);
+      setModulesLoadError(null);
+
+      const urlModule = searchParams.get('module_instance_id') || '';
+      if (urlModule && mods.some(mod => mod.module_id === urlModule)) {
+        selectedModuleRef.current = urlModule;
+      }
+      return mods;
+    } catch (err) {
+      console.error('[Editor] refreshModulesList() — error:', err instanceof Error ? err.message : err);
+      setModulesLoadError(err instanceof Error ? err.message : 'Failed to load modules');
+      return [];
+    }
+  }, [searchParams]);
+
+  const loadModules = useCallback(async (force = false) => {
+    if (modulesLoadedRef.current && !force) return;
     modulesLoadedRef.current = true;
 
     console.log(`[Editor] loadModules() — starting, url="${selectedModule}"`);
@@ -486,23 +506,16 @@ export function EditorPage() {
     setModulesLoadError(null);
 
     try {
-      const data = await api.get<{ items: ModuleInfo[] }>('/api/sdui/modules');
-      const mods = data.items || [];
+      const mods = await refreshModulesList();
       console.log(`[Editor] loadModules() — success: ${mods.length} modules loaded`);
 
-      setModules(mods);
-
-      // Sync ref to URL param — read directly from searchParams (not the stale closure)
       const urlModule = searchParams.get('module_instance_id') || '';
-      if (urlModule && mods.some(mod => mod.module_id === urlModule)) {
-        selectedModuleRef.current = urlModule;
-      } else {
-        // Invalid/empty — mark for redirect (handled by redirect effect)
+      if (!urlModule || !mods.some(mod => mod.module_id === urlModule)) {
         const first = mods[0]?.module_id || '';
-        if (first) {
-          console.log(`[Editor] loadModules() — URL invalid, redirect pending to: ${first}`);
+        if (first && !urlModule) {
+          console.log(`[Editor] loadModules() — URL empty, redirect pending to: ${first}`);
           selectedModuleRef.current = first;
-        } else {
+        } else if (!urlModule) {
           selectedModuleRef.current = '';
         }
       }
@@ -518,7 +531,7 @@ export function EditorPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshModulesList, searchParams, selectedModule]);
 
   const loadSelectedModule = useCallback(async () => {
     if (!selectedModule) {
@@ -596,12 +609,22 @@ export function EditorPage() {
    
   }, [loadScreen, selectedModule, updateModuleHasScreen]);
 
-  // Load modules on mount and whenever the modules list changes.
-  // Does NOT update the URL — uses the URL param as the single source of truth.
-   
+  // Load modules on mount. Does NOT update the URL — uses the URL param as the single source of truth.
   useEffect(() => {
     void loadModules();
-  }, []);
+  }, [loadModules]);
+
+  // FF4-MOD-004: refresh when URL module is missing from local list (e.g. just created in sidebar)
+  useEffect(() => {
+    if (!selectedModule) return;
+    if (modules.some(mod => mod.module_id === selectedModule)) {
+      refreshedModuleRef.current = null;
+      return;
+    }
+    if (refreshedModuleRef.current === selectedModule) return;
+    refreshedModuleRef.current = selectedModule;
+    void refreshModulesList();
+  }, [selectedModule, modules, refreshModulesList]);
 
   // Load screen when module changes
   useEffect(() => {
@@ -1331,7 +1354,7 @@ export function EditorPage() {
           <div className="text-sm font-semibold text-gray-900">Failed to load editor modules</div>
           <div className="mt-2 max-w-sm text-sm text-gray-500">{modulesLoadError}</div>
           <button
-            onClick={() => { void loadModules(); }}
+            onClick={() => { modulesLoadedRef.current = false; void loadModules(true); }}
             className="mt-4 inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
           >
             Retry
@@ -1379,12 +1402,12 @@ export function EditorPage() {
           )}
 
           {/* Versioning action buttons */}
-          <button onClick={handleCreateCheckpoint} disabled={checkpointing || !canModifySelectedModule}
+          <button data-testid="btn-checkpoint" onClick={handleCreateCheckpoint} disabled={checkpointing || !canModifySelectedModule}
             className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors disabled:opacity-50">
             <Camera size={10} /> {checkpointing ? '...' : 'Checkpoint'}
           </button>
 
-          <button onClick={handleOpenVersionHistory}
+          <button data-testid="btn-version-history" onClick={handleOpenVersionHistory}
             className={`flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded transition-colors ${
               showVersionHistory
                 ? 'bg-blue-100 text-blue-700'
@@ -1393,7 +1416,7 @@ export function EditorPage() {
             <History size={10} /> History
           </button>
 
-          <button onClick={handlePreviewInWeb}
+          <button data-testid="btn-preview-web" onClick={handlePreviewInWeb}
             className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-purple-100 hover:bg-purple-200 text-purple-700 rounded transition-colors">
             <Eye size={10} /> Preview
           </button>
@@ -1908,7 +1931,7 @@ export function EditorPage() {
 
       {/* ── Version History Modal ────────────────────────────────────── */}
       {showVersionHistory && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" data-testid="version-history-modal">
           <div className="bg-white rounded-lg p-5 w-[700px] max-h-[80vh] overflow-auto">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold flex items-center gap-1.5">
