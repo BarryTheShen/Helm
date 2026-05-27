@@ -1,5 +1,7 @@
 // Editor state types for the Helm SDUI visual editor
 
+import { validateRow } from './cellWidthEngine';
+
 export interface ActionStep {
   id: string;
   type: string;
@@ -706,6 +708,26 @@ export function getEditorPersistenceValidationError(rows: EditorRow[]): string |
   }
 
   return null;
+}
+
+/** FF4-ROW-011: Detect invalid saved row layouts without silently normalizing. */
+export function getRowLayoutValidationErrors(
+  rows: EditorRow[],
+  rowWidthPx: number = 390,
+): string[] {
+  const errors: string[] = [];
+
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex];
+    const cells = row.cells.map((cell) => ({ id: cell.id, width: cell.width }));
+    const rowErrors = validateRow(cells, rowWidthPx, 0, 0, row.scrollable ?? false);
+
+    for (const rowError of rowErrors) {
+      errors.push(`Row ${rowIndex + 1}: ${rowError.message}`);
+    }
+  }
+
+  return errors;
 }
 
 export function normalizeComponentPropsForEditor(

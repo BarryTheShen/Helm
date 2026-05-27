@@ -739,6 +739,7 @@ function RowPropertiesPanel({ rowId }: { rowId: string }) {
               <button
                 onClick={() => addCellCheck.allowed && setCellCount(rowId, row.cells.length + 1)}
                 disabled={!addCellCheck.allowed}
+                data-testid="btn-add-cell"
                 className="p-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
                 title={addCellCheck.reason || 'Add cell'}
               >

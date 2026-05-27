@@ -1181,6 +1181,7 @@ function RowHeightResizeHandle({
 
       // Stop drag at minimum — prevent bounce instead of clamping
       if (rawHeight < MIN_ROW_HEIGHT) {
+        hasMovedRef.current = true;
         // Snap to minimum and don't move further
         if (rowRef.current) {
           rowRef.current.style.height = MIN_ROW_HEIGHT + 'px';

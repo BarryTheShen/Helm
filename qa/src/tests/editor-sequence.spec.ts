@@ -12,19 +12,23 @@ test.describe('Editor Sequence', () => {
     }
   }
 
-  test('multi-action sequence: add row, add component, save, reload', async ({ page, login }) => {
+  test('multi-action sequence: add row, add component, autosave persists', async ({ page, login }) => {
     await login();
     await page.goto('/editor');
-    await selectFirstModule(page);
+    await waitForEditorReady(page);
 
     await expect(page.locator(EditorPage.canvas)).toBeVisible();
 
     await addRowViaStructureTree(page);
     await addComponentToFirstCell(page, 'Button', { emptyCell: 'last' });
-    await saveModuleAndWait(page);
+    await page.waitForResponse(
+      (resp) => resp.url().includes('/api/sdui/') && resp.request().method() === 'POST' && resp.status() === 200,
+      { timeout: 15000 },
+    );
+    await expect(page.locator('[data-testid="autosave-status-saved"]')).toBeVisible({ timeout: 15000 });
 
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await waitForEditorReady(page);
     await expect(page.locator(EditorPage.canvas)).toBeVisible();
   });
 

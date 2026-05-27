@@ -44,11 +44,15 @@ function ContextMenu({ moduleInstance, onClose, onRename, onDuplicate, onDelete,
   return (
     <div
       ref={ref}
+      data-testid="module-context-menu"
+      role="menu"
+      aria-label="Module context menu"
       className="fixed bg-white border border-gray-200 rounded-lg shadow-xl z-[9999] py-1 w-48"
       style={{ top: position.y, left: position.x }}
     >
       <button
         onClick={() => { onRename(); onClose(); }}
+        role="menuitem"
         className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors text-left"
       >
         <Edit2 size={12} />
@@ -56,6 +60,7 @@ function ContextMenu({ moduleInstance, onClose, onRename, onDuplicate, onDelete,
       </button>
       <button
         onClick={() => { onDuplicate(); onClose(); }}
+        role="menuitem"
         className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors text-left"
       >
         <Copy size={12} />
@@ -64,6 +69,7 @@ function ContextMenu({ moduleInstance, onClose, onRename, onDuplicate, onDelete,
       {!isBuiltIn && (
         <button
           onClick={() => { onDelete(); onClose(); }}
+          role="menuitem"
           className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-red-50 text-red-600 transition-colors text-left"
         >
           <Trash2 size={12} />
@@ -73,6 +79,7 @@ function ContextMenu({ moduleInstance, onClose, onRename, onDuplicate, onDelete,
       <div className="border-t border-gray-100 my-1" />
       <button
         onClick={() => { onOpenInAppEditor(); onClose(); }}
+        role="menuitem"
         className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors text-left"
       >
         <ExternalLink size={12} />
