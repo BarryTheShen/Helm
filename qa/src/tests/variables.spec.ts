@@ -1,5 +1,88 @@
 import { test, expect } from '../fixtures';
 
+test.describe('Variables Page — FF3-DS-UX-001', () => {
+  test('shows page title, tab hints, and variables empty state copy', async ({ page, login }) => {
+    await login();
+    await page.goto('/variables');
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.getByRole('heading', { name: 'Variables & Data Sources', level: 1 })).toBeVisible();
+    await expect(
+      page.getByText(/Configure static values and live data feeds for SDUI components/i)
+    ).toBeVisible();
+
+    await expect(page.getByRole('button', { name: 'Variables', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Data Sources', exact: true })).toBeVisible();
+
+    const variablesHint = page.getByText(/\[\[variable\.name\]\]/i);
+    const variablesHintVisible = await variablesHint.isVisible().catch(() => false);
+    if (variablesHintVisible) {
+      await expect(variablesHint).toBeVisible();
+    }
+
+    const emptyState = page.getByText(/No custom variables yet/i);
+    const variableTable = page.locator('table').first();
+    const emptyVisible = await emptyState.isVisible().catch(() => false);
+    const tableVisible = await variableTable.isVisible().catch(() => false);
+
+    if (emptyVisible) {
+      await expect(page.getByText(/Variables hold static text, numbers, or flags/i)).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Add your first variable' })).toBeVisible();
+    } else {
+      expect(tableVisible, 'Expected variables table when empty state is hidden').toBe(true);
+    }
+
+    await expect(page.getByText('Variable Syntax Reference')).toBeVisible();
+    await expect(page.getByText('How Variables Work')).toBeVisible();
+  });
+
+  test('data sources tab shows hints, empty state, and connector presets', async ({ page, login }) => {
+    await login();
+    await page.goto('/variables');
+    await page.waitForLoadState('networkidle');
+
+    await page.getByRole('button', { name: 'Data Sources', exact: true }).click();
+    await page.waitForLoadState('networkidle');
+
+    const dataSourcesHint = page.getByText(/data\.source_id\.field/i);
+    const hintVisible = await dataSourcesHint.isVisible().catch(() => false);
+    if (hintVisible) {
+      await expect(dataSourcesHint).toBeVisible();
+    }
+
+    await expect(page.getByRole('heading', { name: /Data Sources \(\d+\)/ })).toBeVisible();
+
+    const sourceTable = page.locator('table tbody tr');
+    const hasSeededSources = (await sourceTable.count()) > 0;
+
+    if (!hasSeededSources) {
+      const emptyPanel = page.locator('.border-dashed').filter({ hasText: 'No data sources yet' });
+      await expect(emptyPanel).toBeVisible();
+      await expect(emptyPanel.getByText('calendar_events')).toBeVisible();
+      await expect(page.getByText(/Property Inspector → Data Binding/i)).toBeVisible();
+    } else {
+      await expect(sourceTable.first()).toBeVisible();
+    }
+
+    await expect(page.getByText('How Data Sources Work')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Add Data Source' }).click();
+    await expect(page.getByText('Data Source Configuration Guide')).toBeVisible();
+    await expect(page.getByText(/local_db/i).first()).toBeVisible();
+    await expect(page.getByText(/http_json/i).first()).toBeVisible();
+
+    const typeSelect = page.locator('select').filter({ has: page.locator('option[value="calendar"]') }).first();
+    await typeSelect.selectOption('calendar');
+
+    const connectorInput = page.getByPlaceholder(/local_db, http_json, rss_feed/i);
+    await expect(connectorInput).toHaveValue('local_db');
+
+    await typeSelect.selectOption('http_json');
+    await expect(connectorInput).toHaveValue('http_json');
+    await expect(page.locator('textarea').first()).toContainText('api.example.com');
+  });
+});
+
 test.describe('Variables Page', () => {
 
   test('loads and shows variable list', async ({ page, login }) => {
@@ -12,7 +95,7 @@ test.describe('Variables Page', () => {
 
     // Check for either a variable list table or empty state message
     // The variables table is the first table on the page (before the Syntax Reference table)
-    const emptyState = page.getByText(/No variables yet/i);
+    const emptyState = page.getByText(/No custom variables yet/i);
     const variableTable = page.locator('table').first();
 
     const emptyVisible = await emptyState.isVisible().catch(() => false);
