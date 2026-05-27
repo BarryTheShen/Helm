@@ -3,8 +3,8 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -20,7 +20,12 @@ from app.schemas.device import (
 from app.models.device import Device
 from app.models.device_error import DeviceErrorReport
 from app.models.preview_session import PreviewSession
-from app.schemas.device_error import DeviceErrorCreate, DeviceErrorReportOut
+from app.schemas.device_error import (
+    DeviceErrorCreate,
+    DeviceErrorReportListOut,
+    DeviceErrorReportOut,
+    DeviceErrorReportWithDeviceOut,
+)
 from app.services import device_service
 from app.services.audit import log_audit
 from app.services.websocket_manager import manager
@@ -70,6 +75,39 @@ async def list_devices(
     """List all devices for the current user."""
     devices = await device_service.list_devices(db, user_id)
     return [DeviceResponse.model_validate(device) for device in devices]
+
+
+@router.get("/errors", response_model=DeviceErrorReportListOut)
+async def list_device_errors(
+    app_id: str | None = Query(default=None, description="Filter to devices assigned to this app"),
+    limit: int = Query(default=50, ge=1, le=200),
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """List device error reports for admin review (FF4-APP-024)."""
+    query = (
+        select(DeviceErrorReport, Device)
+        .outerjoin(Device, DeviceErrorReport.device_id == Device.id)
+        .where(DeviceErrorReport.user_id == user_id)
+    )
+    if app_id:
+        query = query.where(Device.assigned_app_id == app_id)
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar_one()
+
+    result = await db.execute(
+        query.order_by(DeviceErrorReport.created_at.desc()).limit(limit)
+    )
+    items = [
+        DeviceErrorReportWithDeviceOut(
+            **DeviceErrorReportOut.model_validate(report).model_dump(),
+            device_name=device.device_name if device else None,
+            assigned_app_id=device.assigned_app_id if device else None,
+        )
+        for report, device in result.all()
+    ]
+    return DeviceErrorReportListOut(items=items, total=total)
 
 
 @router.get("/{device_id}", response_model=DeviceResponse)
@@ -247,6 +285,10 @@ async def report_device_error(
         source="device",
     )
     db.add(error_report)
+
+    # FF4-APP-024: surface render failure to admin without mutating published snapshot
+    device.update_status = "error"
+
     await db.commit()
     await db.refresh(error_report)
     return DeviceErrorReportOut.model_validate(error_report)

@@ -66,6 +66,7 @@ function RowContextMenu({ rowId, position, onClose, onDeleteRow, onDuplicateRow,
   return (
     <div
       ref={ref}
+      data-testid="row-context-menu"
       className="fixed bg-white border border-gray-200 rounded-lg shadow-xl z-[9999] py-1 w-44"
       style={{ top: position.y, left: position.x }}
       role="menu"
@@ -239,6 +240,7 @@ function DividerPreview({ color, thickness, margin }: any) {
 function IconPreview({ name, size, color }: any) {
   return (
     <span
+      data-testid="icon-preview-cell"
       className="flex h-full w-full items-center justify-center"
       style={{ color: color || '#000' }}
     >
@@ -1308,6 +1310,17 @@ function SortableRow({
     setSelection({ type: 'row', rowId: row.id });
   };
 
+  const handleDeleteRowWithConfirm = useCallback(() => {
+    const hasContent = row.cells.some((cell) => cell.content !== null);
+    if (
+      hasContent
+      && !window.confirm('This row contains components. Delete it anyway?')
+    ) {
+      return;
+    }
+    deleteRow(row.id);
+  }, [deleteRow, row.cells, row.id]);
+
   const handleAddRowAbove = (rowId: string) => {
     const idx = useEditorStore.getState().rows.findIndex(r => r.id === rowId);
     addRow(1, idx >= 0 ? idx : 0);
@@ -1350,7 +1363,7 @@ function SortableRow({
         <button
           data-testid={`btn-delete-row-${row.id}`}
           className="absolute -left-1 -top-2.5 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-red-600 shadow-md"
-          onClick={(e) => { e.stopPropagation(); deleteRow(row.id); }}
+          onClick={(e) => { e.stopPropagation(); handleDeleteRowWithConfirm(); }}
           title="Delete row"
         >
           <X size={12} />
@@ -1506,7 +1519,7 @@ function SortableRow({
           rowId={row.id}
           position={contextMenu}
           onClose={() => setContextMenu(null)}
-          onDeleteRow={deleteRow}
+          onDeleteRow={() => handleDeleteRowWithConfirm()}
           onDuplicateRow={handleDuplicateRow}
           onAddRowAbove={handleAddRowAbove}
           onAddRowBelow={handleAddRowBelow}

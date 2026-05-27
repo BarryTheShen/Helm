@@ -181,13 +181,61 @@ export function AppEditorPage() {
     pending: number;
   } | null>(null);
 
+  // ── Assigned devices + error panel (FF4-APP-011,024) ───────────────
+  interface AssignedDeviceInfo {
+    id: string;
+    device_name: string;
+    last_seen: string | null;
+    update_status?: string;
+  }
+  interface DeviceErrorInfo {
+    id: string;
+    device_name: string | null;
+    error_message: string;
+    error_type: string;
+    error_details: Record<string, unknown> | null;
+    created_at: string;
+  }
+  const [assignedDevices, setAssignedDevices] = useState<AssignedDeviceInfo[]>([]);
+  const [deviceErrors, setDeviceErrors] = useState<DeviceErrorInfo[]>([]);
+  const [loadingDevicePanel, setLoadingDevicePanel] = useState(false);
+
   const showMsg = (type: 'success' | 'error' | 'info', text: string) => {
     console.log(`[AppEditor] message: ${type} — ${text}`);
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 4000);
   };
 
-  // Load apps on mount
+  // Load assigned devices + recent errors for this app (FF4-APP-011,024)
+  useEffect(() => {
+    if (!currentAppId) {
+      setAssignedDevices([]);
+      setDeviceErrors([]);
+      return;
+    }
+
+    const loadDevicePanel = async () => {
+      setLoadingDevicePanel(true);
+      try {
+        const [devices, errors] = await Promise.all([
+          api.get<Array<AssignedDeviceInfo & { assigned_app_id?: string | null }>>('/api/devices'),
+          api.get<{ items: DeviceErrorInfo[] }>(`/api/devices/errors?app_id=${currentAppId}&limit=10`),
+        ]);
+        const assigned = (Array.isArray(devices) ? devices : []).filter(
+          (d) => d.assigned_app_id === currentAppId,
+        );
+        setAssignedDevices(assigned);
+        setDeviceErrors(errors.items ?? []);
+      } catch {
+        setAssignedDevices([]);
+        setDeviceErrors([]);
+      } finally {
+        setLoadingDevicePanel(false);
+      }
+    };
+
+    void loadDevicePanel();
+  }, [currentAppId, deviceStatus]);
   useEffect(() => {
     console.log('[AppEditor] mount — loading apps');
     const loadApps = async () => {
@@ -851,7 +899,10 @@ export function AppEditorPage() {
             </span>
           )}
           {autosaveStatus === 'saved' && lastSavedTime && (
-            <span className="flex items-center gap-1 px-2 py-1 text-[11px] bg-green-50 text-green-700 rounded font-medium">
+            <span
+              data-testid="autosave-status"
+              className="flex items-center gap-1 px-2 py-1 text-[11px] bg-green-50 text-green-700 rounded font-medium"
+            >
               <CheckCircle size={10} />
               Saved {lastSavedTime}
             </span>
@@ -1218,6 +1269,42 @@ export function AppEditorPage() {
                 </div>
               </div>
             </div>
+
+            {/* Device errors (FF4-APP-024) */}
+            <div data-testid="device-errors-panel">
+              <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+                <AlertOctagon size={14} className="text-red-500" />
+                Device Errors
+              </h3>
+              {loadingDevicePanel ? (
+                <p className="text-xs text-gray-400">Loading device status...</p>
+              ) : deviceErrors.length === 0 ? (
+                <p className="text-xs text-gray-400">No device errors reported</p>
+              ) : (
+                <div className="space-y-2">
+                  {deviceErrors.map((err) => (
+                    <div
+                      key={err.id}
+                      className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-800"
+                    >
+                      <div className="font-medium">{err.device_name || 'Unknown device'}</div>
+                      <div className="mt-0.5">{err.error_message}</div>
+                      {err.error_details?.unsupported_type ? (
+                        <div className="mt-1 text-red-600">
+                          Unsupported: {String(err.error_details.unsupported_type)}
+                          {err.error_details.installed_runtime ? (
+                            <> · Installed runtime: {String(err.error_details.installed_runtime)}</>
+                          ) : null}
+                          {err.error_details.required_runtime ? (
+                            <> · Required runtime: {String(err.error_details.required_runtime)}</>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1279,6 +1366,30 @@ export function AppEditorPage() {
                   <span className="text-gray-500">Current live version</span>
                   <span className="font-medium text-gray-800">{liveVersionDisplay || 'None'}</span>
                 </div>
+              </div>
+
+              {/* Assigned devices (FF4-APP-011) */}
+              <div data-testid="publish-assigned-devices">
+                <h4 className="text-xs font-semibold text-gray-700 mb-2">Assigned Devices</h4>
+                {assignedDevices.length === 0 ? (
+                  <p className="text-xs text-gray-400 px-3 py-2 bg-gray-50 rounded-lg">
+                    No devices assigned to this app
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {assignedDevices.map((device) => (
+                      <div
+                        key={device.id}
+                        className="flex items-center justify-between px-3 py-1.5 bg-white border border-gray-100 rounded text-xs"
+                      >
+                        <span className="text-gray-800 font-medium">{device.device_name}</span>
+                        <span className="text-gray-400">
+                          {device.update_status === 'error' ? 'Error' : 'Assigned'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Module Versions with validation (FF4-APP-011, FF4-VER-006) */}
