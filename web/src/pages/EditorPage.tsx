@@ -10,7 +10,7 @@ import { EditorCanvas } from '../editor/EditorCanvas';
 import { PropertyInspector } from '../editor/PropertyInspector';
 import { AppPreview } from '../components/AppPreview';
 import { SDUIPreview } from '../components/SDUIPreview';
-import { DEVICE_PRESETS, getEditorPersistenceValidationError } from '../editor/types';
+import { DEVICE_PRESETS, getEditorPersistenceValidationError, getRowLayoutValidationErrors } from '../editor/types';
 import type { DevicePreset, EditorComponent, EditorScreen } from '../editor/types';
 import {
   cloneTemplateScreen,
@@ -21,7 +21,7 @@ import type { LocalTemplateDefinition } from '../editor/templateLibrary';
 import {
   Save, Undo2, Redo2, FileText,
   RefreshCw, Monitor, RotateCw, ChevronDown, ChevronRight, ChevronUp, Code, Trash2, Smartphone,
-  Camera, History, Eye, Clock, Info, List, Archive, FileJson, ExternalLink, CornerDownRight, AlertTriangle
+  Camera, History, Eye, Clock, Info, List, Archive, FileJson, ExternalLink, CornerDownRight, AlertTriangle, CheckCircle
 } from 'lucide-react';
 
 interface ModuleInfo {
@@ -300,6 +300,8 @@ export function EditorPage() {
   const [showImportJson, setShowImportJson] = useState(false);
   const [importJsonValue, setImportJsonValue] = useState('');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState(buildScreenSnapshot({ rows: [] }));
   const moduleLoadRequestIdRef = useRef(0);
   const selectedModuleRef = useRef(selectedModule);
@@ -337,6 +339,10 @@ export function EditorPage() {
     return currentSnapshot !== lastSavedSnapshot;
   }, [rows, lastSavedSnapshot]);
   const lastSavedLabel = useMemo(() => formatLastSaved(lastSavedAt), [lastSavedAt]);
+  const layoutValidationErrors = useMemo(
+    () => getRowLayoutValidationErrors(rows, deviceWidth),
+    [rows, deviceWidth],
+  );
   const visibleServerTemplates = useMemo(() => templates.slice(0, 6), [templates]);
   const selectedModuleInfo = useMemo(
     () => modules.find((module) => module.module_id === selectedModule) ?? null,
@@ -704,6 +710,7 @@ export function EditorPage() {
 
     const currentModule = selectedModule;
     setSaving(true);
+    setAutosaveStatus('saving');
     setMessage(null);
     try {
       const screen = getPersistableScreen();
@@ -734,12 +741,16 @@ export function EditorPage() {
         showMsg('success', `Module saved.${suffix}`);
       }
       markScreenSaved(screen);
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setLastSavedTime(timeStr);
+      setAutosaveStatus('saved');
     } catch (err) {
       console.error('[Editor] handleSaveDraft() — error:', err instanceof Error ? err.message : err);
       if (selectedModuleRef.current !== currentModule) {
         return;
       }
 
+      setAutosaveStatus('failed');
       showMsg('error', err instanceof Error ? err.message : 'Save failed');
     } finally {
       autoSaveSuppressedRef.current = false;
@@ -803,6 +814,11 @@ export function EditorPage() {
       return;
     }
 
+    if (layoutValidationErrors.length > 0) {
+      showMsg('error', `Cannot create checkpoint: ${layoutValidationErrors[0]}`);
+      return;
+    }
+
     setCheckpointing(true);
     try {
       // Save draft first
@@ -828,7 +844,7 @@ export function EditorPage() {
     } finally {
       setCheckpointing(false);
     }
-  }, [selectedModule, getPersistableScreen, showMsg]);
+  }, [selectedModule, getPersistableScreen, showMsg, layoutValidationErrors]);
 
   const handleOpenVersionHistory = useCallback(async () => {
     console.log('[Editor] handleOpenVersionHistory() — opening for module:', selectedModule);
@@ -1315,11 +1331,24 @@ export function EditorPage() {
     }
   }, [applyScreen, closeImportJsonModal, confirmDestructiveEditorAction, importJsonValue, showMsg]);
 
-  const handleApplyLocalScreenTemplate = useCallback((template: LocalTemplateDefinition) => {
+  const handleApplyLocalScreenTemplate = useCallback(async (template: LocalTemplateDefinition) => {
     console.log(`[Editor] handleApplyLocalScreenTemplate() — applying: ${template.name}`);
     if (!confirmDestructiveEditorAction('Applying a local screen template will replace the current canvas.')) {
       console.log('[Editor] handleApplyLocalScreenTemplate() — user cancelled');
       return false;
+    }
+
+    const currentModule = selectedModule;
+    if (currentModule) {
+      try {
+        const screen = getPersistableScreen();
+        await api.post<any>(`/api/sdui/${currentModule}`, { screen });
+        await api.post<any>(`/api/modules/${currentModule}/checkpoints`, {
+          change_summary: 'Auto-checkpoint before template apply',
+        });
+      } catch (checkpointErr) {
+        console.warn('[Editor] handleApplyLocalScreenTemplate() — checkpoint creation failed, continuing:', checkpointErr);
+      }
     }
 
     const clonedScreen = cloneTemplateScreen(template.screen);
@@ -1327,7 +1356,7 @@ export function EditorPage() {
     applyScreen(clonedScreen);
     showMsg('success', `Template loaded: ${template.name}`);
     return true;
-  }, [applyScreen, confirmDestructiveEditorAction, showMsg]);
+  }, [applyScreen, confirmDestructiveEditorAction, getPersistableScreen, selectedModule, showMsg]);
 
   const handleAppendLocalRowTemplate = useCallback((template: LocalTemplateDefinition) => {
     console.log(`[Editor] handleAppendLocalRowTemplate() — appending: ${template.name}`);
@@ -1370,10 +1399,15 @@ export function EditorPage() {
       <div data-testid="toolbar" className="flex items-center justify-between px-3 py-1.5 bg-white border-b border-gray-200 shrink-0">
         {/* Left: Module info + Versioning controls */}
         <div className="flex items-center gap-2">
-          <div className="px-3 py-1 text-sm font-medium text-gray-700">
+          <div
+            data-testid="module-selector"
+            className="flex items-center gap-1 px-3 py-1 text-sm font-medium text-gray-700"
+          >
+            <span className="text-gray-500">Module:</span>
             {selectedModuleInfo ? (
               <>
                 {selectedModuleInfo.name}
+                <ChevronDown size={12} className="text-gray-400" />
                 {selectedModuleInfo.has_screen && <span className="ml-1 text-gray-400">●</span>}
                 {selectedModuleInfo.is_custom && <span className="ml-1 text-gray-400">✦</span>}
               </>
@@ -1382,11 +1416,44 @@ export function EditorPage() {
             )}
           </div>
 
-          {/* Saved status indicator */}
-          <span className="text-[10px] px-2 py-0.5 text-gray-400">
-            <Clock size={10} className="inline mr-0.5" />
-            {lastSavedLabel}
-          </span>
+          {/* Autosave status (FF4-MOD-010) */}
+          {autosaveStatus === 'saving' && (
+            <span
+              data-testid="autosave-status-saving"
+              className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-medium"
+            >
+              <Clock size={10} className="animate-pulse" />
+              Saving...
+            </span>
+          )}
+          {autosaveStatus === 'saved' && lastSavedTime && (
+            <span
+              data-testid="autosave-status-saved"
+              className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-green-50 text-green-700 rounded-full font-medium"
+            >
+              <CheckCircle size={10} />
+              Saved {lastSavedTime}
+            </span>
+          )}
+          {autosaveStatus === 'failed' && (
+            <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-red-50 text-red-700 rounded-full font-medium">
+              <AlertTriangle size={10} />
+              <span data-testid="autosave-status-failed">Save failed</span>
+              <button
+                data-testid="btn-retry-save"
+                onClick={() => { void handleSaveDraft(); }}
+                className="ml-1 underline hover:no-underline"
+              >
+                Retry
+              </button>
+            </span>
+          )}
+          {autosaveStatus === 'idle' && lastSavedLabel !== 'Not saved in this session' && (
+            <span className="text-[10px] px-2 py-0.5 text-gray-400">
+              <Clock size={10} className="inline mr-0.5" />
+              {lastSavedLabel}
+            </span>
+          )}
 
           {hasUnsavedChanges && (
             <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">
@@ -1404,7 +1471,7 @@ export function EditorPage() {
           {/* Versioning action buttons */}
           <button data-testid="btn-checkpoint" onClick={handleCreateCheckpoint} disabled={checkpointing || !canModifySelectedModule}
             className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors disabled:opacity-50">
-            <Camera size={10} /> {checkpointing ? '...' : 'Checkpoint'}
+            <Camera size={10} /> {checkpointing ? 'Saving...' : 'Create Checkpoint'}
           </button>
 
           <button data-testid="btn-version-history" onClick={handleOpenVersionHistory}
@@ -1413,12 +1480,12 @@ export function EditorPage() {
                 ? 'bg-blue-100 text-blue-700'
                 : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
             }`}>
-            <History size={10} /> History
+            <History size={10} /> Version History
           </button>
 
           <button data-testid="btn-preview-web" onClick={handlePreviewInWeb}
             className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-purple-100 hover:bg-purple-200 text-purple-700 rounded transition-colors">
-            <Eye size={10} /> Preview
+            <Eye size={10} /> Preview in Web Admin
           </button>
         </div>
 
@@ -1685,7 +1752,7 @@ export function EditorPage() {
                   {LOCAL_SCREEN_TEMPLATES.map(template => (
                     <button
                       key={template.id}
-                      onClick={() => { handleApplyLocalScreenTemplate(template); }}
+                      onClick={() => { void handleApplyLocalScreenTemplate(template); }}
                       className="w-full rounded-lg border border-gray-200 bg-white p-2 text-left hover:border-blue-300 hover:bg-blue-50 transition-colors"
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -1731,7 +1798,26 @@ export function EditorPage() {
         </div>
 
         {/* Center: Canvas (or JSON view) */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {layoutValidationErrors.length > 0 && !loading && !screenLoadError && (
+            <div
+              data-testid="row-layout-validation-banner"
+              className="shrink-0 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+            >
+              <div className="flex items-start gap-2">
+                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-medium">Layout validation error — fix before checkpoint or publish</div>
+                  <ul className="mt-1 list-disc pl-4 space-y-0.5">
+                    {layoutValidationErrors.slice(0, 3).map((error) => (
+                      <li key={error}>{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="flex-1 overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading screen...</div>
           ) : screenLoadError ? (
@@ -1754,6 +1840,7 @@ export function EditorPage() {
           ) : (
             <EditorCanvas />
           )}
+          </div>
         </div>
 
         {/* Right Panel: Properties Inspector */}
@@ -1865,9 +1952,11 @@ export function EditorPage() {
                     <button
                       key={template.id}
                       onClick={() => {
-                        if (handleApplyLocalScreenTemplate(template)) {
-                          setShowLoadTemplate(false);
-                        }
+                        void handleApplyLocalScreenTemplate(template).then((applied) => {
+                          if (applied) {
+                            setShowLoadTemplate(false);
+                          }
+                        });
                       }}
                       className="text-left p-3 border rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors"
                     >

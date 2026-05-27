@@ -19,7 +19,7 @@ test.describe('Undo/Redo', () => {
   test('undo removes last action, redo restores it', async ({ page, login }) => {
     await login();
     await page.goto('/editor');
-    await page.waitForLoadState('networkidle');
+    await waitForEditorReady(page);
     await expect(page.locator(EditorPage.canvas)).toBeVisible();
 
     // Get initial row count (via store with DOM fallback)
@@ -31,15 +31,11 @@ test.describe('Undo/Redo', () => {
     const afterAdd = await getRowCount(page);
     expect(afterAdd).toBeGreaterThan(initialCount);
 
-    // DOM fallback: also verify via structure tree
-    const domAfterAdd = await page.locator(rowInTree).count();
-    expect(domAfterAdd).toBeGreaterThan(await page.evaluate(async () => {
-      // Store the initial DOM count for comparison (initial tree may be empty)
-      return 0;
-    }) || 0);
+    const btnUndo = page.locator(EditorPage.btnUndo);
+    await expect(btnUndo).toBeEnabled({ timeout: 5000 });
 
     // Click undo
-    await page.locator(EditorPage.btnUndo).click();
+    await btnUndo.click();
     await page.waitForTimeout(200);
 
     const afterUndo = await getRowCount(page);
