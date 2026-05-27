@@ -65,11 +65,14 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
       <div className="flex gap-1.5">
         <button
           type="button"
+          data-testid="icon-picker-trigger"
           onClick={() => setIsOpen(!isOpen)}
           className="flex-1 px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-left flex items-center justify-between"
         >
           <span className="flex items-center gap-1.5">
-            {renderIcon(SelectedIcon, 14, 'text-gray-600')}
+            {SelectedIcon ? renderIcon(SelectedIcon, 14, 'text-gray-600') : value ? (
+              <span className="text-base leading-none">{value}</span>
+            ) : null}
             <span className="truncate">{value || 'Select icon...'}</span>
           </span>
           {renderIcon(iconSearch, 12, 'text-gray-400 ml-1 shrink-0')}
@@ -109,6 +112,7 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
                     <button
                       key={icon}
                       type="button"
+                      data-testid="icon-picker-option"
                       onClick={() => {
                         onChange(icon);
                         setIsOpen(false);
