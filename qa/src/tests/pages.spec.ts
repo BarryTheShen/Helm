@@ -1,4 +1,6 @@
 import { test, expect } from '../fixtures';
+import { EditorPage, waitForEditorReady, addRowViaStructureTree, saveModuleAndWait } from '../page-objects/editor';
+import { addComponentToFirstCell } from '../editor-helpers';
 
 const PAGES = [
   { path: '/editor', name: 'Editor' },
@@ -26,16 +28,15 @@ for (const { path, name } of PAGES) {
 test('Save does not redirect to login page', async ({ page, login }) => {
   await login();
   await page.goto('/editor');
-  await page.waitForLoadState('networkidle');
-  const saveBtn = page.getByText('Save', { exact: true }).first();
-  if (await saveBtn.count() > 0) {
-    const saveResponse = page.waitForResponse(resp =>
-      resp.url().includes('/api/sdui/') && resp.status() === 200
-    );
-    await saveBtn.click();
-    await saveResponse;
-    expect(page.url(), 'After save, should still be on editor').toContain('/editor');
+  const moduleNames = page.locator('aside span.truncate.font-medium');
+  if (await moduleNames.count() > 0) {
+    await moduleNames.first().click();
+    await waitForEditorReady(page);
+    await addRowViaStructureTree(page);
+    await addComponentToFirstCell(page, 'Button');
+    await saveModuleAndWait(page);
   }
+  expect(page.url(), 'After save, should still be on editor').toContain('/editor');
 });
 
 // Module switching updates canvas content, not just the URL (Issue 47)

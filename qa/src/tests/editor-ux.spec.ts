@@ -1,6 +1,7 @@
 import { test, expect } from '../fixtures';
 import { EditorPage } from '../page-objects/editor';
 import { ensureEmptyCellExists } from '../editor-helpers';
+import { addRowViaStructureTree } from '../page-objects/editor';
 
 test('Issue 1: drag handles should be positioned inside the canvas area', async ({ page, login }) => {
   await login();
@@ -56,11 +57,8 @@ test('Issue 10: divider shows visual border-bottom on row', async ({ page, login
   const rowInTree = page.locator('[data-testid="row-in-tree"]');
   const rowCount = await rowInTree.count();
   if (rowCount === 0) {
-    const addRowBtn = page.locator(EditorPage.btnAddRow).first();
-    if (await addRowBtn.isVisible()) {
-      await addRowBtn.click();
-      await expect(rowInTree.first()).toBeVisible();
-    }
+    await addRowViaStructureTree(page);
+    await expect(rowInTree.first()).toBeVisible();
   }
 
   // Select a row from the structure tree

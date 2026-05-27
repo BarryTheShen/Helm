@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Smartphone, Plus, Save, ChevronDown, Eye, Rocket, History, Clock, CheckCircle, AlertTriangle, AlertOctagon, RotateCcw, CornerDownRight } from 'lucide-react';
 import { api } from '../lib/api';
+import { formatVersionOptionLabel, getVersionPrimaryLabel } from '../lib/utils';
 import { useAppEditorStore } from '../stores/useAppEditorStore';
 import { usePreviewStore } from '../stores/usePreviewStore';
 import { BottomBarConfig } from '../components/AppEditor/BottomBarConfig';
@@ -25,6 +26,8 @@ interface ModuleVersion {
   id: string;
   version_number: number;
   display_name: string;
+  default_timestamp_name?: string;
+  custom_name?: string | null;
   created_at: string;
   status: string;
 }
@@ -325,7 +328,7 @@ export function AppEditorPage() {
         // Find latest published version for the live indicator
         const published = versions.find(v => v.source === 'publish');
         if (published) {
-          setLiveVersionDisplay(`v${published.version_number} — ${published.custom_name || published.display_name}`);
+          setLiveVersionDisplay(getVersionPrimaryLabel(published));
         } else {
           setLiveVersionDisplay(null);
         }
@@ -484,7 +487,12 @@ export function AppEditorPage() {
     console.log('[AppEditor] handlePreviewBrowser() — opening browser preview for:', currentApp.name);
     setShowPreviewPicker(false);
 
-    // Start preview with current app config
+    const moduleReferences = Object.entries(versionPolicies).map(([modId, policy]) => ({
+      moduleId: modId,
+      policy: policy.useNewest ? 'use_newest' as const : 'specific_version' as const,
+      selectedModuleVersionId: policy.pinnedVersionId,
+    }));
+
     startPreview(
       {
         id: currentApp.id,
@@ -494,7 +502,8 @@ export function AppEditorPage() {
         design_tokens: currentApp.design_tokens,
         dark_mode: currentApp.dark_mode,
         bottom_bar_config: currentApp.bottom_bar_config,
-        launchpad_config: currentApp.launchpad_config,
+        launchpad_config: launchpadModules,
+        moduleReferences,
       },
       'browser'
     );
@@ -571,8 +580,13 @@ export function AppEditorPage() {
               moduleName: mod.name,
               status: 'pass',
               message: policy?.useNewest
-                ? `Will use newest version (v${versions[0].version_number})`
-                : `Pinned to v${versions.find(v => v.id === policy?.pinnedVersionId)?.version_number || '?'}`,
+                ? `Will use newest version (${getVersionPrimaryLabel(versions[0])})`
+                : (() => {
+                    const pinned = versions.find(v => v.id === policy?.pinnedVersionId);
+                    return pinned
+                      ? `Pinned to ${getVersionPrimaryLabel(pinned)}`
+                      : 'Pinned to unknown version';
+                  })(),
             });
           }
         }
@@ -611,10 +625,10 @@ export function AppEditorPage() {
 
       setPublishResult({
         type: 'success',
-        text: `Published v${publishResult.version_number} — ${publishResult.display_name} (${publishResult.device_count} device${publishResult.device_count === 1 ? '' : 's'})`,
+        text: `Published ${getVersionPrimaryLabel(publishResult)} (${publishResult.device_count} device${publishResult.device_count === 1 ? '' : 's'})`,
       });
 
-      setLiveVersionDisplay(`v${publishResult.version_number} — ${publishResult.display_name}`);
+      setLiveVersionDisplay(getVersionPrimaryLabel(publishResult));
 
       // Refresh versions list
       try {
@@ -915,13 +929,13 @@ export function AppEditorPage() {
                               <option value="">Select a version...</option>
                               {versions.map(v => (
                                 <option key={v.id} value={v.id}>
-                                  v{v.version_number} — {v.display_name || v.created_at}
+                                  {formatVersionOptionLabel(v)}
                                 </option>
                               ))}
                             </select>
                             {pinnedVersion && (
                               <div className="text-[10px] text-gray-400 mt-0.5">
-                                Pinned: v{pinnedVersion.version_number}
+                                Pinned: {getVersionPrimaryLabel(pinnedVersion)}
                               </div>
                             )}
                           </div>
@@ -1129,13 +1143,13 @@ export function AppEditorPage() {
                                 <option value="">Select a version...</option>
                                 {versions.map(v => (
                                   <option key={v.id} value={v.id}>
-                                    v{v.version_number} — {v.display_name || v.created_at}
+                                    {formatVersionOptionLabel(v)}
                                   </option>
                                 ))}
                               </select>
                               {pinnedVersion && (
                                 <div className="text-[10px] text-gray-400 mt-0.5">
-                                  Pinned: v{pinnedVersion.version_number}
+                                  Pinned: {getVersionPrimaryLabel(pinnedVersion)}
                                 </div>
                               )}
                             </div>
@@ -1275,9 +1289,9 @@ export function AppEditorPage() {
                         ? versions.find(v => v.id === policy.pinnedVersionId)
                         : null;
                       const versionLabel = policy?.useNewest
-                        ? (versions.length > 0 ? `Newest (v${versions[0].version_number})` : 'No versions')
+                        ? (versions.length > 0 ? `Newest (${getVersionPrimaryLabel(versions[0])})` : 'No versions')
                         : pinnedVersion
-                          ? `Pinned (v${pinnedVersion.version_number})`
+                          ? `Pinned (${getVersionPrimaryLabel(pinnedVersion)})`
                           : 'Not configured';
                       return (
                         <div key={mod.id} className="flex items-center justify-between px-3 py-1.5 bg-white border border-gray-100 rounded text-xs">
@@ -1456,11 +1470,11 @@ export function AppEditorPage() {
                             {node.depth > 0 && !versionDiffMode && (
                               <CornerDownRight size={12} className="text-gray-300 shrink-0" />
                             )}
-                            <div className="text-sm font-medium text-gray-800">
-                              {/* FF4-VERSIONING-APP-001: avoid "v11 — v11" duplicate when display_name matches version prefix */}
-                              {v.display_name === `v${v.version_number}`
-                                ? `v${v.version_number}`
-                                : `v${v.version_number} — ${v.display_name}`}
+                            <div className="text-sm font-medium text-gray-800 flex items-center gap-2">
+                              {getVersionPrimaryLabel(v)}
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-normal">
+                                v{v.version_number}
+                              </span>
                             </div>
                             <span className={`text-[10px] px-1.5 py-0.5 rounded-full capitalize ${
                               isPublished

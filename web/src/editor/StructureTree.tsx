@@ -150,9 +150,17 @@ export function StructureTree({ moduleLabel = 'Current Module' }: StructureTreeP
     <div data-testid="structure-tree" className="h-full flex flex-col">
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
         <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Structure</span>
-        <div className="relative">
+        <div className="relative flex items-center">
           <button
             data-testid="btn-add-row"
+            onClick={() => addRow(1)}
+            className="p-1 hover:bg-gray-100 rounded transition-colors"
+            title="Add Row (1 column)"
+          >
+            <Plus size={14} className="text-gray-600" />
+          </button>
+          <button
+            data-testid="btn-add-row-menu"
             ref={addRowBtnRef}
             onClick={() => {
               if (!showAddRow && addRowBtnRef.current) {
@@ -161,10 +169,10 @@ export function StructureTree({ moduleLabel = 'Current Module' }: StructureTreeP
               }
               setShowAddRow(!showAddRow);
             }}
-            className="p-1 hover:bg-gray-100 rounded transition-colors"
-            title="Add Row"
+            className="p-0.5 hover:bg-gray-100 rounded transition-colors"
+            title="Row presets"
           >
-            <Plus size={14} className="text-gray-600" />
+            <ChevronDown size={12} className="text-gray-500" />
           </button>
           {showAddRow && (
             <AddRowPopover

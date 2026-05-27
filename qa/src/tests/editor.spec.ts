@@ -81,14 +81,16 @@ async function ensureEmptyCellExists(page: Page) {
 // Helper: click the save button and wait for the response
 // ---------------------------------------------------------------------------
 async function clickSaveAndWait(page: Page) {
+  page.once('dialog', (d) => d.accept());
   const saveResponse = page.waitForResponse(resp =>
-    resp.url().includes('/api/sdui/') && resp.status() === 200
+    resp.url().includes('/api/sdui/') && resp.request().method() === 'POST' && resp.status() === 200,
+    { timeout: 15000 },
   );
   const saveBtn = page.locator(EditorPage.btnSave);
+  await expect(saveBtn).toBeEnabled({ timeout: 10000 });
   if (await saveBtn.count() > 0) {
     await saveBtn.click();
   } else {
-    // Fallback: text-based save button
     await page.getByText('Save', { exact: true }).first().click();
   }
   await saveResponse;
@@ -339,27 +341,32 @@ test('Button fills the cell width', async ({ page, login }) => {
 // Test: Component save returns 200 not 422 (Issues 21-24)
 // ---------------------------------------------------------------------------
 async function testComponentSave(page: Page, componentName: string, expectedStatus: number = 200) {
+  const moduleNames = page.locator('aside span.truncate.font-medium');
+  if (await moduleNames.count() > 0) {
+    await moduleNames.first().click();
+    await page.waitForLoadState('networkidle');
+  }
+
   await ensureEmptyCellExists(page);
   await addComponentToFirstCell(page, componentName);
 
-  // Intercept the save request
+  page.once('dialog', (d) => d.accept());
   const savePromise = page.waitForResponse(async resp => {
     const url = resp.request().url();
     return url.includes('/api/sdui/') && resp.request().method() === 'POST';
-  }).catch(null);
+  }, { timeout: 15000 }).catch(null);
 
-  // Click save
   const saveBtn = page.locator(EditorPage.btnSave);
+  await expect(saveBtn).toBeEnabled({ timeout: 10000 });
   if (await saveBtn.count() > 0) {
     await saveBtn.click();
   } else {
     await page.getByText('Save', { exact: true }).first().click();
   }
 
-  // Wait for response
   const response = await Promise.race([
     savePromise as Promise<any>,
-    new Promise<any>((_, reject) => setTimeout(() => reject(new Error('Save timeout')), 8000))
+    new Promise<any>((_, reject) => setTimeout(() => reject(new Error('Save timeout')), 15000))
   ]);
 
   if (response) {

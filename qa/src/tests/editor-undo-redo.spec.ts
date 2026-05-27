@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures';
-import { EditorPage } from '../page-objects/editor';
+import { EditorPage, addRowViaStructureTree, waitForEditorReady } from '../page-objects/editor';
 
 const rowInTree = '[data-testid="row-in-tree"]';
 
@@ -25,11 +25,7 @@ test.describe('Undo/Redo', () => {
     // Get initial row count (via store with DOM fallback)
     const initialCount = await getRowCount(page);
 
-    // Add a row — the popover appears first; pick "1" cell count
-    await page.locator(EditorPage.btnAddRow).click();
-    await page.waitForSelector('button:text-is("1")', { state: 'visible', timeout: 5000 });
-    // Click the "1" custom button in the popover to add a single-cell row
-    await page.locator('button:text-is("1")').first().click();
+    await addRowViaStructureTree(page);
     await page.waitForTimeout(300);
 
     const afterAdd = await getRowCount(page);
@@ -67,10 +63,7 @@ test.describe('Undo/Redo', () => {
     await page.waitForLoadState('networkidle');
     await expect(page.locator(EditorPage.canvas)).toBeVisible();
 
-    // Add a row
-    await page.locator(EditorPage.btnAddRow).click();
-    await page.waitForSelector('button:text-is("1")', { state: 'visible', timeout: 5000 });
-    await page.locator('button:text-is("1")').first().click();
+    await addRowViaStructureTree(page);
     await page.waitForTimeout(300);
 
     const beforeUndo = await getRowCount(page);

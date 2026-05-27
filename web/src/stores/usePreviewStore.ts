@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ModuleVersionPolicyRef } from '../lib/previewResolver';
 
 export interface PreviewAppConfig {
   id: string;
@@ -13,8 +14,10 @@ export interface PreviewAppConfig {
   bottom_bar_config: any[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   launchpad_config: any[];
+  /** Per-module version policies from App Editor (FF4-APP-010) */
+  moduleReferences?: ModuleVersionPolicyRef[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  screens?: Record<string, any>; // SDUI screen data
+  screens?: Record<string, any>;
 }
 
 interface PreviewState {

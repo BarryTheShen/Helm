@@ -23,12 +23,13 @@ export async function ensureEmptyCellExists(page: Page) {
   try {
     await expect(emptyCellLocator.first()).toBeVisible({ timeout: 10000 });
   } catch {
-    // No empty cells appeared after waiting — the canvas may be empty.
-    // Try adding a row to create an empty cell.
-    if (await addRowBtn.count() > 0) {
+    const structureAddRow = page.locator(EditorPage.btnAddRow);
+    if (await structureAddRow.count() > 0) {
+      await structureAddRow.first().click();
+    } else if (await addRowBtn.count() > 0) {
       await addRowBtn.first().click();
-      await expect(emptyCellLocator.first()).toBeVisible({ timeout: 10000 });
     }
+    await expect(emptyCellLocator.first()).toBeVisible({ timeout: 10000 });
   }
 }
 

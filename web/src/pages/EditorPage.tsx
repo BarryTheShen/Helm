@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
+import { getVersionPrimaryLabel } from '../lib/utils';
 import { useEditorStore } from '../editor/useEditorStore';
 import { StructureTree } from '../editor/StructureTree';
 import { ComponentPalette } from '../editor/ComponentPalette';
@@ -795,7 +796,7 @@ export function EditorPage() {
       if (selectedModuleRef.current !== currentModule) return;
 
       setLastCheckpointId(result.id);
-      showMsg('success', `Checkpoint v${result.version_number} created — ${result.display_name}`);
+      showMsg('success', `Checkpoint created — ${getVersionPrimaryLabel(result)}`);
       setDraftInfo({ has_draft: saveResult.draft ?? false });
     } catch (err) {
       console.error('[Editor] handleCreateCheckpoint() — error:', err instanceof Error ? err.message : err);
@@ -2122,11 +2123,11 @@ export function EditorPage() {
                                 {isDiffSelectedA ? 'A' : isDiffSelectedB ? 'B' : ''}
                               </span>
                             )}
-                            <div className="text-sm font-medium text-gray-800">
-                              {/* FF4-VERSIONING-UI-001: avoid "v11 — v11" duplicate when display_name matches version prefix */}
-                              {v.display_name === `v${v.version_number}`
-                                ? `v${v.version_number}`
-                                : `v${v.version_number} — ${v.display_name}`}
+                            <div className="text-sm font-medium text-gray-800 flex items-center gap-2">
+                              {getVersionPrimaryLabel(v)}
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-normal">
+                                v{v.version_number}
+                              </span>
                             </div>
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 capitalize">
                               {v.source}
@@ -2148,7 +2149,7 @@ export function EditorPage() {
                           {!versionDiffMode && (
                             <>
                               <button
-                                onClick={() => { handleViewVersionJson(v.id, `v${v.version_number}`); }}
+                                onClick={() => { handleViewVersionJson(v.id, getVersionPrimaryLabel(v)); }}
                                 className="px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-100 rounded transition-colors"
                                 title="View JSON"
                               >
@@ -2199,7 +2200,7 @@ export function EditorPage() {
                                   {detail.compCount} component{detail.compCount !== 1 ? 's' : ''}
                                 </span>
                                 <button
-                                  onClick={() => { handleViewVersionJson(v.id, `v${v.version_number}`); }}
+                                  onClick={() => { handleViewVersionJson(v.id, getVersionPrimaryLabel(v)); }}
                                   className="ml-auto flex items-center gap-1 px-2 py-0.5 text-[10px] text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-colors"
                                   title="View raw SDUI JSON"
                                 >
