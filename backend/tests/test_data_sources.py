@@ -166,6 +166,39 @@ async def test_query_not_found(auth_client):
 
 # ── Owner Isolation ────────────────────────────────────────────────────────
 
+async def test_query_by_stable_template_id(auth_client, db_session):
+    """FF4-TPL-001: Query endpoint resolves stable template ids (calendar_events)."""
+    from app.models.data_source import DataSource
+    from app.models.user import User
+    from sqlalchemy import select
+
+    user = (await db_session.execute(select(User).limit(1))).scalar_one()
+
+    db_session.add(DataSource(
+        id="calendar_events",
+        user_id=str(user.id),
+        name="Calendar Events",
+        type="calendar",
+        connector="local_db",
+        config_json="{}",
+    ))
+    await db_session.commit()
+
+    resp = await auth_client.post(f"{DATA_SOURCES}/calendar_events/query", json={})
+    assert resp.status_code == 200
+    assert resp.json()["type"] == "calendar"
+
+
+async def test_seed_data_sources_defined():
+    """FF4-TPL-001: Seed catalog includes template-referenced stable ids."""
+    from app.services.data_source_seed import SAMPLE_DATA_SOURCES
+
+    ids = {item["id"] for item in SAMPLE_DATA_SOURCES}
+    assert "calendar_events" in ids
+    assert "todos" in ids
+    assert "notes" in ids
+
+
 async def test_owner_isolation(client):
     """Data sources created by one user are not visible to another."""
     await client.post("/auth/setup", json={"username": "ds_user", "password": "pass123"})

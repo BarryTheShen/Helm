@@ -117,7 +117,18 @@ export function LogsPage() {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold mb-6">Logs</h2>
+      <h2 className="text-xl font-semibold mb-2">Logs</h2>
+      <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800">
+        <p className="font-semibold mb-1">Debug tooling (FF3-DEBUG-001)</p>
+        <p className="mb-1">
+          CLI trace scripts live in <code className="bg-white px-1 rounded">debug/</code> — see{' '}
+          <code className="bg-white px-1 rounded">debug/README.md</code> for template apply, data source, and app preview flows.
+        </p>
+        <p>
+          Browser: set <code className="bg-white px-1 rounded">localStorage.helm_debug = &apos;1&apos;</code> for{' '}
+          <code className="bg-white px-1 rounded">[EditorStore]</code> / <code className="bg-white px-1 rounded">BrowserPreview</code> traces.
+        </p>
+      </div>
 
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">

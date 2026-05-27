@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 import { Globe, Trash2, Search, Eye, Upload, Smartphone, Layers } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { SDUIPreview } from '../components/SDUIPreview';
-import { AppPreview } from '../components/AppPreview';
+import { AppPreviewFlow } from '../components/AppPreviewFlow';
 import { useResource } from '../hooks/useResource';
 
 interface Template {
@@ -484,7 +484,7 @@ export function TemplatesPage() {
 
       {/* App Preview Modal */}
       {showAppPreview && (
-        <AppPreview onClose={() => setShowAppPreview(false)} />
+        <AppPreviewFlow onClose={() => setShowAppPreview(false)} />
       )}
     </div>
   );

@@ -40,11 +40,13 @@ async def lifespan(app: FastAPI):
     from app.services.template_seed import seed_templates  # noqa: PLC0415
     from app.services.workflow_seed import seed_sample_workflows  # noqa: PLC0415
     from app.services.variable_seed import seed_sample_variables  # noqa: PLC0415
+    from app.services.data_source_seed import seed_sample_data_sources  # noqa: PLC0415
     async with AsyncSessionLocal() as seed_db:
         await seed_components(seed_db)
         await seed_templates(seed_db, replace=True)  # Replace old templates with new ones
         await seed_sample_workflows(seed_db)
         await seed_sample_variables(seed_db)
+        await seed_sample_data_sources(seed_db)
 
     # Migrate ScreenHistory entries to ModuleVersion table at startup.
     # Safe to run on every startup — checks for already-migrated entries.

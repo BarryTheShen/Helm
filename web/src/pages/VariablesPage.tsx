@@ -32,6 +32,12 @@ export function VariablesPage() {
 
   return (
     <div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-gray-900">Variables &amp; Data Sources</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Configure static values and live data feeds for SDUI components. Bind data sources in the Module Editor property inspector.
+        </p>
+      </div>
       <div className="flex gap-1 mb-6 border-b border-gray-200 items-center">
         <button
           onClick={() => setTab('variables')}
@@ -46,8 +52,13 @@ export function VariablesPage() {
           Data Sources
         </button>
         {tab === 'variables' && (
-          <span className="ml-auto text-xs text-gray-400 italic">
-            Use <code className="bg-gray-100 px-1 rounded">[[variable.name]]</code> syntax in Text components, or <code className="bg-gray-100 px-1 rounded">{'{{'}custom.name{'}}'}</code> in dynamic fields
+          <span className="ml-auto text-xs text-gray-400 italic hidden sm:inline">
+            Use <code className="bg-gray-100 px-1 rounded">[[variable.name]]</code> in Text, or <code className="bg-gray-100 px-1 rounded">{'{{'}custom.name{'}}'}</code> in dynamic fields
+          </span>
+        )}
+        {tab === 'data-sources' && (
+          <span className="ml-auto text-xs text-gray-400 italic hidden sm:inline">
+            Reference as <code className="bg-gray-100 px-1 rounded">{'{{'}data.source_id.field{'}}'}</code> — bind in Module Editor → Data Binding
           </span>
         )}
       </div>
@@ -228,7 +239,19 @@ function VariablesTab() {
       )}
 
       {variables.length === 0 ? (
-        <div className="text-center py-12 text-gray-400 text-sm">No variables yet. Click "Add Variable" to create one.</div>
+        <div className="text-center py-12 px-6 bg-white rounded-lg border border-dashed border-gray-200">
+          <p className="text-gray-600 text-sm font-medium mb-1">No custom variables yet</p>
+          <p className="text-gray-400 text-sm mb-4">
+            Variables hold static text, numbers, or flags you can reference in Text components and property fields.
+          </p>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg"
+          >
+            <Plus size={16} />
+            Add your first variable
+          </button>
+        </div>
       ) : (
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           <table className="w-full">
@@ -327,6 +350,44 @@ function VariablesTab() {
     </div>
   );
 }
+
+const CONNECTOR_PRESETS: Record<string, { connector: string; config_json: string; hint: string }> = {
+  calendar: {
+    connector: 'local_db',
+    config_json: '{}',
+    hint: 'Reads calendar events from your Helm backend (no extra config needed).',
+  },
+  todos: {
+    connector: 'local_db',
+    config_json: '{}',
+    hint: 'Reads todo items from the todos API.',
+  },
+  notes: {
+    connector: 'local_db',
+    config_json: '{}',
+    hint: 'Reads notes modules from the notes API.',
+  },
+  chat: {
+    connector: 'local_db',
+    config_json: '{}',
+    hint: 'Reads chat history from the chat API.',
+  },
+  http_json: {
+    connector: 'http_json',
+    config_json: '{"url": "https://api.example.com/data", "method": "GET"}',
+    hint: 'Fetch JSON from any HTTP endpoint. Use {{connection.name.api_key}} for secrets.',
+  },
+  rss: {
+    connector: 'rss_feed',
+    config_json: '{"feed_url": "https://example.com/feed.xml"}',
+    hint: 'Parse RSS/Atom feeds into article cards.',
+  },
+  database: {
+    connector: 'local_db',
+    config_json: '{"table": "events"}',
+    hint: 'Query a local SQLite table (advanced).',
+  },
+};
 
 function DataSourcesTab() {
   const [sources, setSources] = useState<DataSource[]>([]);
@@ -469,8 +530,20 @@ function DataSourcesTab() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
-              <select value={newSource.type} onChange={e => setNewSource(s => ({ ...s, type: e.target.value }))}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-40">
+              <select
+                value={newSource.type}
+                onChange={e => {
+                  const type = e.target.value;
+                  const preset = CONNECTOR_PRESETS[type];
+                  setNewSource(s => ({
+                    ...s,
+                    type,
+                    connector: preset?.connector ?? s.connector,
+                    config_json: preset?.config_json ?? s.config_json,
+                  }));
+                }}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-40"
+              >
                 <option value="">Select type...</option>
                 <option value="calendar">Calendar</option>
                 <option value="notes">Notes</option>
@@ -585,7 +658,25 @@ function DataSourcesTab() {
       )}
 
       {sources.length === 0 ? (
-        <div className="text-center py-12 text-gray-400 text-sm">No data sources yet. Click "Add Data Source" to create one.</div>
+        <div className="text-center py-12 px-6 bg-white rounded-lg border border-dashed border-gray-200">
+          <p className="text-gray-600 text-sm font-medium mb-1">No data sources yet</p>
+          <p className="text-gray-400 text-sm mb-2 max-w-md mx-auto">
+            Data sources feed live data into Calendar, Todo, Notes, and Chat components. On first login, Helm seeds
+            <code className="mx-1 bg-gray-100 px-1 rounded text-xs">calendar_events</code>,
+            <code className="mx-1 bg-gray-100 px-1 rounded text-xs">todos</code>, and
+            <code className="mx-1 bg-gray-100 px-1 rounded text-xs">notes</code> automatically.
+          </p>
+          <p className="text-gray-400 text-xs mb-4">
+            In the Module Editor, select a component → Property Inspector → Data Binding to attach a source.
+          </p>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg"
+          >
+            <Plus size={16} />
+            Add a data source
+          </button>
+        </div>
       ) : (
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           <table className="w-full">
@@ -644,6 +735,13 @@ function DataSourcesTab() {
           </ul>
           <p className="mt-2">
             <span className="font-semibold">Tip:</span> Use the Connections page to store API keys, then reference them in config JSON with <code className="bg-white px-1 rounded">{`{{connection.name.api_key}}`}</code>
+          </p>
+          <p className="mt-2 font-medium">
+            Seeded template IDs (auto-created on first login):{' '}
+            <code className="bg-white px-1 rounded">calendar_events</code>,{' '}
+            <code className="bg-white px-1 rounded">todos</code>,{' '}
+            <code className="bg-white px-1 rounded">notes</code>,{' '}
+            <code className="bg-white px-1 rounded">articles</code>
           </p>
         </div>
       </div>

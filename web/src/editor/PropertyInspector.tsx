@@ -548,12 +548,13 @@ function ReadOnlyComponentSummary({ component }: { component: EditorComponent })
   );
 }
 
-const DATA_BINDING_COMPONENT_TYPES = new Set(['CalendarModule', 'ChatModule', 'NotesModule']);
+const DATA_BINDING_COMPONENT_TYPES = new Set(['CalendarModule', 'ChatModule', 'NotesModule', 'Todo']);
 
 const DATA_BINDING_SOURCE_TYPE: Record<string, string> = {
   CalendarModule: 'calendar',
   ChatModule: 'chat',
   NotesModule: 'notes',
+  Todo: 'todos',
 };
 
 // ── Field Renderers ──────────────────────────────────────────────────────────
@@ -1071,20 +1072,36 @@ function ComponentPropertiesPanel({ rowId, cellIndex }: { rowId: string; cellInd
           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
             🔗 Data Binding
           </div>
+          <p className="text-[10px] text-gray-400 mb-2">
+            Binds this component to live data. Use seeded IDs like{' '}
+            <code className="bg-gray-100 px-1 rounded">calendar_events</code> or create sources on the Variables page.
+          </p>
           <div>
             <label className="block text-[10px] font-medium text-gray-400 mb-0.5">Data Source</label>
             <select
-              value={(props.dataBinding as { sourceId?: string } | undefined)?.sourceId ?? ''}
-              onChange={e => handleChange('dataBinding', e.target.value ? { sourceId: e.target.value } : undefined)}
+              value={(props.dataBinding as { dataSourceId?: string } | undefined)?.dataSourceId ?? ''}
+              onChange={e => handleChange(
+                'dataBinding',
+                e.target.value
+                  ? { dataSourceId: e.target.value, refreshInterval: 60000 }
+                  : undefined,
+              )}
               className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none bg-white"
             >
-              <option value="">None</option>
+              <option value="">None — select a data source</option>
               {dataSources
                 .filter(ds => !DATA_BINDING_SOURCE_TYPE[type] || ds.type === DATA_BINDING_SOURCE_TYPE[type])
                 .map(ds => (
-                  <option key={ds.id} value={ds.id}>{ds.name}</option>
+                  <option key={ds.id} value={ds.id}>
+                    {ds.name} ({ds.id})
+                  </option>
                 ))}
             </select>
+            {dataSources.length === 0 && (
+              <p className="text-[10px] text-amber-600 mt-1">
+                No data sources yet. Open Variables → Data Sources to add one.
+              </p>
+            )}
           </div>
         </div>
       )}

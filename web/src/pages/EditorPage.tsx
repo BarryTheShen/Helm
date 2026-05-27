@@ -8,7 +8,7 @@ import { StructureTree } from '../editor/StructureTree';
 import { ComponentPalette } from '../editor/ComponentPalette';
 import { EditorCanvas } from '../editor/EditorCanvas';
 import { PropertyInspector } from '../editor/PropertyInspector';
-import { AppPreview } from '../components/AppPreview';
+import { AppPreviewFlow } from '../components/AppPreviewFlow';
 import { SDUIPreview } from '../components/SDUIPreview';
 import { DEVICE_PRESETS, getEditorPersistenceValidationError, getRowLayoutValidationErrors } from '../editor/types';
 import type { DevicePreset, EditorComponent, EditorScreen } from '../editor/types';
@@ -1615,7 +1615,7 @@ export function EditorPage() {
             className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors">
             <FileText size={11} /> Save as Template
           </button>
-          <button onClick={() => setShowAppPreview(true)}
+          <button onClick={handlePreviewInWeb}
             className="flex items-center gap-1 px-2 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors">
             <Eye size={11} /> Preview in Web Admin
           </button>
@@ -2015,7 +2015,7 @@ export function EditorPage() {
 
       {/* App Preview Modal */}
       {showAppPreview && (
-        <AppPreview onClose={() => setShowAppPreview(false)} />
+        <AppPreviewFlow onClose={() => setShowAppPreview(false)} />
       )}
 
       {/* ── Version History Modal ────────────────────────────────────── */}
@@ -2437,7 +2437,7 @@ export function EditorPage() {
                   }}
                   className="flex-1 px-3 py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors text-center"
                 >
-                  Full App Preview
+                  Full App Preview (Browser / Device)
                 </button>
               </div>
             </div>

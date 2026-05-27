@@ -622,3 +622,44 @@ async def test_seed_templates_are_valid_and_applyable(auth_client):
         assert draft.json()["has_draft"] is True
         assert isinstance(draft.json()["screen"], dict)
         assert len(draft.json()["screen"].get("rows", [])) > 0
+
+
+@pytest.mark.anyio
+async def test_seed_templates_use_mobile_data_source_ids(auth_client, db_session):
+    """FF4-TPL-001: Template dataBinding ids resolve via data source query API."""
+    from app.models.data_source import DataSource
+    from app.models.user import User
+    from sqlalchemy import select
+
+    user = (await db_session.execute(select(User).limit(1))).scalar_one()
+    for stable_id, source_type in (
+        ("calendar_events", "calendar"),
+        ("todos", "todos"),
+        ("notes", "notes"),
+    ):
+        db_session.add(DataSource(
+            id=stable_id,
+            user_id=str(user.id),
+            name=stable_id.replace("_", " ").title(),
+            type=source_type,
+            connector="local_db",
+            config_json="{}",
+        ))
+    await db_session.commit()
+
+    home = next(item for item in SEED_TEMPLATES if item["name"] == "Home")
+    bindings = []
+    for row in home["screen_json"]["rows"]:
+        for cell in row.get("cells", []):
+            content = cell.get("content") or {}
+            binding = (content.get("props") or {}).get("dataBinding")
+            if binding and binding.get("dataSourceId"):
+                bindings.append(binding["dataSourceId"])
+
+    assert "calendar_events" in bindings
+    assert "todos" in bindings
+    assert "notes" in bindings
+
+    for source_id in ("calendar_events", "todos", "notes"):
+        resp = await auth_client.post(f"/api/data-sources/{source_id}/query", json={})
+        assert resp.status_code == 200, resp.text

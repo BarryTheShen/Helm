@@ -15,6 +15,31 @@ from app.services.data_connectors import get_canonical_schema, query_data_source
 router = APIRouter(prefix="/api/data-sources", tags=["data-sources"])
 
 
+async def _resolve_data_source(
+    db: AsyncSession,
+    user_id: str,
+    source_id_or_name: str,
+) -> DataSource | None:
+    """Resolve a data source by UUID id or stable template id (e.g. calendar_events)."""
+    by_id = await db.execute(
+        select(DataSource).where(
+            DataSource.id == source_id_or_name,
+            DataSource.user_id == user_id,
+        )
+    )
+    source = by_id.scalar_one_or_none()
+    if source is not None:
+        return source
+
+    by_name = await db.execute(
+        select(DataSource).where(
+            DataSource.name == source_id_or_name,
+            DataSource.user_id == user_id,
+        )
+    )
+    return by_name.scalar_one_or_none()
+
+
 @router.get("", response_model=PaginatedResponse[DataSourceOut])
 async def list_data_sources(
     pagination: PaginationParams = Depends(),
@@ -76,13 +101,7 @@ async def get_data_source_schema(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(DataSource).where(
-            DataSource.id == source_id,
-            DataSource.user_id == user_id,
-        )
-    )
-    source = result.scalar_one_or_none()
+    source = await _resolve_data_source(db, user_id, source_id)
     if source is None:
         raise HTTPException(status_code=404, detail="Data source not found")
 
@@ -100,13 +119,7 @@ async def query_data(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(DataSource).where(
-            DataSource.id == source_id,
-            DataSource.user_id == user_id,
-        )
-    )
-    source = result.scalar_one_or_none()
+    source = await _resolve_data_source(db, user_id, source_id)
     if source is None:
         raise HTTPException(status_code=404, detail="Data source not found")
 

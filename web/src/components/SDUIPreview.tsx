@@ -2,6 +2,8 @@
 import { type CSSProperties } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { renderLucideIcon } from '../lib/lucideIcon';
+import { hasMarkdownSyntax, markdownWithHardBreaks } from '../lib/sduiTextContent';
+import { resolveVariables } from '../editor/variableResolver';
 import { CalendarPreview } from './calendar/CalendarPreview';
 
 interface SDUIComponent {
@@ -19,6 +21,7 @@ interface SDUICell {
 
 interface SDUIRow {
   id: string;
+  type?: 'content' | 'divider' | 'spacer';
   height: number | 'auto';
   cells: SDUICell[];
   backgroundColor?: string;
@@ -30,6 +33,11 @@ interface SDUIRow {
   padding?: number | string;
   gap?: number;
   scrollable?: boolean;
+  showDivider?: boolean;
+  dividerColor?: string;
+  dividerThickness?: number;
+  dividerMargin?: number;
+  spacerHeight?: number;
 }
 
 interface SDUIScreen {
@@ -43,15 +51,21 @@ interface SDUIPreviewProps {
   maxHeight?: number;
   /** When true, render module content only (no outer phone chrome). Used inside AppPhoneShell. */
   embedded?: boolean;
+  /** Match published app dark mode in embedded previews (FF4-APP-020). */
+  darkMode?: boolean;
 }
 
 // Component preview renderers (simplified versions from EditorCanvas)
-function TextPreview({ content, variant, fontSize, fontWeight, color, align, bold, italic }: any) {
+function TextPreview({ content, variant, fontSize, fontWeight, color, align, bold, italic, darkMode }: any) {
   const semanticStyle = variant === 'heading'
     ? { fontSize: 28, fontWeight: '700', lineHeight: 1.2 }
     : variant === 'caption'
       ? { fontSize: 12, fontWeight: '400', lineHeight: 1.4 }
       : { fontSize: 16, fontWeight: '400', lineHeight: 1.5 };
+
+  const resolvedContent = resolveVariables(content || 'Text');
+  const useMarkdown = hasMarkdownSyntax(resolvedContent);
+  const defaultColor = darkMode ? '#F3F4F6' : '#000';
 
   const resolvedFontSize = typeof fontSize === 'number' ? fontSize : semanticStyle.fontSize;
   const resolvedFontWeight = (typeof fontWeight === 'string' && fontWeight.length > 0) || typeof fontWeight === 'number'
@@ -60,9 +74,34 @@ function TextPreview({ content, variant, fontSize, fontWeight, color, align, bol
       ? '700'
       : semanticStyle.fontWeight;
 
+  const baseStyle: CSSProperties = {
+    fontSize: resolvedFontSize,
+    fontWeight: resolvedFontWeight,
+    fontStyle: italic ? 'italic' : 'normal',
+    lineHeight: semanticStyle.lineHeight,
+    color: color || defaultColor,
+    textAlign: (align || 'left') as CSSProperties['textAlign'],
+    padding: '4px 0',
+  };
+
+  if (!useMarkdown) {
+    return (
+      <div data-testid="text-preview" style={{ ...baseStyle, whiteSpace: 'pre-wrap' }}>
+        {resolvedContent}
+      </div>
+    );
+  }
+
+  const markdownStyle: CSSProperties = {
+    ...semanticStyle,
+    color: color || defaultColor,
+    textAlign: align || 'left',
+    padding: '4px 0',
+  };
+
   return (
-    <div style={{ fontSize: resolvedFontSize, fontWeight: resolvedFontWeight, fontStyle: italic ? 'italic' : 'normal', lineHeight: semanticStyle.lineHeight, color: color || '#000', textAlign: align || 'left', padding: '4px 0' }}>
-      {content || 'Text'}
+    <div data-testid="text-preview" style={markdownStyle}>
+      <ReactMarkdown>{markdownWithHardBreaks(resolvedContent)}</ReactMarkdown>
     </div>
   );
 }
@@ -118,12 +157,8 @@ function ImagePreview({ src, height, aspectRatio, borderRadius }: any) {
   );
 }
 
-function MarkdownPreview({ content }: any) {
-  return (
-    <div className="prose prose-sm max-w-none text-gray-800" style={{ lineHeight: 1.6 }}>
-      <ReactMarkdown>{content || '# Heading\n\nParagraph text'}</ReactMarkdown>
-    </div>
-  );
+function MarkdownPreview(props: any) {
+  return <TextPreview {...props} />;
 }
 
 function DividerPreview({ color, thickness, margin }: any) {
@@ -281,16 +316,16 @@ const PREVIEW_RENDERERS: Record<string, (props: any) => React.JSX.Element> = {
   empty: EmptyPreview,
 };
 
-function ComponentPreview({ component }: { component: SDUIComponent }) {
+function ComponentPreview({ component, darkMode }: { component: SDUIComponent; darkMode?: boolean }) {
   const Renderer = PREVIEW_RENDERERS[component.type];
   if (Renderer) {
     return (
       <div className="h-full w-full min-h-0 flex flex-1 flex-col">
-        <Renderer {...component.props} children={component.children} />
+        <Renderer {...component.props} darkMode={darkMode} children={component.children} />
       </div>
     );
   }
-  return <div className="text-xs text-gray-400 italic p-2">Unknown: {component.type}</div>;
+  return <div className={`text-xs italic p-2 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>Unknown: {component.type}</div>;
 }
 
 function resolveSpacingValue(value: unknown): number | undefined {
@@ -307,6 +342,31 @@ function resolveSpacingValue(value: unknown): number | undefined {
 }
 
 function getRowStyle(row: SDUIRow): CSSProperties {
+  const rowType = row.type ?? 'content';
+
+  if (rowType === 'divider') {
+    const thickness = typeof row.dividerThickness === 'number' ? row.dividerThickness : 1;
+    const color = row.dividerColor || '#E0E0E0';
+    const margin = typeof row.dividerMargin === 'number' ? row.dividerMargin : 8;
+    return {
+      minHeight: thickness + margin * 2,
+      display: 'flex',
+      alignItems: 'center',
+      marginTop: margin,
+      marginBottom: margin,
+      backgroundColor: color,
+      height: thickness,
+    };
+  }
+
+  if (rowType === 'spacer') {
+    const height = typeof row.spacerHeight === 'number' ? row.spacerHeight : 24;
+    return {
+      minHeight: height,
+      height,
+    };
+  }
+
   const uniformPadding = resolveSpacingValue(row.padding);
   const backgroundColor = row.backgroundColor ?? row.bgColor;
 
@@ -328,6 +388,16 @@ function getRowStyle(row: SDUIRow): CSSProperties {
 
   if (backgroundColor) {
     style.backgroundColor = backgroundColor;
+  }
+
+  if (row.showDivider) {
+    const thickness = typeof row.dividerThickness === 'number' ? row.dividerThickness : 1;
+    const color = row.dividerColor || '#E0E0E0';
+    const margin = typeof row.dividerMargin === 'number' ? row.dividerMargin : 0;
+    style.borderBottom = `${thickness}px solid ${color}`;
+    if (margin > 0) {
+      style.marginBottom = margin;
+    }
   }
 
   return style;
@@ -378,6 +448,7 @@ export function SDUIPreview({
   maxWidth = 375,
   maxHeight = 667,
   embedded = false,
+  darkMode = false,
 }: SDUIPreviewProps) {
   let screen: SDUIScreen;
 
@@ -401,9 +472,21 @@ export function SDUIPreview({
   }
 
   const rowContent = screen.rows.length === 0 ? (
-    <div className="text-center text-gray-400 py-8 text-sm">No content</div>
+    <div className={`text-center py-8 text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>No content</div>
   ) : (
     screen.rows.map((row, rowIdx) => {
+      const rowType = row.type ?? 'content';
+
+      if (rowType === 'divider' || rowType === 'spacer') {
+        return (
+          <div
+            key={row.id || rowIdx}
+            data-testid={rowType === 'divider' ? 'row-divider-preview' : 'row-spacer-preview'}
+            style={getRowStyle(row)}
+          />
+        );
+      }
+
       const totalWidth = row.cells.reduce((sum, cell) => sum + getNumericCellWidth(cell.width), 0);
 
       return (
@@ -419,9 +502,13 @@ export function SDUIPreview({
               style={getCellStyle(row, cell.width, totalWidth)}
             >
               {cell.content ? (
-                <ComponentPreview component={cell.content} />
+                <ComponentPreview component={cell.content} darkMode={darkMode} />
               ) : (
-                <div className="flex items-center justify-center h-full min-h-[40px] bg-gray-50 border border-dashed border-gray-200 rounded text-gray-300 text-xs">
+                <div className={`flex items-center justify-center h-full min-h-[40px] border border-dashed rounded text-xs ${
+                  darkMode
+                    ? 'bg-gray-800 border-gray-700 text-gray-600'
+                    : 'bg-gray-50 border-gray-200 text-gray-300'
+                }`}>
                   Empty
                 </div>
               )}
@@ -434,7 +521,11 @@ export function SDUIPreview({
 
   if (embedded) {
     return (
-      <div className={`h-full w-full overflow-y-auto ${className}`} data-testid="sdui-preview-embedded">
+      <div
+        className={`h-full w-full overflow-y-auto flex flex-col ${darkMode ? 'bg-gray-900' : ''} ${className}`}
+        data-testid="sdui-preview-embedded"
+        data-theme={darkMode ? 'dark' : 'light'}
+      >
         {rowContent}
       </div>
     );
