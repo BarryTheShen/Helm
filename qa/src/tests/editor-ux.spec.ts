@@ -52,6 +52,7 @@ test('Issue 10: divider shows visual border-bottom on row', async ({ page, login
   await login();
   await page.goto('/editor');
   await expect(page.locator(EditorPage.structureTree)).toBeVisible();
+  await expect(page.locator(EditorPage.rowInTree).first()).toBeVisible({ timeout: 15000 });
 
   // Ensure there is at least one row in the structure
   const rowInTree = page.locator('[data-testid="row-in-tree"]');
@@ -140,13 +141,17 @@ test('FF4-CELL-001: cell divider drag changes adjacent cell widths', async ({ pa
   await page.goto('/editor');
   await ensureEmptyCellExists(page);
 
-  // Use first row with multiple cells (Home module seed has 3-cell row 1)
-  await page.locator(EditorPage.rowInTree).first().click();
+  // Home seed: Row 1 is single-cell; pick first tree row with 2+ cells (e.g. Row 4 Text + Button)
+  const multiCellRow = page.locator(EditorPage.rowInTree).filter({ hasText: / \([2-9]\d* cells?\)/ }).first();
+  await expect(multiCellRow, 'module should have at least one multi-cell row').toBeVisible({ timeout: 10000 });
+  await multiCellRow.click();
   await expect(page.locator(EditorPage.propertyInspector)).toBeVisible();
 
-  const rowCanvas = page.locator('[data-testid="editor-canvas"] .group.rounded-lg').first();
+  const rowCanvas = page.locator('[data-testid="editor-canvas"] .group.rounded-lg').filter({
+    has: page.locator('[data-testid^="cell-resize-handle-"]'),
+  }).first();
   const handle = rowCanvas.locator('[data-testid^="cell-resize-handle-"]').first();
-  await expect(handle).toBeVisible();
+  await expect(handle).toBeVisible({ timeout: 10000 });
 
   const cells = rowCanvas.locator(':scope > .flex.min-h-\\[48px\\] > div.rounded');
   const leftCell = cells.first();
@@ -207,4 +212,40 @@ test('FF4-ROW-012 / FF4-CELL-004: button preview fills its cell bounds', async (
     Math.abs(buttonBox!.height - cellBox!.height),
     'button height should match cell height (fit-the-cell)'
   ).toBeLessThan(4);
+});
+
+test('FF4-BTN-002: button icon mode renders visible centered icon', async ({ page, login }) => {
+  await login();
+  await page.goto('/editor');
+  await ensureEmptyCellExists(page);
+
+  await page.locator('[data-testid="editor-canvas"] .bg-gray-50.border-dashed').first().click();
+  const picker = page.locator('.shadow-xl').filter({ has: page.getByText('Add Component') });
+  await expect(picker).toBeVisible({ timeout: 5000 });
+  await picker.locator('button').filter({ has: page.locator('.font-medium', { hasText: 'Button' }) }).click();
+  await page.waitForLoadState('networkidle');
+
+  await page.locator('[data-testid="select-variant"]').selectOption('icon');
+  await page.waitForLoadState('networkidle');
+
+  const iconPreview = page.locator('[data-testid="button-icon-preview"]').first();
+  await expect(iconPreview).toBeVisible({ timeout: 5000 });
+  await expect(iconPreview.locator('svg')).toBeVisible();
+
+  const previewBox = await iconPreview.boundingBox();
+  const cell = page.locator('[data-testid="editor-canvas"] .shadow-sm').filter({
+    has: iconPreview,
+  }).first();
+  const cellBox = await cell.boundingBox();
+  expect(previewBox).not.toBeNull();
+  expect(cellBox).not.toBeNull();
+
+  if (previewBox && cellBox) {
+    const iconCenterX = previewBox.x + previewBox.width / 2;
+    const iconCenterY = previewBox.y + previewBox.height / 2;
+    const cellCenterX = cellBox.x + cellBox.width / 2;
+    const cellCenterY = cellBox.y + cellBox.height / 2;
+    expect(Math.abs(iconCenterX - cellCenterX)).toBeLessThan(8);
+    expect(Math.abs(iconCenterY - cellCenterY)).toBeLessThan(8);
+  }
 });

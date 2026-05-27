@@ -24,6 +24,7 @@ import { MIN_CELL_WIDTH_PERCENT, MIN_CELL_WIDTH_PX, MIN_ROW_HEIGHT, calculateSid
 import { ComponentPicker } from './ComponentPicker';
 import { Plus, Grip, X, Edit2, Eye, Copy, Trash2, ArrowUp, ArrowDown, Clipboard } from 'lucide-react';
 import { resolveVariables } from './variableResolver';
+import { renderLucideIcon } from '../lib/lucideIcon';
 import ReactMarkdown from 'react-markdown';
 
 // cell width validation constants — SLICE-CELL-WIDTH (FF4-ROW-004..021, FF4-ROW-024)
@@ -173,7 +174,7 @@ function TextPreview({ content, variant, fontSize, fontWeight, color, align, bol
   );
 }
 
-function ButtonPreview({ label, variant, size, icon }: any) {
+function ButtonPreview({ label, variant, size, icon, iconPosition = 'left' }: any) {
   const variants: Record<string, string> = {
     primary: 'bg-blue-600 text-white', secondary: 'bg-gray-200 text-gray-800',
     ghost: 'bg-transparent text-gray-600', destructive: 'bg-red-600 text-white', icon: 'bg-transparent text-blue-600',
@@ -182,18 +183,24 @@ function ButtonPreview({ label, variant, size, icon }: any) {
     sm: 'px-3 py-1 text-sm', md: 'px-4 py-2', lg: 'px-6 py-3 text-lg',
     small: 'px-3 py-1 text-sm', medium: 'px-4 py-2', large: 'px-6 py-3 text-lg',
   };
+  const iconNode = renderLucideIcon(icon || 'star', 18, 'shrink-0');
 
   if (variant === 'icon') {
     return (
-      <button className="flex h-full w-full items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-blue-600">
-        {icon || '⭐'}
+      <button
+        data-testid="button-icon-preview"
+        className="flex h-full w-full items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-blue-600"
+      >
+        {renderLucideIcon(icon || 'star', 24, 'shrink-0')}
       </button>
     );
   }
 
   return (
-    <button className={`flex h-full w-full items-center justify-center rounded-md font-medium ${variants[variant] || variants.primary} ${sizes[size] || sizes.md}`}>
+    <button className={`flex h-full w-full items-center justify-center gap-1.5 rounded-md font-medium ${variants[variant] || variants.primary} ${sizes[size] || sizes.md}`}>
+      {!!icon && iconPosition !== 'right' && iconNode}
       {label || 'Button'}
+      {!!icon && iconPosition === 'right' && iconNode}
     </button>
   );
 }
@@ -218,7 +225,14 @@ function DividerPreview({ color, thickness, margin }: any) {
 }
 
 function IconPreview({ name, size, color }: any) {
-  return <span style={{ fontSize: size || 24, color: color || '#000' }}>⭐ {name || 'star'}</span>;
+  return (
+    <span
+      className="flex h-full w-full items-center justify-center"
+      style={{ color: color || '#000' }}
+    >
+      {renderLucideIcon(name || 'star', size || 24)}
+    </span>
+  );
 }
 
 function CalendarPreview() {

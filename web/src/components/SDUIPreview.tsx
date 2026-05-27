@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { type CSSProperties, createElement } from 'react';
+import { type CSSProperties } from 'react';
 import ReactMarkdown from 'react-markdown';
-import * as LucideIcons from 'lucide-react';
+import { renderLucideIcon } from '../lib/lucideIcon';
 
 interface SDUIComponent {
   id: string;
@@ -64,7 +64,7 @@ function TextPreview({ content, variant, fontSize, fontWeight, color, align, bol
   );
 }
 
-function ButtonPreview({ label, variant, size, icon }: any) {
+function ButtonPreview({ label, variant, size, icon, iconPosition = 'left' }: any) {
   const variants: Record<string, string> = {
     primary: 'bg-blue-600 text-white',
     secondary: 'bg-gray-200 text-gray-800',
@@ -80,14 +80,21 @@ function ButtonPreview({ label, variant, size, icon }: any) {
     medium: 'px-4 py-2',
     large: 'px-6 py-3 text-lg',
   };
+  const iconNode = renderLucideIcon(icon || 'star', 18, 'shrink-0');
 
   if (variant === 'icon') {
-    return <button className="rounded-full border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-600">{icon || '⭐'}</button>;
+    return (
+      <button className="flex h-full w-full items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-blue-600">
+        {renderLucideIcon(icon || 'star', 24, 'shrink-0')}
+      </button>
+    );
   }
 
   return (
-    <button className={`rounded-md font-medium ${variants[variant] || variants.primary} ${sizes[size] || sizes.md}`}>
+    <button className={`flex h-full w-full items-center justify-center gap-1.5 rounded-md font-medium ${variants[variant] || variants.primary} ${sizes[size] || sizes.md}`}>
+      {!!icon && iconPosition !== 'right' && iconNode}
       {label || 'Button'}
+      {!!icon && iconPosition === 'right' && iconNode}
     </button>
   );
 }
@@ -120,24 +127,13 @@ function DividerPreview({ color, thickness, margin }: any) {
   return <hr style={{ borderColor: color || '#E0E0E0', borderWidth: thickness ?? 1, margin: `${margin ?? 8}px 0` }} />;
 }
 
-// Convert kebab-case to PascalCase for Lucide icon lookup
-function getLucideIcon(iconName: string) {
-  const pascalCase = iconName
-    .split('-')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join('');
-  return (LucideIcons as any)[pascalCase] || null;
-}
-
 function IconPreview({ name, size, color }: any) {
-  const IconComponent = name ? getLucideIcon(name) : null;
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-      {IconComponent ? (
-        createElement(IconComponent, { size: size || 24, color: color || '#000' })
-      ) : (
-        <span style={{ fontSize: size || 24, color: color || '#000' }}>⭐</span>
-      )}
+    <span
+      className="inline-flex items-center justify-center"
+      style={{ color: color || '#000' }}
+    >
+      {renderLucideIcon(name || 'star', size || 24)}
     </span>
   );
 }

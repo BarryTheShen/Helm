@@ -128,9 +128,22 @@ const ICON_MAP: Record<string, string> = {
   'frown': '☹️',
   'thumbs-up': '👍',
   'thumbs-down': '👎',
+  // IconPicker aliases (web editor → mobile parity)
+  'trash': '🗑️',
+  'file': '📄',
+  'refresh': '↻',
+  'unlock': '🔓',
+  'eye-off': '🙈',
+  'minus': '−',
+  'arrow-right': '→',
+  'arrow-left': '←',
+  'arrow-up': '↑',
+  'arrow-down': '↓',
 };
 
+/** Map IconPicker kebab-case names to emoji; supports common aliases. */
 export function resolveIconName(name: string): string {
+  if (!name) return '⭐';
   return ICON_MAP[name] ?? name;
 }
 

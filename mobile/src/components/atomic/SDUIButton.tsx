@@ -29,6 +29,14 @@ const sizeHeights = { sm: 32, md: 44, lg: 56 };
 const sizeFontSizes = { sm: 14, md: 16, lg: 18 };
 const sizePadding = { sm: 8, md: 12, lg: 16 };
 
+/** FF4-BTN-001: buttons fill their parent cell by default (fullWidth defaults true). */
+const CELL_FILL_STYLE = {
+  flex: 1,
+  alignSelf: 'stretch' as const,
+  width: '100%' as const,
+  minHeight: 0,
+};
+
 export function SDUIButton({
   label,
   icon,
@@ -36,7 +44,7 @@ export function SDUIButton({
   onPress,
   disabled,
   loading,
-  fullWidth,
+  fullWidth = true,
   variant = 'primary',
   size = 'md',
   dispatch,
@@ -47,6 +55,7 @@ export function SDUIButton({
   const height = sizeHeights[size] ?? 44;
   const fontSize = sizeFontSizes[size] ?? 16;
   const px = sizePadding[size] ?? 12;
+  const fillCell = fullWidth !== false;
 
   const handlePress = () => {
     if (disabled || loading || !onPress || !dispatch) return;
@@ -54,27 +63,28 @@ export function SDUIButton({
   };
 
   const variantStyle = getVariantStyle(variant);
+  const resolvedIcon = resolveIconName(icon ?? 'star');
 
-  // Icon-only variant
+  // Icon-only variant — FF4-BTN-002: centered icon at all cell sizes
   if (variant === 'icon') {
     return (
       <TouchableOpacity
         style={[
           styles.iconOnly,
-          { minWidth: 44, minHeight: 44 },
+          fillCell && CELL_FILL_STYLE,
           disabled && styles.disabled,
         ]}
         onPress={handlePress}
         disabled={disabled || loading}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel={resolvedLabel ?? icon}
+        accessibilityLabel={resolvedLabel ?? icon ?? 'icon button'}
       >
         {loading ? (
           <ActivityIndicator size="small" color={themeColors.primary} />
         ) : (
-          <Text style={[styles.iconText, { fontSize: height * 0.5, color: resolveColor(variantStyle.text) }]}>
-            {resolveIconName(icon ?? '')}
+          <Text style={[styles.iconText, { fontSize: height * 0.45, color: resolveColor(variantStyle.text) }]}>
+            {resolvedIcon}
           </Text>
         )}
       </TouchableOpacity>
@@ -85,14 +95,15 @@ export function SDUIButton({
     <TouchableOpacity
       style={[
         styles.base,
+        fillCell
+          ? { ...CELL_FILL_STYLE, height: '100%' as const, minHeight: height }
+          : { height },
         {
-          height,
           paddingHorizontal: px,
           backgroundColor: variant === 'secondary' ? 'transparent' : resolveColor(variantStyle.bg),
           borderWidth: variant === 'secondary' ? 1.5 : 0,
           borderColor: variant === 'secondary' ? themeColors.primary : 'transparent',
         },
-        fullWidth && { width: '100%' },
         disabled && styles.disabled,
       ]}
       onPress={handlePress}
@@ -106,13 +117,17 @@ export function SDUIButton({
       ) : (
         <View style={styles.content}>
           {!!icon && iconPosition === 'left' && (
-            <Text style={[styles.btnIcon, { fontSize, color: resolveColor(variantStyle.text) }]}>{resolveIconName(icon)}</Text>
+            <Text style={[styles.btnIcon, { fontSize, color: resolveColor(variantStyle.text) }]}>
+              {resolveIconName(icon)}
+            </Text>
           )}
           {resolvedLabel && (
             <Text style={[styles.label, { fontSize, color: resolveColor(variantStyle.text) }]}>{resolvedLabel}</Text>
           )}
           {!!icon && iconPosition === 'right' && (
-            <Text style={[styles.btnIcon, { fontSize, color: resolveColor(variantStyle.text) }]}>{resolveIconName(icon)}</Text>
+            <Text style={[styles.btnIcon, { fontSize, color: resolveColor(variantStyle.text) }]}>
+              {resolveIconName(icon)}
+            </Text>
           )}
         </View>
       )}
@@ -152,7 +167,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
   },
-  iconText: {},
+  iconText: {
+    textAlign: 'center',
+  },
   disabled: {
     opacity: 0.4,
   },
