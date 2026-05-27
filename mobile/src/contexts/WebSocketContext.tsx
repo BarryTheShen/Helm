@@ -107,7 +107,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         // The display_name contains the full human-readable version label.
         const versionLabel = message.version_number;
         const displayName: string | undefined = message.display_name;
-        if (serverUrl && token && deviceId) {
+        const assignedAppId = useAppConfigStore.getState().appConfig?.app_id;
+        const targetsThisDevice =
+          !message.app_id || !assignedAppId || message.app_id === assignedAppId;
+        if (targetsThisDevice && serverUrl && token && deviceId) {
           loadAppConfig(serverUrl, token, deviceId).catch((err) =>
             console.error('Failed to reload app config after publish:', err)
           );

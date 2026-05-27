@@ -12,6 +12,8 @@ interface AppPhoneShellProps {
   children?: ReactNode;
   className?: string;
   resolveIcon?: (moduleId: string, fallbackIcon: string) => string;
+  /** When true, module content fills the phone area edge-to-edge (FF4-APP-020). */
+  embeddedModule?: boolean;
 }
 
 /**
@@ -27,6 +29,7 @@ export function AppPhoneShell({
   children,
   className = '',
   resolveIcon,
+  embeddedModule = false,
 }: AppPhoneShellProps) {
   const shellBg = darkMode ? 'bg-gray-900' : 'bg-white';
   const contentBg = darkMode ? 'bg-gray-900' : 'bg-white';
@@ -45,18 +48,21 @@ export function AppPhoneShell({
   };
 
   const showLaunchpad = activeModuleId === null;
+  const showModuleContent = !showLaunchpad;
+  const contentPadding = showModuleContent && embeddedModule ? 'p-0' : 'p-4';
 
   return (
     <div className={`relative ${className}`}>
       <div
         className={`w-[375px] h-[812px] ${shellBg} rounded-[3rem] shadow-2xl border-8 border-gray-900 overflow-hidden flex flex-col`}
         data-testid="app-phone-shell"
+        data-theme={darkMode ? 'dark' : 'light'}
       >
         <div className={`h-11 ${darkMode ? 'bg-gray-800' : 'bg-gray-50'} border-b ${borderColor} flex items-center justify-center shrink-0`}>
           <div className={`text-xs ${mutedText}`}>9:41</div>
         </div>
 
-        <div className={`flex-1 overflow-y-auto ${contentBg} p-4`} data-testid="app-phone-content">
+        <div className={`flex-1 overflow-y-auto ${contentBg} ${contentPadding} min-h-0`} data-testid="app-phone-content">
           {showLaunchpad ? (
             launchpadModules.length > 0 ? (
               <div data-testid="app-phone-launchpad">

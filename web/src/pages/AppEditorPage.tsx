@@ -559,6 +559,7 @@ export function AppEditorPage() {
         dark_mode: currentApp.dark_mode,
         bottom_bar_config: currentApp.bottom_bar_config,
         launchpad_config: launchpadModules,
+        module_icons: currentApp.module_icons,
         moduleReferences,
       },
       'browser'
@@ -1098,6 +1099,7 @@ export function AppEditorPage() {
               }))}
               activeModuleId={selectedModuleId}
               onSelectModule={setSelectedModule}
+              embeddedModule
               resolveIcon={(moduleId, fallback) => {
                 const slot = currentApp.bottom_bar_config.find(s => s.module_instance_id === moduleId);
                 if (slot) {
@@ -1115,7 +1117,12 @@ export function AppEditorPage() {
                   Loading module preview...
                 </div>
               ) : modulePreviewScreen ? (
-                <SDUIPreview json={modulePreviewScreen as never} embedded className="h-full" />
+                <SDUIPreview
+                  json={modulePreviewScreen as never}
+                  embedded
+                  darkMode={currentApp.dark_mode}
+                  className="h-full"
+                />
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-400 text-sm px-6 text-center">
                   No SDUI content resolved for this module yet

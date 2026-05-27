@@ -54,6 +54,12 @@ export function BrowserPreview({ appId, onClose }: BrowserPreviewProps) {
 
   const bottomBar = bundle?.bottomBar ?? [];
   const launchpadModules = bundle?.launchpadModules ?? [];
+  const previewDarkMode = previewAppConfig?.dark_mode ?? bundle?.darkMode ?? false;
+  const moduleIcons = (previewAppConfig as { module_icons?: Record<string, string> } | null)?.module_icons
+    ?? (bundle?.appConfig?.module_icons as Record<string, string> | undefined)
+    ?? {};
+  const resolvePreviewIcon = (moduleId: string, fallback: string) =>
+    moduleIcons[moduleId] ?? fallback;
   const currentScreenData = currentModuleId && bundle
     ? bundle.resolvedScreens[currentModuleId]
     : null;
@@ -110,14 +116,21 @@ export function BrowserPreview({ appId, onClose }: BrowserPreviewProps) {
             <>
               <div className="flex-1 flex items-center justify-center bg-gray-100 p-8 overflow-auto">
                 <AppPhoneShell
-                  darkMode={bundle?.darkMode}
+                  darkMode={previewDarkMode}
                   bottomBar={bottomBar}
                   launchpadModules={launchpadModules}
                   activeModuleId={currentModuleId}
                   onSelectModule={setCurrentModuleId}
+                  embeddedModule
+                  resolveIcon={resolvePreviewIcon}
                 >
                   {currentScreenData ? (
-                    <SDUIPreview json={currentScreenData as any} embedded className="h-full" />
+                    <SDUIPreview
+                      json={currentScreenData as any}
+                      embedded
+                      darkMode={previewDarkMode}
+                      className="h-full"
+                    />
                   ) : (
                     <div className="flex items-center justify-center h-full text-gray-400 text-sm px-6 text-center">
                       {currentSlot?.name
@@ -135,7 +148,7 @@ export function BrowserPreview({ appId, onClose }: BrowserPreviewProps) {
                     <div className="text-xs text-gray-600 space-y-1">
                       <p><span className="font-medium">Mode:</span> Web Admin</p>
                       <p><span className="font-medium">Device:</span> iPhone (375x812)</p>
-                      <p><span className="font-medium">Theme:</span> {bundle?.darkMode ? 'Dark' : 'Light'}</p>
+                      <p><span className="font-medium">Theme:</span> {previewDarkMode ? 'Dark' : 'Light'}</p>
                       <p><span className="font-medium">Module:</span> {currentSlot?.name ?? 'Launchpad'}</p>
                       <p><span className="font-medium">Screens loaded:</span> {bundle?.resolvedCount ?? 0}</p>
                     </div>

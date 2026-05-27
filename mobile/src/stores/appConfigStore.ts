@@ -156,9 +156,14 @@ export const useAppConfigStore = create<AppConfigState>((set, get) => ({
   updateFromWebSocket: (config: Partial<AppConfig> & Record<string, unknown>) => {
     const now = new Date().toISOString();
     const current = get().appConfig;
-    const merged = current
-      ? { ...current, ...config, dark_mode: config.dark_mode ?? current.dark_mode }
-      : (config as AppConfig);
+    const isFullSnapshot =
+      typeof config.app_id === 'string'
+      && Array.isArray(config.bottom_bar_config);
+    const merged = isFullSnapshot
+      ? (config as AppConfig)
+      : current
+        ? { ...current, ...config, dark_mode: config.dark_mode ?? current.dark_mode }
+        : (config as AppConfig);
 
     // Also cache WebSocket-updated config for offline use
     AsyncStorage.setItem(

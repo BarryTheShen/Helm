@@ -63,7 +63,7 @@ export default function RootLayout() {
   }, [token, inAuthGroup, isLoading, serverUrl, deviceId, appConfig, inUnassigned]);
 
   return (
-    <ThemeProvider value={navigationTheme}>
+    <ThemeProvider key={darkMode ? 'dark' : 'light'} value={navigationTheme}>
       <WebSocketProvider>
         <Stack
           screenOptions={{

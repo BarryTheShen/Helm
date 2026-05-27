@@ -41,7 +41,11 @@ from app.schemas.preview import (
     PreviewSessionOut,
 )
 from app.services.audit import log_audit
-from app.services.device_service import normalize_app_config_snapshot, sync_app_shell_from_config
+from app.services.device_service import (
+    get_device_app_config,
+    normalize_app_config_snapshot,
+    sync_app_shell_from_config,
+)
 from app.services.validation_service import (
     validate_app_config,
     validate_autosave_config,
@@ -528,6 +532,21 @@ async def publish_app_version(
                 "version_number": version.version_number,
                 "display_name": version.display_name,
                 "published_at": version.created_at.isoformat() if version.created_at else None,
+            },
+        )
+
+    # Push full app config snapshot so mobile applies dark_mode/theme immediately (FF4-APP-004)
+    for device in devices:
+        device_config = await get_device_app_config(db, device.id)
+        if device_config is None:
+            continue
+        await manager.send(
+            user_id,
+            {
+                "type": "app_config_update",
+                "app_id": app_id,
+                "device_id": device.id,
+                "config": device_config,
             },
         )
 

@@ -18,7 +18,10 @@ export async function ensureModuleInstanceForAppEditor(
   const headers = qaAuthHeaders();
   const instancesResp = await request.get('http://127.0.0.1:8000/api/modules/instances', { headers });
   const instances = await instancesResp.json();
-  if ((instances.items ?? []).length > 0) return;
+  if ((instances.items ?? []).length > 0) {
+    await ensureModulePreviewScreenForAppEditor(request);
+    return;
+  }
 
   const templatesResp = await request.get('http://127.0.0.1:8000/api/templates', { headers });
   const templatesPayload = await templatesResp.json();
@@ -31,6 +34,55 @@ export async function ensureModuleInstanceForAppEditor(
   await request.post('http://127.0.0.1:8000/api/modules/install', {
     headers: { ...headers, 'Content-Type': 'application/json' },
     data: { template_id: homeTemplate.id, name: 'Home' },
+  });
+
+  await ensureModulePreviewScreenForAppEditor(request);
+}
+
+/** Seed a minimal module draft so App Editor preview resolves SDUI (FF4-QA-005). */
+export async function ensureModulePreviewScreenForAppEditor(
+  request: import('@playwright/test').APIRequestContext,
+) {
+  const headers = qaAuthHeaders();
+  const instancesResp = await request.get('http://127.0.0.1:8000/api/modules/instances', { headers });
+  const instances = await instancesResp.json();
+  const moduleId = instances.items?.[0]?.module_instance_id as string | undefined;
+  if (!moduleId) return;
+
+  const draftResp = await request.get(
+    `http://127.0.0.1:8000/api/modules/${moduleId}/draft`,
+    { headers },
+  );
+  if (draftResp.ok()) {
+    const draft = await draftResp.json();
+    if (draft.sdui_json?.rows?.length > 0) return;
+  }
+
+  const previewMarker = `Preview smoke ${Date.now()}`;
+  await request.put(`http://127.0.0.1:8000/api/modules/${moduleId}/draft`, {
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    data: {
+      sdui_json: {
+        rows: [
+          {
+            id: 'preview-row-1',
+            height: 'auto',
+            cells: [
+              {
+                id: 'preview-cell-1',
+                width: 1,
+                content: {
+                  id: 'preview-text-1',
+                  type: 'Text',
+                  props: { content: previewMarker, variant: 'heading' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+      dirty: true,
+    },
   });
 }
 

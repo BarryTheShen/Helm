@@ -67,7 +67,8 @@ export default function ConnectScreen() {
         }
 
         const deviceData = await deviceResponse.json();
-        await setDeviceId(generatedDeviceId);
+        // Store server Device.id (PK) — config/WS routes use id, not client device_id UUID.
+        await setDeviceId(deviceData.id);
 
         // Check if device has an assigned app
         if (!deviceData.assigned_app_id) {
