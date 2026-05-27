@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures';
 import { EditorPage } from '../page-objects/editor';
-import { ensureEmptyCellExists } from '../editor-helpers';
+import { ensureEmptyCellExists, addComponentToFirstCell } from '../editor-helpers';
 import { addRowViaStructureTree } from '../page-objects/editor';
 
 test('Issue 1: drag handles should be positioned inside the canvas area', async ({ page, login }) => {
@@ -218,24 +218,19 @@ test('FF4-BTN-002: button icon mode renders visible centered icon', async ({ pag
   await login();
   await page.goto('/editor');
   await ensureEmptyCellExists(page);
-
-  await page.locator('[data-testid="editor-canvas"] .bg-gray-50.border-dashed').first().click();
-  const picker = page.locator('.shadow-xl').filter({ has: page.getByText('Add Component') });
-  await expect(picker).toBeVisible({ timeout: 5000 });
-  await picker.locator('button').filter({ has: page.locator('.font-medium', { hasText: 'Button' }) }).click();
-  await page.waitForLoadState('networkidle');
+  await addRowViaStructureTree(page);
+  await addComponentToFirstCell(page, 'Button', { emptyCell: 'last' });
 
   await page.locator('[data-testid="select-variant"]').selectOption('icon');
   await page.waitForLoadState('networkidle');
 
-  const iconPreview = page.locator('[data-testid="button-icon-preview"]').first();
-  await expect(iconPreview).toBeVisible({ timeout: 5000 });
+  const iconPreview = page.locator('[data-testid="button-icon-preview"]').last();
+  await expect(iconPreview).toBeVisible({ timeout: 10000 });
   await expect(iconPreview.locator('svg')).toBeVisible();
 
   const previewBox = await iconPreview.boundingBox();
-  const cell = page.locator('[data-testid="editor-canvas"] .shadow-sm').filter({
-    has: iconPreview,
-  }).first();
+  const cell = iconPreview.locator('xpath=ancestor::div[contains(@class,"group/cell")][1]');
+  await expect(cell).toBeVisible();
   const cellBox = await cell.boundingBox();
   expect(previewBox).not.toBeNull();
   expect(cellBox).not.toBeNull();

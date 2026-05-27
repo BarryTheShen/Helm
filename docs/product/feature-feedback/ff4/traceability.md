@@ -149,7 +149,7 @@ Cross-reference: REQ-ID → source → implementation → test → verdict.
 | FF4-MCP-001 | FF4 doc lines 1748-1750 | | | NOT TESTED |
 | FF4-MCP-002 | FF4 doc lines 1748-1750 | | | NOT TESTED |
 | FF4-QA-001 | FF4 doc lines 202-203 | | | NOT TESTED |
-| FF4-QA-002 | FF4 doc lines 15-16 | | | NOT TESTED |
+| FF4-QA-002 | FF4 doc lines 15-16 | `qa/src/tests/app-editor.spec.ts` | BrowserPreview, save/publish smoke, module pinning | COVERED (automated e2e) |
 | FF4-QA-003 | FF4 doc lines 3-4, 1625-1628 | | | NOT TESTED |
 | FF4-QA-004 | FF4 doc lines 1753-1754 | | | NOT TESTED |
 | FF4-QA-005 | FF4 doc lines 188-189 | | | NOT TESTED |
