@@ -151,9 +151,41 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
     });
   };
 
-  const handleDuplicate = (moduleInstance: SDUIModule) => {
-    // TODO: Implement duplicate
+  const handleDuplicate = async (moduleInstance: SDUIModule) => {
     console.log(`[ModulesTree] context menu — duplicate: ${moduleInstance.name} (${moduleInstance.module_id})`);
+    const copyName = `${moduleInstance.name} Copy`.slice(0, 50);
+    setError(null);
+    try {
+      const newModule = await api.post<{ module_id: string; name: string }>('/api/sdui/modules', {
+        name: copyName,
+        icon: moduleInstance.icon,
+      });
+
+      const draftResp = await api.get<{ has_draft: boolean; screen?: unknown }>(
+        `/api/sdui/${moduleInstance.module_id}/draft`,
+      );
+
+      if (draftResp.has_draft && draftResp.screen) {
+        await api.post(`/api/sdui/${newModule.module_id}`, { screen: draftResp.screen });
+      } else {
+        try {
+          await api.post(`/api/sdui/${moduleInstance.module_id}/duplicate`, {
+            target_module_id: newModule.module_id,
+          });
+        } catch {
+          const liveResp = await api.get<{ screen: unknown | null }>(`/api/sdui/${moduleInstance.module_id}`);
+          if (liveResp.screen) {
+            await api.post(`/api/sdui/${newModule.module_id}`, { screen: liveResp.screen });
+          }
+        }
+      }
+
+      await loadModules();
+      navigate('/editor?module_instance_id=' + newModule.module_id);
+    } catch (err) {
+      console.error('[ModulesTree] handleDuplicate() — error:', err instanceof Error ? err.message : err);
+      setError(err instanceof Error ? err.message : 'Failed to duplicate module');
+    }
   };
 
   const handleDelete = (moduleInstance: SDUIModule) => {
@@ -276,7 +308,7 @@ export function ModulesTree({ onModuleSelect }: ModulesTreeProps) {
           position={{ x: contextMenu.x, y: contextMenu.y }}
           onClose={() => setContextMenu(null)}
           onRename={() => handleRename(contextMenu.moduleInstance)}
-          onDuplicate={() => handleDuplicate(contextMenu.moduleInstance)}
+          onDuplicate={() => { void handleDuplicate(contextMenu.moduleInstance); }}
           onDelete={() => handleDelete(contextMenu.moduleInstance)}
           onOpenInAppEditor={() => handleOpenInAppEditor(contextMenu.moduleInstance)}
         />

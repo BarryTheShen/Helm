@@ -3,7 +3,8 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type { CSSProperties, JSX } from 'react';
 import {
   DndContext,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   closestCenter,
@@ -111,10 +112,8 @@ function RowContextMenu({ rowId, position, onClose, onDeleteRow, onDuplicateRow,
 }
 
 const ROW_DRAG_HANDLE_WIDTH = 24;
-/** FF4-ROW-001: Drag handle positioned to the left of the row, inside the editor canvas.
- *  Previously at -60px (off-screen). Now uses a negative left offset relative to the row
- *  container that places it just outside the row border but still within the canvas viewport. */
-const ROW_DRAG_HANDLE_OFFSET = -28;
+/** FF4-ROW-001: Grip on the row's left edge — inside bounds so DnD receives pointer events. */
+const ROW_DRAG_HANDLE_OFFSET = 2;
 const SCROLLABLE_CELL_WIDTH = 160;
 const SCROLLABLE_CELL_MIN_WIDTH = 120;
 const MAX_PREVIEW_WIDTH = 960;
@@ -1562,7 +1561,8 @@ export function EditorCanvas() {
 
   const [pickerState, setPickerState] = useState<{ rowId: string; cellIndex: number; position: { x: number; y: number } } | null>(null);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
   );
 
   const handleCellResizeCommit = useCallback((rowId: string, cellIndex: number, leftWidth: number, rightWidth: number) => {

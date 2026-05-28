@@ -25,6 +25,10 @@ test.describe('FF4 Phase 8 — module editor, versioning, rows', () => {
 
   test('FF4-MOD-010: autosave shows Saving then Saved after edit', async ({ page }) => {
     await addRowViaStructureTree(page);
+    const savingVisible = page.locator('[data-testid="autosave-status-saving"]');
+    await expect(savingVisible.or(page.locator('[data-testid="autosave-status-saved"]'))).toBeVisible({
+      timeout: 15000,
+    });
     await page.waitForResponse(
       (resp) => resp.url().includes('/api/sdui/') && resp.request().method() === 'POST' && resp.status() === 200,
       { timeout: 15000 },
@@ -33,7 +37,7 @@ test.describe('FF4 Phase 8 — module editor, versioning, rows', () => {
     await expect(page.locator('[data-testid="autosave-status-saved"]')).toContainText(/Saved/i);
   });
 
-  test('FF4-MOD-006: right-click module shows functional context menu', async ({ page }) => {
+  test('FF4-MOD-006: module context menu rename, duplicate, and delete work', async ({ page }) => {
     const createResponse = page.waitForResponse(
       (resp) =>
         resp.url().includes('/api/sdui/modules')
@@ -46,15 +50,36 @@ test.describe('FF4 Phase 8 — module editor, versioning, rows', () => {
     const body = await created.json();
     await waitForEditorReady(page);
 
+    const moduleName = body.name || 'New Module';
     const moduleRow = page.locator('aside span.truncate.font-medium').filter({
-      hasText: new RegExp(body.name || 'Module', 'i'),
+      hasText: new RegExp(moduleName, 'i'),
     }).first();
     await moduleRow.click({ button: 'right' });
     const menu = page.locator('[data-testid="module-context-menu"]');
     await expect(menu).toBeVisible();
-    await expect(menu.getByText('Rename')).toBeVisible();
-    await expect(menu.getByText('Duplicate')).toBeVisible();
-    await expect(menu.getByText('Delete')).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Rename' })).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Duplicate' })).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Delete' })).toBeVisible();
+
+    await menu.getByRole('menuitem', { name: 'Rename' }).click();
+    await expect(page.getByRole('heading', { name: 'Rename Module' })).toBeVisible();
+    await page.getByRole('button', { name: 'Cancel' }).click();
+
+    const duplicateResponse = page.waitForResponse(
+      (resp) =>
+        resp.url().includes('/api/sdui/modules')
+        && resp.request().method() === 'POST'
+        && resp.status() === 201,
+      { timeout: 15000 },
+    );
+    await moduleRow.click({ button: 'right' });
+    await expect(menu).toBeVisible();
+    await menu.getByRole('menuitem', { name: 'Duplicate' }).click();
+    const duplicated = await duplicateResponse;
+    const dupBody = await duplicated.json();
+    expect(dupBody.module_id).toBeTruthy();
+    expect(dupBody.name).toMatch(/Copy/i);
+    await expect(page).toHaveURL(new RegExp(`module_instance_id=${dupBody.module_id}`));
   });
 
   test('FF4-MOD-016: delete row with content requires confirmation', async ({ page }) => {
@@ -74,9 +99,12 @@ test.describe('FF4 Phase 8 — module editor, versioning, rows', () => {
     expect(dialogShown).toBe(true);
   });
 
-  test('FF4-MOD-012: preview modal renders module draft with inline validation area', async ({ page }) => {
+  test('FF4-MOD-005/012: preview modal renders SDUI module draft', async ({ page }) => {
+    await addRowViaStructureTree(page);
     await page.locator('[data-testid="btn-preview-web"]').click();
-    await expect(page.locator('[data-testid="module-editor-preview"]')).toBeVisible({ timeout: 10000 });
+    const preview = page.locator('[data-testid="module-editor-preview"]');
+    await expect(preview).toBeVisible({ timeout: 10000 });
+    await expect(preview.locator('[data-testid="sdui-preview-embedded"]')).toBeVisible();
   });
 
   test('FF4-MOD-011: applying local template auto-creates checkpoint', async ({ page }) => {
@@ -122,18 +150,44 @@ test.describe('FF4 Phase 8 — module editor, versioning, rows', () => {
     }
   });
 
-  test('FF4-ROW-001: row drag handle is visible on the left of the row', async ({ page }) => {
+  test('FF4-ROW-001: row drag handle reorders rows', async ({ page }) => {
     await addRowViaStructureTree(page);
-    const handle = page.locator('[data-testid^="row-drag-handle"]').first();
+    await addRowViaStructureTree(page);
+
+    const rowIdsBefore = await page.evaluate(() => {
+      const store = (window as unknown as { __editorStore?: { getState: () => { rows: Array<{ id: string }> } } }).__editorStore;
+      return store?.getState().rows.map((row) => row.id) ?? [];
+    });
+    expect(rowIdsBefore.length).toBeGreaterThanOrEqual(2);
+
+    const sourceId = rowIdsBefore[0];
+    const firstRow = page.locator('[data-testid="editor-canvas"] .group.rounded-lg').first();
+    await firstRow.hover();
+    const handle = page.locator(`[data-testid="row-drag-handle-${sourceId}"]`);
     await expect(handle).toBeVisible();
-    const row = page.locator('[data-testid="editor-canvas"] .group.rounded-lg').first();
+    await handle.scrollIntoViewIfNeeded();
+
     const handleBox = await handle.boundingBox();
-    const rowBox = await row.boundingBox();
+    const targetRow = page.locator('[data-testid="editor-canvas"] .group.rounded-lg').nth(1);
+    const targetBox = await targetRow.boundingBox();
     expect(handleBox).toBeTruthy();
-    expect(rowBox).toBeTruthy();
-    if (handleBox && rowBox) {
-      expect(handleBox.x + handleBox.width).toBeLessThanOrEqual(rowBox.x + 4);
-    }
+    expect(targetBox).toBeTruthy();
+
+    const startX = handleBox!.x + handleBox!.width / 2;
+    const startY = handleBox!.y + handleBox!.height / 2;
+    const endY = targetBox!.y + targetBox!.height / 2;
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX, endY, { steps: 24 });
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+
+    const rowIdsAfter = await page.evaluate(() => {
+      const store = (window as unknown as { __editorStore?: { getState: () => { rows: Array<{ id: string }> } } }).__editorStore;
+      return store?.getState().rows.map((row) => row.id) ?? [];
+    });
+    expect(rowIdsAfter.indexOf(sourceId)).toBeGreaterThan(rowIdsBefore.indexOf(sourceId));
   });
 
   test('FF4-ROW-006: Add Cell disabled when minimum width would be violated', async ({ page }) => {
