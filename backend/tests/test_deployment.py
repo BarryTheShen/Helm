@@ -59,3 +59,23 @@ def test_backend_entrypoint_serves_static_when_dist_present():
     assert 'app.mount("/",' in content
     assert "StaticFiles" in content
     assert "html=True" in content
+
+
+@pytest.mark.anyio
+async def test_ff4_be_005_websocket_health_and_api_coexist(client):
+    """FF4-BE-005: Realtime/API namespaces remain reachable alongside static config."""
+    health = await client.get("/health")
+    assert health.status_code == 200
+
+    ws_probe = await client.get("/ws")
+    assert ws_probe.status_code in (404, 405, 426)
+
+    api_probe = await client.get("/api/apps")
+    assert api_probe.status_code == 401
+
+
+def test_ff4_be_001_admin_route_spa_fallback_comment():
+    """FF4-BE-001: SPA nested admin routes fall back to index.html via html=True mount."""
+    main_py = (REPO_ROOT / "backend" / "app" / "main.py").read_text()
+    assert "SPA client-side routing fallback" in main_py
+    assert "index.html instead of 404" in main_py

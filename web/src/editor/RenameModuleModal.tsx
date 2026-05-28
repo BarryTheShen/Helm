@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
+import { ModuleAffectedAppsPanel } from './ModuleAffectedAppsPanel';
 
 interface RenameModuleModalProps {
   moduleId: string;
@@ -47,6 +48,8 @@ export function RenameModuleModal({ moduleId, currentName, onClose, onSuccess }:
         <h3 className="text-sm font-semibold mb-4">Rename Module</h3>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <ModuleAffectedAppsPanel moduleId={moduleId} />
+
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
               New Name

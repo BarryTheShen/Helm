@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
 import { AlertTriangle } from 'lucide-react';
+import { ModuleAffectedAppsPanel } from './ModuleAffectedAppsPanel';
 
 interface DeleteModuleModalProps {
   moduleId: string;
@@ -50,6 +51,8 @@ export function DeleteModuleModal({ moduleId, moduleName, onClose, onSuccess }: 
         </div>
 
         <div className="space-y-4">
+          <ModuleAffectedAppsPanel moduleId={moduleId} />
+
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-2">
               Type <span className="font-mono font-semibold">{moduleName}</span> to confirm deletion:

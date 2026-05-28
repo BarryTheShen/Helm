@@ -30,6 +30,7 @@ from app.models.module_working_draft import ModuleWorkingDraft
 from app.models.preview_session import PreviewSession
 from app.models.app import App
 from app.models.app_module_ref import AppModuleRef
+from app.models.app_working_draft import AppWorkingDraft
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
 from app.schemas.device_error import DeviceErrorReportOut, PreviewSessionErrorCreate
@@ -829,6 +830,39 @@ async def reject_draft_legacy(
 
 # ── Module Usage endpoint ───────────────────────────────────────────────────
 
+_CUSTOM_MODULES_KEY = "_custom_modules"
+
+
+async def _custom_module_ids(db: AsyncSession, user_id: str) -> set[str]:
+    result = await db.execute(
+        select(ModuleState).where(
+            ModuleState.user_id == user_id,
+            ModuleState.module_type == _CUSTOM_MODULES_KEY,
+        )
+    )
+    state = result.scalars().first()
+    if state is None:
+        return set()
+    return {item.get("id") for item in (state.state_json or {}).get("modules", []) if item.get("id")}
+
+
+def _module_ids_in_config(config: dict | None) -> set[str]:
+    if not config:
+        return set()
+    bb_ids = {
+        item.get("module_instance_id")
+        for item in (config.get("bottom_bar_config") or [])
+        if isinstance(item, dict) and item.get("module_instance_id")
+    }
+    lp_raw = config.get("launchpad_config") or []
+    lp_ids: set[str] = set()
+    for item in lp_raw:
+        if isinstance(item, str):
+            lp_ids.add(item)
+        elif isinstance(item, dict) and item.get("module_instance_id"):
+            lp_ids.add(str(item["module_instance_id"]))
+    return bb_ids | lp_ids
+
 
 @router.get("/{module_id}/usage", response_model=ModuleUsageOut)
 async def get_module_usage(
@@ -838,10 +872,10 @@ async def get_module_usage(
 ):
     """Get which apps use a given module.
 
-    Returns a list of apps that reference this module_instance_id
-    in their bottom_bar_config or launchpad_config.
+    Returns apps referencing this module in live config or app working drafts
+    (bottom_bar_config / launchpad_config). Supports ModuleInstance IDs and
+    custom SDUI module IDs.
     """
-    # Verify module exists
     result = await db.execute(
         select(ModuleInstance).where(
             ModuleInstance.id == module_id,
@@ -850,25 +884,35 @@ async def get_module_usage(
     )
     module = result.scalar_one_or_none()
     if module is None:
-        raise HTTPException(status_code=404, detail="Module not found")
+        custom_ids = await _custom_module_ids(db, user_id)
+        if module_id not in custom_ids:
+            raise HTTPException(status_code=404, detail="Module not found")
 
-    # Find apps that reference this module
-    result = await db.execute(
-        select(App).where(App.user_id == user_id)
-    )
-    apps = list(result.scalars().all())
+    apps_result = await db.execute(select(App).where(App.user_id == user_id))
+    apps = list(apps_result.scalars().all())
+    apps_by_id = {app.id: app for app in apps}
 
-    used_by: list[dict[str, str]] = []
+    used_by: dict[str, str] = {}
     for app in apps:
-        # Check bottom_bar_config
-        bb_ids = {
-            item.get("module_instance_id")
-            for item in (app.bottom_bar_config or [])
-            if isinstance(item, dict)
-        }
-        # Check launchpad_config
-        lp_ids = set(app.launchpad_config or [])
-        if module_id in bb_ids or module_id in lp_ids:
-            used_by.append({"app_id": app.id, "app_name": app.name})
+        if module_id in _module_ids_in_config(
+            {
+                "bottom_bar_config": app.bottom_bar_config,
+                "launchpad_config": app.launchpad_config,
+            }
+        ):
+            used_by[app.id] = app.name
 
-    return ModuleUsageOut(module_id=module_id, used_by_apps=used_by)
+    drafts_result = await db.execute(
+        select(AppWorkingDraft).where(AppWorkingDraft.user_id == user_id)
+    )
+    for draft in drafts_result.scalars().all():
+        if module_id not in _module_ids_in_config(draft.config_json):
+            continue
+        app = apps_by_id.get(draft.app_id)
+        if app is not None:
+            used_by[app.id] = app.name
+
+    return ModuleUsageOut(
+        module_id=module_id,
+        used_by_apps=[{"app_id": app_id, "app_name": app_name} for app_id, app_name in used_by.items()],
+    )
