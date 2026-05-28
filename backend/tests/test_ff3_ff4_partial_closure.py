@@ -261,6 +261,27 @@ async def test_ff3_sess10_bbar_001_bottom_bar_max_five_slots(db_session):
     assert "5" in (error_msg or "")
 
 
+def test_ff3_tpl_meth_001_template_fix_script_documents_step_methodology():
+    """FF3-TPL-METH-001: fix_templates.py records per-template issues and remediation steps."""
+    script = (REPO_ROOT / "backend" / "fix_templates.py").read_text()
+    assert "Fix template issues identified in FF3 audit" in script
+    assert "Home:" in script
+    assert "Daily Planner:" in script
+    assert "Feed:" in script
+    assert "Idempotent" in script
+    assert "Issue" in script
+
+
+def test_ff3_conn_ext_001_connections_ui_supports_custom_provider_types():
+    """FF3-CONN-EXT-001: Connections admin can register custom provider types without code deploy."""
+    page_src = (REPO_ROOT / "web" / "src" / "pages" / "ConnectionsPage.tsx").read_text()
+    assert "helm_custom_providers" in page_src
+    assert "showCustomTypeModal" in page_src
+    assert "Add Connection Type" in page_src
+    assert "builtInProviders" in page_src
+    assert "saveCustomProviders" in page_src
+
+
 async def test_ff3_module_usage_endpoint_for_affected_apps(auth_client, db_session):
     """FF3-SESS10-RENAME/DELETE-MODAL-001: usage API lists apps referencing a module."""
     from app.models.module_instance import ModuleInstance

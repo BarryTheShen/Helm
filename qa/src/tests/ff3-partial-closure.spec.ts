@@ -9,6 +9,7 @@ import {
 } from '../page-objects/app-editor';
 import { WorkflowsPage } from '../page-objects/workflows';
 import { TemplatesPage } from '../page-objects/templates';
+import { ConnectionsPage } from '../page-objects/connections';
 import {
   addComponentToFirstCell,
   createFreshEditorModule,
@@ -401,5 +402,27 @@ test.describe('FF3 supplemental PARTIAL closure', () => {
       data: { text: 'FF3 E2E Todo', completed: false },
     });
     expect(resp.status()).toBe(201);
+  });
+
+  test('FF3-CONN-EXT-001: custom connection type appears in provider dropdown', async ({ page, login }) => {
+    await login();
+    await page.goto('/connections');
+    await page.locator(ConnectionsPage.btnAddType).click();
+    await expect(page.locator(ConnectionsPage.customTypeModalHeading)).toBeVisible();
+
+    const typeId = `ff3ext_${Date.now()}`;
+    await page.locator(ConnectionsPage.customTypeNameInput).fill('FF3 Custom Provider');
+    await page.locator(ConnectionsPage.customTypeIdInput).fill(typeId);
+    await page.locator(ConnectionsPage.customTypeCategoryInput).fill('Custom');
+    await page
+      .locator('.fixed.inset-0')
+      .filter({ has: page.locator(ConnectionsPage.customTypeModalHeading) })
+      .locator(ConnectionsPage.customTypeSubmitBtn)
+      .click();
+    await expect(page.locator(ConnectionsPage.customTypeModalHeading)).toHaveCount(0);
+
+    await page.locator(ConnectionsPage.btnAddConnection).click();
+    await expect(page.locator(ConnectionsPage.createModalHeading)).toBeVisible();
+    await expect(page.locator(`select option[value="${typeId}"]`)).toHaveText('FF3 Custom Provider');
   });
 });
