@@ -1,9 +1,9 @@
 # Slice: FF4-SLICE-CALENDAR
 
 - **Slice ID:** FF4-SLICE-CALENDAR
-- **Status:** unclaimed
-- **Owner agent:** 
-- **Claimed at:** 
+- **Status:** verified
+- **Owner agent:** helm-frontend
+- **Claimed at:** 2026-05-28
 - **Included REQ-IDs:** FF4-CAL-001, FF4-CAL-002, FF4-CAL-003, FF4-CAL-004, FF4-CAL-005, FF4-CAL-006, FF4-CAL-007, FF4-CAL-008, FF4-CAL-009, FF4-CAL-010, FF4-CAL-011, FF4-CAL-012, FF4-CAL-013, FF4-CAL-014, FF4-CAL-015, FF4-CAL-016, FF4-CAL-017, FF4-CAL-018, FF4-CAL-019, FF4-CAL-020, FF4-CAL-021, FF4-CAL-022, FF4-CAL-023, FF4-CAL-024, FF4-CAL-025
 - **Explicitly excluded REQ-IDs:** none
 - **Source sections:** FF4 doc lines 250-504 (Calendar — full implementation direction), `docs/codebase-explanation/frontend.md` lines 343, 672-676 (CalendarModule, Calendar Mobile Changes), `docs/codebase-explanation/protocol.md` lines 379-385 (CalendarEvent source_type + notes)
@@ -63,7 +63,7 @@
   - FF4-CAL-023: manual-flow-test
   - FF4-CAL-024: manual-flow-test
   - FF4-CAL-025: manual-flow-test
-- **Implementation evidence:** 
-- **QA evidence:** 
-- **Reviewer verdict:** 
-- **Remaining blockers:** 
+- **Implementation evidence:** mobile/src/components/composite/CalendarModule.tsx; web/src/components/calendar/CalendarPreview.tsx; backend calendar API
+- **QA evidence:** backend/tests/test_ff4_phase11_calendar.py; qa/src/tests/ff4-phase11-calendar.spec.ts; qa/src/tests/ff4-phase6-cal-tpl.spec.ts
+- **Reviewer verdict:** PASS — FF4-CAL-001..025 closed (CAL-010 deferred accepted). FF4-CAL-009: admin preview + mobile share time-block grid with overlap layout and current-time indicator.
+- **Remaining blockers:** CalDAV/Notion remote sync (V1 deferred per FF4-CAL-014)

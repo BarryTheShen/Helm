@@ -41,6 +41,15 @@ const SAMPLE_EVENTS: CalendarPreviewEvent[] = [
     notes: 'Daily sync with engineering. Review blockers and sprint goals for the week ahead.',
   },
   {
+    id: 'evt-1b',
+    title: '1:1 overlap',
+    start: `${todayIso()}T09:15:00`,
+    end: `${todayIso()}T10:00:00`,
+    sourceColor: '#DC2626',
+    sourceType: 'caldav',
+    notes: 'Overlapping event for side-by-side week/day layout.',
+  },
+  {
     id: 'evt-2',
     title: 'Design review',
     start: `${todayIso()}T14:00:00`,
@@ -59,6 +68,60 @@ const SAMPLE_EVENTS: CalendarPreviewEvent[] = [
     notes: 'Plan tomorrow tasks and calendar blocks.',
   },
 ];
+
+interface TimedEventLayout<T extends CalendarPreviewEvent> {
+  event: T;
+  column: number;
+  columnCount: number;
+}
+
+function minutesFromIso(iso: string): number {
+  const d = new Date(iso);
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+/** FF4-CAL-009: side-by-side columns for overlapping timed events. */
+function layoutTimedEvents<T extends CalendarPreviewEvent>(events: T[]): TimedEventLayout<T>[] {
+  if (events.length === 0) return [];
+
+  const sorted = [...events].sort(
+    (a, b) => minutesFromIso(a.start) - minutesFromIso(b.start)
+      || minutesFromIso(a.end) - minutesFromIso(b.end),
+  );
+
+  const columnEnds: number[] = [];
+  const placed: Array<{ event: T; column: number; start: number; end: number }> = [];
+
+  for (const event of sorted) {
+    const start = minutesFromIso(event.start);
+    const end = Math.max(start + 15, minutesFromIso(event.end));
+    let column = columnEnds.findIndex((endMin) => endMin <= start);
+    if (column === -1) {
+      column = columnEnds.length;
+      columnEnds.push(end);
+    } else {
+      columnEnds[column] = end;
+    }
+    placed.push({ event, column, start, end });
+  }
+
+  return placed.map(({ event, column, start, end }) => {
+    const overlapping = placed.filter((other) => other.start < end && other.end > start);
+    const points: Array<{ t: number; delta: number }> = [];
+    for (const other of overlapping) {
+      points.push({ t: other.start, delta: 1 });
+      points.push({ t: other.end, delta: -1 });
+    }
+    points.sort((a, b) => a.t - b.t || a.delta - b.delta);
+    let concurrent = 0;
+    let maxConcurrent = 1;
+    for (const point of points) {
+      concurrent += point.delta;
+      maxConcurrent = Math.max(maxConcurrent, concurrent);
+    }
+    return { event, column, columnCount: maxConcurrent };
+  });
+}
 
 function todayIso(): string {
   const d = new Date();
@@ -275,6 +338,8 @@ function MonthPreview({
   );
 }
 
+const HOUR_HEIGHT_PX = 28;
+
 function TimeGridPreview({
   events,
   onSelectEvent,
@@ -286,35 +351,80 @@ function TimeGridPreview({
   mode: 'week' | 'day';
   showSourceBadges?: boolean;
 }) {
-  const hours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+  const hours = useMemo(() => Array.from({ length: 24 }, (_, hour) => hour), []);
+  const layouts = useMemo(() => layoutTimedEvents(events), [events]);
+  const today = todayIso();
+  const isToday = mode === 'day' || events.some((event) => event.start.startsWith(today));
+  const currentTimeTop = useMemo(() => {
+    const now = new Date();
+    return (now.getHours() + now.getMinutes() / 60) * HOUR_HEIGHT_PX;
+  }, []);
 
   return (
     <div data-testid={`calendar-${mode}-view`}>
-      <div className="relative" data-testid="calendar-time-grid">
-        {hours.map((hour) => (
-          <div key={hour} className="grid grid-cols-[40px_1fr] border-t border-gray-100 text-[10px]">
-            <div className="py-2 pr-1 text-right text-gray-400">{String(hour).padStart(2, '0')}:00</div>
-            <div className="relative min-h-[28px] py-1">
-              {events
-                .filter((event) => new Date(event.start).getHours() === hour)
-                .map((event) => (
-                  <button
-                    key={event.id}
-                    type="button"
-                    data-testid={`calendar-time-event-${event.id}`}
-                    onClick={() => onSelectEvent(event)}
-                    className="mb-1 flex w-full items-center gap-1 rounded px-2 py-1 text-left text-[10px] text-white"
-                    style={{ backgroundColor: event.sourceColor ?? SOURCE_BADGE_COLORS[event.sourceType ?? 'local'] }}
-                  >
-                    <span className="flex-1">
-                      {formatTime(event.start)} — {event.title}
-                    </span>
-                    {showSourceBadges && <SourceBadge sourceType={event.sourceType} />}
-                  </button>
-                ))}
+      <div
+        className="relative grid grid-cols-[40px_1fr] text-[10px]"
+        data-testid="calendar-time-grid"
+        style={{ height: 24 * HOUR_HEIGHT_PX }}
+      >
+        <div className="relative border-r border-gray-100">
+          {hours.map((hour) => (
+            <div
+              key={hour}
+              className="absolute right-1 text-right text-gray-400"
+              style={{ top: hour * HOUR_HEIGHT_PX, height: HOUR_HEIGHT_PX }}
+            >
+              {String(hour).padStart(2, '0')}:00
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
+        <div className="relative">
+          {hours.map((hour) => (
+            <div
+              key={hour}
+              className="absolute left-0 right-0 border-t border-gray-100"
+              style={{ top: hour * HOUR_HEIGHT_PX, height: HOUR_HEIGHT_PX }}
+            />
+          ))}
+          {layouts.map(({ event, column, columnCount }) => {
+            const startMinutes = minutesFromIso(event.start);
+            const endMinutes = Math.max(startMinutes + 15, minutesFromIso(event.end));
+            const top = (startMinutes / 60) * HOUR_HEIGHT_PX;
+            const height = Math.max(((endMinutes - startMinutes) / 60) * HOUR_HEIGHT_PX, 18);
+            const widthPct = 100 / columnCount;
+            const leftPct = column * widthPct;
+            return (
+              <button
+                key={event.id}
+                type="button"
+                data-testid={`calendar-time-event-${event.id}`}
+                data-overlap-column={column}
+                data-overlap-columns={columnCount}
+                onClick={() => onSelectEvent(event)}
+                className="absolute flex items-center gap-1 overflow-hidden rounded px-1 py-0.5 text-left text-[10px] text-white"
+                style={{
+                  top,
+                  height,
+                  left: `${leftPct}%`,
+                  width: `calc(${widthPct}% - 2px)`,
+                  backgroundColor: event.sourceColor ?? SOURCE_BADGE_COLORS[event.sourceType ?? 'local'],
+                }}
+              >
+                <span className="flex-1 truncate">
+                  {formatTime(event.start)} — {event.title}
+                </span>
+                {showSourceBadges && <SourceBadge sourceType={event.sourceType} />}
+              </button>
+            );
+          })}
+          {isToday && (
+            <div
+              className="pointer-events-none absolute left-0 right-0 z-10 h-0.5 bg-red-500"
+              data-testid="calendar-current-time-line"
+              style={{ top: currentTimeTop }}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

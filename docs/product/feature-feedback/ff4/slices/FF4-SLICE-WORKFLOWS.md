@@ -1,9 +1,9 @@
 # Slice: FF4-SLICE-WORKFLOWS
 
 - **Slice ID:** FF4-SLICE-WORKFLOWS
-- **Status:** unclaimed
-- **Owner agent:** 
-- **Claimed at:** 
+- **Status:** verified
+- **Owner agent:** helm-backend
+- **Claimed at:** 2026-05-28
 - **Included REQ-IDs:** FF4-WF-001, FF4-WF-002
 - **Explicitly excluded REQ-IDs:** none
 - **Source sections:** FF4 doc lines 566-568 (Workflows), `docs/codebase-explanation/backend.md` lines 761-764 (Sample Data Seeding / Workflows)
@@ -20,7 +20,7 @@
 - **QA coverage classification/checks:**
   - FF4-WF-001: manual-flow-test
   - FF4-WF-002: automated-test
-- **Implementation evidence:** 
-- **QA evidence:** 
-- **Reviewer verdict:** 
-- **Remaining blockers:** 
+- **Implementation evidence:** backend/app/services/workflow_seed.py; WorkflowsPage
+- **QA evidence:** backend/tests/test_ff4_phase12_tpl_wf_mcp.py; qa/src/tests/ff4-phase12-tpl-wf-mcp.spec.ts
+- **Reviewer verdict:** PASS — FF4-WF-001 closed (sample workflows visible via API/UI)
+- **Remaining blockers:** none for FF4-WF-001

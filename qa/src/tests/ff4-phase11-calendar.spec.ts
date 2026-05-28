@@ -83,4 +83,42 @@ test.describe('FF4 Phase 11 — calendar PARTIAL closure', () => {
     await page.locator(EditorPage.selectVariant).selectOption('eventList');
     await expect(page.locator('[data-testid^="calendar-event-notes-"]').first()).toBeVisible({ timeout: 10000 });
   });
+
+  test('FF4-CAL-008: month variant supports date tap agenda and event details', async ({ page }) => {
+    await addComponentToFirstCell(page, 'CalendarModule');
+    const calendar = page.locator('[data-testid="calendar-preview"][data-variant="month"]').first();
+    await expect(calendar.locator('[data-testid="calendar-month-grid"]')).toBeVisible();
+    await calendar.locator('[data-testid="calendar-today"]').click({ force: true });
+    const agendaEvent = calendar.locator('[data-testid^="calendar-agenda-event-"]').first();
+    await expect(agendaEvent).toBeVisible({ timeout: 10000 });
+    await agendaEvent.evaluate((el) => (el as HTMLButtonElement).click());
+    await expect(calendar.locator('[data-testid="calendar-event-detail"]')).toBeVisible({ timeout: 10000 });
+  });
+
+  test('FF4-CAL-009: week/day time-block grid with overlap and current-time line', async ({ page }) => {
+    await addComponentToFirstCell(page, 'CalendarModule');
+
+    await page.locator(EditorPage.selectVariant).selectOption('week');
+    const week = page.locator('[data-testid="calendar-preview"][data-variant="week"]').first();
+    await expect(week.locator('[data-testid="calendar-time-grid"]')).toBeVisible();
+    await expect(week.locator('[data-testid^="calendar-time-event-"]').first()).toBeVisible();
+    const overlapBlock = week.locator('[data-testid="calendar-time-event-evt-1b"]').first();
+    await expect(overlapBlock).toHaveAttribute('data-overlap-columns', '2');
+    await expect(week.locator('[data-testid="calendar-current-time-line"]')).toBeVisible();
+
+    await page.locator(EditorPage.selectVariant).selectOption('day');
+    const day = page.locator('[data-testid="calendar-preview"][data-variant="day"]').first();
+    await expect(day.locator('[data-testid="calendar-time-grid"]')).toBeVisible();
+    await expect(day.locator('[data-testid="calendar-current-time-line"]')).toBeVisible();
+  });
+
+  test('FF4-CAL-019: calendar inspector exposes required fields', async ({ page }) => {
+    await addComponentToFirstCell(page, 'CalendarModule');
+    const inspector = page.locator(EditorPage.propertyInspector);
+    await expect(inspector.getByText('View Type')).toBeVisible();
+    await expect(inspector.getByText('Title (optional)')).toBeVisible();
+    await expect(inspector.getByText('Max Events (Event List/Compact)')).toBeVisible();
+    await expect(inspector.getByText('Show Source Badges')).toBeVisible();
+    await expect(inspector.getByText('Show Notes')).toBeVisible();
+  });
 });

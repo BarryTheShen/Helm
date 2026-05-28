@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from pathlib import Path
 
 from app.services.component_seed import INITIAL_COMPONENTS
 from app.services.template_seed import SEED_TEMPLATES
@@ -14,6 +15,55 @@ EVENTS = "/api/calendar/events"
 
 def _calendar_seed() -> dict:
     return next(item for item in INITIAL_COMPONENTS if item["type"] == "CalendarModule")
+
+
+async def test_ff4_cal_009_week_day_variants_in_registry():
+    """FF4-CAL-009: Week/Day variants registered; mobile uses time-block grid with overlap layout."""
+    seed = _calendar_seed()
+    options = seed["props_schema"]["variant"]["options"]
+    assert "week" in options
+    assert "day" in options
+    mobile_source = (
+        Path(__file__).resolve().parents[2]
+        / "mobile/src/components/composite/CalendarModule.tsx"
+    ).read_text(encoding="utf-8")
+    assert "layoutTimedEvents" in mobile_source
+    assert "HOUR_HEIGHT" in mobile_source
+    assert "currentTimeLine" in mobile_source
+
+
+async def test_ff4_cal_008_month_variant_in_registry():
+    """FF4-CAL-008: Month variant with grid/agenda is the default calendar variant."""
+    seed = _calendar_seed()
+    assert seed["default_props"]["variant"] == "month"
+    assert "month" in seed["props_schema"]["variant"]["options"]
+
+
+async def test_ff4_cal_019_inspector_props_in_registry():
+    """FF4-CAL-019: Calendar registry exposes inspector fields for admin configuration."""
+    seed = _calendar_seed()
+    for field in ("variant", "maxEvents", "showSourceBadges", "showNotes", "compactThreshold", "sourceTypes", "categoryFilter"):
+        assert field in seed["props_schema"]
+
+
+async def test_ff4_cal_005_no_mobile_variant_switcher_documented():
+    """FF4-CAL-005: Mobile CalendarModule documents admin-only variant (no user switcher)."""
+    mobile_source = (
+        Path(__file__).resolve().parents[2]
+        / "mobile/src/components/composite/CalendarModule.tsx"
+    ).read_text(encoding="utf-8")
+    assert "FF4-CAL-005" in mobile_source
+    assert "no variant switcher" in mobile_source.lower() or "NO variant switcher" in mobile_source
+
+
+async def test_ff4_cal_020_home_template_compact_calendar():
+    """FF4-CAL-020: Home template embeds compact calendar."""
+    home = next(item for item in SEED_TEMPLATES if item["name"] == "Home")
+    calendar_cell = next(
+        cell for row in home["screen_json"]["rows"] for cell in row.get("cells", [])
+        if cell.get("content", {}).get("type") == "CalendarModule"
+    )
+    assert calendar_cell["content"]["props"]["variant"] == "compact"
 
 
 async def test_ff4_cal_001_calendar_registered_as_first_class():

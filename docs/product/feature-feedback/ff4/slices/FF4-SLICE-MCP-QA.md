@@ -35,7 +35,7 @@
   - FF4-QA-007: manual-flow-test
   - FF4-QA-008: manual-flow-test
   - FF4-DES-003: review-only
-- **Implementation evidence:** 
-- **QA evidence:** 
-- **Reviewer verdict:** 
-- **Remaining blockers:** 
+- **Implementation evidence:** backend/app/mcp/server.py; AGENTS.md react-doctor policy; ConnectionsPage docs
+- **QA evidence:** backend/tests/test_ff4_phase12_tpl_wf_mcp.py; qa/src/tests/ff4-phase12-tpl-wf-mcp.spec.ts
+- **Reviewer verdict:** PASS — FF4-MCP-001, FF4-MCP-002, FF4-QA-004, FF4-QA-006 closed in phase 12
+- **Remaining blockers:** FF4-QA-002/005 App Editor live E2E still open

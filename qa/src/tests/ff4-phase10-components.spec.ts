@@ -65,6 +65,31 @@ test.describe('FF4 Phase 10 — components and variables', () => {
     await expect(page.locator('[data-testid="editor-canvas"]').getByText(/To-Do|Todo/i).first()).toBeVisible();
   });
 
+  test('FF4-ICON-001: Icon preview fills cell and picker changes icon', async ({ page }) => {
+    await addComponentToFirstCell(page, 'Icon');
+    const iconCell = page.locator('[data-testid="icon-preview-cell"]').first();
+    await expect(iconCell).toBeVisible();
+    await page.locator('[data-testid="icon-picker-trigger"]').first().click();
+    await page.locator('[data-testid="icon-picker-option"]').filter({ hasText: 'heart' }).first().click();
+    await expect(iconCell.locator('svg.lucide-heart').first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('FF4-EC-004/005: Daily Planner template uses Empty vertical stack', async ({ page, request }) => {
+    const token = await page.evaluate(() => window.localStorage.getItem('admin_token'));
+    const templatesResp = await request.get('/api/templates', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const planner = (await templatesResp.json()).items.find((item: { name?: string }) => item.name === 'Daily Planner');
+    expect(planner?.id).toBeTruthy();
+    const detailResp = await request.get(`/api/templates/${planner.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const screenJson = JSON.stringify((await detailResp.json()).screen_json);
+    expect(screenJson).toContain('"type":"Empty"');
+    expect(screenJson).toContain('CalendarModule');
+    expect(screenJson).toContain('"type":"Todo"');
+  });
+
   test('FF4-BTN-003: Home template buttons include configured actions', async ({ page, request }) => {
     const token = await page.evaluate(() => window.localStorage.getItem('admin_token'));
     const templatesResp = await request.get('/api/templates', {

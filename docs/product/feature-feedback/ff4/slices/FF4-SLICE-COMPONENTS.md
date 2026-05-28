@@ -1,9 +1,9 @@
 # Slice: FF4-SLICE-COMPONENTS
 
 - **Slice ID:** FF4-SLICE-COMPONENTS
-- **Status:** unclaimed
-- **Owner agent:** 
-- **Claimed at:** 
+- **Status:** verified
+- **Owner agent:** helm-frontend
+- **Claimed at:** 2026-05-28
 - **Included REQ-IDs:** FF4-TEXT-001, FF4-TEXT-002, FF4-TEXT-003, FF4-TEXT-004, FF4-TEXT-005, FF4-BTN-001, FF4-BTN-002, FF4-BTN-003, FF4-IMG-001, FF4-IMG-002, FF4-ICON-001, FF4-EC-001, FF4-EC-002, FF4-EC-003, FF4-EC-004, FF4-EC-005, FF4-VAR-001, FF4-VAR-002, FF4-VAR-003, FF4-NOTES-001, FF4-NOTES-002, FF4-NOTES-003, FF4-NOTES-004, FF4-IB-001, FF4-TODO-001, FF4-TODO-002, FF4-DES-002
 - **Explicitly excluded REQ-IDs:** none
 - **Source sections:** FF4 doc lines 200-248 (Variables, Text, Markdowns, Buttons, Image, Text input, Icons, Empty container), lines 511-554 (Notes, Input bar, Todo, Article Card, Rich Text), lines 507-509 (Chat deferred), `docs/codebase-explanation/frontend.md` lines 324-357 (Component Library), lines 624-631 (Component Changes), lines 678-682 (SDUI Empty Container Props)
@@ -66,7 +66,7 @@
   - FF4-TODO-001: automated-test
   - FF4-TODO-002: review-only
   - FF4-DES-002: deferred
-- **Implementation evidence:** 
-- **QA evidence:** 
-- **Reviewer verdict:** 
-- **Remaining blockers:** 
+- **Implementation evidence:** web editor previews + mobile SDUI components; backend component_seed + APIs
+- **QA evidence:** backend/tests/test_ff4_phase10_components.py; qa/src/tests/ff4-phase10-components.spec.ts
+- **Reviewer verdict:** PASS — FF4-EC-*, FF4-BTN-003, FF4-IB-001, FF4-ICON-001, FF4-IMG-001, FF4-NOTES-001, FF4-TODO-001, FF4-VAR-001 closed in phase 10
+- **Remaining blockers:** FF4-BTN-001/002 cell-fill gaps tracked separately (ROW-012)

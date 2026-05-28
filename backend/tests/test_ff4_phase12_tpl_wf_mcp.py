@@ -1,5 +1,6 @@
 """FF4 Phase 12 — Templates, workflows, MCP-QA PARTIAL REQ closure tests."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,19 @@ TEMPLATES = "/api/templates"
 WORKFLOWS = "/api/workflows"
 APPS = "/api/apps"
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+async def test_ff4_tpl_001_seed_templates_are_functional_json():
+    """FF4-TPL-001: Seed templates validate and include functional component bindings."""
+    names = {item["name"] for item in SEED_TEMPLATES}
+    assert {"Home", "Daily Planner", "Feed"}.issubset(names)
+    for seed in SEED_TEMPLATES:
+        if seed["name"] not in ("Home", "Daily Planner", "Feed"):
+            continue
+        _, errors = validate_sdui_screen_payload(seed["screen_json"])
+        assert errors == [], f"{seed['name']} failed validation: {errors}"
+        payload = json.dumps(seed["screen_json"])
+        assert "CalendarModule" in payload or "Button" in payload
 
 
 async def test_ff4_tpl_003_templates_are_json_payloads():

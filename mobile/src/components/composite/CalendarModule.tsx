@@ -251,6 +251,60 @@ function eventHeight(start: string, end: string): number {
   return Math.max(getDurationHours(start, end) * HOUR_HEIGHT, 30);
 }
 
+interface TimedEventLayout<T extends CalendarEvent> {
+  event: T;
+  column: number;
+  columnCount: number;
+}
+
+function minutesFromIso(iso: string): number {
+  const d = new Date(iso);
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+/** FF4-CAL-009: side-by-side columns for overlapping timed events. */
+function layoutTimedEvents<T extends CalendarEvent>(events: T[]): TimedEventLayout<T>[] {
+  if (events.length === 0) return [];
+
+  const sorted = [...events].sort(
+    (a, b) => minutesFromIso(a.start) - minutesFromIso(b.start)
+      || minutesFromIso(a.end) - minutesFromIso(b.end),
+  );
+
+  const columnEnds: number[] = [];
+  const placed: Array<{ event: T; column: number; start: number; end: number }> = [];
+
+  for (const event of sorted) {
+    const start = minutesFromIso(event.start);
+    const end = Math.max(start + 15, minutesFromIso(event.end));
+    let column = columnEnds.findIndex((endMin) => endMin <= start);
+    if (column === -1) {
+      column = columnEnds.length;
+      columnEnds.push(end);
+    } else {
+      columnEnds[column] = end;
+    }
+    placed.push({ event, column, start, end });
+  }
+
+  return placed.map(({ event, column, start, end }) => {
+    const overlapping = placed.filter((other) => other.start < end && other.end > start);
+    const points: Array<{ t: number; delta: number }> = [];
+    for (const other of overlapping) {
+      points.push({ t: other.start, delta: 1 });
+      points.push({ t: other.end, delta: -1 });
+    }
+    points.sort((a, b) => a.t - b.t || a.delta - b.delta);
+    let concurrent = 0;
+    let maxConcurrent = 1;
+    for (const point of points) {
+      concurrent += point.delta;
+      maxConcurrent = Math.max(maxConcurrent, concurrent);
+    }
+    return { event, column, columnCount: maxConcurrent };
+  });
+}
+
 // ── Date Navigation Bar ──────────────────────────────────────────────────────
 
 function DateNavBar({
@@ -518,9 +572,11 @@ function WeekView({
                     {hourLabels.map(h => (
                       <View key={h.hour} style={styles.timeDayColTick} />
                     ))}
-                    {/* Timed events positioned absolutely by time */}
-                    {dayEvents.map(e => {
+                    {/* Timed events positioned absolutely by time (FF4-CAL-009 overlap layout) */}
+                    {layoutTimedEvents(dayEvents).map(({ event: e, column, columnCount }) => {
                       const color = getEventColor(e);
+                      const widthPct = 100 / columnCount;
+                      const leftPct = column * widthPct;
                       return (
                         <TouchableOpacity
                           key={e.id}
@@ -530,6 +586,8 @@ function WeekView({
                               top: timeToTop(e.start),
                               height: eventHeight(e.start, e.end),
                               borderLeftColor: color,
+                              left: `${leftPct}%`,
+                              width: `${widthPct - 1}%`,
                             },
                           ]}
                           onPress={() => onEventPress?.(e)}
@@ -663,10 +721,12 @@ function DayView({
                 {hourLabels.map(h => (
                   <View key={h.hour} style={styles.timeDayColTick} />
                 ))}
-                {/* Timed events positioned absolutely by time */}
-                {timedEvents.map(e => {
+                {/* Timed events positioned absolutely by time (FF4-CAL-009 overlap layout) */}
+                {layoutTimedEvents(timedEvents).map(({ event: e, column, columnCount }) => {
                   const color = getEventColor(e);
                   const st = e.sourceType ? SOURCE_TYPE_CONFIG[e.sourceType] : undefined;
+                  const widthPct = 100 / columnCount;
+                  const leftPct = column * widthPct;
                   return (
                     <TouchableOpacity
                       key={e.id}
@@ -677,6 +737,8 @@ function DayView({
                           top: timeToTop(e.start),
                           height: eventHeight(e.start, e.end),
                           borderLeftColor: color,
+                          left: `${leftPct}%`,
+                          width: `${widthPct - 1}%`,
                         },
                       ]}
                       onPress={() => onEventPress?.(e)}
@@ -1346,8 +1408,6 @@ const styles = StyleSheet.create({
   },
   timeBlockEvent: {
     position: 'absolute',
-    left: 2,
-    right: 2,
     borderLeftWidth: 3,
     backgroundColor: '#FAFAFA',
     borderRadius: 3,
@@ -1355,6 +1415,10 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     overflow: 'hidden',
     zIndex: 5,
+  },
+  timeBlockEventSingle: {
+    left: 2,
+    right: 2,
   },
   timeBlockEventDay: {
     paddingHorizontal: 6,

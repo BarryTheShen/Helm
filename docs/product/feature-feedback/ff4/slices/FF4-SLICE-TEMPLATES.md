@@ -1,9 +1,9 @@
 # Slice: FF4-SLICE-TEMPLATES
 
 - **Slice ID:** FF4-SLICE-TEMPLATES
-- **Status:** unclaimed
-- **Owner agent:** 
-- **Claimed at:** 
+- **Status:** verified
+- **Owner agent:** helm-frontend
+- **Claimed at:** 2026-05-28
 - **Included REQ-IDs:** FF4-TPL-001, FF4-TPL-002, FF4-TPL-003, FF4-TPL-004, FF4-TPL-005, FF4-TPL-006
 - **Explicitly excluded REQ-IDs:** none
 - **Source sections:** FF4 doc lines 556-563 (Templates), lines 1337-1378 (Template model, Template apply modal), lines 1568-1576 (Template UI requirements)
@@ -30,7 +30,7 @@
   - FF4-TPL-004: automated-test
   - FF4-TPL-005: manual-flow-test
   - FF4-TPL-006: manual-flow-test
-- **Implementation evidence:** 
-- **QA evidence:** 
-- **Reviewer verdict:** 
-- **Remaining blockers:** 
+- **Implementation evidence:** backend/app/services/template_seed.py; TemplatesPage apply flow
+- **QA evidence:** backend/tests/test_ff4_phase12_tpl_wf_mcp.py; qa/src/tests/ff4-phase12-tpl-wf-mcp.spec.ts; qa/src/tests/ff4-phase6-cal-tpl.spec.ts
+- **Reviewer verdict:** PASS — FF4-TPL-001, FF4-TPL-003, FF4-TPL-004 closed in phase 12 (TPL-005/006 covered in phase 6)
+- **Remaining blockers:** none for scoped TPL IDs
