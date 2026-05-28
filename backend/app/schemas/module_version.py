@@ -32,6 +32,7 @@ class ModuleVersionOut(BaseModel):
     change_summary: str | None = None
     validation_status: str = "unknown"
     schema_version: str = "2.0"
+    status: str = "active"
     created_at: datetime
 
     model_config = {"from_attributes": True}

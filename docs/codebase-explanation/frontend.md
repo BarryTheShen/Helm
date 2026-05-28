@@ -585,6 +585,7 @@ The editor page (`/editor`) is a custom React + Zustand SDUI editor built from `
 - **Restore-to-draft (FF4-APP-026):** Each version in the history modal has a "Restore" button that restores the version to the working draft and reloads the app config.
 - **Version comparison:** Version History modal supports "Compare" mode (when ≥2 versions exist) — select two versions A and B for side-by-side diff.
 - **Preview:** `usePreviewStore` with `startPreview()` launching browser-based iframe preview of app configuration. Preview dropdown: "Preview in Web Admin" | "Preview on Device...".
+- **BrowserPreview (FF4-APP-020, should):** Best-effort web preview using `SDUIPreview` (DOM/CSS), not native React Native. Matches mobile for shell navigation, theme, dark mode, and module SDUI content; full RN pixel parity requires a real device or Expo Web — intentionally PARTIAL at the product level.
 - **Top bar:** `[App: {name} ▼] [Saving.../Saved HH:MM/Save failed] [Live: v{N} — {name}] [Preview ▼] [Publish] [History icon] [Save]`
 - **API calls:** `getApps()`, `createApp()`, `updateApp()`, `deleteApp()`, `updateAppBottomBar()` via `/api/apps` endpoints. Versioning endpoints via `/api/apps/{id}/versions`, `/api/apps/{id}/publish`. Module instance endpoints via `/api/module-instances`.
 

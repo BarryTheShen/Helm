@@ -163,3 +163,70 @@ export async function saveAppAndWait(page: import('@playwright/test').Page) {
   await page.locator(AppEditorPage.btnSave).click();
   await saveResponse;
 }
+
+/** First installed module instance id for API seeding in FF4 App Editor tests. */
+export async function getFirstModuleInstanceId(
+  request: import('@playwright/test').APIRequestContext,
+): Promise<string | undefined> {
+  const headers = qaAuthHeaders();
+  const instancesResp = await request.get('http://127.0.0.1:8000/api/modules/instances', { headers });
+  const instances = await instancesResp.json();
+  return instances.items?.[0]?.module_instance_id as string | undefined;
+}
+
+/** Create a checkpoint and archive it; returns archived version id (FF4-APP-022). */
+export async function archiveNewestModuleVersion(
+  request: import('@playwright/test').APIRequestContext,
+  moduleId: string,
+): Promise<string> {
+  const headers = { ...qaAuthHeaders(), 'Content-Type': 'application/json' };
+  await request.post(`http://127.0.0.1:8000/api/modules/${moduleId}/checkpoints`, {
+    headers,
+    data: { change_summary: 'E2E archived version test' },
+  });
+  const versionsResp = await request.get(`http://127.0.0.1:8000/api/modules/${moduleId}/versions`, {
+    headers: qaAuthHeaders(),
+  });
+  const versions = await versionsResp.json();
+  const versionId = versions.items?.[0]?.id as string;
+  expect(versionId).toBeTruthy();
+  const archiveResp = await request.post(
+    `http://127.0.0.1:8000/api/modules/${moduleId}/versions/${versionId}/archive`,
+    { headers: qaAuthHeaders() },
+  );
+  expect(archiveResp.ok()).toBeTruthy();
+  return versionId;
+}
+
+/** Seed a device render error visible in App Editor device errors panel (FF4-APP-024). */
+export async function seedDeviceRenderError(
+  request: import('@playwright/test').APIRequestContext,
+  appId: string,
+  deviceName = 'Barry\'s iPhone',
+): Promise<void> {
+  const headers = { ...qaAuthHeaders(), 'Content-Type': 'application/json' };
+  const deviceResp = await request.post('http://127.0.0.1:8000/api/devices', {
+    headers,
+    data: { device_id: `ff4-error-${Date.now()}`, device_name: deviceName },
+  });
+  expect(deviceResp.ok()).toBeTruthy();
+  const deviceId = (await deviceResp.json()).id as string;
+  const assignResp = await request.put(`http://127.0.0.1:8000/api/devices/${deviceId}/app`, {
+    headers,
+    data: { app_id: appId },
+  });
+  expect(assignResp.ok()).toBeTruthy();
+  const reportResp = await request.post(`http://127.0.0.1:8000/api/devices/${deviceId}/error`, {
+    headers,
+    data: {
+      error_type: 'render_error',
+      error_message: `${deviceName} failed to update: Unsupported component type 'ArticleCard'.`,
+      error_details: {
+        unsupported_type: 'ArticleCard',
+        installed_runtime: '1.0.0',
+        required_runtime: '1.2.0',
+      },
+    },
+  });
+  expect(reportResp.status()).toBe(201);
+}

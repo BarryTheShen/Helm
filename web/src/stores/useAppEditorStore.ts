@@ -33,6 +33,8 @@ export interface App {
   launchpad_config: ModuleInstance[];
   /** Per-module icon overrides keyed by module_instance_id (FF4-APP-001/013) */
   module_icons?: Record<string, string>;
+  /** Per-module enabled flag; omitted or true = enabled (FF4-APP-007/014) */
+  module_enabled?: Record<string, boolean>;
   created_at: string;
   updated_at: string;
 }

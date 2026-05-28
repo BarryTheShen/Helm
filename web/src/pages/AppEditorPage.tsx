@@ -560,6 +560,7 @@ export function AppEditorPage() {
         bottom_bar_config: currentApp.bottom_bar_config,
         launchpad_config: launchpadModules,
         module_icons: currentApp.module_icons,
+        module_enabled: currentApp.module_enabled,
         moduleReferences,
       },
       'browser'
@@ -1002,6 +1003,7 @@ export function AppEditorPage() {
                     const pinnedVersion = policy?.pinnedVersionId
                       ? versions.find(v => v.id === policy.pinnedVersionId)
                       : null;
+                    const moduleArchiveWarning = archivedModuleWarnings[slot.module_instance_id];
                     if (!policy) return null;
                     return (
                       <div key={slot.module_instance_id} className="text-[11px] bg-gray-50 rounded-lg p-2 space-y-1">
@@ -1010,6 +1012,14 @@ export function AppEditorPage() {
                           <span className="text-xs font-medium text-gray-800 truncate">{slot.name}</span>
                           <span className="text-[9px] text-gray-400 ml-auto">Slot {slot.slot_position + 1}</span>
                         </div>
+                        {moduleArchiveWarning && (
+                          <div
+                            data-testid="archived-module-version-warning"
+                            className="px-2 py-1 bg-amber-50 border border-amber-200 rounded text-[10px] text-amber-700"
+                          >
+                            {moduleArchiveWarning}
+                          </div>
+                        )}
                         <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
                             type="radio"
@@ -1190,6 +1200,27 @@ export function AppEditorPage() {
                           <div className="text-sm font-medium text-gray-900 truncate">{module.name}</div>
                           <div className="text-xs text-gray-500">{module.module_type}</div>
                         </div>
+                        <label
+                          className="flex items-center gap-1 shrink-0 cursor-pointer"
+                          title="Include module in app preview and publish"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            data-testid="module-enabled-toggle"
+                            checked={currentApp.module_enabled?.[module.module_instance_id] !== false}
+                            onChange={(e) => {
+                              updateApp(currentApp.id, {
+                                module_enabled: {
+                                  ...(currentApp.module_enabled ?? {}),
+                                  [module.module_instance_id]: e.target.checked,
+                                },
+                              });
+                            }}
+                            className="w-3 h-3 rounded border-gray-300"
+                          />
+                          <span className="text-[10px] text-gray-500">Enabled</span>
+                        </label>
                         <button
                           onClick={() => handleAddToBottomBar(module)}
                           className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -1199,7 +1230,10 @@ export function AppEditorPage() {
                         </button>
                       </div>
                       {moduleArchiveWarning && (
-                        <div className="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] text-amber-700 flex items-start gap-1">
+                        <div
+                          data-testid="archived-module-version-warning"
+                          className="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] text-amber-700 flex items-start gap-1"
+                        >
                           <AlertOctagon size={10} className="mt-0.5 shrink-0" />
                           <span>{moduleArchiveWarning}</span>
                         </div>

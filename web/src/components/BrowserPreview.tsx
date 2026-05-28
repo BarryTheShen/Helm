@@ -13,6 +13,12 @@ import {
 /**
  * BrowserPreview — Full app preview in web admin (FF4-APP-014/020).
  * Resolves app working draft + per-module versions via previewResolver.
+ *
+ * FF4-APP-020 (should): Best-effort web preview — not native React Native.
+ * Uses the same SDUIPreview renderer as Module Editor (DOM/CSS approximation).
+ * Matches mobile for layout, theme, dark mode, bottom bar, and Launchpad navigation;
+ * pixel-perfect RN parity is not feasible in web admin without Expo Web or a device frame.
+ * See docs/codebase-explanation/frontend.md § App Editor → BrowserPreview.
  */
 interface BrowserPreviewProps {
   appId: string;

@@ -97,6 +97,7 @@ export interface PreviewLaunchpadModule {
 }
 
 export interface PreviewAppConfigInput {
+  module_enabled?: Record<string, boolean>;
   bottom_bar_config?: PreviewBottomBarSlot[];
   launchpad_config?: Array<
     string | PreviewLaunchpadModule | { module_instance_id?: string; name?: string; icon?: string; module_type?: string }
@@ -130,6 +131,20 @@ function normalizeLaunchpadModule(
     name: item.name || item.module_instance_id,
     icon: item.icon || '📦',
   };
+}
+
+function isModuleEnabledInApp(
+  moduleId: string,
+  moduleEnabled?: Record<string, boolean> | null,
+): boolean {
+  return moduleEnabled?.[moduleId] !== false;
+}
+
+function filterEnabledBottomBar(
+  slots: PreviewBottomBarSlot[] | undefined,
+  moduleEnabled?: Record<string, boolean> | null,
+): PreviewBottomBarSlot[] {
+  return (slots ?? []).filter(slot => isModuleEnabledInApp(slot.module_instance_id, moduleEnabled));
 }
 
 function normalizeBottomBar(
@@ -168,16 +183,21 @@ export async function resolveAppPreviewBundle(
     `/api/apps/${appId}/draft`,
   );
   const draftConfig = draftResponse.config_json ?? {};
+  const moduleEnabled = (previewConfig?.module_enabled
+    ?? draftConfig.module_enabled) as Record<string, boolean> | undefined;
 
   const bottomBar = normalizeBottomBar(
-    (previewConfig?.bottom_bar_config
-      ?? draftConfig.bottom_bar_config
-      ?? []) as PreviewBottomBarSlot[],
+    filterEnabledBottomBar(
+      (previewConfig?.bottom_bar_config
+        ?? draftConfig.bottom_bar_config
+        ?? []) as PreviewBottomBarSlot[],
+      moduleEnabled,
+    ),
   );
   const launchpadModules = normalizeLaunchpadModules(
     previewConfig?.launchpad_config ?? draftConfig.launchpad_config as PreviewAppConfigInput['launchpad_config'],
     bottomBar,
-  );
+  ).filter(mod => isModuleEnabledInApp(mod.module_instance_id, moduleEnabled));
 
   const appConfig: Record<string, unknown> = {
     ...draftConfig,

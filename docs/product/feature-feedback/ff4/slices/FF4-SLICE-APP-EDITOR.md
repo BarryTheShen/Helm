@@ -1,9 +1,9 @@
 # Slice: FF4-SLICE-APP-EDITOR
 
 - **Slice ID:** FF4-SLICE-APP-EDITOR
-- **Status:** unclaimed
-- **Owner agent:** 
-- **Claimed at:** 
+- **Status:** verified (App Editor slice PARTIAL closure)
+- **Owner agent:** helm-frontend + helm-tester
+- **Claimed at:** 2026-05-28
 - **Included REQ-IDs:** FF4-APP-001, FF4-APP-002, FF4-APP-003, FF4-APP-004, FF4-APP-005, FF4-APP-006, FF4-APP-007, FF4-APP-008, FF4-APP-009, FF4-APP-010, FF4-APP-011, FF4-APP-012, FF4-APP-013, FF4-APP-014, FF4-APP-015, FF4-APP-016, FF4-APP-017, FF4-APP-018, FF4-APP-019, FF4-APP-020, FF4-APP-021, FF4-APP-022, FF4-APP-023, FF4-APP-024, FF4-APP-025, FF4-APP-026, FF4-APP-027
 - **Explicitly excluded REQ-IDs:** none
 - **Source sections:** FF4 doc lines 5-16 (Helm Admin / App Editor), lines 1009-1333 (App Editor behavior — full-app composition and publish model, Preview model, Publish model, Mobile live behavior), lines 1540-1554 (UI requirements / App Editor UI), lines 1579-1628 (Edge cases), `docs/codebase-explanation/frontend.md` lines 570-581 (App Editor), lines 664-670 (Version Comparison/Diff UI)
@@ -66,7 +66,7 @@
   - FF4-APP-025: automated-test
   - FF4-APP-026: automated-test
   - FF4-APP-027: automated-test
-- **Implementation evidence:** 
-- **QA evidence:** 
-- **Reviewer verdict:** 
-- **Remaining blockers:** 
+- **Implementation evidence:** web/src/pages/AppEditorPage.tsx, BrowserPreview.tsx, previewResolver.ts; backend/tests/test_ff4_phase9_app_editor.py
+- **QA evidence:** qa/src/tests/ff4-app-editor.spec.ts, qa/src/tests/app-editor-preview.spec.ts, qa/src/tests/ff4-phase5-editors.spec.ts
+- **Reviewer verdict:** PASS for listed must-REQs with e2e/API evidence; PARTIAL where mobile-only or should-REQ (020, 004, 015, 018, 025)
+- **Remaining blockers:** FF4-APP-004/015/018/025 need mobile device e2e for full PASS; FF4-APP-020 remains intentional PARTIAL (should-REQ)

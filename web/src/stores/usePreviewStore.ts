@@ -16,6 +16,8 @@ export interface PreviewAppConfig {
   launchpad_config: any[];
   /** Per-module icon overrides from app config (FF4-APP-001). */
   module_icons?: Record<string, string>;
+  /** Per-module enabled flags (FF4-APP-007/014). */
+  module_enabled?: Record<string, boolean>;
   /** Per-module version policies from App Editor (FF4-APP-010) */
   moduleReferences?: ModuleVersionPolicyRef[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
