@@ -1,0 +1,39 @@
+# Codex project-local configuration for Helm.
+# OpenCode remains in .opencode/ and opencode.jsonc for rollback.
+# Do not add model_provider, model_providers, profile, profiles, or notify here;
+# those belong in user-level Codex config, not project config.
+
+model = "gpt-5.5"
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+
+[features]
+hooks = true
+multi_agent = true
+
+# TODO: OpenCode supported ask-level bash gating such as "git push": "ask".
+# Codex CLI 0.137 PreToolUse hooks cannot return permissionDecision="ask";
+# this hook blocks matching commands with a clear approval message instead.
+[hooks]
+pre_tool_use = [
+  { command = "python3 .codex/hooks/guard_bash.py" },
+]
+
+[mcp_servers.playwright]
+command = "/home/barry/.local/share/mise/installs/node/lts/bin/node"
+args = [
+  "/home/barry/.local/share/mise/installs/node/lts/lib/node_modules/@playwright/mcp/cli.js",
+  "--headless",
+  "--ignore-https-errors",
+  "--viewport-size=1920x1080",
+  "--caps=vision,devtools",
+  "--isolated",
+]
+
+[mcp_servers.context7]
+url = "https://mcp.context7.com/mcp"
+# TODO: OpenCode used a custom CONTEXT7_API_KEY header; Codex MCP config maps HTTP auth to bearer_token_env_var.
+bearer_token_env_var = "CONTEXT7_API_KEY"
+
+# TODO: OpenCode slash command frontmatter (agent: ...) has no clean Codex project-config equivalent.
+# The legacy command definitions were read from .opencode/commands/ and left untouched for rollback.
