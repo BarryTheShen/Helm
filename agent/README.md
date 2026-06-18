@@ -4,7 +4,7 @@ An independent external AI agent that connects to the Helm MCP server and can al
 
 ## What it does
 
-- **Connects to Helm's MCP server** (`/mcp`) — gets access to all 9 Helm tools: read/write calendar events, send notifications, read/write chat messages, update module states.
+- **Connects to Helm's MCP server** (`/mcp`) — gets access to the current Helm tool surface for calendar, notifications, chat, SDUI, tabs, apps, templates, previews, and more.
 - **Edits the frontend** — has local filesystem tools restricted to `mobile/` so it can read and modify the Expo/React Native TypeScript source.
 - **Runs completely independently** — no imports from `backend/app/`. Just uses the MCP HTTP protocol and the filesystem.
 
@@ -71,7 +71,7 @@ curl -X POST http://localhost:8000/auth/login \
 # from the repo root (Helm/), with venv activated
 cd agent
 
-# Web UI — pydantic-ai's built-in browser chat (streams at http://localhost:7860)
+# Web UI — local browser chat at http://localhost:7860
 python helm_agent.py --web
 python helm_agent.py --web --port 8080  # custom port
 
@@ -86,7 +86,7 @@ python helm_agent.py "Read mobile/app/(tabs)/settings.tsx and summarise it"
 python helm_agent.py "Add a comment at the top of mobile/app/(tabs)/chat.tsx explaining what it does"
 ```
 
-The web UI is pydantic-ai's official `@pydantic/ai-chat-ui` — fetched from CDN on first run and cached in `~/.cache/pydantic-ai/`. No npm build, no custom HTML.
+The web UI is served from the local `chat_ui.html` shell through pydantic-ai's web app wrapper, so it works without an external CDN.
 
 ## Architecture
 
@@ -94,16 +94,13 @@ The web UI is pydantic-ai's official `@pydantic/ai-chat-ui` — fetched from CDN
 agent/helm_agent.py (standalone — no backend imports)
   │
   ├── Modes:
-  │     --web   → pydantic-ai built-in web UI (create_web_app)
+  │     --web   → local browser chat UI at http://localhost:7860
   │     (none)  → interactive terminal REPL
   │     task    → one-shot CLI execution
   │
   ├── pydantic_ai.Agent
-  │     ├── MCPServerStreamableHTTP → Helm /mcp (9 Helm tools)
-  │     │     • helm_read_calendar, helm_create_event, helm_update_event
-  │     │     • helm_delete_event, helm_send_notification
-  │     │     • helm_get_chat_history, helm_send_chat_message
-  │     │     • helm_update_module_state, helm_get_form_data
+  │     ├── MCPServerStreamableHTTP → Helm /mcp (shared tool layer)
+  │     │     • calendar, notifications, chat, SDUI, tabs, apps, templates, previews
   │     │
   │     └── Local filesystem tools (restricted to mobile/)
   │           • read_frontend_file(relative_path)
@@ -115,11 +112,7 @@ agent/helm_agent.py (standalone — no backend imports)
 
 ### Web UI
 
-Uses `pydantic_ai.ui._web.create_web_app(agent)` — pydantic-ai's official built-in Starlette app:
-- Serves the **official** `@pydantic/ai-chat-ui` React frontend from CDN
-- Cached locally in `~/.cache/pydantic-ai/web-ui/` after first download
-- MCP and tool connections are managed per-request by pydantic-ai's `Agent.iter()`
-- API mounted at `/api`, UI served at `/`
+Uses `pydantic_ai.ui._web.create_web_app(agent, html_source=_local_ui)` — the local `chat_ui.html` shell mounted at `/` with API endpoints under `/api`.
 
 ## Security notes
 

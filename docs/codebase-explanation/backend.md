@@ -1,870 +1,538 @@
 # Backend — Python FastAPI Server
-
-> Last updated: 2026-05-15 (FF4 Reassessment follow-up: device compatibility validation, module reference resolution at publish, apply-template writes to ModuleWorkingDraft, calendar seed source_type/notes)
-> Last audit: 2026-05-15 — ✅ FF4 Reassessment complete
-
-## Tier 1: TLDR
-
-The backend is a **Python FastAPI** server that serves as the brain of the Helm super app. It handles:
-
-- **User authentication** (signup, login, logout with JWT tokens + device tracking)
-- **REST APIs** for calendar events, chat history, notifications, workflows, modules, AI agent configuration, user management, session management, audit logs, SDUI templates, component registry, modules, apps, devices, settings, todos, articles, variables, data sources, and triggers
-- **WebSocket server** for real-time chat streaming between the mobile app and AI
-- **AI Agent Proxy** that streams LLM responses (OpenAI-compatible API) back to the app with tool-calling support
-- **MCP Server** mounted at `/mcp` — exposes tools to external AI agents
-- **Workflow Engine** — React Flow graph-based automation with branching/loops using APScheduler
-- **Trigger Engine** — flexible trigger system with freeform JSON config and action chains
-- **SQLite database** (async via aiosqlite + SQLAlchemy)
-- **Action Registry** — named function whitelist callable from SDUI `server_action` events
-- **Variable Resolver** — mustache-style `{{scope.path}}` template resolution with chevron (Python mustache)
-- **Module Service** — module instance management with app-aware operations (enable/disable module in app)
-- **App Service** — full CRUD for App configuration including bottom bar config and launchpad layout
-- **Device Service** — device registration, app assignment, full config retrieval for mobile
-- **Audit logging** — automatic audit trail for security-relevant operations
-- **Sandbox mode** — ASGI middleware that intercepts DB commits for safe testing
-- **Admin panel APIs** — system stats, user/session management, component registry
-- **SQLAdmin** — mounted at `/admin/db` with BasicAuth for raw database browsing
-
-**To run it:** `cd backend && uvicorn app.main:app --reload`
-**To run tests:** `cd backend && pytest`
-
+ 
+> Last updated: 2026-06-18 (architecture refresh: current app wiring, FF4 versioning, validation pipeline, MCP/tooling, and backend folder map)
+> Last audit: 2026-06-18 — updated against the current backend file tree
+ 
+## Tier 1: TL;DR
+ 
+Helm's backend is the server-side control plane. It owns:
+ 
+- Identity and access: first-user setup, login/logout, bearer sessions, device tracking, admin guards
+- Product state: apps, modules, module instances, templates, working drafts, version history, preview sessions
+- User content: chat, calendar, notifications, todos, notes, articles, settings
+- Automation: workflows, triggers, actions, variables, data sources, connections
+- Real-time delivery: WebSocket chat stream, SDUI updates, notifications, action results
+- Agent interfaces: in-app agent proxy and external MCP server sharing the same tool layer
+- Ops and safety: audit logs, sandbox request recording, cleanup tools, SQLAdmin
+ 
+The backend is intentionally layered:
+ 
+1. `main.py` wires the FastAPI app, middleware, router registration, lifespan, and mounted sub-apps.
+2. Routers translate HTTP/WebSocket requests into validated service calls.
+3. Services own the business rules, scheduling, validation, seeding, and cross-cutting orchestration.
+4. ORM models are the authoritative persisted state.
+5. Schemas define request/response contracts at the API boundary.
+6. Alembic migrations evolve the schema independently of code.
+7. Tests exercise the real app in-process against SQLite.
+ 
+If you want to learn it in order, start here:
+ 
+- `backend/app/main.py`
+- `backend/app/config.py`
+- `backend/app/database.py`
+- `backend/app/dependencies.py`
+- `backend/app/services/sdui_state.py`
+- `backend/app/services/app_service.py`
+- `backend/app/services/version_service.py`
+- `backend/app/services/validation_service.py`
+- `backend/app/services/workflow_engine.py`
+- `backend/app/services/action_registry.py`
+- `backend/app/mcp/tools.py`
+- `backend/tests/conftest.py`
+ 
+Run it: `cd backend && uvicorn app.main:app --reload`
+Test it: `cd backend && pytest -q`
+ 
 ---
-
-## Tier 2: Architecture Overview
-
-```
-┌────────────────────────────────────────────────────────┐
-│                    FastAPI App (main.py)                │
-│                                                        │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐            │
-│  │  Routers │  │ Services │  │   MCP    │            │
-│  │ (REST +  │──│ (Business│──│ Server   │            │
-│  │   WS)    │  │  Logic)  │  │ (/mcp)   │            │
-│  └──────────┘  └──────────┘  └──────────┘            │
-│        │              │              │                 │
-│  ┌─────────────────────────────────────────┐          │
-│  │           SQLAlchemy ORM Models          │          │
-│  │         (SQLite + aiosqlite)             │          │
-│  └─────────────────────────────────────────┘          │
-└────────────────────────────────────────────────────────┘
-```
-
-### Request Flow
-
-1. Mobile app → HTTP request or WebSocket message
-2. Router handles the request, authenticates via Bearer token
-3. `dependencies.py` validates the token against the sessions table
-4. Service layer contains business logic
-5. Models (SQLAlchemy ORM) interact with the SQLite database
-6. Response sent back to the app
-
+ 
+## Backend folder map
+ 
+| Path | What it owns | Why it matters |
+|------|--------------|----------------|
+| `backend/app/main.py` | FastAPI app construction, middleware order, router registration, lifespan, mounts, startup seeders | This is the wiring file. If request flow or startup behavior feels mysterious, start here. |
+| `backend/app/config.py` | Pydantic settings loaded from the repo-root `.env`, plus startup validation for required secrets and runtime flags | Single place where env-driven behavior is defined. |
+| `backend/app/database.py` | Async SQLAlchemy engine, session factory, request-scoped DB lifecycle, sandbox commit interception | The session lifecycle is the hidden contract most routes depend on. |
+| `backend/app/dependencies.py` | Bearer-token auth, current-user resolution, admin guard, pagination helpers | Most protected routes share these dependencies. |
+| `backend/app/routers/` | Domain HTTP/WebSocket routers, one file per concern | Thin transport layer. Should translate and delegate, not contain domain logic. |
+| `backend/app/services/` | Business logic, schedulers, validation, versioning, seeding, real-time delivery, agent proxy, action registry | This is where most backend behavior actually lives. |
+| `backend/app/models/` | ORM tables and relationships | Authoritative persisted state. If a field exists in the DB, it starts here. |
+| `backend/app/schemas/` | Pydantic request/response DTOs | Transport contracts. These define what routers accept and emit. |
+| `backend/app/mcp/` | MCP server wrapper and shared tool implementations | External agents call the same tool implementations the app uses internally. |
 ### Key Components
-
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| FastAPI App | `app/main.py` | Entry point, middleware, router registration, lifespan |
-| Config | `app/config.py` | pydantic-settings loading from `.env` (resolves from repo root) |
-| Database | `app/database.py` | Async SQLAlchemy engine + session factory |
-| Auth dependencies | `app/dependencies.py` | `get_current_user`, `get_current_user_id`, `get_token_from_request`, `require_admin`, `PaginationParams` |
-| Models | `app/models/` | 32 SQLAlchemy ORM models (added Note, ModuleVersion, ModuleWorkingDraft, PreviewSession) |
-| Schemas | `app/schemas/` | Pydantic request/response models (29 files; added admin) |
-| Routers | `app/routers/` | 28 route files (added notes, module_versions) |
-| Services | `app/services/` | auth, agent_proxy, websocket_manager, workflow_engine, action_registry, audit, component_seed, variable_resolver, trigger_engine, app_service, module_service, device_service, data_connectors, sdui_state, template_seed, version_service, variable_seed, workflow_seed, calendar_seed, **cleanup_service**, **validation_service** |
-| SDUI shared contract helpers | `app/services/sdui_state.py` | Live/draft key helpers, shared validate/apply pipeline, row-aware counters, and broadcast utilities used by REST + MCP |
-| Middleware | `app/middleware/sandbox.py` | Sandbox mode ASGI middleware |
-| MCP | `app/mcp/` | MCP server + shared tool implementations |
-| Utils | `app/utils/security.py` | JWT + bcrypt password helpers |
-| CLI | `manage.py` (backend root) | User management CLI |
-| Tests | `tests/` | pytest-asyncio with in-memory SQLite |
-
+ 
+| Component | Location | What it owns |
+|-----------|----------|--------------|
+| FastAPI app | `app/main.py` | App construction, middleware order, router registration, lifespan hooks, mounted sub-apps, startup seeding |
+| Config | `app/config.py` | Repo-root `.env` loading, settings validation, feature flags, secret checks |
+| Database | `app/database.py` | Async engine/session factory, request-scoped DB lifecycle, sandbox commit interception |
+| Auth dependencies | `app/dependencies.py` | Bearer token parsing, current-user lookup, admin guard, pagination helpers |
+| Models | `app/models/` | Table-backed ORM state (32 tables), relationships, and compatibility models |
+| Schemas | `app/schemas/` | 31 Pydantic request/response modules |
+| Routers | `app/routers/` | 28 domain routers; HTTP and WebSocket transport only |
+| Services | `app/services/` | Business rules, schedulers, validation, versioning, seeders, real-time delivery, agent proxy, cleanup |
+| MCP | `app/mcp/` | External agent server plus shared tool implementations |
+| Middleware | `app/middleware/sandbox.py` | Sandbox ASGI middleware |
+| Utils | `app/utils/security.py`, `app/utils/crypto.py` | JWT, bcrypt, Fernet helpers |
+| Tests | `backend/tests/` | In-process integration suite using ASGITransport and in-memory SQLite |
+ 
 ### `main.py` — App Setup
-
+ 
 **Middleware (in order of execution):**
-1. `SandboxMiddleware` — `X-Helm-Sandbox: true` header → intercepts DB commits, records to `sandbox_actions`
-2. `SessionMiddleware` — required by SQLAdmin's authentication backend
-3. `CORSMiddleware` — allows all origins from `settings.cors_allow_origins`, credentials=True
-
+1. `SandboxMiddleware` — `X-Helm-Sandbox: true` header triggers sandbox mode, intercepts DB commits, records to `sandbox_actions`
+2. `SessionMiddleware` — required by SQLAdmin's auth backend
+3. `CORSMiddleware` — allows configured origins with credentials enabled
+ 
 **Lifespan events:**
-- Startup: `start_scheduler()`, manually starts MCP session manager (FastAPI does not invoke sub-app lifespans for mounted apps), seeds component registry (`seed_components()`), seeds templates with `replace=True` (`seed_templates()`), optionally starts `_run_time_alerts()` background task
-- Shutdown: cancels alert task, stops MCP session manager, `stop_scheduler()`
-
-**Background task `_run_time_alerts()`**: Every 2 minutes, saves a Notification to DB for every connected user and broadcasts a notification via WebSocket. Controlled by `DEMO_TIME_ALERTS` env var — **defaults to true**. Disable in production.
-
-**Routers registered:** auth, modules, chat, calendar, notifications, agent_config, workflows, actions, websocket, users, sessions, audit, components, templates, admin, variables, data_sources, triggers, notes, module_versions, apps, devices, articles, settings, todos
-
-**MCP mounted:** `app.mount(settings.mcp_path, _MCPAuthMiddleware(mcp.streamable_http_app()))` → at `/mcp`
-
-**SQLAdmin mounted:** `app.mount("/admin/db", admin)` — SQLAdmin with BasicAuth (username/password from `ADMIN_USERNAME`/`ADMIN_PASSWORD` env vars, default `admin`/`admin`); all 16 models registered; separate from FastAPI JWT auth
-
+- Startup: `start_scheduler()`, start the mounted MCP session manager manually, seed component registry, seed templates with `replace=True`, seed sample workflows/variables/data sources, migrate `sdui_screen_history` into the FF4 versioning layer, optionally start `_run_time_alerts()`
+- Shutdown: cancel the alert task, stop the MCP session manager, stop the scheduler
+ 
+**Background task `_run_time_alerts()`**: Every 2 minutes, inserts notifications for connected users and broadcasts the event over WebSocket. Controlled by `DEMO_TIME_ALERTS`; defaults to true.
+ 
+**Routers registered:** `auth`, `modules`, `templates`, `chat`, `calendar`, `notifications`, `todos`, `agent_config`, `workflows`, `actions`, `users`, `sessions`, `audit`, `components`, `admin`, `variables`, `data_sources`, `triggers`, `connections`, `module_instances`, `settings`, `articles`, `apps`, `app_versions`, `devices`, `module_versions`, `websocket`, `notes`
+ 
+**Mounted sub-apps:** MCP at `settings.mcp_path` (typically `/mcp`), SQLAdmin at `/admin/db` with BasicAuth from `ADMIN_USERNAME` / `ADMIN_PASSWORD`, and the compiled web admin at `/` when `settings.serve_static` and `web/dist` are present.
+## Backend domain map
+ 
+### Identity and access
+`routers/auth.py`, `routers/users.py`, `routers/sessions.py`, `routers/settings.py`, `routers/devices.py`, `routers/agent_config.py`, `services/auth.py`, `dependencies.py`, `utils/security.py`
+ 
+### Apps, modules, and versioning
+`routers/apps.py`, `routers/app_versions.py`, `routers/modules.py`, `routers/module_instances.py`, `routers/module_versions.py`, `services/app_service.py`, `services/device_service.py`, `services/module_service.py`, `services/version_service.py`, `services/validation_service.py`, `services/sdui_state.py`
+ 
+### SDUI templates and component registry
+`routers/templates.py`, `routers/components.py`, `services/template_seed.py`, `services/component_seed.py`
+ 
+### Automation and integrations
+`routers/workflows.py`, `routers/triggers.py`, `routers/actions.py`, `routers/connections.py`, `routers/data_sources.py`, `services/workflow_engine.py`, `services/trigger_engine.py`, `services/action_registry.py`, `services/variable_resolver.py`, `services/data_connectors.py`
+ 
+### User content and collaboration
+`routers/chat.py`, `routers/calendar.py`, `routers/notifications.py`, `routers/todos.py`, `routers/notes.py`, `routers/articles.py`
+ 
+### Ops, telemetry, and maintenance
+`routers/admin.py`, `routers/audit.py`, `services/audit.py`, `services/cleanup_service.py`, `middleware/sandbox.py`, `services/websocket_manager.py`
+ 
+### External agent surface
+`mcp/server.py`, `mcp/tools.py`, `services/agent_proxy.py`
+ 
 ---
 
-## Database Tables (28 total)
-
-| Table | Key Fields |
-|-------|------------|
-| `users` | id (UUID PK), username (unique), password_hash, role (admin/user) |
-| `devices` | id, user_id (FK), device_name, device_id (unique), config_json, last_seen, assigned_app_id (FK → apps), active_app_version_id, preview_session_id, installed_runtime_version, supported_schema_versions, update_status |
-| `sessions` | id, user_id (FK), device_id (FK), token (unique), expires_at, is_active |
-| `chat_messages` | id, user_id (FK), role (user/assistant/system/tool), content, metadata_json |
-| `calendar_events` | id, user_id (FK), title, start_time, end_time, description, color, location, is_all_day, **source_type** (String(20), default='local', values: local/caldav/notion/custom), **notes** (Text, nullable) |
-| `notifications` | id, user_id (FK), title, message, severity (info/warning/error/success), actions (JSON), is_read |
-| `workflows` | id, user_id (FK), name, description, graph (JSON), trigger_type (onSchedule/onDataChange/onServerEvent/manual), trigger_config (JSON), enabled |
-| `connections` | id, user_id (FK), name, provider, credentials_encrypted (Fernet) |
-| `agent_configs` | id, user_id (FK, unique), provider, model, api_key_encrypted, base_url, system_prompt, temperature, max_tokens, is_active |
-| `module_states` | id, user_id (FK), module_type (string key), state_json, version |
-| `audit_logs` | id, user_id, action_type (50, indexed), resource_type (50, indexed), resource_id, details_json, ip_address |
-| `component_registry` | id, type (100, unique, indexed), tier (50), name, icon, description, props_schema (JSON), default_props (JSON), is_active |
-| `sdui_templates` | id, name, description, category (indexed), screen_json (JSON), created_by (FK), is_public |
-| `sdui_screen_history` | id, module_id (100, indexed), user_id (FK), screen_json, version, source (50), is_starred | **Deprecated** — use `module_versions` for new data |
-| `sandbox_actions` | id, session_id (100, indexed), user_id (FK), method, path (500), request_body (JSON), response_body (JSON), response_code |
-| `custom_variables` | id, user_id (FK), name, value, type (text/number/boolean), description |
-| `data_sources` | id, user_id (FK), name, type, config_json |
-| `trigger_definitions` | id, user_id (FK), name, trigger_type (schedule/data_change/server_event), config_json, action_chain_json, enabled, created_at, updated_at |
-| `apps` | id, user_id (FK), name, icon, splash, theme (JSON), design_tokens (JSON), dark_mode, default_launch_module_id (FK → module_instances), bottom_bar_config (JSON), launchpad_config (JSON), **current_working_draft_id**, **current_published_version_id** |
-| `app_module_refs` | id, app_id (FK), module_instance_id (FK), order, slot_position (0-4 for bottom bar) — junction table for app↔module many-to-many |
-| `module_instances` | id, user_id (FK), module_type, name, icon, description, config_json, status, template_id (FK), created_at, updated_at, **current_working_draft_id**, **current_version_id** |
-| `settings` | id, user_id (FK, unique), display_name, email, endpoint_url, dark_mode, password_hash |
-| `todos` | id, user_id (FK), text, completed |
-| `articles` | id, user_id (FK), title, source, url, summary_markdown, content_markdown, image_url, published_at |
-| `notes` | id, user_id (FK), title, content | **NEW (FF4)** |
-| `module_working_drafts` | id, module_id (FK), user_id (FK), sdui_json (JSON), last_autosaved_at, base_version_id, validation_status, validation_errors (JSON), dirty | **NEW (FF4)** — replaces old `__draft` ModuleState |
-| `module_versions` | id, module_id (FK), user_id (FK), version_number, display_name, default_timestamp_name, custom_name, sdui_json (JSON), source, parent_version_id, change_summary, validation_status, validation_errors (JSON), schema_version, created_at | **NEW (FF4)** |
-| `preview_sessions` | id, user_id (FK), target_type (web_admin/mobile_device), app_id (FK), module_id (FK), resolved_config_json (JSON), resolved_sdui_json (JSON), device_id (FK), status (active/expired/exited), created_at, expires_at, exited_at | **NEW (FF4)** |
-
-**Divider removed as standalone component:** `Divider` is no longer a standalone cell component per Architecture Decisions Session 9 and Feature Feedback 2. It has been removed from the web editor's `COMPONENT_REGISTRY` and the backend `_VALID_V2_COMPONENT_TYPES` (`mcp/tools.py`). Divider is now a row-level property. The legacy `divider` type remains in `_LEGACY_V2_TYPE_MAP` and `_SDUI_PROPS_FIELDS` for backward compatibility with existing screens, but new screens should use row-level dividers instead.
-
-**Component validation sync (FF3 gap fix):** `Empty` is fully synchronized across all three layers — backend `_VALID_V2_COMPONENT_TYPES` + `_LEGACY_V2_TYPE_MAP` (`mcp/tools.py`), component seed (`component_seed.py`), and web editor `COMPONENT_REGISTRY` + `COMPONENT_SCHEMAS`. Empty can round-trip from LLM generation through server validation to editor property inspection without errors.
-
-**`module_states` key naming conventions:**
-| Key | Content |
-|-----|---------|
-| `sdui__{module_id}` | Live SDUI screen JSON (e.g. `sdui__home`) |
-| `sdui__{module_id}__draft` | Pending draft awaiting user approval |
-| `_tabs_config` | Per-user tab visibility + overrides |
-| `_custom_modules` | Per-user custom module definitions |
-| `form_data__{form_id}` | Form submission storage |
-| `forms` | General forms state (used by `get_form_data` MCP tool) |
-
+## Data model and schema evolution
+ 
+The authoritative backend state lives in `backend/app/models/`. `backend/app/models/__init__.py` imports every model so metadata registration, SQLAdmin, migrations, tests, and seed code all share the same registry.
+ 
+Current model count: **33 model files**.
+ 
+### Model organization
+ 
+#### Identity and access
+- `user.py`
+- `session.py`
+- `device.py`
+- `settings.py`
+- `agent_config.py`
+ 
+#### Apps, modules, and versioning
+- `app.py`
+- `app_module_ref.py`
+- `app_version.py`
+- `app_working_draft.py`
+- `module_instance.py`
+- `module_state.py`
+- `module_version.py`
+- `module_working_draft.py`
+- `preview_session.py`
+ 
+#### Templates and SDUI structure
+- `template.py`
+- `template_version.py`
+- `component_registry.py`
+- `screen_history.py`
+ 
+#### Automation and integrations
+- `workflow.py`
+- `trigger.py`
+- `connection.py`
+- `data_source.py`
+- `custom_variable.py`
+ 
+#### Content and collaboration
+- `chat_message.py`
+- `calendar_event.py`
+- `notification.py`
+- `todo.py`
+- `note.py`
+- `article.py`
+ 
+#### Operational and audit state
+- `audit_log.py`
+- `sandbox_action.py`
+- `device_error.py`
+ 
+### What the model registry means
+ 
+- If a feature writes to the database, there is usually a model file for it.
+- If a feature needs a join or relationship to survive across requests, that relationship belongs in the model layer first.
+- Compatibility rows still exist for older flows, but the FF4 draft/version tables are the current source of truth for module and app edit state.
+ 
+### Schema migration history
+ 
+Current Alembic revision count: **22 migration files** in `backend/alembic/versions/`.
+ 
+Current revisions:
+ 
+- `de71aeb133e3_initial_schema.py`
+- `1d07216a865d_add_sdui_templates_and_sdui_screen_.py`
+- `31969323f95b_add_component_registry_table.py`
+- `f8a9b0c1d2e3_add_todos_table.py`
+- `c9bfbdb0973f_add_settings_table_with_foreign_key.py`
+- `ee17096d9496_add_temperature_max_tokens_is_active_to_.py`
+- `f3a1b2c4d5e6_add_module_instances_table.py`
+- `ace0bc925c39_add_last_active_to_sessions.py`
+- `644530918c51_add_audit_logs_table.py`
+- `b5c7d9e2f4a6_add_trigger_definitions_table.py`
+- `0b3ecd975f0b_add_connections_table_for_api_key_.py`
+- `a3b8c9d0e1f2_add_custom_variables_and_data_sources.py`
+- `d4aa5857b012_add_run_count_and_last_run_at_to_.py`
+- `97967c8d628b_update_workflow_model_for_react_flow.py`
+- `5f1877f37748_add_session10_models.py`
+- `12d257e0ec5e_add_unique_constraint_user_id_module_.py`
+- `d15c43b2c823_merge_heads.py`
+- `59b20307e798_ff4_versioning_and_notes.py`
+- `5468f59c7834_ff4_app_template_versioning.py`
+- `0a1b2c3d4e5f_add_calendar_source_type_and_notes.py`
+- `089ea87bcf18_add_sandbox_actions_table.py`
+- `d8dc2a68d143_add_device_error_reports_table_and_.py`
+ 
+### Persistence flow
+ 
+The typical persistence path is:
+ 
+1. Router parses a request schema from `backend/app/schemas/`.
+2. `dependencies.py` resolves the user and opens the request DB session.
+3. Router delegates to a service or does a small local check.
+4. Service reads/writes ORM rows.
+5. Session commits or rolls back.
+6. Router returns a response schema or DTO.
+ 
+### Current source-of-truth rows
+ 
+- `ModuleWorkingDraft` / `ModuleVersion`
+- `AppWorkingDraft` / `AppVersion`
+- `PreviewSession`
+- `Settings`, `AgentConfig`, `Session`, `Device`
+- `Connection`, `DataSource`, `CustomVariable`
+- `Workflow`, `TriggerDefinition`, `AuditLog`
+ 
+Legacy compatibility still exists:
+ 
+- `ModuleState`
+- `ScreenHistory`
+- `module_states` compatibility keys such as `sdui__{module_id}` and `sdui__{module_id}__draft`
+ 
 ---
 
-## API Endpoints (Full Reference)
-
-### Auth (`/auth`)
-
+## API surface
+ 
+The backend API is intentionally grouped by domain, not by technical layer.
+ 
+### Identity and access
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/auth/status` | ❌ | `{setup_complete, server_name, version}` |
-| POST | `/auth/setup` | ❌ | Creates first user (locked with 409 after first use) |
-| POST | `/auth/login` | ❌ | Authenticates, upserts device, creates session → token |
-| POST | `/auth/refresh` | ✅ | Invalidates old session, issues fresh 24h token |
-| POST | `/auth/logout` | ✅ | Invalidates session |
-
-### Modules & SDUI (`/api`)
-
+| GET | `/auth/status` | ❌ | Setup state and server identity |
+| POST | `/auth/setup` | ❌ | First-user bootstrap; locked after success |
+| POST | `/auth/login` | ❌ | Authenticate, upsert device, create session token |
+| POST | `/auth/refresh` | ✅ | Reissue the current session token |
+| POST | `/auth/logout` | ✅ | Invalidate the current session |
+| GET/PUT | `/api/settings` | ✅ | Read/update user profile settings |
+| `/api/devices...` | ✅ | Device registration, assignment, config, status, preview exit |
+| `/api/users...` | ✅ Admin | Admin user CRUD |
+| `/api/sessions...` | ✅ | Session listing and revocation |
+| `/api/agent/config` | ✅ | User AI provider config |
+ 
+### Product state and SDUI
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/modules` | ✅ | List all tabs with enabled/disabled status, hidden/enabled state and overrides |
-| DELETE | `/api/modules/{module_id}` | ✅ | Hide a tab (broadcasts `tabs_updated` WS event) |
-| POST | `/api/modules/{module_id}/show` | ✅ | Restore a hidden tab (broadcasts `tabs_updated`) |
-| PATCH | `/api/modules/{module_id}/config` | ✅ | Rename tab and/or change icon `{name?, icon?}` — broadcasts `tabs_updated` |
-| GET | `/api/modules/custom` | ✅ | List only custom modules |
-| POST | `/api/modules/custom` | ✅ | Create custom module `{name, icon}` → generates slug-based ID |
-| DELETE | `/api/modules/custom/{module_id}` | ✅ | Delete custom module + its SDUI data |
-| GET | `/api/sdui/{module_id}` | ✅ | Get live SDUI screen `{screen, version}` |
-| GET | `/api/sdui/{module_id}/draft` | ✅ | Get pending draft `{screen, has_draft}` |
-| POST | `/api/sdui/{module_id}` | ✅ | Set SDUI screen (REST equivalent of MCP set_screen) |
-| DELETE | `/api/sdui/{module_id}` | ✅ | Delete SDUI screen (live + draft) |
-| GET | `/api/sdui/modules` | ✅ | List all modules with `is_custom` flag |
-| GET | `/api/sdui/{module_id}/tabs` | ✅ | Get tab config |
-| PUT | `/api/sdui/{module_id}/tabs` | ✅ | PUT tab config |
-| GET | `/api/sdui/{module_id}/history` | ✅ | Paginated screen history |
-| GET | `/api/sdui/{module_id}/history/{entry_id}` | ✅ | Single history entry detail |
-| POST | `/api/sdui/{module_id}/validate` | ✅ | Validate SDUI payload |
-| POST | `/api/sdui/{module_id}/duplicate` | ✅ | Duplicate screen to another module |
-| GET | `/api/device/config` | ✅ | Get device config |
-| PUT | `/api/device/config` | ✅ | Update device config |
-
-### Chat (`/api/chat`)
-
+| `/api/apps...` | ✅ | App CRUD, module refs, bottom bar config, drafts, versions, previews, publish |
+| `/api/modules...` | ✅ | Module tab visibility, custom modules, drafts, versions, duplication, usage |
+| `/api/templates...` | ✅ | Template CRUD, apply/import, rows, versions |
+| `/api/components...` | ✅ Admin | Component registry CRUD |
+| `/api/sdui...` | ✅ | Live screen, draft, validate, history, duplicate, tab config |
+| `/api/module_versions...` | ✅ | Module version history and checkpoint flows |
+| `/api/app_versions...` | ✅ | App publish/version flows |
+| `/api/preview-sessions...` | ✅ | Preview session retrieval, exit, extend |
+ 
+### Collaboration and content
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/chat/history` | ✅ | `{messages, has_more}`; params: `limit=20`, `offset=0` |
-| DELETE | `/api/chat/history` | ✅ | Deletes all chat messages for current user |
-
-### Calendar (`/api/calendar`)
-
+| `/api/chat...` | ✅ | Chat history retrieval and clearing |
+| `/api/calendar...` | ✅ | Event CRUD; fires workflow triggers on changes |
+| `/api/notifications...` | ✅ | Notification list and read state |
+| `/api/todos...` | ✅ | Todo CRUD |
+| `/api/notes...` | ✅ | Notes CRUD |
+| `/api/articles...` | ✅ | Article list/get/delete |
+ 
+### Automation and integration
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/calendar/events` | ✅ | List events; optional `start_date`, `end_date`, pagination |
-| POST | `/api/calendar/events` | ✅ | Create event; fires `EVENT_CREATED` workflow trigger; auto-refreshes SDUI calendar screen |
-| GET | `/api/calendar/events/{event_id}` | ✅ | Get single event |
-| PUT | `/api/calendar/events/{event_id}` | ✅ | Update event; fires `EVENT_UPDATED`; updates SDUI |
-| DELETE | `/api/calendar/events/{event_id}` | ✅ | Delete event |
-| DELETE | `/api/calendar/events/bulk` | ✅ | Bulk delete events `{ids: [...]}` |
-
-### Notifications (`/api/notifications`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/notifications` | ✅ | List notifications; params: `unread_only=False`, pagination (`skip`, `limit`, `search`) |
-| POST | `/api/notifications/{id}/read` | ✅ | Mark one notification as read |
-| POST | `/api/notifications/read-all` | ✅ | Mark all notifications as read |
-| DELETE | `/api/notifications/bulk-delete` | ✅ | Bulk delete notifications `{ids: [...]}` |
-
-### Agent Config (`/api/agent`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/agent/config` | ✅ | Get config (creates default if none); API key never returned, only `api_key_set: bool` |
-| PUT | `/api/agent/config` | ✅ | Update config; API key Fernet-encrypted before storage |
-
-### Workflows (`/api/workflows`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/workflows` | ✅ | List user workflows; pagination (`skip`, `limit`, `search`) |
-| POST | `/api/workflows` | ✅ | Create workflow; auto-registers with APScheduler if onSchedule type |
-| PUT | `/api/workflows/{id}` | ✅ | Update; manages scheduler registration |
-| DELETE | `/api/workflows/{id}` | ✅ 204 | Delete; unregisters from scheduler |
-| DELETE | `/api/workflows/bulk` | ✅ | Bulk delete workflows `{ids: [...]}` |
-| POST | `/api/workflows/import/n8n` | ✅ | Import n8n workflow JSON → React Flow graph |
-
-### Connections (`/api/connections`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/connections` | ✅ | List user connections; pagination |
-| POST | `/api/connections` | ✅ | Create connection `{name, provider, credentials}` — credentials Fernet-encrypted |
-| GET | `/api/connections/{id}` | ✅ | Get connection (credentials excluded) |
-| PUT | `/api/connections/{id}` | ✅ | Update connection |
-| DELETE | `/api/connections/{id}` | ✅ 204 | Delete connection |
-
-### Actions (`/api/actions`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/actions/execute` | ✅ | Execute a named registered action |
-| GET | `/api/actions/functions` | ✅ | List all registered action names |
-
-### Triggers (`/api/triggers`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/triggers` | ✅ | List user's trigger definitions; paginated |
-| POST | `/api/triggers` | ✅ | Create trigger `{name, trigger_type, config_json, action_chain_json, enabled}` |
-| PUT | `/api/triggers/{id}` | ✅ | Update trigger (partial) |
-| DELETE | `/api/triggers/{id}` | ✅ 204 | Delete trigger |
-| POST | `/api/triggers/{id}/test` | ✅ | Manually fire a trigger for testing — runs action chain via `fire_trigger()` |
-
-### WebSocket & Health
-
-| Path | Auth | Description |
-|------|------|-------------|
-| `WS /ws` | `?token=` query param | Main app WebSocket |
-| `GET /health` | ❌ | `{"status": "ok", "version": ...}` |
-
-### User Management (`/api/users`) — Admin Only
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/users` | ✅ Admin | List all users with pagination |
-| POST | `/api/users` | ✅ Admin | Create a new user `{username, password, role?}` |
-| GET | `/api/users/{id}` | ✅ Admin | Get user by ID |
-| PUT | `/api/users/{id}` | ✅ Admin | Update user `{username?, password?, role?}` |
-| DELETE | `/api/users/{id}` | ✅ Admin | Delete user |
-
-### Session Management (`/api/sessions`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/sessions` | ✅ Admin | All active sessions |
-| GET | `/api/sessions/me` | ✅ | My active sessions |
-| DELETE | `/api/sessions/me/others` | ✅ | Revoke all sessions except current |
-| DELETE | `/api/sessions/{id}` | ✅ Admin | Revoke specific session |
-
-### Audit Log (`/api/audit`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/audit` | ✅ Admin | List all audit logs with pagination; filterable by action, resource_type |
-| GET | `/api/audit/me` | ✅ | List current user's audit logs |
-
-### Component Registry (`/api/components`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/components/registry` | ✅ | All active components |
-| GET | `/api/components/registry/{type}` | ✅ | Single component by type |
-| POST | `/api/components/registry` | ✅ Admin | Create component |
-| PUT | `/api/components/registry/{type}` | ✅ Admin | Update component |
-| DELETE | `/api/components/registry/{type}` | ✅ Admin | Soft-delete component |
-
-### SDUI Templates (`/api/templates`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/templates` | ✅ | List templates (public + own); pagination |
-| POST | `/api/templates` | ✅ | Create template from SDUI JSON |
-| GET | `/api/templates/{id}` | ✅ | Get template by ID |
-| PUT | `/api/templates/{id}` | ✅ | Update template |
-| DELETE | `/api/templates/{id}` | ✅ | Delete template |
-| POST | `/api/templates/{id}/apply` | ✅ | Apply template to a module (sets SDUI screen) |
-| POST | `/api/templates/import` | ✅ | Import template from JSON export |
-| GET | `/api/templates/{id}/rows` | ✅ | Get template rows only |
-
-### Admin Stats (`/api/admin`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/admin/stats` | ✅ Admin | Aggregate counts (users, sessions, WS connections, events, workflows, notifications, screens, templates, audit entries) |
-| GET | `/api/admin/stats/workflows` | ✅ Admin | Per-workflow analytics |
-| GET | `/api/admin/stats/websocket` | ✅ Admin | Live WS connection details |
-| GET | `/api/admin/cleanup/preview` | ✅ Admin | Preview test data cleanup — returns counts of apps/modules/templates that would be deleted |
-| POST | `/api/admin/cleanup/execute` | ✅ Admin | Execute test data cleanup — deletes apps/modules/templates with "test/Test" prefix |
-
-### Apps (`/api/apps`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/apps` | ✅ | List user's apps; paginated |
-| POST | `/api/apps` | ✅ | Create app `{name, icon?, splash?, theme?, design_tokens?, dark_mode?, default_launch_module_id?, bottom_bar_config?, launchpad_config?}` — validates 5-slot bottom bar cap |
-| GET | `/api/apps/{id}` | ✅ | Get app with enriched bottom bar config (join with ModuleInstance) |
-| PUT | `/api/apps/{id}` | ✅ | Update app (partial) |
-| DELETE | `/api/apps/{id}` | ✅ 204 | Delete app + module refs |
-| PATCH | `/api/apps/{id}/modules` | ✅ | Update module assignments `{add?: [{module_instance_id, slot_position?}], remove?: [module_instance_id]}` |
-| PATCH | `/api/apps/{id}/bottom-bar` | ✅ | Update bottom bar config `{config: [{module_instance_id, slot_position}]}` — validates 5-slot cap |
-
-### Devices (`/api/devices`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/devices` | ✅ | Register/update device `{device_name, device_id}` — self-service endpoint for mobile |
-| GET | `/api/devices` | ✅ | List user's devices |
-| GET | `/api/devices/{device_id}` | ✅ | Get device |
-| PUT | `/api/devices/{device_id}` | ✅ | Update device |
-| DELETE | `/api/devices/{device_id}` | ✅ 204 | Delete device |
-| POST | `/api/devices/{device_id}/app` | ✅ | Assign app to device `{app_id}` |
-| GET | `/api/devices/{device_id}/config` | ✅ | Get full device config (with app info, modules) for mobile app |
-
-### Todos (`/api/todos`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/todos` | ✅ | List user's todos |
-| POST | `/api/todos` | ✅ | Create todo `{text}` |
-| PUT | `/api/todos/{id}` | ✅ | Update todo `{text?, completed?}` |
-| DELETE | `/api/todos/{id}` | ✅ 204 | Delete todo |
-
-### Articles (`/api/articles`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/articles` | ✅ | List user's articles with pagination |
-| GET | `/api/articles/{id}` | ✅ | Get single article |
-| DELETE | `/api/articles/{id}` | ✅ 204 | Delete article |
-
-### Settings (`/api/settings`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/settings` | ✅ | Get/update user settings |
-| PUT | `/api/settings` | ✅ | Update settings `{display_name?, email?, endpoint_url?, dark_mode?, password?}` |
-
-### Modules — Screen History & Utilities (added to `/api/sdui`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/sdui/{module_id}/history` | ✅ | Paginated screen history for module |
-| GET | `/api/sdui/{module_id}/history/{entry_id}` | ✅ | Single history entry detail |
-| POST | `/api/sdui/{module_id}/validate` | ✅ | Validate SDUI payload |
-| POST | `/api/sdui/{module_id}/duplicate` | ✅ | Duplicate a screen to another module |
-
+| `/api/workflows...` | ✅ | Workflow CRUD and n8n import |
+| `/api/triggers...` | ✅ | Trigger CRUD and manual execution |
+| `/api/actions...` | ✅ | Action catalog and execution |
+| `/api/connections...` | ✅ | Encrypted external credentials |
+| `/api/data_sources...` | ✅ | Data source configs |
+| `/api/variables...` | ✅ | Custom variables |
+| `/api/audit...` | ✅ | Audit log retrieval |
+| `/api/admin...` | ✅ Admin | Stats and cleanup |
+ 
+### Mounted non-HTTP domain channels
+| Path | Auth | What it serves |
+|------|------|----------------|
+| `WS /ws` | `?token=` | Chat streaming, notifications, SDUI updates, module actions |
+| `/mcp` | Bearer token | External agent tools |
+| `/admin/db` | BasicAuth | SQLAdmin database browser |
+| `/health` | none | Liveness check |
+ 
+### Router design rule
+ 
+Routers should be readable as transport adapters:
+ 
+- parse request data with schemas
+- resolve auth and sessions via dependencies
+- delegate policy to services
+- emit websocket events and audit logs when side effects matter
+ 
+Complex rules belong in services, not in route handlers.
+ 
 ---
 
-## WebSocket Protocol
-
-**Connection:** `ws://<host>/ws?token=<session_token>&device_id=<optional>`
-
-**Heartbeat:** Client sends `{type: "ping"}` every 30 seconds; server replies `{type: "pong"}`. The mobile `ReconnectingWebSocket` wrapper handles this automatically.
-
-### Client → Server messages
-
+## WebSocket protocol
+ 
+The websocket channel is not a side feature. It carries the live chat stream, notifications, SDUI updates, tab changes, and module action results that make the mobile app feel reactive.
+ 
+### Connection
+- URL: `ws://<host>/ws?token=<session_token>&device_id=<optional>`
+- Heartbeat: client sends `{type: "ping"}` every 30 seconds; server replies `{type: "pong"}`
+- Auth: token comes from the session table, not a separate websocket secret
+ 
+### Client → server messages
 | `type` | Payload | Action |
 |--------|---------|--------|
-| `ping` | — | Replies `{type: "pong"}` |
-| `chat_message` | `content, conversation_id` | Spawns agent proxy as background task |
-| `module_action` | `function, params, ref` | Executes action via registry; replies `action_result` or `action_error` |
-
-### Server → Client messages
-
+| `ping` | — | Replies `pong` |
+| `chat_message` | `content, conversation_id` | Starts agent-proxy streaming in the background |
+| `module_action` | `function, params, ref` | Executes through the action registry |
+ 
+### Server → client messages
 | `type` | Payload | When |
 |--------|---------|------|
-| `connected` | `user_id, device_id` | On connection accepted |
-| `pong` | — | After `ping` |
-| `chat_start` | `message_id` | AI begins responding and establishes the assistant `message_id` for the stream |
-| `chat_token` | `message_id, token` | Each streamed text delta; reuses the `chat_start` `message_id` |
-| `chat_message_replace` | `message_id, content` | After XML tool call stripping |
-| `chat_complete` | `message_id, content` | Full response done; reuses the same `message_id` |
-| `chat_error` | `message, code?` | Error; `code:"no_api_key"` if no LLM configured |
+| `connected` | `user_id, device_id` | Connection accepted |
+| `pong` | — | Heartbeat reply |
+| `chat_start` | `message_id` | Assistant stream begins |
+| `chat_token` | `message_id, token` | Streamed text delta |
+| `chat_message_replace` | `message_id, content` | Tool-call stripping rewrite |
+| `chat_complete` | `message_id, content` | Final assistant message |
+| `chat_error` | `message, code?` | Chat streaming failed |
 | `notification` | `id?, title, message, severity, actions?, timestamp?` | Push notification |
-| `sdui_screen_update` | `module_id, screen, version` | Live SDUI screen updated |
-| `sdui_draft_update` | `module_id, screen, version` | New draft ready for approval, or draft cleared when `screen=null` and `version=0` |
-| `sdui_draft_rejected` | `module_id` | Legacy companion event when a draft is rejected or cleared |
-| `tabs_updated` | `modules: [...]` | Tab visibility changed |
-| `module_state_update` | `module, state, version` | Module state changed (legacy) |
+| `sdui_screen_update` | `module_id, screen, version` | Live SDUI screen changed |
+| `sdui_draft_update` | `module_id, screen, version` | Draft ready, updated, or cleared |
+| `sdui_draft_rejected` | `module_id` | Legacy draft rejection signal |
+| `tabs_updated` | `modules: [...]` | Tab visibility or naming changed |
+| `module_state_update` | `module, state, version` | Legacy module state change |
 | `tool_result` | `tool, result` | Tool call succeeded |
 | `tool_error` | `tool, message` | Tool call failed |
 | `action_result` | `ref?, result` | Module action completed |
 | `action_error` | `ref?, message` | Module action failed |
-
+ 
+### What to notice
+- The websocket protocol mirrors the REST/MCP contract instead of inventing its own domain vocabulary.
+- Chat and screen state reuse the same `message_id` / module identifiers across events so the client can reconcile a stream with the UI state.
+- Draft clearing is explicit. A cleared draft is not just “missing”; the protocol emits `screen: null, version: 0` before the live update.
+ 
 ---
-
-## Services Detail
-
+ 
+## Services detail
+ 
+The service layer is where the backend becomes understandable. Routers are mostly transport; services own rules.
+ 
 ### `services/auth.py`
-
 | Function | Purpose |
 |----------|---------|
 | `is_setup_complete(db)` | True if any user exists |
-| `create_first_user(db, username, password)` | Creates admin user with bcrypt hash |
+| `create_first_user(db, username, password)` | Creates the initial admin user |
 | `authenticate_user(db, username, password)` | Validates credentials |
-| `upsert_device(db, user_id, device_id, device_name)` | Creates or updates last_seen on Device |
-| `create_session(db, user_id, device_id)` | Invalidates existing sessions for device, creates new JWT-signed session |
+| `upsert_device(db, user_id, device_id, device_name)` | Creates or updates `Device.last_seen` |
+| `create_session(db, user_id, device_id)` | Invalidates prior device sessions and creates a new one |
 | `get_session_by_token(db, token)` | Finds active, non-expired session |
-| `invalidate_session(db, token)` | Sets `is_active=False` |
-
-### `services/module_service.py`
-
-Module instance management with app-aware operations:
-
-| Function | Purpose |
-|----------|---------|
-| `get_module_usage(module_instance_id)` | Get list of apps that reference this module (for "affected apps" preview) |
-| `enable_module(app_id, module_instance_id)` | Enable module in an app (set status to 'active') |
-| `disable_module(app_id, module_instance_id)` | Disable module in an app |
-| `resolve_legacy_instance_id(user_id)` | Get/create synthetic "legacy" module instance for agent calls |
-
+| `invalidate_session(db, token)` | Marks a session inactive |
+ 
 ### `services/app_service.py`
-
-App CRUD and configuration management:
-
+App CRUD and configuration management.
 | Function | Purpose |
 |----------|---------|
-| `create_app(db, user_id, name, icon?, splash?, theme?, design_tokens?, dark_mode?, default_launch_module_id?, bottom_bar_config?, launchpad_config?)` | Create new app |
-| `get_app(db, app_id, user_id)` | Get app with enriched bottom bar config (joins ModuleInstance) |
-| `list_apps(db, user_id, pagination?)` | List user's apps |
-| `update_app(db, app_id, user_id, updates)` | Update app fields |
-| `delete_app(db, app_id, user_id)` | Delete app + module refs |
-| `update_module_refs(db, app_id, user_id, add?, remove?)` | Add/remove module instances from app |
-| `validate_bottom_bar_config(db, user_id, config)` | Validate 5-slot cap + valid module_instance_ids |
-| `enrich_bottom_bar_config(db, config)` | Join bottom bar config with ModuleInstance metadata |
-| `assign_app_to_device(db, device_id, app_id, user_id)` | Assign app to device |
-
+| `create_app(...)` | Create a new app row |
+| `get_app(...)` | Load app and enrich bottom bar metadata |
+| `list_apps(...)` | Paginated app listing |
+| `update_app(...)` | Update app fields |
+| `delete_app(...)` | Delete an app and related module refs |
+| `update_module_refs(...)` | Add/remove app-module relationships |
+| `validate_bottom_bar_config(...)` | Enforce the 5-slot cap and valid module IDs |
+| `enrich_bottom_bar_config(...)` | Join config with module metadata |
+| `assign_app_to_device(...)` | Bind a device to an app |
+ 
 ### `services/device_service.py`
-
-Device registration and management:
-
 | Function | Purpose |
 |----------|---------|
-| `register_device(db, user_id, device_name, device_id)` | Create or update last_seen for device |
-| `list_devices(db, user_id)` | List user's devices |
-| `assign_app_to_device(db, device_id, app_id, user_id)` | Assign app to device |
-| `get_device_config(db, device_id, user_id)` | Get full device config for mobile (with app info, modules, settings) |
-
-### `services/action_registry.py`
-
-Registered built-in actions (singleton `registry`):
-
-| Name | What it does |
-|------|-------------|
-| `refresh_data` | Re-reads SDUI screen from DB for `params.module_id`, pushes `sdui_screen_update` |
-| `submit_form` | Stores form submission in `ModuleState` keyed by `form_data__{form_id}`; sends notification; fires `form_submitted` trigger |
-| `send_to_agent` | Fires `handle_chat_message()` as background task |
-| `mark_notification_read` | Sets `is_read=True` on notification |
-| `create_calendar_event` | Creates `CalendarEvent` ORM row |
-| `delete_calendar_event` | Deletes `CalendarEvent` by `event_id` |
-| `approve_draft` | Calls `tools.approve_draft()` |
-| `reject_draft` | Calls `tools.reject_draft()` with optional `feedback` |
-| `set_variable` | Upserts a CustomVariable by user + name |
-| `fetch_rss` | Fetches and parses RSS feed via `feedparser`, returns normalized article list |
-| `fetch_weather` | Fetches weather from OpenWeatherMap API using Connection credentials |
-| `run_workflow` | Executes a workflow by ID via `workflow_engine._execute_workflow()` |
-
-**Client-only action stubs (14):** `navigate`, `go_back`, `open_url`, `server_action`, `set_component_state`, `toggle`, `show_notification`, `show_alert`, `haptic`, `share`, `copy_text`, `delay`, `chain`, `conditional` — these return `{"status": "client_only"}` so the action registry has a complete catalog for the web admin action catalog UI.
-
-**Total registered actions: 28** (14 server-side handlers + 14 client-only stubs)
-
-### `services/variable_resolver.py`
-
-Resolves `{{expression}}` mustache syntax in SDUI payloads server-side using **chevron** (Python mustache library). Uses a placeholder-swap approach to preserve `{{expr}}` for unresolved tokens.
-
-**Supported scopes:**
-| Scope | Pattern | Source |
-|-------|---------|--------|
-| `user` | `{{user.name}}`, `{{user.id}}`, `{{user.email}}` | Current user object |
-| `component` | `{{component.<id>.value}}` | Component state dict |
-| `self` | `{{self.value}}` | Shorthand for current component |
-| `custom` | `{{custom.<name>}}` | CustomVariable by user + name |
-| `env` | `{{env.<key>}}` | `os.environ` |
-| `data` | `{{data.<source_name>.<field>}}` | Data source cache dict |
-| `connection` | `{{connection.<name>.<credential_key>}}` | Connection credentials (Fernet-decrypted) |
-| `date` | `{{date.today}}`, `{{date.now}}` | Current date (YYYY-MM-DD) and ISO timestamp |
-
-Async entry point: `resolve_expression(expr, context)` replaces all `{{...}}` in a string. Unresolved expressions are left as-is.
-
-### `services/trigger_engine.py`
-
-Executes action chains defined in TriggerDefinition records.
-
-| Function | Purpose |
-|----------|--------|
-| `fire_trigger(trigger, db)` | Parses `action_chain_json` and runs each action through `action_registry.execute()` |
-| `register_scheduled_triggers(scheduler)` | V1 placeholder for APScheduler cron-based triggers |
-
-### `services/workflow_engine.py`
-
-React Flow graph execution engine with APScheduler (`AsyncIOScheduler(timezone="UTC")`).
-
-**Workflow structure:**
-- `graph` field stores React Flow JSON: `{nodes: [...], edges: [...]}`
-- `trigger_type`: `onSchedule`, `onDataChange`, `onServerEvent`, `manual`
-- `trigger_config`: JSON config (e.g., `{cron: "0 9 * * *"}` for onSchedule)
-
-**Node types:**
-- `action` — executes MCP tool via `execute_tool()`
-- `condition` — evaluates expression, branches on true/false edges
-- `switch` — multi-way branching based on expression
-- `loop` — iterates over array, executes subgraph for each item
-
-**Execution:**
-- Topological sort via in-degree queue
-- Context passing between nodes (`context.results[node_id]`)
-- Branching via edge `sourceHandle` matching condition results
-- Max iterations limit to prevent infinite loops
-
+| `register_device(...)` | Create or update device registration |
+| `list_devices(...)` | List the user’s devices |
+| `assign_app_to_device(...)` | Assign an app to a device |
+| `get_device_config(...)` | Build the full mobile config payload |
+ 
+### `services/module_service.py`
 | Function | Purpose |
 |----------|---------|
-| `start_scheduler()` / `stop_scheduler()` | Lifecycle management |
-| `_load_scheduled_workflows()` | On startup: re-registers all active onSchedule workflows |
-| `_schedule_workflow_by_config(workflow_id, config)` | Registers APScheduler cron job |
-| `fire_trigger(trigger_type, user_id, event_data)` | Called by routers when events occur; finds matching workflows and executes |
-| `_execute_workflow(workflow_id, event_data)` | Executes workflow graph in topological order |
-| `_execute_graph(nodes, edges, user_id, context)` | Core graph execution with branching/looping support |
-
-### `services/audit.py`
-
-| Function | Purpose |
-|----------|---------|
-| `log_audit(db, user_id, action, resource_type, resource_id, details?, ip_address?)` | Creates an `AuditLog` row. Wired into auth (login/logout/setup), calendar, workflows, notifications, modules, agent_config, users, sessions |
-
+| `get_module_usage(...)` | Find apps referencing a module |
+| `enable_module(...)` | Enable a module for an app |
+| `disable_module(...)` | Disable a module for an app |
+| `resolve_legacy_instance_id(...)` | Return the synthetic legacy module instance for agent calls |
+ 
+### `services/version_service.py`
+Versioning is the FF4 backbone. It creates checkpoints, resolves publish-time module references, and moves draft state into immutable versions.
+ 
 ### `services/validation_service.py`
-
-Unified validation for apps, modules, and previews:
-
-| Function | Purpose |
-|----------|---------|
-| `validate_app_config(app_config)` | Validate app config structure (bottom bar ≤5 slots, launchpad format, default_launch_module exists) |
-| `validate_publish_config(app_config, devices=None)` | Extends app config validation with device compatibility checks (runtime version, schema version support). Called at publish time to prevent publishing to incompatible devices. |
-| `_validate_device_compatibility(device)` | Checks a single device: `installed_runtime_version` must be set, `supported_schema_versions` must be present. Returns error messages list. |
-| `validate_preview_config(config)` | Lightweight preview config validation (bottom bar slot count only) |
-
+Validation runs at multiple severities:
+- autosave: lightweight shape checks
+- checkpoint/version: component/action/data-binding checks
+- preview: bottom-bar and launchpad shape checks
+- publish: device compatibility, runtime version, schema support
+ 
+### `services/action_registry.py`
+The action registry is the server-side whitelist for SDUI and workflow actions.
+ 
+Server-side actions include refresh, form submission, notification updates, calendar CRUD, draft approval/rejection, custom variables, RSS, weather, and workflow execution. Client-only stubs exist so the web admin can display a complete action catalog without accidentally permitting unsafe server execution.
+ 
+### `services/variable_resolver.py`
+Supported scopes:
+- `user.*`
+- `component.*.value`
+- `self.value`
+- `custom.*`
+- `env.*`
+- `data.*.*`
+- `connection.*.*`
+- `date.today`
+- `date.now`
+ 
+The important rule: unresolved expressions are intentionally left unresolved so the caller can decide whether that is acceptable.
+ 
+### `services/workflow_engine.py`
+React Flow graphs are executed through an APScheduler-backed engine. The graph model supports action, condition, switch, and loop nodes. Execution uses topological ordering plus branch state stored in context.
+ 
+### `services/trigger_engine.py`
+Triggers convert stored JSON action chains into executed actions. This is the bridge between event-driven backend state and reusable action execution.
+ 
+### `services/audit.py`
+Audit logging is a shared side effect, not a separate subsystem. Many user-facing operations write an audit row in addition to their primary mutation.
+ 
 ### `services/component_seed.py`
-
-Seeds the `component_registry` table on startup with default components. Only inserts if the component type doesn't already exist.
-
-**Atomic components (10):** `text`, `button`, `image`, `icon`, `container`, `divider` (legacy), `spacer`, `alert`, `list`, `empty`
-
-> **FF4 changes:** `markdown` and `textinput` removed (text merged with markdown, TextInput replaced by InputBar). `icon` added as atomic. `rich_text_renderer` remains as legacy alias.
-
-**Composite components (8):** `calendar`, `form`, `todo`, `article_card`, `calendar_module`, `chat_module`, `notes_module`, `input_bar`
-
-> **Note:** `divider` is preserved in the DB seed for backward compatibility with existing screens, but is deprecated as a standalone component.
-
-**New in Session 9:**
-- `rich_text_renderer` — renders markdown/rich text with theme support
-- `todo` — interactive todo list with add/toggle/delete actions
-- `article_card` — article preview card with image, title, description, source, publishedAt
-- `calendar` — updated with `variant` prop (month/week/day/agenda)
-
-### `services/websocket_manager.py` (updated)
-
-Added `ConnectionInfo` dataclass and `get_all_connections()` method for the admin WebSocket stats endpoint.
-
-### `middleware/sandbox.py`
-
-ASGI middleware that checks for `X-Helm-Sandbox: true` header. When active:
-- Sets `sandbox_mode` context var in `database.py`
-- `get_db()` intercepts `commit()` calls, recording them to `sandbox_actions` table instead
-- Responses succeed but DB state is not permanently changed
-
+The component seed keeps the authorable component registry populated at startup. It also encodes backward-compatibility behavior such as legacy `divider`.
+ 
+### `services/template_seed.py`, `variable_seed.py`, `workflow_seed.py`, `calendar_seed.py`, `data_source_seed.py`
+These seeders exist to make a fresh backend useful immediately. They are not examples; they are runtime bootstrap inputs and therefore validated at startup.
+ 
+### `services/websocket_manager.py`
+Tracks live connections and connection metadata so the admin stats endpoint can report websocket activity.
+ 
+### `services/cleanup_service.py`
+Owns admin cleanup preview/execute behavior for test data. It is intentionally separate from the router so cleanup policy can be tested in isolation.
+ 
 ---
-
-## MCP Server & Tools
-
-### `mcp/server.py`
-- **Framework:** `FastMCP("Helm", streamable_http_path="/")`
-- **Auth middleware:** `_MCPAuthMiddleware` validates Bearer token, sets `_current_user_id` context var
-- **Mounted at:** `/mcp`
-
-### MCP Tools (exposed to external agents via `/mcp`)
-
-| Tool | Parameters | Purpose |
-|------|-----------|---------|
-| `helm_read_calendar` | `start_date, end_date` (YYYY-MM-DD) | Get events in date range |
-| `helm_create_event` | `title, start_time, end_time, description?, color?, location?` | Create event |
-| `helm_update_event` | `event_id, title?, start_time?, end_time?, description?, color?, location?` | Update event |
-| `helm_delete_event` | `event_id` | Delete one event |
-| `helm_delete_all_events` | — | Delete ALL events for user (bulk) |
-| `helm_read_all_calendar` | — | Get all events across all dates |
-| `helm_send_notification` | `title, message, severity="info"` | Save notification + push WS event |
-| `helm_get_chat_history` | `limit=20` | Get recent chat messages |
-| `helm_send_chat_message` | `content` | Send assistant message + push `chat_complete` event |
-| `helm_update_module_state` | `module_type, state` | Upsert module state + push `module_state_update` |
-| `helm_get_form_data` | `form_id=""` | Get submitted form data |
-| `helm_set_screen` | `module_id, screen` | Set SDUI screen; default draft=True |
-| `helm_delete_screen` | `module_id` | Clear SDUI screen |
-| `helm_list_screens` | — | List all AI-set screens |
-| `helm_get_screen` | `module_id` | Get current SDUI JSON for a module |
-| `helm_get_draft` | `module_id` | Get pending draft `{screen, has_draft}` for a module |
-| `helm_approve_draft` | `module_id` | Promote draft to live (legacy — use versioning for new screens) |
-| `helm_reject_draft` | `module_id, feedback?` | Discard pending draft with optional feedback (legacy) |
-| `helm_hide_tab` | `tab_id` | Hide a nav-bar tab |
-| `helm_show_tab` | `tab_id` | Restore hidden tab |
-| `helm_rename_tab` | `tab_id, name?, icon?` | Rename a tab and/or change its emoji icon |
-| `helm_list_tabs` | — | List all tabs with visibility |
-| `helm_create_checkpoint` | `module_id, change_summary?` | **NEW (FF4):** Create a version checkpoint from the working draft |
-| `helm_list_module_versions` | `module_id, limit?, offset?` | **NEW (FF4):** List version history for a module |
-| `helm_restore_version` | `module_id, version_id` | **NEW (FF4):** Restore a version to the working draft |
-| `helm_publish_version` | `module_id, version_id?` | **NEW (FF4):** Publish a version as the live screen |
-
-**Total: 26 MCP tools** (registered in `mcp/server.py` via `@mcp.tool()`). The Agent Proxy (`services/agent_proxy.py`) exposes an **18-tool subset** of these to the in-app LLM.
-
-### `mcp/tools.py` — Core Tool Implementations
-
-All tool logic is here; shared between the Agent Proxy (internal) and MCP Server (external). Accessed via `execute_tool(name, args, user_id)` dispatcher.
-
-**Shared SDUI contract (`app/services/sdui_state.py` + `mcp/tools.py`):** `validate_sdui_screen_payload()` and `prepare_sdui_screen_for_storage()` centralize the save/apply contract used by REST validate/save, MCP `set_screen`, template apply/restore/duplicate flows, and draft approval. `normalize_sdui_screen()` still converts flat AI-generated component dicts to the props-based schema the frontend expects, while `_validate_sdui_v2()` enforces the row-first V2 contract when `rows` are present.
-
-**Draft-cleared publish semantics:** `send_draft_cleared()` emits `sdui_draft_update` with `screen: null, version: 0` before the live update and still sends legacy `sdui_draft_rejected` for compatibility.
-
-**Regression coverage:** `tests/test_sdui_parity.py` and `tests/test_templates.py` verify row-first validation/apply parity, agent-proxy/MCP tool-definition parity, live-only `list_screens`, draft-cleared publish sequencing, and assistant `message_id` reuse.
-
+ 
+## MCP and external agent integration
+ 
+The external agent story is split into two layers:
+ 
+1. `services/agent_proxy.py` — in-app LLM chat path. This is what the mobile app uses when a user sends a prompt to the embedded assistant.
+2. `backend/app/mcp/` — external tool server mounted at `/mcp`. This is what standalone agents use.
+ 
+Both paths share `mcp/tools.py`, which is the real implementation layer.
+ 
+### Current MCP tool surface
+- calendar read/write
+- notifications
+- chat history and assistant message sending
+- module state read/write
+- form data retrieval
+- SDUI screen read/write/delete/list
+- tab visibility management
+- version checkpoint/list/restore/publish
+ 
+### Why this matters
+ 
+If you are trying to understand “what can the AI actually do?”, the answer is not in one file:
+ 
+- the allowed tool names live in `mcp/server.py`
+- the actual logic lives in `mcp/tools.py`
+- the in-app agent path reuses the same tool logic through `services/agent_proxy.py`
+- SDUI save/apply behavior is shared through `services/sdui_state.py`
+ 
+That is the source of truth, not any single router.
+ 
 ---
-
-## `utils/security.py`
-
-| Function | Purpose |
-|----------|---------|
-| `hash_password(password)` | bcrypt hash via passlib |
-| `verify_password(plain, hashed)` | bcrypt verify |
-| `create_access_token(subject, extra?)` | JWT HS256; expires in `access_token_expire_hours`; includes `sub`, `exp`, `type="access"`, `jti` (UUID for uniqueness) |
-| `create_refresh_token(subject)` | JWT HS256; expires in `refresh_token_expire_days` |
-| `decode_token(token)` | Decodes JWT; raises `JWTError` if invalid/expired |
-| `get_subject_from_token(token)` | Returns `sub` claim or None |
-
+ 
+## Test architecture
+ 
+The test suite is intentionally in-process.
+ 
+- `backend/tests/conftest.py` starts the FastAPI app with `httpx.ASGITransport`
+- it swaps the database layer to an in-memory SQLite database per test function
+- it patches `get_db()` and shared session factories so routers, services, and MCP code all hit the same test DB
+- auth fixtures create a first admin user and then log in, so most tests exercise authenticated behavior
+ 
+### What the test tree emphasizes
+- SDUI/templates/modules/apps/devices/publishing
+- workflows/actions/triggers/variables
+- auth/admin/session behavior
+- calendar, notifications, todos, data sources
+- FF4 migration and regression bundles
+ 
+### What is thinner
+- live websocket session coverage
+- live MCP integration
+- chat and agent_config
+- connections
+- notes/articles
+ 
+That does not mean those areas are unimportant. It means their confidence is more structural than deeply behavior-driven.
+ 
 ---
-
-## Python Dependencies (key packages)
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `fastapi` | ≥0.115 | Web framework |
-| `uvicorn[standard]` | ≥0.34 | ASGI server |
-| `sqlalchemy[asyncio]` | ≥2.0 | ORM + async engine |
-| `aiosqlite` | ≥0.21 | Async SQLite driver |
-| `alembic` | ≥1.15 | DB migrations |
-| `pydantic` | ≥2.10 | Data validation |
-| `pydantic-settings` | ≥2.7 | Config from `.env` |
-| `python-jose[cryptography]` | ≥3.3 | JWT |
-| `passlib[bcrypt]` | ≥1.7.4 | Password hashing |
-| `bcrypt` | ≥3.2,<4.0 | (passlib incompatible with bcrypt≥4) |
-| `httpx` | ≥0.28 | HTTP client for LLM calls, SSE |
-| `mcp` | ≥1.6 | FastMCP framework |
-| `apscheduler` | ≥3.11 | Cron/event scheduler |
-| `loguru` | ≥0.7 | Logging |
-| `python-dotenv` | ≥1.0 | `.env` loading |
-| `cryptography` | ≥44.0 | Fernet encryption for credentials |
-| `feedparser` | ≥6.0.0 | RSS feed parsing |
-
+ 
+## Reading order for a newcomer
+ 
+If you want the quickest path from “black box” to “I can trace things,” read in this order:
+ 
+1. `backend/app/main.py`
+2. `backend/app/config.py`
+3. `backend/app/database.py`
+4. `backend/app/dependencies.py`
+5. `backend/app/models/__init__.py`
+6. `backend/app/services/sdui_state.py`
+7. `backend/app/services/app_service.py`
+8. `backend/app/services/version_service.py`
+9. `backend/app/services/validation_service.py`
+10. `backend/app/services/workflow_engine.py`
+11. `backend/app/mcp/tools.py`
+12. `backend/tests/conftest.py`
+13. `backend/tests/test_apps.py`
+14. `backend/tests/test_templates.py`
+15. `backend/tests/test_sdui_parity.py`
+16. `backend/tests/test_workflows.py`
+ 
 ---
-
-## FF4 Changes (2026-05-14)
-
-### New Models
-- **Note** — Simple note CRUD (`notes` table: id, user_id, title, content)
-- **ModuleWorkingDraft** — Replaces old `__draft` ModuleState-based draft system (`module_working_drafts` table: id, module_id, user_id, sdui_json, last_autosaved_at, base_version_id, validation_status, validation_errors, dirty)
-- **ModuleVersion** — Versioned snapshots of module SDUI screens (`module_versions` table: id, module_id, user_id, version_number, display_name, default_timestamp_name, custom_name, sdui_json, source, parent_version_id, change_summary, validation_status, validation_errors, schema_version, created_at)
-- **PreviewSession** — Time-limited preview sessions (`preview_sessions` table: id, user_id, target_type, app_id, module_id, resolved_config_json, resolved_sdui_json, device_id, status, created_at, expires_at, exited_at)
-
-### Enhanced Models
-- **apps** — Added `current_working_draft_id`, `current_published_version_id`
-- **module_instances** — Added `current_working_draft_id`, `current_version_id`
-- **devices** — Added `assigned_app_id`, `active_app_version_id`, `preview_session_id`, `installed_runtime_version`, `supported_schema_versions`, `update_status`
-- **sdui_templates** (class `SDUITemplate`) — Added `current_version_id`
-- New `template_version` relationship via existing version model
-
-### New Routers
-- **notes.py** — Notes CRUD (`GET/POST/PUT/DELETE /api/notes`)
-- **module_versions.py** — Module versioning endpoints: list versions, create checkpoint, restore to draft, rename, publish
-
-### New Services
-- **version_service.py** — Shared version tree logic, timestamp naming, draft-to-version pipeline
-- **variable_seed.py** — Sample custom variable seeding (user.name, app.theme, greeting.morning)
-- **workflow_seed.py** — Sample workflow seeding (Daily Summary, Event Reminder, New Todo Alert)
-- **calendar_seed.py** — Sample calendar event seeding
-
-### Versioning Endpoints
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| PATCH | `/api/modules/{moduleId}/draft` | ✅ | Update module working draft (autosave) |
-| GET | `/api/modules/{moduleId}/draft` | ✅ | Get module working draft |
-| POST | `/api/modules/{moduleId}/checkpoints` | ✅ | Create checkpoint from working draft |
-| GET | `/api/modules/{moduleId}/versions` | ✅ | List versions |
-| GET | `/api/modules/{moduleId}/versions/{versionId}` | ✅ | Get version detail |
-| PATCH | `/api/modules/{moduleId}/versions/{versionId}/rename` | ✅ | Rename a version |
-| POST | `/api/modules/{moduleId}/versions/{versionId}/restore-to-draft` | ✅ | Restore version to working draft |
-| POST | `/api/modules/{moduleId}/preview/web` | ✅ | Start web admin preview |
-| GET | `/api/modules/{moduleId}/usage` | ✅ | Where this module is used |
-| PATCH | `/api/apps/{appId}/draft` | ✅ | Update app working draft |
-| GET | `/api/apps/{appId}/draft` | ✅ | Get app working draft |
-| POST | `/api/apps/{appId}/checkpoints` | ✅ | Create app checkpoint |
-| GET | `/api/apps/{appId}/versions` | ✅ | List app versions |
-| POST | `/api/apps/{appId}/versions/{versionId}/restore-to-draft` | ✅ | Restore app version to draft |
-| POST | `/api/apps/{appId}/preview/web` | ✅ | Start web admin app preview |
-| POST | `/api/apps/{appId}/preview/device` | ✅ | Start mobile device preview |
-| POST | `/api/apps/{appId}/publish` | ✅ | Publish app version to mobile |
-| GET | `/api/templates/{templateId}/versions` | ✅ | List template versions |
-| POST | `/api/templates/{templateId}/versions` | ✅ | Create template version |
-| POST | `/api/templates/{templateId}/versions/{versionId}/apply` | ✅ | Apply template version to module |
-| GET | `/api/preview-sessions/{sessionId}` | ✅ | Get preview session |
-| POST | `/api/preview-sessions/{sessionId}/exit` | ✅ | Exit preview session |
-| POST | `/api/preview-sessions/{sessionId}/extend` | ✅ | Extend preview session |
-| GET | `/api/devices/{deviceId}/status` | ✅ | Get device status with version info |
-| POST | `/api/devices/{deviceId}/exit-preview` | ✅ | Exit device preview mode |
-
-### Validation Pipeline
-New `validation_service.py` validates SDUI screens at multiple stages:
-- Autosave validation (lightweight schema check)
-- Checkpoint/version validation (component types, actions, data bindings)
-- App preview validation (bottom bar slots, Launchpad, modules)
-- Publish validation (device compatibility, runtime version check, schema version support)
-
-### Device Compatibility Validation
-`validate_publish_config()` in `validation_service.py` validates devices before publishing:
-- `installed_runtime_version` must be set (device has reported its runtime)
-- `supported_schema_versions` must be present (device can handle current schema)
-- If validation fails, publish returns HTTP 400 with per-device error messages
-
-### Module Reference Resolution at Publish
-`resolve_module_references()` in `version_service.py` resolves per-module version policies at publish time:
-- Iterates over all module references in app config (bottom bar + launchpad)
-- Resolves "use_newest" policy to the latest valid `ModuleVersion` via `ModuleInstance.current_version_id`
-- Resolves "use_specific" policy to the pinned version
-- Populates `resolved_module_versions` and `module_reference_policies` on the `AppVersion` record
-- Device offline handling: devices that are offline still get `active_app_version_id` updated; `update_status` set to `update_available` so they fetch new config on reconnect
-
-### Component Type Sync
-`_VALID_V2_COMPONENT_TYPES` in `mcp/tools.py` updated to include:
-- `TodoModule`, `ArticleCardModule` — added alongside existing `Todo`/`ArticleCard` for mobile registry alignment
-- `RichTextRenderer` — added for MCP validation consistency
-- `Empty` — synchronized across all three layers (backend, mobile, web)
-
-### New MCP Tools
-- `helm_create_checkpoint` — Save a versioned snapshot from the working draft
-- `helm_list_module_versions` — List version history for a module
-- `helm_restore_version` — Restore a version to the working draft
-- `helm_publish_version` — Publish a version as the live screen
-
-### WebSocket Events (New)
-- `preview_session_started` — Mobile enters preview mode with preview config
-- `app_version_published` — New app version published to mobile devices
-
-### Notes CRUD
-Complete REST endpoints for notes (`/api/notes`). Wired to the NotesModule composite component on mobile.
-
-### Sample Data Seeding
-- **Workflows:** "Daily Summary" (9am notification with today's events), "Event Reminder" (15 min before calendar events), "New Todo Alert" (notifies when todo added)
-- **Variables:** `user.name`, `app.theme`, `greeting.morning`
-- **Calendar events:** Sample events for demo purposes. All events include `source_type` field (local/caldav/notion/custom) for colored badges on mobile. Most events include `notes` field with contextual note text, displayed as 2-line truncated text on mobile.
-
-### ScreenHistory Migration
-The existing `sdui_screen_history` table is deprecated in favor of `module_versions`. New code writes to `module_versions` only. The old table and APIs remain for backward compatibility with existing data.
-
-### Template Seed Validation
-All seed `screen_json` payloads validated against `validate_sdui_screen_payload()` at startup (logged as warnings on failure). Templates rewritten to use only real, working component types (no fake/placeholder components).
-
+ 
+## Current counts
+ 
+- Routers: 28
+- Schemas: 30
+- Services: 22
+- Models: 33
+- Alembic revisions: 22
+ 
 ---
-
-## Session 9 Changes (2026-04-17)
-
-### New Models
-- **Connection** — OAuth/API key storage with Fernet encryption (`id`, `user_id`, `name`, `provider`, `credentials_encrypted`)
-- **Workflow** — Updated to React Flow graph structure (`graph` JSON field replaces `action_config`; removed `run_count`, `last_run_at`)
-
-### New Routers
-- **connections.py** — CRUD for connections with encrypted credentials
-- **workflows.py** — Added n8n import endpoint (`POST /api/workflows/import/n8n`)
-
-### New Actions
-- **fetch_rss** — Fetches and parses RSS feeds via `feedparser`
-- **fetch_weather** — Fetches weather from OpenWeatherMap API using Connection credentials
-- **run_workflow** — Executes workflow by ID
-
-### New Components
-- **todo** — Interactive todo list with add/toggle/delete
-- **rich_text_renderer** — Markdown/rich text renderer with theme support
-- **article_card** — Article preview card with image, title, description, source
-- **calendar** — Updated with `variant` prop (month/week/day/agenda)
-
-### Variable Resolver
-- Added `connection.*` namespace for accessing encrypted connection credentials
-
-### Workflow Engine
-- Executes React Flow graphs in topological order
-- Supports branching (condition, switch nodes)
-- Supports loops (loop node with iteration context)
-- Node types: action, condition, switch, loop
-
-### Template Seed
-- 5 new production templates (Calendar, Chat, News, Weather, Tasks)
-- Templates now use new components and actions
-- Seed data `screen_json` validated against `validate_sdui_screen_payload()` on startup — validation errors logged as warnings so seed bugs are caught early
-
----
-
-## FF3 Bug Fixes (2026-05-03)
-
-### RichTextRenderer Legacy Type Alias
-`mcp/tools.py::_LEGACY_V2_TYPE_MAP` contains `"RichTextRenderer": "RichText"` so the LLM's legacy component type name normalizes to the canonical `"RichText"` before validation against `_VALID_V2_COMPONENT_TYPES`. This prevents validation failures when external agents use the snake_case name.
-
-### Variable Resolver — date namespace
-Added `date.today` (YYYY-MM-DD) and `date.now` (ISO 8601 timestamp) to the variable resolution context. Templates referencing `{{date.today}}` (e.g., Daily Planner) now resolve correctly.
-
-### Template Validation Fixes
-- Home template Calendar variant changed from `"agenda"` to `"month"` (mobile only supports month view)
-- ArticleCard preview field names aligned to `"description"` (matching template seed, not `"summary"`)
-
----
-
-## Session 11 Changes (2026-05-11)
-
-### Divider Removed as Standalone Component
-- `Divider` removed from `_VALID_V2_COMPONENT_TYPES` in `mcp/tools.py`
-- Legacy `divider` type preserved in `_LEGACY_V2_TYPE_MAP`, `_SDUI_PROPS_FIELDS`, and `component_seed.py` for backward compatibility with existing screens
-- Web editor `COMPONENT_REGISTRY` no longer includes `Divider` as an authorable type
-- Mobile `componentRegistry.ts` no longer exports `Divider`
-
-### Template CRUD Validates Component Types
-- `_prepare_template_screen_or_422()` in `routers/templates.py` validates all SDUI component types (including nested `Container` children) before creating or updating templates
-- Returns HTTP 422 with a clear message listing invalid types found
-- Called by POST/PUT template endpoints
-
-### Template Apply Writes to ModuleWorkingDraft with Auto-Checkpoint
-- `POST /api/templates/{template_id}/apply` now writes to the `ModuleWorkingDraft` system (replacing old `__draft` ModuleState approach)
-- **Auto-checkpoint**: Before overwriting, if the module has an existing working draft with content and `auto_checkpoint=true`, an automatic checkpoint is created to preserve the previous state
-- Also writes to the old ModuleState draft key for backward compatibility
-
-### Template Seed Startup Validation
-- `seed_templates()` in `services/template_seed.py` now validates all seed `screen_json` payloads against `validate_sdui_screen_payload()` at startup
-- Previously invalid seed data would only surface at runtime; now caught during app initialization

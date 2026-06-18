@@ -1,65 +1,48 @@
 # Helm Codebase Map
-
-> Generated: 2026-03-23T14:30:39Z
-> 122 files · ~102k tokens
-
+ 
+> Live tree snapshot: 2026-06-18
+> Scope: backend/, mobile/, web/, qa/, agent/, debug/, docs/
+ 
+## Read this first
+ 
+1. [docs/codebase-explanation/README.md](codebase-explanation/README.md) — docs index and reading order.
+2. [docs/codebase-explanation/OPERATIONS.md](codebase-explanation/OPERATIONS.md) — how to run and configure the stack.
+3. [docs/codebase-explanation/backend.md](codebase-explanation/backend.md) — backend layer map.
+4. [docs/codebase-explanation/frontend.md](codebase-explanation/frontend.md) — frontend layer map for the mobile app and web admin.
+5. [docs/codebase-explanation/protocol.md](codebase-explanation/protocol.md) — REST, WebSocket, MCP, and SDUI contracts.
+6. [docs/codebase-explanation/qa.md](codebase-explanation/qa.md) — Playwright coverage and test layout.
+7. [docs/codebase-explanation/AI-TECHNICAL-REFERENCE.md](codebase-explanation/AI-TECHNICAL-REFERENCE.md) — fast lookup for AI agents.
+ 
 ## Project Overview
-
-Helm is an **agentic AI super app** (WeChat/Alipay model but AI-native). Three-layer architecture:
-
-```
-FastAPI Backend  ←→  AG-UI over WebSocket  ←→  React Native / Expo Frontend
-```
-
-**Status**: Backend complete (32 tests passing). Frontend dev server on port 8082.
-
----
-
-## Directory Structure
-
-```
+ 
+Helm is an agentic AI super app. The live repo is split across backend, mobile, web, qa, agent, debug, and docs.
+ 
+```text
 Helm/
-├── backend/                  # Python 3.12 + FastAPI
+├── backend/                  # FastAPI backend
 │   ├── alembic/              # DB migrations
-│   ├── app/
-│   │   ├── main.py           # Entry point, app factory
-│   │   ├── config.py         # Pydantic Settings
-│   │   ├── database.py       # SQLAlchemy async engine
-│   │   ├── dependencies.py   # DI: auth, db, token
-│   │   ├── models/           # ORM models
-│   │   ├── routers/          # FastAPI routers
-│   │   ├── schemas/          # Pydantic request/response
-│   │   ├── services/         # Business logic
-│   │   ├── mcp/              # MCP server (FastMCP)
-│   │   └── utils/            # JWT, security, encryption
-│   └── tests/                # pytest suite (32 tests)
-├── mobile/                   # Expo / React Native
-│   ├── app/
-│   │   ├── _layout.tsx       # Root layout, auth gate
-│   │   ├── (auth)/           # Login / connect screens
-│   │   └── (tabs)/           # Main tab navigation
-│   └── src/
-│       ├── components/       # UI components
-│       │   ├── alerts/
-│       │   ├── calendar/
-│       │   ├── chat/
-│       │   ├── common/
-│       │   ├── forms/
-│       │   ├── sdui/         # Server-driven UI renderer
-│       │   └── settings/
-│       ├── services/         # API client, WebSocket
-│       ├── stores/           # Zustand stores
-│       ├── theme/            # Design system
-│       ├── types/            # TypeScript types
-│       └── utils/
-├── tests/                    # Playwright E2E
-├── docs/
+│   ├── app/                  # API wiring, models, routers, schemas, services
+│   └── tests/                # 34 test modules
+├── mobile/                   # Expo / React Native app
+│   ├── app/                  # Router-driven screens
+│   └── src/                  # components, hooks, services, stores, utils
+├── web/                      # React + Vite admin panel
+│   └── src/                  # editor, pages, components, hooks, stores, lib
+├── qa/                       # 33 Playwright spec files plus support code
+├── agent/                    # standalone PydanticAI agent
+├── debug/                    # trace and smoke-test helpers
+├── docs/                     # docs index and codebase maps
+├── AGENTS.md
 ├── CLAUDE.md
-└── package.json
+├── docker-compose.yml
+├── package.json
+└── setup.sh
 ```
-
+ 
+**Status**: Updated against the live tree on 2026-06-18. Backend test modules: 34. QA spec files: 33. Backend registry: 29 routers, 34 model files, 31 schema files, 23 service modules. Web admin runs from `web/`; mobile uses Expo.
+ 
 ---
-
+ 
 ## Backend
 
 ### Entry Point
@@ -68,7 +51,7 @@ Helm/
 - FastAPI app with async lifespan (starts/stops APScheduler)
 - CORS: allow all origins (dev)
 - Health check: `GET /health`
-- Mounts 8 routers: `auth`, `modules`, `chat`, `calendar`, `notifications`, `agent_config`, `workflows`, `websocket`
+- Registers the current router set from `backend/app/main.py`; see [backend.md](codebase-explanation/backend.md) for the full live router list.
 - Mounts MCP server at `/mcp` via FastMCP `streamable_http_app`
 - Logging: loguru
 
@@ -95,7 +78,7 @@ All models extend `Base` + `TimestampMixin` (`created_at`, `updated_at`).
 | Model | File | Key Fields | Notes |
 |-------|------|-----------|-------|
 | User | [models/user.py](../backend/app/models/user.py) | id (UUID), username, password_hash, role | All relationships cascade delete-orphan |
-| Session | [models/session.py](../backend/app/models/session.py) | token (unique, indexed), expires_at, is_active, device_id | Opaque tokens, not JWT |
+| Session | [models/session.py](../backend/app/models/session.py) | token (unique, indexed), expires_at, is_active, device_id | Session-backed auth token |
 | CalendarEvent | [models/calendar_event.py](../backend/app/models/calendar_event.py) | title, start_time, end_time, color, is_all_day | Indexed on user_id + start_time |
 | Workflow | [models/workflow.py](../backend/app/models/workflow.py) | trigger_type (enum), trigger_config (JSON), action_config (JSON), run_count, last_run_at | TriggerType: EVENT_CREATED, SCHEDULE, etc. |
 | Device | [models/device.py](../backend/app/models/device.py) | device_id, push_token | For push notifications |
@@ -162,7 +145,7 @@ All models extend `Base` + `TimestampMixin` (`created_at`, `updated_at`).
 
 ### Utils
 
-**[utils/](../backend/app/utils/)** — JWT generation/validation, bcrypt password hashing, Fernet encryption for sensitive fields
+**[utils/](../backend/app/utils/)** — session-token auth, bcrypt password hashing, Fernet encryption for sensitive fields
 
 ---
 
@@ -180,18 +163,27 @@ All models extend `Base` + `TimestampMixin` (`created_at`, `updated_at`).
 
 ```
 mobile/app/
-├── _layout.tsx          # Root: auth gate, store init
+├── index.tsx          # Expo Router entry
+├── _layout.tsx        # Root: auth gate, store init
+├── launchpad.tsx      # App launchpad
+├── unassigned.tsx     # Unassigned modules
 ├── (auth)/
 │   ├── connect.tsx      # Server URL input
 │   └── login.tsx        # Username/password
-└── (tabs)/
-    ├── _layout.tsx      # Tab bar (6 tabs)
-    ├── chat.tsx         # Chat interface
-    ├── modules.tsx      # Module grid
-    ├── calendar.tsx     # Calendar view
-    ├── forms.tsx        # Form submissions
-    ├── alerts.tsx       # Notifications
-    └── settings.tsx     # User settings
+├── (tabs)/
+│   ├── _layout.tsx      # Tab bar (6 tabs)
+│   ├── home.tsx         # AI-driven home screen
+│   ├── chat.tsx         # Chat interface
+│   ├── modules.tsx      # Module grid
+│   ├── calendar.tsx     # Calendar view
+│   ├── forms.tsx        # Form submissions
+│   ├── alerts.tsx       # Notifications
+│   ├── article.tsx      # Article reader
+│   └── settings.tsx     # User settings
+├── template/
+│   └── [id].tsx         # Template detail/apply screen
+└── module/
+    └── [moduleId].tsx   # Custom module runtime + draft approval
 ```
 
 **Auth Flow**: `connect` → `login` → `(tabs)/chat`
@@ -317,7 +309,7 @@ Workflow run_count incremented, last_run_at updated
 
 - **Dependency Injection**: FastAPI Depends() for db, auth
 - **Async/Await**: All DB, HTTP, WebSocket operations
-- **Session Management**: Opaque tokens (not JWT), stored with expiry
+- **Session Management**: Session tokens stored with expiry and validated server-side
 - **Multi-device Support**: ConnectionManager maps user_id → list[WebSocket]
 - **Tool Execution**: Shared dispatcher for agent proxy + MCP server
 - **SDUI Protocol**: Backend sends JSON definitions, frontend renders natively
@@ -347,15 +339,14 @@ Workflow run_count incremented, last_run_at updated
 ---
 
 ## Testing
-
-**Backend**: pytest with in-memory SQLite, dependency override for get_db
-- 32 tests covering auth, calendar, notifications, workflows
+ 
+**Backend**: 34 backend test modules in `backend/tests/`; pytest uses in-memory SQLite and the `get_db` dependency override
 - Fixtures: `auth_client` (pre-authenticated), `db_engine` (fresh DB per test)
-
-**Frontend**: Playwright E2E
+ 
+**QA**: 33 Playwright spec files in `qa/src/tests/` across the `backend-only` and `e2e` projects
 - Backend API tests work without browser
 - Browser tests need: `sudo npx playwright install-deps chromium`
-- Config: [playwright.config.ts](../playwright.config.ts)
+- Config: [qa/playwright.config.ts](../qa/playwright.config.ts)
 
 ---
 
@@ -380,10 +371,10 @@ Workflow run_count incremented, last_run_at updated
 4. Use SDUI renderer for backend-driven UI
 
 ### To add a new component
-1. Create file in `mobile/src/components/`
-2. Export from `mobile/src/components/index.ts`
-3. Use theme colors from `@/theme/colors`
-4. Add SDUI type if backend-driven
+1. Create the component in the right family (`mobile/src/components/atomic/`, `composite/`, `structural/`, `sdui/`, or `common/`).
+2. Register it in `mobile/src/renderer/componentRegistry.ts` if SDUI should render it.
+3. Use theme colors from `@/theme/colors`.
+4. Add SDUI types if backend-driven.
 
 ### To modify auth flow
 1. Backend: `backend/app/services/auth.py` + `backend/app/routers/auth.py`
@@ -398,28 +389,60 @@ Workflow run_count incremented, last_run_at updated
 ---
 
 ## Commands
-
+ 
 ```bash
 # Backend
 cd backend
 .venv/bin/python -m pytest tests/ -q          # Run tests
 uv run uvicorn app.main:app --reload          # Dev server
-
+ 
 # Frontend
 cd mobile
 npx expo start                                 # Dev server (port 8082)
 npx expo start --ios                          # iOS simulator (Mac only)
 npx expo start --android                      # Android emulator
-
+ 
 # Database
 cd backend
 .venv/bin/alembic upgrade head                # Apply migrations
 .venv/bin/alembic revision --autogenerate -m "..." # Create migration
-
-# E2E Tests
-npx playwright test                           # Run all tests
-npx playwright test --grep "Backend API"      # Backend only
+ 
+# QA
+cd qa
+npm run test                                   # Full Playwright suite
+npm run test:backend                           # Backend-only project
 ```
+
+---
+
+## Other top-level folders
+
+### Web Admin (`web/`)
+
+- Entry point: `web/src/App.tsx`
+- Pages: `web/src/pages/*.tsx` — Login, Settings, Templates, Editor, App Editor, Workflows, Variables, Connections, Logs
+- Editor surface: `web/src/editor/*`
+- Shared helpers: `web/src/lib/api.ts`, `web/src/hooks/useResource.ts`, `web/src/stores/authStore.ts`
+- Use [frontend.md](codebase-explanation/frontend.md) and [AI-TECHNICAL-REFERENCE.md](codebase-explanation/AI-TECHNICAL-REFERENCE.md) for the full web-admin path map.
+
+### QA (`qa/`)
+
+- Playwright config: `qa/playwright.config.ts`
+- Spec files: `qa/src/tests/*.spec.ts` — 33 test files
+- Startup / teardown: `qa/src/globalSetup.cjs`, `qa/src/globalTeardown.cjs`
+- Discovery: `qa/src/discover.cjs`
+- Fixtures and helpers: `qa/src/fixtures.ts`, `qa/src/utils.ts`, `qa/src/page-objects/*.ts`
+
+### Agent (`agent/`)
+
+- Entry points: `agent/helm_agent.py`, `agent/api_server.py`
+- Chat UI: `agent/chat_ui.html`
+- CLI: `agent/send_prompt.py`
+
+### Debug (`debug/`)
+
+- Trace helpers: `debug/trace_*.py`
+- Notes: `debug/README.md`
 
 ---
 

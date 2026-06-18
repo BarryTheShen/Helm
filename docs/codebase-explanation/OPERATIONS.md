@@ -1,56 +1,109 @@
 # Helm — Operations Guide
 
-How to run, configure, and edit every part of the stack.
+How to run the Helm stack, where each app lives, and which commands are preferred today.
 
-> Last updated: 2026-05-14 (FF4: Docker bundled deployment, single port, test count update)
-> Last audit: 2026-05-14 — ✅ FF4 fully implemented
+> Last updated: 2026-06-18
+> Related docs: `docs/codebase-explanation/backend.md` for backend internals, `docs/codebase-explanation/qa.md` for the Playwright suite.
 
 ---
 
-## Quick Start (Full Stack)
+## Tier 1: TL;DR
+
+- `SDUI` means **server-driven UI**.
+- Preferred local commands:
+  - Backend API: `cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
+  - Web admin: `cd web && npm run dev`
+  - Mobile app: `cd mobile && npx expo start`
+  - Playwright QA: `cd qa && npm test`
+- Fixed service ports:
+  - Backend HTTP, WebSocket (WS), and Model Context Protocol (MCP): `8000`
+  - Web admin dev server: `5174`
+  - Standalone agent web UI / API server: `7860`
+- Reading order for new readers:
+  1. `docs/codebase-explanation/backend.md`
+  2. `docs/codebase-explanation/qa.md`
+  3. This file for day-to-day setup and run commands
+
+### Quick port map
+
+| Service | Default address | Notes |
+|---------|-----------------|-------|
+| Backend HTTP / WS / MCP | `http://localhost:8000` | QA and docs assume this exact port |
+| Web admin dev server | `http://localhost:5174` | Keep 5174 free when running QA |
+| Standalone agent browser UI | `http://localhost:7860` | Used only for agent mode |
+| Mobile app | Expo chooses its own port | Connect the app to backend port 8000 |
+
+---
+
+## Tier 2: Folder map
+
+| Path | What it owns | Notes |
+|------|--------------|-------|
+| `backend/` | FastAPI server, database, migrations, backend tests, admin CLI | Server-side control plane |
+| `web/` | React + Vite admin UI | Includes the SDUI editor |
+| `mobile/` | Expo mobile client | Uses a backend URL entered in-app |
+| `qa/` | Playwright suite and cleanup helpers | Auto-starts backend + web admin |
+| `agent/` | Standalone PydanticAI agent and API server | Runs on port 7860 |
+| `docs/codebase-explanation/backend.md` | Backend architecture map | Start here for code flow |
+| `docs/codebase-explanation/qa.md` | QA suite map | Start here for test flow |
+
+---
+
+## Run by task
+
+| Task | Preferred command | Notes |
+|------|-------------------|-------|
+| Full local stack | See [Full local stack](#full-local-stack) | Backend first, then web, then mobile |
+| Backend only | See [Backend](#backend) | Requires the repo-root `.env` |
+| Web admin only | See [Web admin](#web-admin) | Keep port 5174 free |
+| Mobile only | See [Mobile](#mobile) | No fixed port |
+| QA suite | See [QA suite](#qa-suite) | Uses fixed backend and web ports |
+| Standalone agent | See [Standalone agent](#standalone-agent) | Uses `backend/.venv` |
+| Bundled production | See [Bundled production Docker](#bundled-production-docker) | Backend + web in one container |
+| Legacy scripts | See [Legacy scripts](#legacy-scripts) | Manual helpers, not CI |
+
+---
+
+## Full local stack
+
+Start the backend first, then the web admin, then mobile if you want the device app.
+
+- Terminal 1 — backend
 
 ```bash
-# Terminal 1 — Backend
-# .env lives at the REPO ROOT (Helm/.env), not inside backend/
-cp backend/.env.example .env   # first time only — run from repo root
-# edit .env with your keys (see API Keys section below)
+# Repo root: create the shared env file once
+cp backend/.env.example .env
+# Edit .env with your keys before starting the backend
 cd backend
-python -m venv .venv           # first time only
+python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"        # first time only
+pip install -e ".[dev]"
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# Terminal 2 — Frontend
-cd mobile
-npm install                    # first time only
-npx expo start
-
-# Terminal 3 — Web Admin Panel (optional)
-cd web
-npm install                    # first time only
-npm run dev                    # Usually http://localhost:5174 (auto-increments if 5173 is busy)
 ```
 
-Then open the Expo Go app on your phone and scan the QR code **or** press `i` for iOS Simulator.
+- Terminal 2 — web admin
 
-At first launch the app shows a **Connect** screen. Enter your backend URL:
-- Same device / simulator: `http://localhost:8000`
-- Real device on same WiFi: `http://YOUR_MACHINE_IP:8000`
+```bash
+cd web
+npm install
+npm run dev
+```
+
+- Terminal 3 — mobile
+
+```bash
+cd mobile
+npm install
+npx expo start
+```
+
+Mobile connection URLs:
+
+- Same machine or simulator: `http://localhost:8000`
 - Android Emulator: `http://10.0.2.2:8000`
+- Real device on the same Wi-Fi: `http://<your-machine-ip>:8000`
 
----
-
-## Port Reference
-
-| Service | Default Port | How to change |
-|---------|-------------|---------------|
-| Backend FastAPI | `8000` | `SERVER_PORT` env var or uvicorn `--port` arg |
-| Web Admin Panel (Vite) | `5174` | `web/vite.config.ts` or `--port` arg (auto-increments if 5173 is busy) |
-| Standalone agent web UI / api_server | `7860` | `AGENT_WEB_PORT` env var or `--port` CLI arg |
-| WebSocket | Same as backend (`8000`) | `ws://<host>:8000/ws?token=...` |
-| MCP endpoint | Same as backend (`8000`) | `http://<host>:8000/mcp/` |
-
-> **Note:** Vite dev server auto-increments the port if the default is busy. Check the terminal output for the actual port.
+At first launch the mobile app shows a Connect screen. Enter the backend URL there and the app stores it on-device.
 
 ---
 
@@ -61,32 +114,29 @@ At first launch the app shows a **Connect** screen. Enter your backend URL:
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate          # Linux/Mac
-# .venv\Scripts\activate           # Windows
-
-pip install -e ".[dev]"            # installs app + dev deps (pytest etc.)
-# .env lives at repo root:
-cp backend/.env.example ../.env
-# → edit .env with your values (see API Keys section below)
+source .venv/bin/activate
+pip install -e ".[dev]"
 ```
+
+The shared environment file lives at the repo root (`Helm/.env`), not inside `backend/`.
 
 ### Run the dev server
 
 ```bash
 cd backend
 source .venv/bin/activate
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Server starts at `http://localhost:8000`
+Server URLs:
 
 | URL | What it is |
 |-----|-----------|
 | `http://localhost:8000` | REST API root |
-| `http://localhost:8000/docs` | Auto-generated Swagger UI — test every endpoint here |
+| `http://localhost:8000/docs` | Swagger UI |
 | `http://localhost:8000/redoc` | ReDoc API reference |
-| `http://localhost:8000/mcp` | MCP server endpoint (Streamable HTTP) |
-| `ws://localhost:8000/ws` | WebSocket for AI chat; pass `?token=` as query param |
+| `http://localhost:8000/mcp` | MCP server endpoint |
+| `ws://localhost:8000/ws` | WebSocket for AI chat; pass `?token=` in the query string |
 
 ### Database migrations
 
@@ -94,7 +144,7 @@ Server starts at `http://localhost:8000`
 cd backend
 source .venv/bin/activate
 
-# Apply all pending migrations (run this after pulling new code)
+# Apply all pending migrations
 alembic upgrade head
 
 # Create a new migration after changing a model
@@ -104,128 +154,88 @@ alembic revision --autogenerate -m "describe your change"
 alembic downgrade -1
 ```
 
-The database file lives at `backend/helm.db`. Delete it and re-run `alembic upgrade head` to start fresh.
+The SQLite database lives at `backend/helm.db`. Delete it and re-run `alembic upgrade head` if you want a fresh local database.
 
 ### Run tests
 
 ```bash
 cd backend
 source .venv/bin/activate
-pytest                         # all tests
-pytest -v                      # verbose
-pytest tests/test_auth.py      # single file
-pytest --cov=app               # with coverage
+pytest -q
+pytest tests/test_auth.py -q
+pytest --cov=app
 ```
 
-Test files (23 total):
-| File | Covers |
-|------|--------|
-| `tests/test_auth.py` | Registration, login, lockdown, JWT |
-| `tests/test_calendar.py` | Calendar CRUD, bulk delete |
-| `tests/test_notifications.py` | Notifications + mark-read action |
-| `tests/test_workflows.py` | Workflow CRUD, cron scheduling |
-| `tests/test_actions.py` | Action registry, endpoint auth, each handler |
-| `tests/test_drafts.py` | Draft lifecycle (set/approve/reject/overwrite) |
-| `tests/test_users.py` | User management CRUD (admin-only) |
-| `tests/test_sessions.py` | Session listing, revocation |
-| `tests/test_templates.py` | SDUI template CRUD, apply, import |
-| `tests/test_sandbox.py` | Sandbox mode commit interception |
-| `tests/test_admin.py` | Admin stats endpoints |
-| `tests/test_triggers.py` | Trigger definition CRUD + test endpoint |
-| `tests/test_variable_resolver.py` | Variable expression resolution |
-| `tests/test_variables.py` | Custom variables CRUD |
-| `tests/test_data_sources.py` | Data source management |
-| `tests/test_modules.py` | Module and SDUI screen management |
-| `tests/test_sdui_parity.py` | Row-first validate/apply parity, proxy tool defs, streamed message_id reuse |
-| `tests/test_apps.py` | App CRUD, bottom bar config |
-| `tests/test_devices.py` | Device registration, app assignment |
-| `tests/test_settings.py` | Settings CRUD |
-| `tests/test_todos.py` | Todo CRUD |
-| `tests/test_module_install.py` | Module install flow |
-| `tests/test_workflow_engine_unit.py` | Workflow engine unit tests (graph execution) |
+Current backend test count: **32 files**.
+These tests run the real FastAPI app in-process against SQLite, so they catch route and service wiring issues without mocks.
 
-### User management (CLI)
+#### Identity and access
+- `test_auth.py`
+- `test_users.py`
+- `test_sessions.py`
+- `test_devices.py`
+- `test_settings.py`
 
-After the first user is created via `POST /auth/setup`, that endpoint is **locked** (409). Use `manage.py` to create additional users:
+#### App, module, template, and SDUI state
+- `test_apps.py`
+- `test_app_versions.py`
+- `test_modules.py`
+- `test_module_install.py`
+- `test_drafts.py`
+- `test_templates.py`
+- `test_sdui_parity.py`
+- `test_validation_service.py`
+
+#### Content and collaboration
+- `test_calendar.py`
+- `test_notifications.py`
+- `test_todos.py`
+
+#### Automation and integrations
+- `test_actions.py`
+- `test_workflows.py`
+- `test_triggers.py`
+- `test_variable_resolver.py`
+- `test_variables.py`
+- `test_data_sources.py`
+- `test_workflow_engine_unit.py`
+
+#### Ops and regression slices
+- `test_admin.py`
+- `test_sandbox.py`
+- `test_deployment.py`
+- `test_debug_trace_scripts.py`
+- `test_ff3_ff4_partial_closure.py`
+- `test_ff4_phase9_app_editor.py`
+- `test_ff4_phase10_components.py`
+- `test_ff4_phase11_calendar.py`
+- `test_ff4_phase12_tpl_wf_mcp.py`
+
+### User management CLI
+
+After the first user is created through `POST /auth/setup`, that endpoint is locked and returns `409`.
+Use `manage.py` to create or manage additional users:
 
 ```bash
 cd backend
 source .venv/bin/activate
 
-# Interactive (prompts for username + password):
+# Interactive (prompts for username + password)
 python manage.py create_user
 
-# Non-interactive:
+# Non-interactive
 python manage.py create_user --username alice --password supersecret
 
-# List all users:
+# Reset a password
+python manage.py reset_password --username alice
+
+# List users
 python manage.py list_users
 ```
 
 ---
 
-## Frontend (Mobile)
-
-### One-time setup
-
-```bash
-cd mobile
-npm install
-```
-
-No `.env` file — the server URL is entered in-app on the Connect screen and stored on-device via `expo-secure-store`.
-
-### Run the dev server
-
-```bash
-cd mobile
-npx expo start
-```
-
-| Key | Action |
-|-----|--------|
-| `i` | Open in iOS Simulator (Mac only — requires Xcode) |
-| `a` | Open in Android Emulator (requires Android Studio) |
-| `w` | Open in browser (limited native API support) |
-| Scan QR | Open in Expo Go on a real iPhone/Android |
-
-### Running on a real device with Expo Go
-
-1. Install **Expo Go** from the App Store (iOS) or Play Store (Android)
-2. Make sure your phone is on the **same Wi-Fi** as your development machine
-3. iOS: scan the QR from the Camera app; Android: scan from within Expo Go
-4. The app will load and hot-reload on every file save
-
-**If the QR doesn't work:**
-```bash
-npx expo start --tunnel   # uses ngrok, works across networks
-```
-
-### Running in an iOS Simulator (Mac only)
-
-Requires Mac + Xcode installed. With Expo running, press `i`.
-
-**Linux development:** The iOS Simulator is Mac-only. On Linux, use the Android emulator, a real device via Expo Go, or the browser (`w` key). Secure storage falls back to `localStorage` in browser.
-
-### Running in an Android Emulator
-
-1. Install **Android Studio**
-2. Create a virtual device (AVD) in Android Studio
-3. Start the emulator
-4. With Expo running, press `a`
-
-### Build for production
-
-```bash
-npm install -g eas-cli             # requires EAS CLI + Apple Developer account
-eas build --platform ios
-```
-
----
-
-## Web Admin Panel (`web/`)
-
-A React + TypeScript web application for administering the Helm backend. Built with Vite, Tailwind CSS, Zustand, and React Router. Includes a custom visual SDUI editor.
+## Web admin
 
 ### One-time setup
 
@@ -241,60 +251,210 @@ cd web
 npm run dev
 ```
 
-Opens at `http://localhost:5173` by default. Requires the backend to be running at `http://localhost:8000`.
+The current dev server expects `http://localhost:5174`. The QA suite also assumes that port, so keep it free when you plan to run Playwright.
 
-> **Port note:** If 5173 is already in use, Vite auto-assigns the next available port (e.g., 5174). The backend always runs on 8000 regardless.
+### Current route map
 
-### Vite proxy (dev mode)
+| Page | URL | Notes |
+|------|-----|-------|
+| Login | `/login` | Public entry point |
+| Editor | `/editor` | Preferred landing page after sign-in |
+| App editor | `/app-editor` | App and module management |
+| Templates | `/templates` | Template library |
+| Workflows | `/workflows` | Workflow builder |
+| Variables | `/variables` | Variables and data sources |
+| Connections | `/connections` | External connections |
+| Logs | `/logs` | Logs view |
+| Settings | `/settings` | Settings page |
 
-In dev mode, `vite.config.ts` proxies these paths to the backend so there are no CORS issues:
+**Protected surface:** 8 pages plus `/login`.
+
+Legacy aliases:
+
+- `/` redirects to `/editor`
+- `/dashboard` redirects to `/editor`
+
+Everything except `/login` is behind the app's protected route wrapper.
+
+### Dev proxy
+
+In development, `web/vite.config.ts` proxies these paths to the backend:
 
 | Prefix | Target |
 |--------|--------|
-| `/api/*` | `http://localhost:8000` |
-| `/auth/*` | `http://localhost:8000` |
+| `/api` | `http://localhost:8000` |
+| `/auth` | `http://localhost:8000` |
 | `/ws` | `ws://localhost:8000` |
 
-All `fetch('/api/...')` calls in the web panel go through this proxy. In production, deploy the web panel behind the same reverse proxy as the backend.
+This keeps browser requests same-origin during local development.
 
-### Authentication
+### Authentication flow
 
-**Login flow:**
-1. `POST /auth/login` → returns `{ session_token, user_id, username, role }`
-2. Token is stored in `localStorage` as `admin_token`
-3. `ApiClient` in `web/src/lib/api.ts` reads `admin_token` and injects `Authorization: Bearer <token>` on every request automatically
-4. `authStore` (`web/src/stores/authStore.ts`, Zustand) holds the decoded user state in memory
-5. `ProtectedRoute` in `App.tsx` redirects to `/login` if no token is present
+1. `POST /auth/login` returns `session_token`, `user_id`, `username`, and `role`.
+2. The token is stored in `localStorage` as `admin_token`.
+3. `web/src/lib/api.ts` adds `Authorization: Bearer <token>` on future requests.
+4. `ProtectedRoute` sends you to `/login` when no token is present.
 
-### First-time login / credentials
-
-There are **no hardcoded default credentials** in the codebase (intentional security practice). The first admin user must be created via CLI before the web panel can be used:
-
-```bash
-cd backend
-source .venv/bin/activate
-
-# Create first admin user:
-python manage.py create_user --username admin --password yourpassword
-
-# Reset a forgotten password:
-python manage.py reset_password --username admin
-```
-
-After the first user is created, `POST /auth/setup` is permanently locked (returns 409).
-
-> **Tests:** `conftest.py` creates a test user programmatically via hashed password — no CLI step needed for the test suite.
+The first admin user is created through the backend CLI because `POST /auth/setup` locks after initial bootstrap.
 
 ### Build for production
 
 ```bash
 cd web
-npm run build    # outputs to web/dist/
+npm run build
 ```
 
-### Production Build (Docker Bundled)
+This outputs the compiled app to `web/dist/`.
 
-**NEW in FF4:** Backend + web admin bundled in a single Docker container. The Python FastAPI server serves the compiled web admin static files.
+---
+
+## Mobile
+
+### One-time setup
+
+```bash
+cd mobile
+npm install
+```
+
+There is no `.env` file for the mobile app. The backend URL is entered on the Connect screen and stored on-device with `expo-secure-store`.
+
+### Run the dev server
+
+```bash
+cd mobile
+npx expo start
+```
+
+Common Expo shortcuts:
+
+| Key | Action |
+|-----|--------|
+| `i` | Open in iOS Simulator (Mac only, requires Xcode) |
+| `a` | Open in Android Emulator (requires Android Studio) |
+| `w` | Open in the browser (limited native API support) |
+| Scan QR | Open in Expo Go on a real device |
+
+If QR scanning fails across networks, use:
+
+```bash
+npx expo start --tunnel
+```
+
+### Connect screen
+
+Use one of these backend URLs on first launch:
+
+- Same machine or simulator: `http://localhost:8000`
+- Android Emulator: `http://10.0.2.2:8000`
+- Real device on the same Wi-Fi: `http://<your-machine-ip>:8000`
+
+### Build for production
+
+```bash
+npm install -g eas-cli
+# Replace ios with android when needed
+eas build --platform ios
+```
+
+---
+
+## QA suite
+
+The Playwright QA suite lives in `qa/`. Use the commands in `docs/codebase-explanation/qa.md` for the full map.
+
+Quick version:
+
+```bash
+cd qa
+npm test
+# or, for the full backend pytest + Playwright pipeline
+bash run.sh
+```
+
+The Playwright suite auto-starts the backend and web admin when needed, then runs against fixed ports `8000` and `5174`.
+
+---
+
+## Standalone agent
+
+The standalone agent reuses `backend/.venv`.
+
+### One-time setup
+
+The agent needs a valid backend session token and, if you use the external-agent path, a model key in `Helm/.env`.
+
+```bash
+curl -s -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"your_user","password":"your_pass","device_id":"agent","device_name":"Agent"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['session_token'])"
+```
+
+Add the token and agent settings to `Helm/.env`:
+
+| Variable | Use |
+|----------|-----|
+| `HELM_SESSION_TOKEN` | Agent-to-MCP auth |
+| `HELM_MCP_URL` | MCP endpoint for the agent |
+| `AGENT_WEB_PORT` | Browser UI and API server port |
+| `OPENROUTER_API_KEY` / `OPENAI_API_KEY` | Model provider credentials |
+| `OPENROUTER_MODEL` / `OPENAI_MODEL` | Model selection |
+
+### Run the agent
+
+```bash
+source backend/.venv/bin/activate
+cd agent
+
+# Browser chat UI at http://localhost:7860
+python helm_agent.py --web
+
+# Custom port
+python helm_agent.py --web --port 8080
+
+# Interactive REPL
+python helm_agent.py
+
+# One-shot task
+python helm_agent.py "What's on my calendar this week?"
+```
+
+### Agent API server
+
+`api_server.py` runs the agent as a standalone HTTP service. When `EXTERNAL_AGENT_URL` is set in `.env`, the backend forwards mobile-app chat to it instead of calling OpenRouter directly.
+
+```bash
+source backend/.venv/bin/activate
+cd agent
+
+python api_server.py               # port 7860 by default
+python api_server.py --port 8080
+# or: uvicorn api_server:app --port 7860 --reload
+```
+
+| URL | What it is |
+|-----|-----------|
+| `http://localhost:7860/` | Browser UI (`chat_ui.html`) |
+| `http://localhost:7860/health` | Health JSON |
+| `http://localhost:7860/api/run` | SSE stream used by backend `agent_proxy` |
+| `http://localhost:7860/api/chat` | SSE chat endpoint used by `chat_ui.html` |
+
+### Send a one-shot prompt from CLI
+
+```bash
+source backend/.venv/bin/activate
+cd agent
+python send_prompt.py "Create a home screen with a greeting"
+```
+
+This requires `api_server.py` to already be running on port 7860.
+
+---
+
+## Bundled production Docker
+
+Backend and web admin are bundled into a single container. The Python FastAPI server serves the compiled web admin static files.
 
 ```bash
 # Build
@@ -310,294 +470,94 @@ docker compose logs -f helm
 docker compose down
 ```
 
-**Configuration:** `docker-compose.yml` at repo root. Environment variables passed through from `.env` (required: `ENCRYPTION_KEY`, `SECRET_KEY`). Persistent SQLite data volume at `helm-data:/app/data`.
+### Production notes
 
-**Architecture:**
-- `Dockerfile` at repo root: multi-stage build (Node 20-alpine for web build → Python 3.11-slim for runtime)
-- `docker-compose.yml`: single service exposing port 8000
-- `SERVE_STATIC=true` env var enables static file serving in production
-- API routes (`/api/*`, `/auth/*`, `/ws/*`, `/mcp/*`) take precedence over static files
-- `/` and `/admin` routes serve the web admin SPA with client-side routing fallback
+- `docker-compose.yml` lives at the repo root.
+- `.env` lives at the repo root and is passed through to the container.
+- Required production secrets: `ENCRYPTION_KEY` and `SECRET_KEY`.
+- Persistent SQLite data is stored in the `helm-data:/app/data` volume.
+- `SERVE_STATIC=true` enables static file serving in production.
+- API routes (`/api/*`, `/auth/*`, `/ws`, `/mcp`) take precedence over static files.
+- `/` and `/admin` serve the web admin SPA with client-side routing fallback.
 
-**Port 8000 serves everything:**
+### Port 8000 serves everything
+
 | URL | What it is |
 |-----|-----------|
-| `http://localhost:8000/` | Web admin (production) |
-| `http://localhost:8000/admin` | Web admin SPA fallback |
+| `http://localhost:8000/` | Web admin in production |
+| `http://localhost:8000/admin` | SPA fallback route |
 | `http://localhost:8000/api/...` | REST API |
 | `http://localhost:8000/ws` | WebSocket |
 | `http://localhost:8000/mcp` | MCP server |
 | `http://localhost:8000/docs` | Swagger UI |
 
-In development, use the separate Vite dev server (`cd web && npm run dev`) for hot reload. The `SERVE_STATIC` env var is `false` by default (development mode).
-
-### Pages
-
-| Page | URL | Description |
-|------|-----|-------------|
-| Login | `/login` | Authenticates against backend `/auth/login` |
-| Editor | `/editor` | Custom SDUI editor; sidebar has expandable ModulesTree; percentage width rendering; VariablePillExtension |
-| App Editor | `/app-editor` | App management: create apps, assign module instances, bottom bar config (5-slot drag-and-drop), launchpad, theme/dark-mode |
-| Templates | `/templates` | SDUI template library (CRUD + import/export + SDUIPreview/AppPreview) |
-| Workflows | `/workflows` | React Flow visual workflow builder with node inspector; n8n import |
-| Variables | `/variables` | Variables CRUD + Data Sources (React Hook Form + Zod) |
-| Connections | `/connections` | OAuth/API key management with Fernet encryption (React Hook Form + Zod) |
-| Settings | `/settings` | Device management (replaced Users page); React Hook Form + Zod |
-| Logs | `/logs` | Merged Sessions + Audit Logs |
-| Pill Editor Test | `/pill-editor-test` | Test harness for PillEditor variable inline editing |
-
-### Custom SDUI Editor
-
-The editor at `/editor` is a custom React + Zustand SDUI editor composed from `web/src/pages/EditorPage.tsx` and `web/src/editor/*`:
-- The left panel combines the structure tree with a collapsible template library
-- Saved templates load from `/api/templates`, while local starter screens and row templates come from `web/src/editor/templateLibrary.ts`
-- Device preview supports presets, rotate, and custom width/height values with an explicit Apply action
-- The canvas supports cell resizing, direct row-height drag handles, add-row controls, and a JSON view/import flow
-- Row properties include background color, per-side padding, and horizontal scrollability
-- The structure tree includes a screen root item plus JSON copy actions for the whole screen and individual rows
-- Save writes a draft to `/api/sdui/{module_id}` and Push Live saves then approves it via `/api/sdui/{module_id}/draft/approve`
-- The status bar shows unsaved state, last saved time, preview dimensions, and AI connectivity
+In development, keep using the separate Vite dev server in `web/` for hot reload.
 
 ---
 
-## Standalone PydanticAI Agent (`agent/`)
+## Shared `.env` reference
 
-A fully independent external agent that controls Helm via MCP and can also edit the frontend source code directly. Requires no backend imports — just HTTP + file I/O. Reuses the backend venv.
+The shared environment file lives at the repo root (`Helm/.env`). The backend configuration object in `backend/app/config.py` is the source of truth for the full list of settings.
 
-### Setup (one-time)
+### Core settings
 
-No extra installs needed — `pydantic-ai` ships with the backend venv. You need a valid session token:
+| Variable | Use |
+|----------|-----|
+| `DATABASE_URL` | Backend database URL |
+| `SECRET_KEY` | JWT and app security |
+| `ENCRYPTION_KEY` | Fernet encryption for stored secrets |
+| `SERVER_HOST` | Backend bind host |
+| `SERVER_PORT` | Backend bind port |
+| `SERVE_STATIC` | Enables static file serving in production |
+| `MCP_PATH` | MCP mount path |
 
-```bash
-curl -s -X POST http://localhost:8000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"your_user","password":"your_pass","device_id":"agent","device_name":"Agent"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['session_token'])"
-```
+### Provider settings
 
-Add to `Helm/.env`:
-```ini
-HELM_SESSION_TOKEN=eyJ...
-OPENROUTER_API_KEY=sk-or-...
-OPENROUTER_MODEL=stepfun/step-3.5-flash:free
-```
+| Variable | Use |
+|----------|-----|
+| `OPENROUTER_API_KEY` / `OPENROUTER_BASE_URL` / `OPENROUTER_MODEL` | OpenRouter provider |
+| `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` | OpenAI fallback provider |
+| `EXTERNAL_AGENT_URL` | Forwards mobile chat to the standalone agent |
 
-### Run the agent
+### Agent settings
 
-```bash
-source backend/.venv/bin/activate
-cd agent
+| Variable | Use |
+|----------|-----|
+| `HELM_SESSION_TOKEN` | Agent auth token |
+| `HELM_MCP_URL` | MCP URL used by the agent |
+| `AGENT_WEB_PORT` | Port for `helm_agent.py --web` and `api_server.py` |
 
-# Browser chat UI at http://localhost:7860
-python helm_agent.py --web
+### Docker admin auth
 
-# Custom port
-python helm_agent.py --web --port 8080
-
-# Interactive REPL (maintains conversation history)
-python helm_agent.py
-
-# One-shot task
-python helm_agent.py "What's on my calendar this week?"
-```
-
-### Agent API server (for external agent mode)
-
-`api_server.py` runs the agent as a standalone HTTP service. When `EXTERNAL_AGENT_URL` is set in `.env`, the backend forwards all mobile-app chat to it instead of calling OpenRouter directly:
-
-```bash
-source backend/.venv/bin/activate
-cd agent
-
-python api_server.py               # port 7860 by default
-python api_server.py --port 8080
-# or: uvicorn api_server:app --port 7860 --reload
-```
-
-| URL | What it is |
-|-----|-----------|
-| `http://localhost:7860/` | Serves `chat_ui.html` browser UI |
-| `http://localhost:7860/health` | `{"status":"ok","model":"..."}` |
-| `http://localhost:7860/api/run` | SSE stream endpoint — used by backend agent_proxy |
-| `http://localhost:7860/api/chat` | pydantic-ai SSE chat endpoint — used by chat_ui.html |
-
-### Send a one-shot prompt from CLI
-
-`send_prompt.py` sends a single message to a running `api_server.py` and prints the streamed response to stdout:
-
-```bash
-source backend/.venv/bin/activate
-cd agent
-python send_prompt.py "Create a home screen with a greeting"
-```
-
-Requires `api_server.py` to already be running on port 7860.
-
-### Session token expiry
-
-Tokens expire (default: 720h = 30 days). To reissue:
-
-```bash
-curl -s -X POST http://localhost:8000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"your_user","password":"your_pass","device_id":"agent","device_name":"Agent"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['session_token'])"
-# Update HELM_SESSION_TOKEN in Helm/.env
-```
+| Variable | Use |
+|----------|-----|
+| `ADMIN_USERNAME` | SQLAdmin BasicAuth username |
+| `ADMIN_PASSWORD` | SQLAdmin BasicAuth password |
 
 ---
 
-## API Keys (`.env` reference)
+## Legacy scripts
 
-`.env` lives at the **repo root** (`Helm/.env`), not inside `backend/`.
+Root-level helper scripts are manual debugging tools, not part of the production app or the current QA suite.
 
-```ini
-# ─── Backend server ──────────────────────────────────────
-DATABASE_URL=sqlite+aiosqlite:///./helm.db
-SECRET_KEY=change_me_32_char_hex_string
-ENCRYPTION_KEY=       # Fernet key — required to encrypt agent API keys in the DB
-ACCESS_TOKEN_EXPIRE_HOURS=720
-REFRESH_TOKEN_EXPIRE_DAYS=30
-SERVER_HOST=0.0.0.0
-SERVER_PORT=8000
+### Ad-hoc browser helpers
 
-# ─── LLM providers ───────────────────────────────────────
-# Primary: OpenRouter (recommended)
-OPENROUTER_API_KEY=sk-or-...
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=stepfun/step-3.5-flash:free
+- `test-all-buttons.js`
+- `test-buttons.js`
+- `test-diag.js`
+- `test-diag2.js`
+- `test-frontend.js`
+- `test-openurl.js`
+- `helm-live-test.js`
+- `helm-sdui-test2.js`
 
-# Fallback: OpenAI
-OPENAI_API_KEY=
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o
+### Python and shell helpers
 
-# ─── Optional: external agent routing ────────────────────
-# When set, ALL mobile-app chat is forwarded to this URL/api/run
-EXTERNAL_AGENT_URL=   # e.g. http://localhost:7860
+- `test_mcp_agent.py`
+- `test-full-flow.sh`
+- `inject-home.py`
 
-# ─── MCP ─────────────────────────────────────────────────
-MCP_PATH=/mcp
-
-# ─── Standalone agent ────────────────────────────────────
-HELM_SESSION_TOKEN=   # JWT token for agent → MCP auth
-HELM_MCP_URL=http://localhost:8000/mcp/
-AGENT_WEB_PORT=7860   # port for helm_agent.py --web and api_server.py
-```
-
-**Generating an ENCRYPTION_KEY:**
-```python
-from cryptography.fernet import Fernet
-print(Fernet.generate_key().decode())
-```
-
-**OpenRouter Model Selection notes:**
-- Free tier models are rate-limited (429) if called too frequently
-- Known-working free model: `stepfun/step-3.5-flash:free`
-- Paid models: `anthropic/claude-3.5-sonnet`, `openai/gpt-4o`
-- Browse available models at https://openrouter.ai/models
-- If free models hit 429: wait 2–3 minutes, or add $5 credit to OpenRouter
-
----
-
-## MCP Configuration
-
-The MCP server is mounted at `http://localhost:8000/mcp`.
-
-**To connect Claude Desktop to Helm's MCP server**, add to `claude_desktop_config.json`:
-```json
-{
-  "mcpServers": {
-    "helm": {
-      "url": "http://localhost:8000/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_SESSION_TOKEN"
-      }
-    }
-  }
-}
-```
-
-**Standalone agent** — set `HELM_MCP_URL` + `HELM_SESSION_TOKEN` in `.env`.
-
----
-
-## Root-Level Dev & Test Scripts (Legacy)
-
-These scripts live at the repo root and are **not** part of the production app. They are development utilities and debugging tools. The root-level `playwright.config.ts` targeting port 8082 no longer exists — QA tests have moved to `qa/`.
-
-### Playwright E2E tests (moved to `qa/`)
-
-The official Playwright E2E suite now lives in `qa/` — see the QA Test Suite section below and `docs/codebase-explanation/qa.md` for current usage.
-
-### Ad-hoc Playwright / Puppeteer scripts (manual, not CI)
-
-These scripts were created during SDUI development sessions. Run them while the frontend dev server is active at `http://localhost:19006` or `http://localhost:8082`:
-
-```bash
-node test-all-buttons.js    # Test all SDUI action types across all tabs
-node test-buttons.js        # Quick navigate action smoke test
-node test-diag.js           # Diagnose SDUI loading on home tab
-node test-diag2.js          # Dump all buttons and text across 4 tabs
-node test-frontend.js       # Puppeteer smoke test + screenshot
-node test-openurl.js        # Verify open_url action fires window.open
-node helm-live-test.js      # Full live-app test with screenshots
-node helm-sdui-test2.js     # SDUI V2 integration test
-```
-
-> **Note:** Some scripts have hardcoded JWT tokens that must be updated before use. Check the top of each file.
-
-### QA Test Suite (`qa/`)
-
-A Playwright-based test suite for the web admin panel and backend API. Auto-starts backend and Vite if not already running.
-
-```bash
-# One-time setup
-cd qa
-npm install
-npx playwright install chromium
-
-# Run all tests (auto-starts servers)
-npx playwright test
-
-# Backend-only tests (no browser)
-npx playwright test --project backend-only
-
-# E2E tests only (browser)
-npx playwright test --project e2e
-
-# Specific test file
-npx playwright test schema-reconciliation
-npx playwright test editor
-```
-
-**Configuration file:** `qa/.qa-env.json` — contains QA credentials (username/password). Create it before first run:
-```json
-{"username": "admin", "password": "your_password"}
-```
-
-If `qa/.qa-env.json` doesn't exist, `globalSetup` creates it with default values `admin`/`admin` and attempts to set up the backend.
-
-**Servers:** Tests run against `http://127.0.0.1:8000` (backend) and `http://127.0.0.1:5174` (web admin). `globalSetup.cjs` auto-starts them if not already running.
-
-**Results:** `qa/results/playwright-results.json` (JSON report)
-
-See `docs/codebase-explanation/qa.md` for full details.
-
-### Python dev scripts
-
-```bash
-# MCP integration test (needs backend + HELM_SESSION_TOKEN + OPENROUTER_API_KEY)
-source backend/.venv/bin/activate
-python test_mcp_agent.py
-
-# Shell smoke test (needs backend + frontend both running)
-bash test-full-flow.sh
-
-# Inject a sample Wandr/Tokyo SDUI V2 home screen directly (bypasses draft approval)
-source backend/.venv/bin/activate
-python inject-home.py
-```
+Read the top of each file before running it; these scripts may assume old ad-hoc dev setups and are not wired into CI.
 
 ---
 
@@ -605,11 +565,19 @@ python inject-home.py
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| `401 Unauthorized` from API | Token expired | Re-login and update token |
-| `429 Too Many Requests` from LLM | Rate-limited on free tier | Wait 2–3 min or switch model |
+| `401 Unauthorized` from the API | Token expired | Re-login and update the stored token |
+| `429 Too Many Requests` from the LLM | Free-tier rate limit | Wait 2–3 minutes or switch models |
 | WebSocket disconnects immediately | Token invalid or expired | Re-login |
-| Agent can't connect to MCP | `HELM_SESSION_TOKEN` missing or expired | Regenerate token, update `.env` |
-| Android emulator can't reach backend | Wrong localhost | Use `http://10.0.2.2:8000` not `http://localhost:8000` |
-| Expo Go can't reach backend | Device on different network | Use `npx expo start --tunnel` |
-| Standalone agent rate limit errors | Using `claude-opus-4-20250514` | Change to `claude-sonnet-4-20250514` in `agent/helm_agent.py` |
-| Web admin shows wrong port in docs | Vite auto-incremented port | Check terminal output for actual port (usually 5174) |
+| Agent cannot connect to MCP | `HELM_SESSION_TOKEN` missing or expired | Regenerate the token and update `.env` |
+| Android Emulator cannot reach backend | Wrong localhost address | Use `http://10.0.2.2:8000` |
+| Expo Go cannot reach backend | Device is on a different network | Use `npx expo start --tunnel` |
+| Web admin or QA lands on the wrong port | Another process is already on 5174 | Free the port before starting Vite or Playwright |
+| Docker container cannot start | Missing required env vars | Check `SECRET_KEY` and `ENCRYPTION_KEY` |
+
+---
+
+## Working notes
+
+- The backend and web admin both assume the current fixed ports. If you change one, update the QA config too.
+- Prefer the component-specific setup instructions above when you only need one layer.
+- Use `docs/codebase-explanation/qa.md` for the full Playwright map, and `docs/codebase-explanation/backend.md` for backend internals.

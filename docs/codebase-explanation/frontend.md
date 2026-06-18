@@ -1,700 +1,385 @@
-# Frontend — React Native (Expo) Mobile App + Web Admin
-
-> Last updated: 2026-05-15 (FF4 Reassessment follow-up: Module Editor autosave/auto-checkpoint, App Editor phone preview/module versioning/publish expansion, Image simplification)
-
-## Tier 1: TLDR
-
-The frontend is a **React Native (Expo)** mobile app that serves as the universal UI for the Helm super app. It:
-
-- **Authenticates** users against a self-hosted backend (connect → setup → login)
-- **Renders 7 tab screens**: Home, Chat, Modules, Calendar, Forms, Alerts, Settings
-- **Streams AI chat** via WebSocket with real-time token-by-token rendering
-- **Integrated SDUI renderer** — AI can push any screen to any tab via MCP tools; V1 (19 component types) and V2 (compositional row+cell format) both supported
-- **V2 component registry** — extensible type-string→component map; PascalCase types; atomic, structural, composite component layers
-- **AI controls tab visibility** — hide/show tabs live via MCP tools
-- **Uses Zustand** for state management (auth, UI, settings, tab visibility)
-- **Single shared WebSocket** connection via `WebSocketContext`
-- **Works on iOS, Android, and Web** (Expo universal platform)
-
-**To run it:** `cd mobile && npx expo start`
-
----
-
-## Tier 2: Deeper Explanation
-
-### Navigation Structure (Expo Router)
-
-```
-app/
-├── _layout.tsx           → RootLayout: auth guard + root providers + WebSocketProvider
-├── index.tsx             → Splash/redirect while auth hydrates
-├── (auth)/
-│   ├── _layout.tsx       → Stack (headerShown: false)
-│   ├── connect.tsx       → Server URL entry + first account setup
-│   └── login.tsx         → Username/password sign-in
-├── (tabs)/
-│   ├── _layout.tsx       → Tabs + TabsConfigSync
-│   ├── home.tsx          → SDUI-driven home (DraftPreview when draft exists)
-│   ├── chat.tsx          → AI chat (WebSocket streaming)
-│   ├── modules.tsx       → Module list (enable/disable tabs)
-│   ├── calendar.tsx      → Month grid calendar with event dots
-│   ├── forms.tsx         → SDUI-driven forms (no fallback native UI)
-│   ├── alerts.tsx        → Notifications list
-│   └── settings.tsx      → Server info, account, logout
-└── module/
-  └── [moduleId].tsx    → Dedicated custom-module SDUI route (DraftPreview when draft exists)
-```
-
-**Auth guard** (`_layout.tsx`): Calls `initialize()` + `initializeSettings()` on mount. No token → redirect to `/(auth)/connect`. Has token + in auth group → redirect to `/(tabs)/chat`.
-
-**Tab visibility**: `TabsConfigSync` (inside `(tabs)/_layout.tsx`) fetches `GET /api/modules` on mount, maps disabled modules to `tabsStore.hiddenTabs`. Live updates via `tabs_updated` WebSocket event. Tabs use `href: null` to hide from nav bar while keeping route accessible.
-
----
-
-## Screens (Full Detail)
-
-### `app/index.tsx` — Loading Splash
-Shows `ActivityIndicator` while auth loads, then redirects. No API calls.
-
-### `app/(auth)/connect.tsx` — Server Setup
-- **Shows:** Server URL field, username, password, Setup button, "Already have an account?" link
-- **Default values:** URL = `http://localhost:8000`; username and password are blank by default
-- **API:** `POST /auth/setup` via `AuthService.setup()`. On 409 → saves server URL, navigates to login
-- **State written:** `authStore.serverUrl` (persisted to SecureStore)
-
-### `app/(auth)/login.tsx` — Sign In
-- **Shows:** Username + password fields only (no signup), "Connected to: {serverUrl}" + "Change Server" link
-- **Rewritten in Session 9:** Simplified to 3 fields (username, password, server display), removed signup flow
-- **API:** `POST /auth/login` with `device_id: 'web'`, `device_name: 'Web Browser'`
-- **State written:** `authStore.token` + `authStore.user` (persisted)
-
-### `app/(tabs)/home.tsx` — SDUI Home
-- **Shows:** AI-generated SDUI screen, or working draft preview if draft exists, or empty-state prompt
-- **API:** `GET /api/sdui/home` + `GET /api/sdui/home/draft` via `useSDUIScreen('home')`
-- **Versioning:** AI creates a draft via `helm_set_screen` → user creates checkpoint → version history available. Old draft/approve/reject flow is superseded by Draft → Checkpoint → Version → Preview → Publish model.
-
-### `app/(tabs)/chat.tsx` — AI Chat
-- **Shows:** Chat message list (FlashList v2), typing indicator (`●●●`), text input + Send button. If AI set SDUI for chat tab, renders that instead.
-- **API:** `GET /api/chat/history` on mount (reversed for display)
-- **WS sent:** `{type: 'chat_message', content, conversation_id: 'default'}`
-- **WS handled:** `chat_start`, `chat_token` (streaming), `chat_message_replace` (strips XML tool calls), `chat_complete`, `chat_error`, `tool_result`, `tool_error`
-- **Pattern:** stale-closure-safe `wsHandlerRef` — subscription set up once on `[ws]` change, always calls latest ref
-
-### `app/(tabs)/calendar.tsx` — Calendar
-- **Shows:** Month navigation header, 7-column day grid with event dots, selected day agenda. SDUI fallback if AI sets it.
-- **API:** `GET /api/calendar/events?start_date=...&end_date=...` via `useFocusEffect` (re-runs on focus + currentMonth change)
-- **Performance:** `useMemo` for `calendarDays`, `eventsByDate` (O(1) lookup by date string), `selectedDayEvents`
-- **Variant switching:** Admin-controlled only — mobile shows no variant switcher UI (only time navigation arrows + Today button)
-- **Source types:** Events display colored badges by source type (local/caldav/notion/custom) and optional notes text
-
-### `app/(tabs)/alerts.tsx` — Notifications
-- **Shows:** List of notification cards with title, message, formatted timestamp. SDUI fallback if set.
-- **API:** `GET /api/notifications` on mount and when `[token, serverUrl]` change. Re-fetches on WS `notification` message.
-
-### `app/(tabs)/modules.tsx` — Module Store
-- **Shows:** Two-mode view: "My Modules" (installed modules with enable/disable toggles) and "Module Store" (all available templates from backend)
-- **Session 9 changes:** Added Module Store view showing all templates (system + custom), tab bar customization via enable/disable toggles
-- **API:** `GET /api/modules` (module list), `GET /api/templates` (template list for store view)
-- **State:** `tabsStore.enabledTabIds` (user's enabled tabs, persisted to AsyncStorage)
-- **Navigation:** Built-in modules route to `/(tabs)/{name}`, custom modules route to `/module/{id}`
-
-### `app/module/[moduleId].tsx` — Custom Module Route
-- **Shows:** AI-generated SDUI screen for the selected custom module, or working draft preview if draft exists, or empty-state prompt
-- **API:** `GET /api/sdui/{moduleId}` + `GET /api/sdui/{moduleId}/draft` via `useSDUIScreen(moduleId)`
-- **Versioning:** Draft → Checkpoint → Version → Preview → Publish model. Supports version history via `GET /api/modules/{moduleId}/versions`.
-
-### `app/(tabs)/forms.tsx` — Forms
-- **Shows:** SDUI-driven form screen via `useSDUIScreen('forms')`, or empty-state loading/error. **No native fallback UI** — purely SDUI.
-
-### `app/(tabs)/settings.tsx` — Settings
-- **Shows:** Server URL, Navigation Mode, Theme, Version (1.0.0), Username, Logout. SDUI fallback if set.
-- **Session 9:** Settings page has 4 items only (Theme, Notifications, Data Sync, About)
-- **No API calls** — display only. Logout → `authStore.logout()` → navigate to connect.
-
-### `app/(tabs)/article.tsx` — Article Reader (NEW in Session 9)
-- **Shows:** Full article content with header image, title, source, published date, and markdown content rendered via `RichTextRendererComponent`
-- **Route params:** title, content, imageUrl, source, publishedAt (passed from ArticleCard navigation)
-- **No API calls** — displays data passed via route params from RSS feed
-
----
-
-## State Management (Zustand)
-
-| Store | File | Key State | Persisted? |
-|-------|------|-----------|----------|
-| `useAuthStore` | `src/stores/authStore.ts` | `token`, `user`, `serverUrl`, `isLoading` | SecureStore: `auth_token`, `server_url`, `username` |
-| `useUIStore` | `src/stores/uiStore.ts` | `isConnected`, `errorBanner: {message, retry?}` | No |
-| `useSettingsStore` | `src/stores/settingsStore.ts` | `navigationMode`, `theme` | AsyncStorage: `navigation_mode`, `theme` |
-| `useTabsStore` | `src/stores/tabsStore.ts` | `hiddenTabs: string[]`, `moduleConfigs: Record<string, {name, icon}>`, `enabledTabIds: string[]` | `enabledTabIds` persisted to AsyncStorage |
-| `componentStateStore` | `src/stores/componentStateStore.ts` | `states: Record<componentId, Record<key, any>>` | No (in-session only) |
-
-**Critical notes:**
-- `authStore.logout()` calls `POST /auth/logout` to invalidate the server session, then clears client-side token
-- `settingsStore.navigationMode` and `settingsStore.theme` are stored but **neither has any effect** on the UI
-- `settingsStore` uses `AsyncStorage` directly instead of the `storage` utility (inconsistency)
-- `tabsStore.hiddenTabs` is repopulated from `GET /api/modules` on every app launch
-- **Session 9:** `tabsStore.enabledTabIds` controls user's customizable tab bar (persisted to AsyncStorage). Tabs are shown if: (1) in `enabledTabIds` AND (2) not in `hiddenTabs` (server-side)
-
----
-
-## Services Layer
-
-| Service | File | Purpose |
-|---------|------|---------|
-| `ApiClient` | `services/api.ts` | HTTP client for all REST API calls. Auto-redirects on 401. |
-| `AuthService` | `services/auth.ts` | Standalone auth service for setup/login/logout (used before token exists) |
-| `WebSocketService` | `services/websocket.ts` | ReconnectingWebSocket wrapper with heartbeat (30s ping), Zod validation, multi-handler subscriptions |
-
-### ApiClient — All Methods
-
-| Method | HTTP | Path | Notes |
-|--------|------|------|-------|
-| `login(data)` | POST | `/auth/login` | |
-| `logout()` | POST | `/auth/logout` | |
-| `healthCheck()` | GET | `/health` | |
-| `getCalendarEvents(start?, end?)` | GET | `/api/calendar/events` | |
-| `createCalendarEvent(event)` | POST | `/api/calendar/events` | |
-| `updateCalendarEvent(id, event)` | PUT | `/api/calendar/events/{id}` | Backend bug: 404 |
-| `deleteCalendarEvent(id)` | DELETE | `/api/calendar/events/{id}` | |
-| `getNotifications()` | GET | `/api/notifications` | Returns `.notifications` array |
-| `markNotificationRead(id)` | POST | `/api/notifications/{id}/read` | |
-| `getAgentConfig()` | GET | `/api/agent/config` | |
-| `updateAgentConfig(config)` | PUT | `/api/agent/config` | |
-| `getWorkflows()` | GET | `/api/workflows` | |
-| `createWorkflow(w)` | POST | `/api/workflows` | |
-| `updateWorkflow(id, w)` | PUT | `/api/workflows/{id}` | |
-| `deleteWorkflow(id)` | DELETE | `/api/workflows/{id}` | |
-| `getModules()` | GET | `/api/modules` | |
-| `getTemplates()` | GET | `/api/templates` | Session 9: used by Module Store view |
-| `hideTab(tabId)` | DELETE | `/api/modules/{tabId}` | |
-| `showTab(tabId)` | POST | `/api/modules/{tabId}/show` | |
-| `configureModule(tabId, config)` | PATCH | `/api/modules/{tabId}/config` | `{name?, icon?}` body |
-| `getSDUIScreen(moduleId)` | GET | `/api/sdui/{moduleId}` | `{screen, version?}` |
-| `getSDUIDraft(moduleId)` | GET | `/api/sdui/{moduleId}/draft` | `{screen, has_draft}` |
-| `deleteSDUIScreen(moduleId)` | DELETE | `/api/sdui/{moduleId}` | |
-| `getChatHistory(conversationId?)` | GET | `/api/chat/history` | Returns `.messages` array |
-| `deleteConversation(id)` | DELETE | `/api/chat/history` | |
-| `executeAction(functionName, params)` | POST | `/api/actions/execute` | `{function, params}` body |
-
-### WebSocketService
-
-- **URL:** `${serverUrl}?token=${token}` (WS URL derived from serverUrl + `/ws` in context)
-- **ReconnectingWebSocket config:** maxRetries=10, connectionTimeout=5000ms, maxReconnectionDelay=10000ms, minReconnectionDelay=1000ms
-- **Heartbeat:** sends `{type: 'ping'}` every 30 seconds
-- **Validation:** all incoming messages validated with `wsMessageSchema` (Zod `.passthrough()` — preserves all extra fields)
-
----
-
-## Hooks
-
-### `useSDUIScreen(moduleId)` → `SDUIScreenState`
-```ts
-{ screen: SDUIPayload | null, draft: SDUIPayload | null, loading: boolean,
-  error: string | null, refresh: () => void }
-```
-- Fetches `GET /api/sdui/{moduleId}` + `GET /api/sdui/{moduleId}/draft` in parallel on mount
-- Re-fetches on `[moduleId, token, serverUrl]` change
-- Shared by built-in tabs and the dedicated custom-module route
-- Subscribes to WS: `sdui_screen_update` (sets live screen and clears draft), `sdui_draft_update` (sets or clears draft based on `screen`), `sdui_draft_rejected` (clears draft)
-- Supports both V1 (`SDUIScreen`) and V2 (`SDUIPage`) payloads via `isSDUIPage()` type guard
-
-### `useActionDispatcher()` → `(action: SDUIAction) => void`
-Memoized stable callback. Handles all SDUI action types:
-
-| Action type | Behavior |
-|-------------|----------|
-| `navigate` | Maps built-in module IDs to tab routes and custom module IDs to `/module/[moduleId]`, then calls `router.push()` |
-| `go_back` | `router.back()` if `canGoBack()` |
-| `open_url` | Only allows `http/https/mailto/tel` schemes; calls `Linking.openURL()` |
-| `copy_text` | `Clipboard.setStringAsync()` + Alert confirmation |
-| `dismiss` | `router.back()` |
-| `open_sheet` | Not yet implemented (stub) |
-| `server_action` | `ApiClient.executeAction(function, params)` |
-| `send_to_agent` | `ws.send({type:'chat_message', content})` then navigates to chat |
-
-### `useBreakpoint()` → `'compact' | 'regular'`
-Returns `'compact'` (width < 768px) or `'regular'` (width ≥ 768px). Listens to `Dimensions` change events. Used by V2 row renderer for responsive layout.
-
-### `useVariableContext(selfId?)` → `VariableContext`
-Assembles the full variable context for SDUI expression resolution. Combines:
-- **User info** from auth store (`username`, `id`, `email`)
-- **Component state** from `componentStateStore`
-- **Custom variables** fetched from `GET /api/variables?limit=200` on first mount (module-level cache shared across instances)
-- **Self state** from `componentStates[selfId]` if `selfId` provided
-
-Returns `{ user, component, self, data, env, custom }` — consumed by `variableResolver.resolveExpression()`.
-
-### `useDataSource(name?)` → data
-Fetches from `GET /api/data-sources`, caches results. Used by V2 components for data binding via `dataBinding` field on `SDUIComponentV2`.
-
----
-
-## Contexts
-
-### `WebSocketContext` — `WebSocketProvider` / `useWebSocket()`
-- Creates a single `WebSocketService` instance per `[token, serverUrl]`
-- WS URL: `serverUrl.replace(/^http/, 'ws') + '/ws'`
-- On connect: `uiStore.setConnected(true)`, `hideError()`
-- On disconnect: `uiStore.setConnected(false)`, `showError('Connection lost', reconnect)`
-- `useWebSocket()` returns `WebSocketService | null`
-
----
-
-## SDUI Component System
-
-### V1 — `SDUIScreen` (legacy, still supported)
-
-```json
-{
-  "schema_version": 1,
-  "sections": [
-    { "id": "s1", "title": "optional", "component": { "type": "text", ... } }
-  ]
-}
-```
-
-Component types (lowercase): `text`, `heading`, `button`, `icon_button`, `divider`, `spacer`, `card`, `container`, `list`, `form`, `alert`, `badge`, `stat`, `stats_row`, `calendar`, `image`, `progress`
-
-Rendered by `SDUIScreenRenderer` → `SDUIRenderer` (single component) in `src/components/sdui/SDUIRenderer.tsx`.
-
-### V2 — `SDUIPage` (preferred)
-
-```json
-{
-  "rows": [
-    {
-      "id": "r1",
-      "cells": [
-        { "id": "c1", "width": "50%", "content": { "type": "Text", ... } }
-      ],
-      "compact": { "direction": "column" },
-      "regular": { "direction": "row" },
-      "scrollable": false
-    }
-  ]
-}
-```
-
-Persisted V2 screens are row-first. The mobile type guard only requires `rows`; `schema_version`, `module_id`, and `title` are optional on stored payloads.
-
-**Row/cell changes (FF4):** Row padding/gap/background removed. Cell widths are percentage-based (e.g. `"50%"`, `"33%"`, or `"auto"`). Minimum cell width enforced at 80px. Pre-flight validation prevents adding cells or resizing below minimum width. Rows no longer have `padding`, `paddingTop`, `paddingBottom`, `paddingLeft`, `paddingRight`, `gap`, or `backgroundColor` properties.
-
-Component types (PascalCase — registered in `src/renderer/componentRegistry.ts`):
-`Text` (markdown-based, replaced old Text + Markdown), `Button`, `Image`, `Icon`, `Container` (simplified — no gap/padding/background), `CalendarModule` (5 variants), `ChatModule`, `NotesModule`, `InputBar`, `Badge`, `Stat`, `List`, `Alert`, `Todo`, `TodoModule`, `ArticleCard`, `ArticleCardModule`, `RichText`, `RichTextRenderer`, `Empty`
-
-> **Divider removed as standalone component** — `Divider` was removed from the component registry per Architecture Decisions Session 9 and Feature Feedback 2. Divider is now a row-level property (`showDivider: true` or `type: 'divider'` on rows), not a cell component. The backend validation whitelist still permits legacy `divider` type for backward compatibility with existing screens.
-
-Rendered by `SDUIPageRenderer` → `RowRenderer` → `CellRenderer` → `V2ComponentRenderer`.
-
-When `scrollable: true`, rows render as horizontal card rails with fixed-width cells derived from each numeric cell width, so the mobile runtime matches the editor preview instead of flexing cells like paging rows.
-
-Rows with a fixed height apply `overflow: 'hidden'` so that tall child content (e.g. `CalendarModule`) does not bleed into adjacent rows.
-
-### Auto-dispatch — `SDUIUniversalRenderer`
-Detects format via `isSDUIPage()` type guard and dispatches to `SDUIPageRenderer` (V2) or `SDUIScreenRenderer` (V1).
-
----
-
-## Component Library
-
-### Common (`src/components/common/`)
-
-| Component | Props | Notes |
-|-----------|-------|-------|
-| `Button` | `title, onPress, variant?('primary'\|'secondary'\|'outline'), disabled?, style?` | |
-| `Card` | `children, style?` | White bg, 12px radius, shadow |
-| `ErrorBanner` | `message, onRetry?, onDismiss?` | Red banner |
-| `Input` | `...TextInputProps` | Styled TextInput |
-
-### V1 SDUI (`src/components/sdui/`)
-
-| Component | Notes |
-|-----------|-------|
-| `AlertComponent` | Severity-colored card; `dismissible`, `onAction` |
-| `DraftPreview` | Banner + preview + Approve/Reject/Add Feedback buttons |
-| `ListComponent` | FlatList with icon/title/subtitle/chevron |
-| `SDUIRenderer` / `SDUIScreenRenderer` / `SDUIPageRenderer` / `SDUIUniversalRenderer` | Main renderer |
-
-**Note:** `CalendarComponent.tsx` and `FormComponent.tsx` were deleted in Session 10 (Phase A) — they were not in the component registry and had zero callers. `AlertComponent` and `ListComponent` still exist but are not imported by `SDUIRenderer.tsx` (it renders all V1 types inline).
-
-### V2 Atomic (`src/components/atomic/`)
-
-| Component | Key Props | Notes |
-|-----------|-----------|-------|
-| `SDUIText` | `content, variant?('heading'\|'body'\|'caption'), color?, bold?, italic?, underline?, strikethrough?, align?('left'\|'center'\|'right'), numberOfLines?, selectable?` | **FF4:** Merged with old `SDUIMarkdown` — uses `react-native-markdown-display` library. Supports markdown content + text alignment. Old `SDUIMarkdown` removed. |
-| `SDUIButton` | `label?, icon?, variant?('primary'\|'secondary'\|'ghost'\|'icon'\|'destructive'), size?('sm'\|'md'\|'lg'), loading?, fullWidth?, dispatch?` | Fills entire cell. |
-| `SDUIImage` | `src, fitMode?('fitWidth'\|'fitHeight'), action?` | **FF4:** Simplified — only `src`, `fitMode`, and `action`. Removed `alt`, `width`, `height`, `aspectRatio`, `borderRadius`, `onPress`, `placeholder`. |
-| `SDUIIcon` | `name` (Feather name → emoji/unicode map, ~40 icons), `size?, color?, onPress?` | Fills entire cell (centered). Icon picker popup enhanced. |
-| ~~`SDUIDivider`~~ | ~~`direction?('horizontal'\|'vertical'), thickness?, color?, indent?, margin?`~~ | **Removed** — Divider is now a row property, not a cell component. |
-| ~~`SDUITextInput`~~ | ~~`value?, onChangeText?, placeholder?, ...`~~ | **Removed (FF4)** — replaced by `InputBar` for input needs. |
-
-### V2 Structural (`src/components/structural/`)
-
-| Component | Key Props | Notes |
-|-----------|-----------|-------|
-| `SDUIContainer` | `direction?, borderRadius?, shadow?('sm'\|'md'\|'lg'), flex?, align?, justify?, children?` | **FF4:** Simplified — removed `gap`, `padding`, `backgroundColor`. Acts as a vertical row (direction defaults to `column`). |
-
-Uses `resolveColor()` and `themeShadows` from `src/theme/tokens.ts`.
-
-### V2 Composite (`src/components/composite/`)
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| `CalendarModule` | Full FF4 | Uses `react-native-calendars`; **5 variants** (month/week/day/eventList/compact); date navigation controls (`◀ [range] ▶ Today`); unified event model; fit-the-cell sizing; Compact variant for small cells; **sourceType badges** (colored by local/caldav/notion/custom); **notes display** (up to 2 truncated lines) |
-| `ChatModule` | Placeholder | Shows "navigate to Chat tab"; pull-to-refresh via RefreshControl |
-| `NotesModule` | Full FF4 | Wired to backend Notes CRUD; markdown rendering for note content; create/edit/delete |
-| `InputBar` | Full MVP | Text input + send strip; wired to backend actions; variable resolution |
-| `TodoModule` | Full FF4 | Wired to backend Todos CRUD; toggle complete via backend; add/delete via backend |
-| `ArticleCardModule` | Full FF4 | Wired to backend Articles; tap navigation to article detail |
-
-### V2 SDUI Components (FF4)
-
-| Component | File | Key Props | Notes |
-|-----------|------|-----------|-------|
-| `CalendarComponent` | `src/components/sdui/CalendarComponent.tsx` | `events, variant?('month'\|'week'\|'day'\|'eventList'\|'compact'), onEventPress?, onAction?` | 5 variants; date navigation; fit-the-cell |
-| `TodoComponent` | `src/components/sdui/TodoComponent.tsx` | `items: {id, text, completed}[], placeholder?, onToggle?, onAdd?, onDelete?, dispatch?` | Wired to backend Todos CRUD |
-| `RichTextRendererComponent` | `src/components/sdui/RichTextRendererComponent.tsx` | `content (markdown), theme?('light'\|'dark'), dispatch?` | Custom regex-based markdown parser |
-| `ArticleCardComponent` | `src/components/sdui/ArticleCardComponent.tsx` | `title, description, imageUrl?, publishedAt, source, onPress?, dispatch?` | Wired to backend Articles |
-
-### Component Registry (`src/renderer/componentRegistry.ts`)
-
-```ts
-resolveComponent(type: string) // → React component or undefined
-registerComponent(type, component) // extend registry at runtime
-getRegisteredTypes() // → string[]
-```
-
----
-
-## Theme & Design Tokens
-
-### `src/theme/colors.ts`
-iOS-style color palette + spacing + border radius + typography:
-
-```ts
-// Colors
-primary: '#007AFF'     secondary: '#5856D6'   success: '#34C759'
-warning: '#FF9500'     error: '#FF3B30'        info: '#5AC8FA'
-background: '#FFFFFF'  surface: '#F2F2F7'      card: '#FFFFFF'
-text: '#000000'        textSecondary: '#8E8E93' border: '#C6C6C8'
-// Dark mode tokens also defined (not yet applied to UI)
-
-// Spacing: xs:4, sm:8, md:16, lg:24, xl:32, xxl:48
-// Border radius: sm:4, md:8, lg:12, xl:16, full:9999
-// Typography: largeTitle(34/700), title1(28/700), title2(22/700),
-//   title3(20/600), headline(17/600), body(17/400), callout(16/400),
-//   subheadline(15/400), footnote(13/400), caption1(12/400), caption2(11/400)
-```
-
-### `src/theme/tokens.ts`
-V2 renderer tokens:
-
-```ts
-themeColors    // extended palette + primaryLight, surfaceElevated
-themeShadows   // { sm, md, lg } shadow objects for SDUIContainer
-resolveColor(tokenOrHex, fallback?)  // resolves token name or passes through hex
-```
-
----
-
-## Types
-
-### `src/types/sdui.ts` — SDUI Type System
-
-**`SDUIAction`** (discriminated union): `navigate`, `go_back`, `api_call`, `server_action`, `send_to_agent`, `dismiss`, `open_sheet`, `copy_text`, `open_url`, `toggle`
-
-**V1:** `SDUISection`, `SDUIScreen` (schema_version: 1)
-
-**V2:** `SDUICell { id, width, content }` (width is percentage-based, e.g. `"50%"` or `"auto"`), `SDUIRow { id, cells, compact?, regular?, scrollable? }` (row properties simplified — no gap/padding/background), `SDUIPage { schema_version?: '1.0.0', module_id?: string, title?: string, rows }`
-
-**FF4 row/cell changes:** Row padding, gap, and background color have been removed. Cell widths are percentage-based with minimum width enforcement (80px). Pre-flight validation blocks invalid configurations (e.g., adding cells when minimum width would be violated). Components are expected to fill their cell (`flex: 1`, `width: '100%'`, `height: '100%'`).
-
-Persisted rows-first payloads may omit page wrapper metadata; `isSDUIPage(payload)` now treats `rows` as the accepted V2 discriminator.
-
-**`SDUIPayload`** = `SDUIScreen | SDUIPage`
-
-**`isSDUIPage(payload)`** — type guard
-
-### Type Guard Utilities
-
-Type guard files provide runtime validation of component types, warning on unknown types without crashing:
-
-| File | Location | Function | Purpose |
-|------|----------|----------|---------|
-| `typeGuards.ts` (mobile) | `mobile/src/utils/typeGuards.ts` | `isKnownComponentType()`, `assertValidComponentType()` | Checks against `COMPONENT_MAP`; logs `console.warn` for unknown types |
-| `typeGuards.ts` (web) | `web/src/editor/typeGuards.ts` | `isRegisteredComponentType()`, `assertRegisteredComponentType()` | Checks against `COMPONENT_REGISTRY`; logs `console.warn` for unregistered types |
-
-Used by `EditorCanvas.tsx` (web) and `SDUIRenderer.tsx` (mobile) to surface unknown component types during development without crashing in production.
-
-### `src/types/api.ts`
-```ts
-User, SetupRequest, SetupResponse, LoginRequest, LoginResponse,
-ChatMessage, CalendarEvent, Notification, AgentConfig, Workflow, Module, Device
-```
-
----
-
-## Package Dependencies
-
-| Package | Version |
-|---------|---------|
-| `expo` | ~55.0.8 |
-| `expo-router` | ^55.0.7 |
-| `react` | 19.2.0 |
-| `react-native` | 0.83.2 |
-| `zustand` | ^5.0.12 |
-| `zod` | ^4.3.6 |
-| `date-fns` | ^4.1.0 |
-| `reconnecting-websocket` | ^4.4.0 |
-| `@react-native-async-storage/async-storage` | ^3.0.1 |
-| `expo-secure-store` | ^55.0.9 |
-| `expo-clipboard` | ~55.0.9 |
-| `@react-navigation/bottom-tabs` | ^7.15.6 |
-| `react-native-gesture-handler` | ^2.30.0 |
-| `react-native-reanimated` | ^4.2.3 |
-| `@shopify/flash-list` | ^2.x | Session 10: replaces FlatList in chat |
-| `react-native-markdown-display` | ^7.x | Session 10: replaces custom regex parser in SDUIMarkdown |
-| `react-native-calendars` | ^1.x | Session 10: used in CalendarModule |
-| `react-native-toast-message` | ^2.x | Session 10: wired to uiStore.showError() |
-| `mustache` | ^4.x | Session 10: used in variableResolver.ts |
-| `nativewind` | ^4.x | Session 10: Tailwind className styling for RN |
-| `typescript` | ~5.9.2 |
-
----
-
-## Web Admin Panel (`web/`)
-
-A separate React + TypeScript web application for backend administration. **Not part of the mobile app** — this is a standalone Vite SPA that communicates with the same backend API.
-
-### Tech Stack
-
-| Tech | Purpose |
-|------|---------|
-| Vite | Build tool + dev server |
-| React 19 + TypeScript | UI framework |
-| Tailwind CSS | Styling |
-| Zustand | App + auth + preview state management |
-| React Router | Client-side routing |
-| React Flow | Workflow visual editor |
-| @dnd-kit/sortable | Row drag-and-drop in EditorCanvas (Session 10) |
-| React Hook Form + Zod | Form state + validation in ConnectionsPage and VariablesPage (Session 10) |
-| sonner | Toast notifications (Session 10) |
-| openapi-ts | Typed SDK generation from OpenAPI spec (`npm run generate:api`) |
-| Custom editor components | Visual SDUI editor built from React + Zustand editor primitives |
-
-### Architecture
-
-```
-web/src/
-├── main.tsx              → React entry point
-├── App.tsx               → React Router + auth guard + AdminLayout + sonner Toaster
-├── index.css             → Tailwind globals
-├── components/
-│   ├── AdminLayout.tsx   → Sidebar nav + top bar; Session 9: restructured sidebar; Session 11: App Editor link
-│   ├── SDUIPreview.tsx   → Template preview with simplified component renderers
-│   ├── AppPreview.tsx    → Whole app preview with tab navigation
-│   ├── PreviewPicker.tsx → Preview mode picker (browser vs device)
-│   ├── BrowserPreview.tsx → Browser-based full app preview modal
-│   └── AppEditor/
-│       └── BottomBarConfig.tsx → Draggable bottom bar slot configuration (Session 11)
-├── pages/
-│   ├── LoginPage.tsx     → Auth against /auth/login
-│   ├── AppEditorPage.tsx → NEW Session 11: Multi-app management; 3-column layout with sidebar + iPhone mockup center + right panel
-│   ├── EditorPage.tsx    → Custom SDUI editor; ModulesTree sidebar using SDUIModule interface; autosave (500ms debounce), checkpoints, version history; session logs for debugging
-│   ├── TemplatesPage.tsx → SDUI template CRUD + import/export + preview (Session 9)
-│   ├── WorkflowsPage.tsx → React Flow visual workflow builder with node inspector (Session 9)
-│   ├── VariablesPage.tsx → Custom variable management with React Hook Form + Zod (Session 10)
-│   ├── ConnectionsPage.tsx → OAuth/API key management with Fernet encryption (Session 9)
-│   ├── SettingsPage.tsx  → General settings (Session 9: replaced Users page); **FF4 Reassessment:** "Clean State" section with preview/execute test data cleanup buttons
-│   ├── LogsPage.tsx      → Merged Sessions + Audit Logs (Session 9)
-│   └── PillEditorTestPage.tsx → Test harness for PillEditor variable inline editing
-├── editor/
-│   ├── types.ts          → Editor types, row visual props, device presets, component registry; preserves lowercase legacy types as read-only; requires valid server_action.function+params before persistence
-├── cellWidthEngine.ts → **FF4 (658 lines):** Percentage-based cell width calculation engine with 24+ exported validation functions — pre-flight checks, minimum width enforcement, disabled action calculation, existing row validation, row validation pipeline for 12 operations, all-fixed vs mixed rules, cell split support
-│   ├── templateLibrary.ts→ Local starter screens + reusable row templates; starter InputBar no longer seeds dead send_to_agent.message defaults
-│   ├── componentSchemas.ts → Dynamic property schemas for inspector; only supported authorable actions offered for new edits; Session 9: Todo, RichTextRenderer, ArticleCard, Calendar variants; FF3 gap fix: Divider (color, thickness, margin)
-│   ├── useEditorStore.ts → Rows-first Zustand contract, 50-state undo/redo, selection, device preview; exports MIN_ROW_HEIGHT=48 constant; updateRowHeight() clamps to MIN_ROW_HEIGHT; serializeCellForRuntime() preserves rules array
-│   ├── StructureTree.tsx → Left panel tree + JSON copy actions
-│   ├── EditorCanvas.tsx  → Center canvas with cell resize, row-height resize, @dnd-kit/sortable multi-step row drag, external drag handles, percentage width rendering; PREVIEW_RENDERERS includes EmptyPreview and RichTextRendererPreview; **RowContextMenu** (right-click Add Above/Below, Duplicate, Delete)
-│   ├── PropertyInspector.tsx → Right panel editor with auto width controls, uniform + per-side padding, InputBar action narrowing, read-only summaries for legacy payloads; Session 9: width toggle, VariableInput integration
-│   ├── VariablePicker.tsx → @ trigger variable picker with namespace support; includes Date category (date.today, date.now) in STATIC_NAMESPACES
-│   ├── VariableInput.tsx → Text input with variable picker integration
-│   ├── useVariablePicker.tsx → Hook for variable picker state management
-│   ├── ComponentPicker.tsx → Component type chooser for empty cells
-│   ├── ModulesTree.tsx   → Module instance tree sidebar; SDUIModule interface (module_id, name, icon, has_screen, is_custom); direct /api/sdui/modules fetch; RenameModuleModal and DeleteModuleModal
-│   ├── RenameModuleModal.tsx → Inline rename dialog for modules
-│   ├── DeleteModuleModal.tsx → Inline delete dialog for modules with redirect on success
-│   ├── PillEditor.tsx    → Variable pill inline editor with @ trigger; value-comparison guard in onUpdate prevents cursor snap during typing
-│   ├── VariablePillExtension.ts → TipTap/ProseMirror extension for variable pills
-│   ├── VariablePillNodeView.tsx → Node view for pill rendering in editor
-│   ├── variableResolver.ts → Variable resolution for editor
-│   ├── ActionParamsEditor.tsx → Parameter editor for action steps
-│   ├── RuleBuilder.tsx   → Notion-style visual rule builder for action chains
-│   ├── IconPicker.tsx    → Emoji/icon picker for module/app icons
-│   ├── PILL_EDITOR_QUICK_REFERENCE.ts → Documentation for pill editor behavior
-│   ├── VARIABLE_PICKER.md → Variable picker documentation
-│   └── pill-editor.css   → Pill editor styles
-├── stores/
-│   ├── authStore.ts      → Zustand auth store (token, user, serverUrl); failed /auth/login requests do not clear auth state
-│   ├── useAppEditorStore.ts → NEW Session 11: App management state (App, ModuleInstance, BottomBarSlot types; CRUD operations)
-│   └── usePreviewStore.ts → NEW Session 11: Preview mode state (startPreview, exitPreview, previewAppConfig, previewType)
-└── lib/
-    ├── api.ts            → Typed fetch wrapper; login suppresses global 401 handler; Session 9: connections, workflows, template preview; Session 10: openapi-ts SDK; Session 11: app endpoints, module instance endpoints, data source CRUD, trigger CRUD + test
-    └── utils.ts          → Shared helpers
-```
-
-### Custom SDUI Editor
-
-The editor page (`/editor`) is a custom React + Zustand SDUI editor built from `EditorPage.tsx` and the `web/src/editor/` folder. It loads live and draft module screens in parallel, prefers the draft when both exist, surfaces module/screen load failures instead of fabricating fallback module state, normalizes legacy payloads in `normalizeScreenData()`, preserves V1 section titles by turning them into heading rows, imports each legacy section component into its own row so V1 section stacks stay vertical instead of being flattened horizontally, preserves lowercase legacy runtime components including legacy form payloads as type-stable read-only inspectable entries rather than rewriting them or surfacing them as Unknown, and no longer depends on a Puck translation layer.
-
-**Module selection:** Uses `SDUIModule` interface (`module_id`, `name`, `icon`, `has_screen`, `is_custom`) loaded from `GET /api/sdui/modules`. URL param `module_instance_id` maps to `module_id`. Session logs (`[Editor]` prefix) added for debugging module loads and screen fetches.
-
-**Core layout:**
-- The left panel combines `StructureTree` with a collapsible Template Library
-- `StructureTree` includes a screen root item plus row/cell hierarchy, row reorder, duplication/delete, and copy-screen/copy-row JSON actions
-- The Template Library surfaces saved full-screen templates from `/api/templates` and local starter/row templates from `templateLibrary.ts`
-
-**Editing flow:**
-- Device preview supports presets, rotation, and custom width/height values with an explicit Apply action; the toolbar and status bar read actual `deviceWidth`/`deviceHeight` from the Zustand store
-- **Top bar overhaul (FF4):** Replaced `Draft v1 | Approve | Reject` with document-style versioning: `[Module: {name} ▼] Saved {time} [Checkpoint] [History] [Preview]` + device picker + Save button. "Push Live" button removed — publishing is now done via Checkpoint → Version History → Publish Version.
-- **Autosave (500ms debounce):** Working drafts are automatically saved 500ms after the last edit, via debounced `useEffect` on `hasUnsavedChanges`. Manual save temporarily suppresses autosave to prevent race conditions.
-- **Auto-checkpoint before destructive actions:** Before applying a template or restoring a version, the editor automatically creates a checkpoint of the current working draft (non-blocking — continues even if checkpoint creation fails).
-- **Versioning toolbar:** Creates checkpoints (snapshots) from the working draft. Preview before publishing. Full version history with restore-to-draft capability. See `module_versions` API for version CRUD.
-- The canvas provides component previews, add-row buttons, row drag handles, cell width resize handles, and direct row-height drag handles
-- Multi-step row dragging uses a 50px movement threshold and 300ms debounce to prevent overshoot; row drag handles moved to the LEFT of the row boundary
-- `ComponentPicker` only offers components marked authorable in `types.ts`
-- **Row system (FF4):** `PropertyInspector` row properties simplified — no padding/gap/background controls. Cell widths are percentage-based with auto/fixed toggle. Pre-flight validation blocks invalid cell configurations. Minimum width enforced (80px).
-- `PropertyInspector` edits row height, cell count, cell widths, horizontal scrollability, and component props/actions
-- New actions limited to supported authorable set (`navigate`, `server_action`, `open_url`, `go_back`, `send_to_agent`, `dismiss`, `copy_text`)
-- Save stores a working draft (also autosaved 500ms after changes); Create Checkpoint creates a version; Publish Version goes live
-- Delete Screen only enabled when module has a persisted live screen or pending draft
-
-### App Editor (`/app-editor`)
-
-**NEW in Session 11:** Multi-app management page with 3-column layout.
-
-- **Left sidebar:** Bottom bar configuration with drag-and-drop slot management (5-slot cap) + **module version resolution** per module (radio: "Use newest" / "Use specific" with version dropdown)
-- **Center:** iPhone mockup preview showing **Launchpad grid** (4-column icon grid for modules not in bottom bar) + **bottom bar** with icons. Tapping a module in the phone preview selects it for properties.
-- **Right panel:** Launchpad section (modules not in bottom bar) with per-module **version resolution**, **per-module icon editing** (inline IconPicker, shown on hover), archived version warnings, + app properties (name, icon picker, dark mode toggle)
-- **State:** `useAppEditorStore` — `App` type with id, user_id, name, icon, splash, theme, design_tokens, dark_mode, default_launch_module_instance_id, bottom_bar_config, launchpad_config, module_icons (per-module icon overrides)
-- **Autosave (FF4-APP-006):** Working draft autosaved 500ms after last change, with status indicator (`Saving...` / `Saved HH:MM` / `Save failed`)
-- **Module version resolution (FF4-APP-007/008/009):** Each module in bottom bar and launchpad gets a version policy — "Use newest" (auto-follows the latest version) or "Use specific" (pinned to a specific version). Policies are saved with app draft and resolved at publish time via `resolve_module_references()`.
-- **Per-module icon editing (FF4-APP-001/013):** Hover over any module icon in Launchpad to show an edit button. Opens `IconPicker` inline for module-specific icon overrides. Overrides are persisted in `app.module_icons`.
-- **Expanded publish modal (FF4-APP-011/017, VER-006/007):** Shows: app info summary, all module version statuses (pass/warn/error with version labels), per-module validation results, device update status (total/updated/pending counts), final confirmation before publishing. Creates a checkpoint → publishes the version → broadcasts `app_version_published` WebSocket event to all assigned devices.
-- **Archived version detection (FF4-APP-022):** When a module's pinned version has status `archived`, a warning banner appears on the module card: "This app references an archived module version. Choose a different version or restore the archived version."
-- **Restore-to-draft (FF4-APP-026):** Each version in the history modal has a "Restore" button that restores the version to the working draft and reloads the app config.
-- **Version comparison:** Version History modal supports "Compare" mode (when ≥2 versions exist) — select two versions A and B for side-by-side diff.
-- **Preview:** `usePreviewStore` with `startPreview()` launching browser-based iframe preview of app configuration. Preview dropdown: "Preview in Web Admin" | "Preview on Device...".
-- **BrowserPreview (FF4-APP-020, should):** Best-effort web preview using `SDUIPreview` (DOM/CSS), not native React Native. Matches mobile for shell navigation, theme, dark mode, and module SDUI content; full RN pixel parity requires a real device or Expo Web — intentionally PARTIAL at the product level.
-- **Top bar:** `[App: {name} ▼] [Saving.../Saved HH:MM/Save failed] [Live: v{N} — {name}] [Preview ▼] [Publish] [History icon] [Save]`
-- **API calls:** `getApps()`, `createApp()`, `updateApp()`, `deleteApp()`, `updateAppBottomBar()` via `/api/apps` endpoints. Versioning endpoints via `/api/apps/{id}/versions`, `/api/apps/{id}/publish`. Module instance endpoints via `/api/module-instances`.
-
----
-
-## Session 9 Web Admin Changes Summary
-
-**Sidebar restructure:**
-- New order: Visual Editor, Templates, Workflows, Variables, Connections, Advanced (collapsible), Settings
-- Removed pages: Dashboard (hidden, not deleted), Components, Actions & Triggers
-- New pages: ConnectionsPage, LogsPage (merged Sessions + Audit), WorkflowsPage (React Flow)
-
-**WorkflowsPage:**
-- React Flow visual workflow builder with node inspector
-- Graph-based workflow execution (branching, loops)
-- n8n workflow importer endpoint
-
-**ConnectionsPage:**
-- OAuth and API key management
-- Fernet encryption for sensitive credentials
-- Provider-based connection storage
-- **End-to-end usage:** Admin creates a connection under `/connections` → credentials stored encrypted via `POST /api/connections` → workflows and server actions reference `connection.*` variables → MCP agents can read connection metadata through the backend API. See `docs/codebase-explanation/backend.md` (Connections section) for REST paths and audit logging.
-
-**TemplatesPage:**
-- Added SDUIPreview component for template preview
-- Added AppPreview component for whole app preview with tab navigation
-
-**Editor improvements:**
-- Percentage widths for cells (flex vs percentage toggle)
-- VariablePicker with @ trigger for variable insertion
-- External drag handles for rows
-- New component schemas: Todo, RichTextRenderer, ArticleCard, Calendar variant
-
-## FF4 Changes (2026-05-14)
-
-### Versioning Model
-Replaced the old Draft/Approve/Reject flow with a new document-style versioning model:
-- **Working Draft** — current editing state, autosaved
-- **Checkpoint** — snapshot of the working draft
-- **Version** — named, publishable state (created from checkpoint)
-- **Preview** — time-limited preview session on device or web admin
-- **Publish** — publish a version live to mobile devices
-
-Module Editor top bar: `[Module: {name} ▼] Saved {time} [Create Checkpoint] [Preview in Web Admin] [Version History]`
-App Editor top bar: `[App: {name} ▼] Saved {time} Live: {live version} [Preview ▼] [Publish to Mobile] [Version History]`
-
-### Component Changes
-- **Text** merged with old **Markdown** — `SDUIText` now uses `react-native-markdown-display` and supports alignment. Old `SDUIMarkdown` removed.
-- **TextInput** removed — replaced by `InputBar` for input needs.
-- **Image** simplified — only `src` and `fitMode` (fitWidth/fitHeight). `action`, `alt`, `width`, `height`, `aspectRatio`, `borderRadius`, `onPress`, and `placeholder` props removed per FF4-IMG-002. Image fills its cell with no interactive behavior.
-- **Icon** fixed — fills cell, icon picker popup enhanced. Used for per-module icon editing in App Editor.
-- **Button** — fills entire cell; icon mode renders centered icon.
-- **Empty Container** — simplified as vertical row; no gap/padding/background.
-- **Calendar** — 5 variants (month/week/day/eventList/compact), date navigation, unified event model.
-
-### Row/Cell Simplification
-- Row padding, gap, and background color removed
-- Cell widths are percentage-based (e.g. `"50%"`, `"33%"`, `"auto"`)
-- Minimum cell width: 80px
-- Pre-flight validation prevents invalid cell configurations
-- Components fill the cell (`flex: 1`, full width/height)
-- Row drag handles moved to the LEFT of the row boundary
-
-### Component Type Sync
-Four-way sync maintained between: mobile `componentRegistry.ts` ↔ web `types.ts` COMPONENT_REGISTRY ↔ backend `mcp/tools.py` `_VALID_V2_COMPONENT_TYPES` ↔ backend `component_seed.py`. All new component types (`TodoModule`, `ArticleCardModule`, `RichTextRenderer`) added to all layers.
-
-## FF4 Reassessment Changes (2026-05-15)
-
-### Cell Width Validation Engine (`web/src/editor/cellWidthEngine.ts`)
-Expanded from 241 to 658 lines with 24+ exported validation functions:
-- **Pre-flight validation:** `canAddCell()`, `canChangeCellWidth()`, `canChangeCellWidthV2()`, `canIncreasePadding()`, `canResizeRow()`, `canToggleHorizontalScroll()` — all return boolean before action commits
-- **Disabled action calculation:** `getDisabledActions()` returns which controls should be greyed out
-- **Minimum width enforcement:** `calculateUsableRowWidth()`, `calculateMinWidthPercent()` — per FF4-ROW-007
-- **Existing row validation:** `validateExistingRow()` — flags invalid saved rows (does not silently normalize)
-- **Row validation pipeline:** `validateRow()` checks all 12 operations (add, delete, split, resize, padding, scroll toggle, load, import, etc.)
-- **All-fixed vs mixed rules:** `allCellsFixed()`, `calculateSidePadding()` — leftover becomes side padding only when ALL cells are fixed-width
-- **Cell split support:** `canSplitCell()` — validates cell splitting within row constraints
-
-### Row Context Menu (`web/src/editor/EditorCanvas.tsx`)
-New `RowContextMenu` component with ARIA accessibility:
-- **Add Row Above** — inserts a new row before the current
-- **Add Row Below** — inserts a new row after the current
-- **Duplicate Row** — clones the row with all cells and components
-- **Delete Row** — removes the row (with confirmation if cells contain content)
-- Triggered by right-click on any row in the editor canvas
-
-### Version Comparison/Diff UI
-New comparison mode in both **Module Editor** (`EditorPage.tsx`) and **App Editor** (`AppEditorPage.tsx`):
-- Click "Compare Versions" button (available when ≥2 versions exist)
-- Select two versions (A and B) by clicking them in the version history list
-- Side-by-side comparison shows: row counts, component counts, component type lists (added vs removed)
-- Visual indicators: each version's row count, component type tags, added/removed type lists
-- Exit diff mode to return to standard version history
-
-### Calendar Mobile Changes
-- **View switcher removed** — mobile CalendarModule no longer shows variant switching UI. Variant is admin-controlled only (FF4-CAL-005). Only time navigation (prev/next arrows, Today button) remains on mobile.
-- **Auto-adapt for small cells** — when calendar cell width < 200px, auto-switches to Compact or Event List variant (FF4-CAL-013)
-- **sourceType badges** — each event shows a colored badge (Local/Gray, CalDAV/Blue, Notion/Purple, Custom/Teal) based on event source (FF4-CAL-026)
-- **Notes display** — events with `notes` field show up to 2 lines of notes text, truncated with `numberOfLines` (FF4-CAL-027)
-
-### SDUI Empty Container Props
-`SDUIEmpty.tsx` enhanced with standard SDUI V2 props:
-- **`dispatch`** — function to dispatch `SDUIAction` for interactive behavior (FF4-EC-005)
-- **`dataBinding`** — `SDUIDataBinding` for data source integration
-- Already a vertical flex container (`flexDirection: 'column', flex: 1`) — enhancement adds real registry-component treatment without redesigning the layout
-
-### Settings Clean State
-New "Clean State" section in admin Settings page (`web/src/pages/SettingsPage.tsx`):
-- **Preview button** — calls `GET /api/admin/cleanup/preview` to show what test data would be deleted
-- **Execute button** — calls `POST /api/admin/cleanup/execute` to remove test apps/modules/templates (names starting with "test"/"Test")
-- Displays deletion counts for apps, module instances, and templates
-- Linked to backend `cleanup_service.py` and admin router cleanup endpoints
+# Frontend — React Native Expo mobile app + web admin
+
+> Last updated: 2026-06-18
+> Scope: the current `mobile/` Expo app and the current `web/` admin SPA.
+
+## Tier 1: TL;DR
+
+Helm has two frontends.
+
+- `mobile/` is the product app. It is a React Native app built with Expo Router. It handles sign-in, device assignment, app config, shared WebSocket updates, SDUI rendering, and the native fallback screens.
+- `web/` is the admin app. It is a separate React + TypeScript single-page app built with Vite and React Router. It edits module screens, app layouts, templates, workflows, variables, connections, logs, and previews.
+- Both frontends talk to the same backend. The backend owns the data; the frontends mostly render it and send user actions back.
+- SDUI means server-driven UI. New work should use the V2 row/cell format (`SDUIPage`) and PascalCase component names. V1 lowercase payloads still work for old content.
+- The main startup files are `mobile/app/_layout.tsx`, `mobile/app/(tabs)/_layout.tsx`, `web/src/App.tsx`, and `web/src/components/AdminLayout.tsx`.
+- If you need exact API endpoints or SDUI payload shapes, pair this doc with `docs/codebase-explanation/backend.md` and `docs/codebase-explanation/protocol.md`.
+
+If you are new here, read in this order:
+
+1. `docs/codebase-explanation/README.md` — docs map and reading order.
+2. `mobile/app/_layout.tsx` — mobile boot, providers, redirects.
+3. `mobile/app/(tabs)/_layout.tsx` — tab shell, tab visibility, app config sync.
+4. `mobile/src/stores/authStore.ts` — mobile auth state.
+5. `mobile/src/hooks/useSDUIScreen.ts` — live SDUI loading and draft syncing.
+6. `mobile/src/components/sdui/SDUIRenderer.tsx` — how JSON becomes native UI.
+7. `web/src/App.tsx` — admin router boot.
+8. `web/src/components/AdminLayout.tsx` — admin shell and sidebar.
+9. `web/src/editor/types.ts` — editor data model and component registry.
+10. `web/src/pages/EditorPage.tsx` — module editor flow.
+11. `web/src/pages/AppEditorPage.tsx` — app editor flow.
+12. `web/src/lib/previewResolver.ts` — preview bundle resolution.
+
+If you only want the mobile app, stop after step 6. If you only want the web admin, start at step 7.
+
+## Tier 2: How the frontend is organized
+
+### Current folder map
+
+#### Mobile app (`mobile/`)
+
+| Path | Current count | What it owns |
+|------|---------------|--------------|
+| `mobile/app/` | 18 route files | Expo Router screens, route groups, launchpad, template detail, module detail, and the unassigned waiting screen |
+| `mobile/src/components/` | 30 TSX files | native UI, SDUI renderers, preview banner, and draft preview UI |
+| `mobile/src/hooks/` | 5 hooks | SDUI loading, action dispatch, variable context, data sources, breakpoints |
+| `mobile/src/stores/` | 7 stores | auth, app config, preview, UI, tabs, settings, component state |
+| `mobile/src/services/` | 4 files | REST, auth, WebSocket, and app config fetch helper |
+| `mobile/src/types/` | 3 files | API and SDUI types |
+| `mobile/src/renderer/` | 1 file | SDUI type-string → component registry |
+| `mobile/src/constants/` | 1 file | module → route mapping |
+| `mobile/src/contexts/` | 1 file | shared WebSocket provider |
+| `mobile/src/theme/` | 4 files | colors, tokens, navigation theme, and app theme helpers |
+
+The mobile route tree is easy to scan:
+
+- Root routes: `mobile/app/_layout.tsx`, `mobile/app/index.tsx`, `mobile/app/launchpad.tsx`, `mobile/app/unassigned.tsx`
+- Auth routes: `mobile/app/(auth)/connect.tsx`, `mobile/app/(auth)/login.tsx`, `mobile/app/(auth)/_layout.tsx`
+- Tab routes: `mobile/app/(tabs)/home.tsx`, `mobile/app/(tabs)/chat.tsx`, `mobile/app/(tabs)/modules.tsx`, `mobile/app/(tabs)/calendar.tsx`, `mobile/app/(tabs)/forms.tsx`, `mobile/app/(tabs)/alerts.tsx`, `mobile/app/(tabs)/settings.tsx`, `mobile/app/(tabs)/article.tsx`
+- Dynamic routes: `mobile/app/template/[id].tsx`, `mobile/app/module/[moduleId].tsx`
+
+#### Web admin (`web/`)
+
+| Path | Current count | What it owns |
+|------|---------------|--------------|
+| `web/src/App.tsx` | 1 file | router bootstrap and auth guard |
+| `web/src/pages/` | 9 pages | login, module editor, app editor, templates, workflows, variables, connections, logs, settings |
+| `web/src/components/` | 11 TSX files | admin shell, preview shells, and preview helpers |
+| `web/src/editor/` | 24 files | editor data model, canvas, inspector, validation, and authoring helpers |
+| `web/src/stores/` | 3 stores | auth, app editor, preview |
+| `web/src/hooks/` | 1 hook | generic resource fetcher |
+| `web/src/lib/` | 6 files | API client, preview resolver, text helpers, icon helpers, utilities |
+
+The most important web files are:
+
+- Shell and preview components: `web/src/components/AdminLayout.tsx`, `web/src/components/SDUIPreview.tsx`, `web/src/components/BrowserPreview.tsx`, `web/src/components/AppPhoneShell.tsx`, `web/src/components/AppPreviewFlow.tsx`, `web/src/components/PreviewPicker.tsx`
+- Pages: `web/src/pages/LoginPage.tsx`, `web/src/pages/EditorPage.tsx`, `web/src/pages/AppEditorPage.tsx`, `web/src/pages/TemplatesPage.tsx`, `web/src/pages/WorkflowsPage.tsx`, `web/src/pages/VariablesPage.tsx`, `web/src/pages/ConnectionsPage.tsx`, `web/src/pages/LogsPage.tsx`, `web/src/pages/SettingsPage.tsx`
+- Editor internals: `web/src/editor/types.ts`, `web/src/editor/useEditorStore.ts`, `web/src/editor/cellWidthEngine.ts`, `web/src/editor/componentSchemas.ts`, `web/src/editor/EditorCanvas.tsx`, `web/src/editor/PropertyInspector.tsx`, `web/src/editor/StructureTree.tsx`, `web/src/editor/ModulesTree.tsx`
+
+### Shared concern map
+
+| Concern | Mobile files | Web files |
+|---------|--------------|-----------|
+| Startup and auth | `mobile/app/_layout.tsx`, `mobile/app/(auth)/*`, `mobile/src/stores/authStore.ts` | `web/src/App.tsx`, `web/src/pages/LoginPage.tsx`, `web/src/stores/authStore.ts` |
+| Navigation | `mobile/app/(tabs)/_layout.tsx`, `mobile/src/constants/moduleRoutes.ts`, `mobile/app/launchpad.tsx` | `web/src/components/AdminLayout.tsx` |
+| SDUI render | `mobile/src/components/sdui/SDUIRenderer.tsx`, `mobile/src/renderer/componentRegistry.ts`, `mobile/src/types/sdui.ts` | `web/src/components/SDUIPreview.tsx`, `web/src/editor/types.ts`, `web/src/editor/typeGuards.ts` |
+| Preview | `mobile/src/components/sdui/DraftPreview.tsx`, `mobile/src/components/PreviewBanner.tsx` | `web/src/components/AppPreviewFlow.tsx`, `web/src/components/BrowserPreview.tsx`, `web/src/components/AppPhoneShell.tsx`, `web/src/components/PreviewPicker.tsx` |
+| Data fetch | `mobile/src/services/api.ts`, `mobile/src/hooks/useDataSource.ts`, `mobile/src/utils/variableResolver.ts` | `web/src/lib/api.ts`, `web/src/hooks/useResource.ts`, `web/src/lib/previewResolver.ts` |
+
+### Legacy vs preferred
+
+| Area | Legacy / compatibility | Preferred / current |
+|------|------------------------|--------------------|
+| SDUI screen format | V1 `SDUIScreen`, section-based payloads, lowercase component types | V2 `SDUIPage`, row/cell payloads, PascalCase component types |
+| Tab visibility | `hiddenTabs` + `enabledTabIds` fallback | `appConfig.bottom_bar_config` when app config exists |
+| Draft approval path | `DraftPreview` on mobile for AI-generated screen drafts | `AppEditorPage` checkpoint / version / publish flow |
+| SDUI actions | `send_to_agent` | `server_action` or `api_call` |
+| Web preview path | `web/src/components/AppPreview.tsx` older helper | `AppPreviewFlow` + `BrowserPreview` + `AppPhoneShell` + `SDUIPreview` |
+| Mobile navigation mode | persisted `navigationMode` flag | current tab shell; no drawer route exists today |
+
+## Tier 3: File-by-file guide
+
+### Mobile app
+
+#### Startup, navigation, and data flow
+
+The mobile app starts in `mobile/app/index.tsx` and `mobile/app/_layout.tsx`.
+
+- `index.tsx` is only a splash redirect. It waits for auth to hydrate and then sends the user to either the connect/login flow or the chat tab.
+- `app/_layout.tsx` initializes auth, settings, and cached app config. It also wraps the app in the navigation theme, the shared WebSocket provider, status bar, and toast provider.
+- `app/_layout.tsx` uses the current auth state to decide where to send the user:
+  - no token → `/(auth)/connect` or `/(auth)/login`
+- `app/(tabs)/_layout.tsx` is the tab shell. It loads enabled tab IDs from AsyncStorage, fetches module config from REST, and listens for WebSocket updates. The root layout hydrates app config.
+- The current tab visibility rule is:
+  - if `appConfig` exists, use `appConfig.bottom_bar_config`
+  - otherwise fall back to the legacy `hiddenTabs` + `enabledTabIds` path
+- The tab shell also renders the settings gear button in the header. The settings screen itself stays hidden from the tab bar.
+- `mobile/src/contexts/WebSocketContext.tsx` creates one shared `WebSocketService` per auth session. It handles reconnects, connection banners, app config updates, preview events, and device assignment events.
+- `mobile/src/components/PreviewBanner.tsx` appears when preview mode is active. It lets the user exit preview without restarting the app.
+- Most tab screens use `useSDUIScreen(moduleId)` and then render `SDUIUniversalRenderer` if the backend has pushed a screen. When no SDUI payload exists, they show native fallback UI.
+- `home`, `chat`, `calendar`, `alerts`, `settings`, and `module/[moduleId]` can all be overridden by SDUI.
+- `forms` is SDUI-only. It shows an empty state until the backend creates a form.
+- `launchpad.tsx` is a full-screen grid of app-configured modules.
+- `template/[id].tsx` loads a template and applies it to a module.
+- `module/[moduleId].tsx` shows the live screen when one exists. If the backend also sends a draft, it shows `DraftPreview` instead of the live screen so the user can approve or reject the draft.
+- `unassigned.tsx` is the waiting screen for a device that has a session but no app assignment yet. It polls the backend and also listens for the `device_app_assigned` WebSocket event.
+- `article.tsx` is the article detail screen. It receives article content through route params from an article card.
+
+The auth screens are intentionally simple:
+
+- `connect.tsx` is the first-time entry point. It asks for the server URL plus credentials, saves the server URL, signs in, registers the device, and then routes either to `unassigned` or to the tabs.
+- `login.tsx` is the returning-user sign-in screen. It assumes the server URL is already known and gives the user a shortcut back to `connect` if they need to change servers.
+
+#### Mobile state
+
+| Store | File | What it tracks | Notes |
+|-------|------|----------------|-------|
+| `useAuthStore` | `mobile/src/stores/authStore.ts` | token, user, serverUrl, deviceId, loading state | persists through `mobile/src/utils/storage.ts`; logout clears the server session and client state |
+| `useAppConfigStore` | `mobile/src/stores/appConfigStore.ts` | current app config, sync time, offline state | loads `/api/devices/{deviceId}/config`, caches the result in AsyncStorage, and keeps the last known good config if fetch fails |
+| `useTabsStore` | `mobile/src/stores/tabsStore.ts` | hidden tabs, module configs, enabled tab IDs | `enabledTabIds` persists to AsyncStorage |
+| `useSettingsStore` | `mobile/src/stores/settingsStore.ts` | `navigationMode`, `theme` | persisted settings; the current shell still uses tabs and `appConfig.dark_mode` for appearance |
+| `usePreviewStore` | `mobile/src/stores/previewStore.ts` | preview session ID and preview mode | set from WebSocket preview events and cleared when preview ends |
+| `useUIStore` | `mobile/src/stores/uiStore.ts` | connection state and error banner | also shows toast errors |
+| `useComponentStateStore` | `mobile/src/stores/componentStateStore.ts` | per-component runtime state | feeds SDUI variable resolution and stateful component interactions |
+
+The important thing to remember is this:
+
+- auth state comes first
+- app config comes second
+- tab visibility follows app config when available
+- preview mode is a separate flag, not part of auth
+- per-component state is local runtime state, not persisted app data
+
+#### Mobile services and hooks
+
+| File | Role | Notes |
+|------|------|-------|
+| `mobile/src/services/api.ts` | main REST client | adds auth headers, handles 401 by calling the unauthorized callback, and wraps the app’s REST calls |
+| `mobile/src/services/auth.ts` | pre-auth auth helper | used for login, refresh, logout, and the setup helper |
+| `mobile/src/services/websocket.ts` | shared reconnecting WebSocket wrapper | uses `reconnecting-websocket`, sends a ping every 30 seconds, and validates inbound messages with Zod |
+| `mobile/src/services/appConfigService.ts` | app config fetch helper | thin helper around the device config endpoint |
+| `mobile/src/hooks/useSDUIScreen.ts` | live SDUI loader | fetches live screen and draft in parallel, then keeps both in sync with WebSocket updates |
+| `mobile/src/hooks/useActionDispatcher.ts` | SDUI action bridge | central place for navigation, open URL, copy text, state updates, notifications, alerts, haptics, share, conditionals, delay, refresh, and backend actions |
+| `mobile/src/hooks/useVariableContext.ts` | variable context builder | combines auth info, component state, custom variables, and date helpers for expression resolution |
+| `mobile/src/hooks/useDataSource.ts` | data-binding fetcher | cache-first data source loading with 30-second polling |
+| `mobile/src/hooks/useBreakpoint.ts` | responsive helper | returns `compact` or `regular` for the SDUI V2 renderer |
+
+A few details matter for maintainers:
+
+- `useActionDispatcher()` uses `mobile/src/utils/actionEngine.ts` for composite actions such as `chain`, `conditional`, and `delay`.
+- `send_to_agent` still works, but it is deprecated. Use `server_action` or `api_call` for new work.
+- `useVariableContext()` and `mobile/src/utils/variableResolver.ts` work together. The hook gathers the data, and the resolver renders `{{expression}}` strings with Mustache.
+- `useDataSource()` caches by `dataSourceId + query`, and `refresh_data` actions clear that cache.
+- The WebSocket provider listens for `device_app_assigned`, `app_config_update`, `preview_session_started`, `preview_session_ended`, `app_version_published`, and `tabs_updated`.
+- `mobile/src/utils/validation.ts` contains the Zod schema used by the WebSocket service.
+
+#### Mobile components
+
+| Folder | What it contains |
+|--------|------------------|
+| `mobile/src/components/common/` | `Button`, `Card`, `ErrorBanner`, `Input` |
+| `mobile/src/components/atomic/` | `SDUIText`, `SDUIButton`, `SDUIIcon`, `SDUIImage`, `SDUIRichTextRenderer` |
+| `mobile/src/components/structural/` | `SDUIContainer`, `SDUIEmpty` |
+| `mobile/src/components/composite/` | `CalendarModule`, `ChatModule`, `NotesModule`, `TodoModule`, `ArticleCardModule`, `InputBar` |
+| `mobile/src/components/sdui/` | `SDUIRenderer`, `DraftPreview`, `RichTextRendererComponent`, `AlertComponent`, `ArticleCardComponent`, `ListComponent`, `SDUIBadge`, `SDUIStat`, `TodoComponent` |
+
+The mobile component system has a clear split:
+
+- `common` components are plain native UI.
+- Tier 1 structural components manage layout.
+- Tier 2 atomic components are the smallest SDUI building blocks.
+- Tier 3 composite components are bigger feature widgets.
+- `sdui/` contains the actual JSON renderers and draft preview UI.
+
+The key renderer files are:
+
+- `mobile/src/components/sdui/SDUIRenderer.tsx` — renders V1 `SDUIScreen` payloads and V2 `SDUIPage` payloads
+- `mobile/src/components/sdui/DraftPreview.tsx` — wraps a draft screen with approve/reject/feedback controls
+- `mobile/src/renderer/componentRegistry.ts` — maps SDUI type strings to React components
+- `mobile/src/utils/typeGuards.ts` — warns about unknown component types without crashing the app
+
+Current mobile SDUI counts:
+
+- V1 `SDUIComponentType` has 19 lowercase types
+- V2 `SDUIComponentTypeV2` has 16 preferred PascalCase types
+- `mobile/src/renderer/componentRegistry.ts` currently registers 24 keys, including aliases such as `Markdown` and backend snake_case names
+
+The rule for new work is simple:
+
+- use the PascalCase V2 names for new screens
+- keep the lowercase V1 names only for old payloads
+- update the mobile registry, the web editor registry, and the backend SDUI whitelist together when you add a component
+
+#### Mobile legacy vs preferred notes
+
+- `DraftPreview` is still the mobile approval flow for AI-generated draft screens. It is not the same thing as the web editor’s version history.
+- `settingsStore.navigationMode` is persisted, but the current app shell still uses tabs. There is no drawer route today.
+- `settingsStore.theme` is also persisted, but the visible theme comes from `appConfig.dark_mode` in the root layout.
+- The `connect` screen is not a setup wizard anymore. It is the first-time server URL + sign-in screen.
+- `AuthService.setup()` still exists as a helper, but the current mobile flow uses `login()` plus device registration.
+
+### Web admin
+
+#### Startup, navigation, and data flow
+
+The web admin is a separate SPA. It does not share routing with the mobile app.
+
+- `web/src/App.tsx` initializes auth and guards the route tree.
+- `web/src/App.tsx` redirects `/` and `/dashboard` to `/editor`.
+- `web/src/pages/LoginPage.tsx` is the login screen.
+- `web/src/components/AdminLayout.tsx` is the main shell. It renders the left sidebar, top-level outlet, and logout button.
+- The Module Editor button expands `ModulesTree` in the sidebar.
+- The sidebar entries are now: App Editor, Module Editor, Templates, Workflows, Variables, Connections, Logs, and Settings.
+- `AdminLayout.tsx` clears stale `module_instance_id` query params when you leave the module editor. That stops one editor selection from leaking into other pages.
+- `AdminLayout.tsx` also shows a width warning below 1024px for the Module Editor.
+- Most pages fetch their own data through `web/src/lib/api.ts` or the generic `useResource()` hook.
+- `EditorPage.tsx` and `AppEditorPage.tsx` are the two main editing surfaces.
+
+The web editor flow is different from the mobile draft flow:
+
+- the mobile app renders live screens and can show a draft preview for human approval
+- the web admin edits the data model itself, then saves checkpoints, versions, and publish state
+
+#### Web state, services, and hooks
+
+| File | Role | Notes |
+|------|------|-------|
+| `web/src/stores/authStore.ts` | admin auth state | restores auth from localStorage, sets the API token, and clears auth on 401 |
+| `web/src/stores/useAppEditorStore.ts` | app editor state | current app, app list, selected module, and drag state |
+| `web/src/stores/usePreviewStore.ts` | preview state | browser/device preview config, preview type, and preview start time |
+| `web/src/lib/api.ts` | current REST client | page-level API client used by the admin pages |
+| `web/src/hooks/useResource.ts` | generic async fetch hook | small wrapper for CRUD pages |
+| `web/src/lib/previewResolver.ts` | preview bundle resolver | resolves app preview data and per-module screens from version policies |
+| `web/src/lib/sduiTextContent.ts` | shared text helpers | markdown detection and hard-break handling for preview renderers |
+
+A few details matter here too:
+
+- `web/src/stores/authStore.ts` stores the admin token and user in localStorage.
+- `web/src/lib/api.ts` is the compatibility client that current pages use.
+- `web/src/lib/previewResolver.ts` resolves module screens in this order: newest checkpoint/version, then working draft, then legacy live screen.
+- `usePreviewStore()` is used by the preview components and the app editor.
+
+#### Web preview components
+
+| File | Role | Notes |
+|------|------|-------|
+| `web/src/components/SDUIPreview.tsx` | SDUI preview renderer | renders rows/cells in the browser with DOM and CSS |
+| `web/src/components/AppPhoneShell.tsx` | shared phone shell | iPhone-style frame used by App Editor and browser preview |
+| `web/src/components/BrowserPreview.tsx` | full app preview | resolves app data, then renders the current app inside the phone shell |
+| `web/src/components/PreviewPicker.tsx` | preview chooser | picks browser or device preview and shows device/session metadata |
+| `web/src/components/AppPreviewFlow.tsx` | preview orchestrator | the main preview flow used by `EditorPage` and `TemplatesPage` |
+| `web/src/components/AppPreview.tsx` | older preview helper | still in the tree, but current pages use `AppPreviewFlow` instead |
+| `web/src/components/calendar/CalendarPreview.tsx` | calendar preview helper | used by `SDUIPreview` |
+| `web/src/components/workflow/NodeInspector.tsx` | workflow inspector panel | used by `WorkflowsPage` |
+| `web/src/components/workflow/TriggerNode.tsx` | workflow trigger node | used by `WorkflowsPage` |
+| `web/src/components/AppEditor/BottomBarConfig.tsx` | bottom-bar editor | used by `AppEditorPage` |
+
+The preview path to remember is:
+
+`AppPreviewFlow` → `PreviewPicker` → `BrowserPreview` → `AppPhoneShell` → `SDUIPreview`
+
+That path is the current one. `AppPreview.tsx` is an older helper, so do not build new work around it.
+
+#### Web editor internals
+
+| File | Role | Notes |
+|------|------|-------|
+| `web/src/editor/types.ts` | editor model | owns the rows-first screen model, legacy normalization, and the component registry |
+| `web/src/editor/useEditorStore.ts` | editor state | rows-first Zustand store with a 50-item history window |
+| `web/src/editor/cellWidthEngine.ts` | row/cell validation | pre-flight width checks, minimum width rules, and layout validation |
+| `web/src/editor/componentSchemas.ts` | inspector schemas | property schemas and supported authorable actions |
+| `web/src/editor/EditorCanvas.tsx` | editor canvas | rows, cells, drag handles, and the row context menu |
+| `web/src/editor/PropertyInspector.tsx` | right panel | property editing for rows and components |
+| `web/src/editor/StructureTree.tsx` | outline view | screen, row, and cell hierarchy |
+| `web/src/editor/ModulesTree.tsx` | module sidebar | module selection, rename, and delete |
+| `web/src/editor/ComponentPalette.tsx`, `web/src/editor/ComponentPicker.tsx` | component selection | choose authorable component types |
+| `web/src/editor/templateLibrary.ts` | starter templates | reusable screen and row templates |
+| `web/src/editor/ModuleAffectedAppsPanel.tsx` | dependency panel | shows where a module is used |
+| `web/src/editor/VariablePicker.tsx`, `VariableInput.tsx`, `useVariablePicker.tsx` | variable editing | `@` picker and inline variable input helpers |
+| `web/src/editor/PillEditor.tsx`, `VariablePillExtension.ts`, `VariablePillNodeView.tsx` | pill editing | inline variable pill editor |
+| `web/src/editor/RuleBuilder.tsx` | rule editor | visual builder for action chains and rules |
+| `web/src/editor/IconPicker.tsx` | icon picker | emoji/icon selection |
+| `web/src/editor/typeGuards.ts` | type checks | warns on unknown registry types without crashing the editor |
+
+The module editor flow is now pretty straightforward:
+
+1. `EditorPage.tsx` reads the selected `module_instance_id` from the URL.
+2. `ModulesTree.tsx` updates that query param when the user picks another module.
+3. `EditorPage.tsx` loads the live screen, draft screen, templates, and version history.
+4. `normalizeScreenData()` converts old `sections` payloads into the current rows/cells shape.
+5. `AppPreviewFlow` opens the preview flow when the user wants to inspect the result.
+
+A few important editor rules:
+
+- The current editor model is rows-first.
+- The canvas and inspector enforce minimum width and layout checks before the user can commit an invalid change.
+- `ComponentPalette` and `ComponentPicker` only offer component types that the editor considers authorable.
+- The editor still understands old lowercase payloads, but the current authoring path is the V2 PascalCase registry.
+
+#### Web pages
+
+| Page | File | What it does |
+|------|------|--------------|
+| Login | `web/src/pages/LoginPage.tsx` | admin sign-in |
+| Module editor | `web/src/pages/EditorPage.tsx` | edit a single module screen |
+| App editor | `web/src/pages/AppEditorPage.tsx` | edit app-level config, module policies, bottom bar, and launchpad |
+| Templates | `web/src/pages/TemplatesPage.tsx` | template CRUD, preview, and apply flow |
+| Workflows | `web/src/pages/WorkflowsPage.tsx` | React Flow workflow editor |
+| Variables | `web/src/pages/VariablesPage.tsx` | variables and data sources |
+| Connections | `web/src/pages/ConnectionsPage.tsx` | provider and connection management |
+| Logs | `web/src/pages/LogsPage.tsx` | sessions + audit logs in one page |
+| Settings | `web/src/pages/SettingsPage.tsx` | device assignment, app assignment, and clean-state actions |
+
+#### Web app editor flow
+
+`AppEditorPage.tsx` is the app-level editor, not the module editor.
+
+- It uses `useAppEditorStore()` for current app state.
+- It tracks app version history, version diffs, publish flow, module version policies, and preview mode.
+- It manages bottom bar config and launchpad config through the shared AppPhoneShell preview.
+- It supports browser preview and device preview through the preview picker and preview flow.
+- It shows archived version warnings when a module points at a version that no longer matches the current state.
+- It is the place to look when app-wide preview behavior feels wrong.
+
+#### Web legacy vs preferred notes
+
+- `web/src/editor/types.ts` still knows how to normalize legacy screen payloads. That is for reading old data, not for creating new data.
+- `web/src/editor/typeGuards.ts` warns on unknown component types instead of throwing.
+- `SettingsPage.tsx` is no longer a generic settings screen. It is now a device/app admin page plus clean-state tooling.
+- `LogsPage.tsx` merged sessions and audit logs into one page.
+- `ConnectionsPage.tsx` still supports custom provider definitions stored in localStorage, but the backend connection records are the source of truth.
+
+### Shared SDUI type system
+
+This is the part that matters most if you are adding or changing rendered UI.
+
+| Path | Current role |
+|------|--------------|
+| `mobile/src/types/sdui.ts` | shared V1 and V2 SDUI types, plus `isSDUIPage()` |
+| `mobile/src/renderer/componentRegistry.ts` | runtime type-string → component map for the mobile renderer |
+| `mobile/src/utils/typeGuards.ts` | warns about unknown mobile component types without crashing |
+| `web/src/editor/types.ts` | editor-side component registry and legacy normalization |
+| `web/src/editor/typeGuards.ts` | warns about unknown editor component types without crashing |
+
+The current type picture is:
+
+- V1 `SDUIScreen` is the legacy section-based format.
+- V2 `SDUIPage` is the preferred row/cell format.
+- `isSDUIPage(payload)` treats `rows` as the V2 discriminator.
+- `mobile/src/renderer/componentRegistry.ts` currently registers 24 keys.
+- `web/src/editor/types.ts` currently registers 27 component definitions: 16 editable runtime types plus 11 read-only legacy/runtime entries.
+
+The practical rule is:
+
+- use V2 rows/cells for new screens
+- use PascalCase type names for new components
+- keep lowercase V1 types only for old content and compatibility
+- update the mobile registry, the web registry, and the backend SDUI whitelist together when you add a component
+
+### A few quick “where do I start?” notes
+
+- If the mobile app does not leave the splash screen, start with `mobile/app/_layout.tsx` and `mobile/src/stores/authStore.ts`.
+- If a mobile tab is missing or hidden, check `mobile/app/(tabs)/_layout.tsx`, `mobile/src/stores/tabsStore.ts`, and `mobile/src/stores/appConfigStore.ts`.
+- If a mobile SDUI screen does not refresh, check `mobile/src/hooks/useSDUIScreen.ts` and `mobile/src/contexts/WebSocketContext.tsx`.
+- If the module editor refuses a resize or split, check `web/src/editor/cellWidthEngine.ts`.
+- If the web preview does not match the current app state, check `web/src/lib/previewResolver.ts`, `web/src/components/AppPhoneShell.tsx`, and `web/src/components/BrowserPreview.tsx`.
+- If a new SDUI type appears as unknown, update the mobile registry, the web registry, and the backend whitelist together.

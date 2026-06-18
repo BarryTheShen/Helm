@@ -1,433 +1,362 @@
 # Protocol — Communication Layer
 
-> Last updated: 2026-05-15 (FF4 Reassessment: CalendarEvent source_type + notes fields)
-
-## Tier 1: TLDR
-
-Helm communicates between frontend and backend using **three channels**:
-
-1. **REST API** (HTTP) — Standard CRUD operations for all data
-2. **WebSocket** (`/ws`) — Real-time bidirectional communication for AI chat streaming and live UI updates
-3. **MCP Server** (`/mcp`) — Machine-readable tool interface for external AI agents
-
-The chat flow: User types → WebSocket → backend → LLM streams tokens → WS tokens to frontend.
-The SDUI flow (legacy): Agent calls `helm_set_screen` → WS draft notification → user approves → live screen.
-The SDUI flow (FF4 versioning): Agent calls `helm_set_screen` → user edits → `helm_create_checkpoint` → `helm_publish_version` → live screen. Or directly: `helm_set_screen` → `helm_publish_version` for auto-approve.
-
----
-
-## Tier 2: Deeper Explanation
-
-### Channel 1: REST API (HTTP)
-
-All authenticated endpoints require `Authorization: Bearer <session_token>`.
-
-**Auth flow:**
-```
-App                          Backend
- |-- GET /auth/status ------> Is server set up?
- |<- {setup_complete: false}
- |
- |-- POST /auth/setup ------> Create admin user (first time only)
- |<- {user_id, message}
- |
- |-- POST /auth/login ------> Get session token
- |<- {session_token, expires_at, user_id, username}
- |
- |-- GET /api/... ----------> Authenticated requests
- |   Authorization: Bearer <token>
-```
-
-**Response format:**
-- Success: JSON body matching the Pydantic schema
-- Error: `{"detail": "error message"}` with HTTP status code
-- 401: Token invalid/expired → app triggers logout
-
-### Channel 2: WebSocket (Real-Time)
-
-**Connection:** `ws://server:8000/ws?token=SESSION_TOKEN&device_id=OPTIONAL`
-
-**Chat flow:**
-```
-App                     Backend                    LLM
- |-- {type:"chat_message", content:"..."} -------->
- |                        |-- POST /chat/completions (stream:true) -->
- |<-- {type:"chat_start"} |
- |<-- {type:"chat_token", token:"Hel"} <-- data:{delta} --
- |<-- {type:"chat_token", token:"lo"}  <-- data:{delta} --
- |                        |<-- data:[DONE] --------------------
- |<-- {type:"chat_complete", content:"Hello..."} --
-```
-
-**Tool call flow:**
-```
- |<-- {type:"chat_start"}
- |<-- {type:"chat_token", token:"Let me check..."}
- | [LLM emits tool_call delta in stream]
- | [backend executes tool()...]
- |<-- {type:"tool_result", tool:"read_calendar", result:{...}}
- | [backend calls LLM again with tool result...]
- |<-- {type:"chat_token", token:"You have 2 events..."}
- |<-- {type:"chat_complete"}
-```
-
-**SDUI draft flow (legacy — still supported):**
-```
- [Agent calls helm_set_screen (draft=True)]
- |<-- {type:"sdui_draft_update", module_id:"home", screen:{...}, version:N}
- | [User sees DraftPreview in app]
- | [User taps Approve]
- |-- POST /api/actions/execute {function:"approve_draft"} -->
- |<-- {type:"sdui_draft_update", module_id:"home", screen:null, version:0}
- |<-- {type:"sdui_draft_rejected", module_id:"home"}   // legacy companion clear event
- |<-- {type:"sdui_screen_update", module_id:"home", screen:{...}, version:N}
- ```
-
-**SDUI versioning flow (FF4 — preferred):**
-```
- [Agent calls helm_set_screen (draft=True) OR user edits in editor]
- | [Working draft saved via autosave]
- |-- POST /api/modules/{moduleId}/checkpoints -->  // Create checkpoint
- |<- {checkpoint_id, version_number}
- |-- GET /api/modules/{moduleId}/versions -->       // List versions
- |-- POST /api/modules/{moduleId}/preview/web -->   // Preview before publish
- |-- POST /api/modules/{moduleId}/versions/{id}/restore-to-draft -->  // Restore if needed
- |-- POST /api/modules/{moduleId}/versions/{id}/publish --> // OR direct helm_publish_version
- |<-- {type:"sdui_screen_update", module_id:"home", screen:{...}, version:N}
- ```
-
-### WebSocket Message Reference (Server → Client)
-
-| `type` | Payload | When |
-|--------|---------|------|
-| `connected` | `{user_id, device_id}` | On connection accepted |
-| `pong` | — | After `ping` |
-| `chat_start` | `{message_id}` | AI begins responding |
-| `chat_token` | `{message_id, token}` | Each streamed text delta |
-| `chat_message_replace` | `{message_id, content}` | After XML tool call stripping |
-| `chat_complete` | `{message_id, content}` | Full response done, persisted to DB |
-| `chat_error` | `{message?, code?}` | Error; `code: "no_api_key"` if unconfigured |
-| `notification` | `{id?, title, message, severity, actions?, timestamp?}` | Push notification |
-| `sdui_screen_update` | `{module_id, screen, version}` | Live SDUI screen set (or null to clear) |
-| `sdui_draft_update` | `{module_id, screen, version}` | Draft ready for approval, or draft cleared when `screen=null` and `version=0` |
-| `sdui_draft_rejected` | `{module_id}` | Legacy companion event when a draft is rejected or cleared |
-| `tabs_updated` | `{modules: [...]}` | Tab visibility changed |
-| `module_state_update` | `{module, state, version}` | Module state changed (legacy) |
-| `tool_result` | `{tool, result}` | Tool call succeeded |
-| `tool_error` | `{tool, message}` | Tool call failed |
-| `action_result` | `{ref?, result}` | `module_action` action completed |
-| `action_error` | `{ref?, message}` | `module_action` action failed |
-| `preview_session_started` | `{session_id, app_config?, sdui_json?}` | **NEW (FF4):** Mobile enters preview mode with preview config |
-| `app_version_published` | `{version_id, app_id}` | **NEW (FF4):** New app version published to mobile devices |
-
-### WebSocket Message Reference (Client → Server)
-
-| `type` | Payload | Action |
-|--------|---------|--------|
-| `ping` | — | Server replies `{type: "pong"}` |
-| `chat_message` | `{content, conversation_id}` | Starts AI response (async background task) |
-| `module_action` | `{function, params, ref?}` | Executes named action from registry |
-
-### Channel 3: MCP Server (`/mcp`)
-
-Mounted at `/mcp` on the FastAPI app. Uses FastMCP (Streamable HTTP). All requests must include `Authorization: Bearer <token>`.
-
-#### Complete MCP Tool Reference
-
-| Tool | Parameters | Purpose |
-|------|-----------|---------|
-| `helm_read_calendar` | `start_date: str`, `end_date: str` (YYYY-MM-DD) | Get events in date range |
-| `helm_create_event` | `title, start_time, end_time, description?, color?, location?` | Create event |
-| `helm_update_event` | `event_id, title?, start_time?, end_time?, description?, color?, location?` | Partial update event |
-| `helm_delete_event` | `event_id: str` | Delete one event |
-| `helm_delete_all_events` | — | Bulk delete all events for user |
-| `helm_read_all_calendar` | — | Get all events (no date filter) |
-| `helm_send_notification` | `title: str`, `message: str`, `severity: str = "info"` | Save notification + push to app |
-| `helm_get_chat_history` | `limit: int = 20` | Get recent chat messages |
-| `helm_send_chat_message` | `content: str` | Send message as assistant + push `chat_complete` event |
-| `helm_update_module_state` | `module_type: str`, `state: dict` | Update module state key |
-| `helm_get_form_data` | `form_id: str = ""` | Get form submission data |
-| `helm_set_screen` | `module_id: str`, `screen: dict\|str` | Set SDUI screen; draft=True by default; canonical row-first authoring uses PascalCase V2 types, while preserved lowercase legacy runtime component types can round-trip when already present in a payload |
-| `helm_delete_screen` | `module_id: str` | Clear SDUI screen → empty state |
-| `helm_list_screens` | — | List all AI-set SDUI screens |
-| `helm_get_screen` | `module_id: str` | Get current SDUI JSON for a module |
-| `helm_get_draft` | `module_id: str` | Get pending draft screen for a module; returns `{screen, version, has_draft}` |
-| `helm_approve_draft` | `module_id: str` | Promote draft to live via the shared live persistence helper |
-| `helm_reject_draft` | `module_id: str`, `feedback?: str` | Discard pending draft with optional feedback |
-| `helm_hide_tab` | `tab_id: str` | Hide a nav-bar tab |
-| `helm_show_tab` | `tab_id: str` | Restore hidden tab |
-| `helm_rename_tab` | `tab_id: str`, `name?: str`, `icon?: str` | Rename a tab and/or change its emoji icon |
-| `helm_list_tabs` | — | List all tabs + visibility status |
-| `helm_create_checkpoint` | `module_id: str`, `change_summary?: str` | **NEW (FF4):** Create a version checkpoint from working draft |
-| `helm_list_module_versions` | `module_id: str`, `limit?: int`, `offset?: int` | **NEW (FF4):** List version history for a module |
-| `helm_restore_version` | `module_id: str`, `version_id: str` | **NEW (FF4):** Restore a version to the working draft |
-| `helm_publish_version` | `module_id: str`, `version_id?: str` | **NEW (FF4):** Publish a version as the live screen |
-
-**Valid `module_id` values (built-in):** `home`, `chat`, `calendar`, `forms`, `alerts`, `modules`, `settings` — plus any user-created custom module IDs (slug-based, e.g. `my-module`)
-
-**Module CRUD endpoints:**
-| Tool | Parameters | Purpose |
-|------|-----------|--------|
-| `POST /api/sdui/modules` | `{name: str, icon: str}` | Create a custom module; returns the new module with generated slug ID and `is_custom: true` |
-| `DELETE /api/sdui/modules/{module_id}` | — | Delete a custom module (built-in modules cannot be deleted); cleans up associated SDUI data |
-
-**`GET /api/sdui/modules` response** now includes `is_custom: boolean` for each module entry.
-
-**Valid `tab_id` values:** same as module IDs above
-
-**Note:** The same tools are used internally by the Agent Proxy when the LLM makes tool calls during chat, and externally by any MCP-compatible client. Logic lives in `backend/app/mcp/tools.py`.
-
----
-
-## Tier 3: SDUI Schema Reference
-
-### V1 Schema (legacy, still supported)
-
-```json
-{
-  "schema_version": 1,
-  "sections": [
-    {
-      "id": "section-id",
-      "title": "Optional Section Title",
-      "component": {
-        "type": "text",
-        "id": "component-id",
-        "props": {
-          "content": "Hello world",
-          "style": "body"
-        }
-      }
-    }
-  ]
-}
-```
-
-**V1 component types:** `text`, `heading`, `button`, `icon_button`, `divider`, `spacer`, `card`, `container`, `list`, `form`, `alert`, `badge`, `stat`, `stats_row`, `calendar`, `image`, `progress`
-
-**V1 action types:** `navigate`, `go_back`, `open_url`, `copy_text`, `server_action`, `send_to_agent`, `dismiss`, `toggle`
-
-### V2 Schema (preferred — row+cell layout)
-
-```json
-{
-  "rows": [
-    {
-      "id": "row-1",
-      "cells": [
-        {
-          "id": "cell-1",
-          "width": "50%",
-          "content": {
-            "type": "Text",
-            "props": {
-              "content": "Good morning!",
-              "variant": "heading"
-            }
-          }
-        },
-        {
-          "id": "cell-2",
-          "width": "50%",
-          "content": {
-            "type": "Button",
-            "props": {
-              "label": "Tap me",
-              "variant": "primary"
-            }
-          }
-        }
-      ],
-      "compact": { "direction": "column" },
-      "regular": { "direction": "row" },
-      "scrollable": false
-    }
-  ]
-}
-```
-
-Persisted V2 payloads are row-first. `rows` is the required shape discriminator; `schema_version`, `module_id`, and `title` may be omitted on stored payloads and added later by editor/runtime layers. New authored content should still use PascalCase V2 types, but server validation also permits preserved lowercase legacy runtime component types so existing live screens can round-trip.
-
-**V2 component types (PascalCase):** `Text` (markdown-based), `Button`, `Image`, `Icon`, `Container`, `CalendarModule` (5 variants), `ChatModule`, `NotesModule`, `InputBar`, `Badge`, `Stat`, `List`, `Alert`, `Todo`, `TodoModule`, `ArticleCard`, `ArticleCardModule`, `RichText`, `RichTextRenderer`, `Empty`
-
-> **FF4 changes:** `TextInput` removed (use `InputBar`). `Markdown` merged into `Text` (which now uses `react-native-markdown-display`). `TodoModule`, `ArticleCardModule`, `RichTextRenderer` added. `Empty` synchronized across all layers.
->
-> `Divider` was removed as a standalone cell component per Architecture Decisions Session 9. It is now a row-level property. The type is preserved for backward compatibility.
-
-**V2 cell `width`:** Percentage-based string (e.g. `"50%"`, `"33%"`, `"auto"`). Minimum cell width: 80px. Pre-flight validation blocks invalid configurations.
-
-> **FF4 change:** Cell widths are now percentage-based instead of numeric flex weights. `"auto"` distributes remaining space equally among auto-sized cells. When all cells are fixed-width and total < 100%, cells center with side padding.
-
-**V2 row responsive behavior:**
-- `compact` props → applied on screens < 768px wide
-- `regular` props → applied on screens ≥ 768px wide
-- If `scrollable: true` → horizontal card rail with fixed-width cells
-- **FF4:** Row padding/gap/background removed. Rows are clean containers with no spacing properties.
-
-**V2 spacing notes:**
-- ~~Row spacing~~ — Gap, padding, and background color removed from rows per FF4. Use `Container` (vertical row) for nested layouts with spacing.
-- ~~`Divider`~~ — Preserved in legacy type map for backward compatibility.
-
-**V2 action types:** `navigate`, `api_call`, `server_action`, `dismiss`, `copy_text`, `open_url`
-
-### SDUI Action Reference
-
-| Action type | Required fields | Effect |
-|-------------|----------------|--------|
-| `navigate` | `screen: string` | Navigate to a tab or route |
-| `go_back` | — | Navigate back |
-| `open_url` | `url: string` | Open URL in browser (http/https/mailto/tel only) |
-| `copy_text` | `text: string` | Copy string to clipboard |
-| `server_action` | `function: string`, `params?: object` | `POST /api/actions/execute` |
-| `send_to_agent` | `message: string` | Send message via WS + navigate to chat |
-| `dismiss` | — | Navigate back |
-| `api_call` | `method, path, body?` | Direct API call (legacy) |
-
-When `TextInput.onSubmit` or `InputBar.onSend` triggers `send_to_agent` or `server_action`, `{{input}}` placeholders inside the message or params template are replaced with the submitted text. If no placeholder is present, the runtime falls back to the raw input for `send_to_agent` and to `params.text = input` for `server_action`.
-
-### SDUI `server_action` Function Reference
-
-These are the registered functions callable via `server_action`:
-
-| Function | Params | Effect |
-|----------|--------|--------|
-| `refresh_data` | `{module_id}` | Re-broadcasts SDUI screen for module |
-| `submit_form` | `{form_id, data}` | Saves form submission, sends notification |
-| `send_to_agent` | `{message}` | Fires chat message to AI |
-| `mark_notification_read` | `{notification_id}` | Marks notification read |
-| `create_calendar_event` | `{title, start_time, end_time, ...}` | Creates calendar event |
-| `delete_calendar_event` | `{event_id}` | Deletes calendar event |
-| `approve_draft` | `{module_id}` | Promotes SDUI draft to live (legacy — use versioning for new screens) |
-| `reject_draft` | `{module_id, feedback?}` | Discards SDUI draft (legacy) |
-| `set_variable` | `{name, value, type?}` | Upserts a CustomVariable by user + name |
-
-**Client-only action stubs (16):** `navigate`, `go_back`, `open_url`, `open_sheet`, `dismiss`, `server_action`, `set_component_state`, `toggle`, `show_notification`, `show_alert`, `haptic`, `share`, `copy_text`, `delay`, `chain`, `conditional` — acknowledged by backend but executed on client.
-
-### Trigger Definitions (`/api/triggers`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/triggers` | ✅ | List user’s trigger definitions; paginated |
-| POST | `/api/triggers` | ✅ | Create trigger `{name, trigger_type, config_json, action_chain_json, enabled}` |
-| PUT | `/api/triggers/{id}` | ✅ | Update trigger (partial) |
-| DELETE | `/api/triggers/{id}` | ✅ 204 | Delete trigger |
-| POST | `/api/triggers/{id}/test` | ✅ | Manually fire — runs action chain via `fire_trigger()` |
-
-**Trigger types:** `schedule`, `data_change`, `server_event`
-
-**`action_chain_json` format:** JSON array of action steps: `[{"type": "<action_name>", "params": {...}}, ...]`
-
-### Variable Expression Format
-
-Template strings use `{{expression}}` mustache syntax. Resolved both server-side (`variable_resolver.py`) and client-side (`variableResolver.ts`).
-
-| Scope | Pattern | Source |
-|-------|---------|--------|
-| `user` | `{{user.name}}`, `{{user.id}}` | Current user |
-| `component` | `{{component.<id>.value}}` | Component state |
-| `self` | `{{self.value}}` | Current component shorthand |
-| `custom` | `{{custom.<name>}}` | CustomVariable record |
-| `env` | `{{env.<key>}}` | Environment variables |
-| `data` | `{{data.<source>.<field>}}` | Data source cache |
-| `date` | `{{date.today}}`, `{{date.now}}` | Current date (YYYY-MM-DD) and ISO timestamp |
-
-Unresolved expressions are left as-is `{{original}}`. `{{input}}` is a backward-compat alias for `{{self.value}}`.
-
----
-
-## REST API Contract Details
-
-### Authentication headers
-
-```http
-Authorization: Bearer <session_token>
-Content-Type: application/json
-```
-
-### Pydantic schema quick reference
-
-**`POST /auth/login` body:**
-```json
-{
-  "username": "alice",
-  "password": "secret",
-  "device_id": "web",
-  "device_name": "Web Browser"
-}
-```
-
-**`POST /auth/login` response:**
-```json
-{
-  "session_token": "eyJ...",
-  "expires_at": "2026-04-30T12:00:00Z",
-  "user_id": "uuid",
-  "username": "alice"
-}
-```
-
-**`POST /api/calendar/events` body:**
-```json
-{
-  "title": "Team Standup",
-  "start_time": "2026-03-30T09:00:00Z",
-  "end_time": "2026-03-30T09:30:00Z",
-  "description": null,
-  "color": "#007AFF",
-  "location": null,
-  "all_day": false,
-  "source_type": "local",
-  "notes": null
-}
-```
-
-**`source_type`** (String, default `"local"`) — tracks event origin. Valid values: `local`, `caldav`, `notion`, `custom`. Mobile displays a colored badge per source type.
-
-**`notes`** (String, nullable) — free-form notes/content field for event details. Mobile shows up to 2 lines truncated.
-
-**`GET /api/notifications` response:**
-```json
-{
-  "notifications": [
-    {
-      "id": "uuid",
-      "title": "Hello",
-      "message": "World",
-      "severity": "info",
-      "is_read": false,
-      "actions": null,
-      "created_at": "2026-03-30T12:00:00Z"
-    }
-  ],
-  "unread_count": 1
-}
-```
-
-**`POST /api/actions/execute` body:**
-```json
-{
-  "function": "approve_draft",
-  "params": { "module_id": "home" }
-}
-```
-
-**`GET /api/sdui/{module_id}` response:**
-```json
-{
-  "screen": { "schema_version": "1.0.0", "module_id": "home", "rows": [...] },
-  "version": 3
-}
-```
-Returns `{"screen": null, "version": 0}` if no screen set.
-
-**`GET /api/sdui/{module_id}/draft` response:**
-```json
-{
-  "screen": { "rows": [...] },
-  "version": 4,
-  "has_draft": true
-}
-```
-This response is normalized to the same client-facing shape used by live screens; it does not return raw stored JSON.
-
-Returns `{"screen": null, "version": 0, "has_draft": false}` if no draft.
+> Last updated: 2026-06-18
+> This doc explains how Helm clients, the backend, and AI agents talk to each other.
+> Read it in this order: mental model → REST (request/response HTTP) → WebSocket → MCP (Model Context Protocol) → SDUI (server-driven UI) schema → legacy notes.
+
+## Read this first
+
+### Source map
+
+| If you are changing... | Read first | Why |
+|---|---|---|
+| Login, sessions, create/read/update/delete calls, or validation | `backend/app/routers/auth.py`, `backend/app/dependencies.py`, `backend/app/services/auth.py`, `backend/app/routers/modules.py` | These routes own the normal request/response path. |
+| Live chat, live screen pushes, or notifications | `backend/app/routers/websocket.py`, `backend/app/services/websocket_manager.py`, `backend/app/services/agent_proxy.py`, `mobile/src/services/websocket.ts`, `mobile/src/utils/validation.ts` | This is the live push channel. |
+| What the AI is allowed to do | `backend/app/mcp/server.py`, `backend/app/mcp/tools.py` | This is the MCP tool surface. |
+| Screen JSON or renderer mismatches | `backend/app/services/sdui_state.py`, `backend/app/routers/modules.py`, `mobile/src/types/sdui.ts`, `mobile/src/components/sdui/SDUIRenderer.tsx`, `mobile/src/renderer/componentRegistry.ts` | These files define and render SDUI. |
+| Button behavior and client actions | `mobile/src/hooks/useActionDispatcher.ts`, `mobile/src/components/composite/InputBar.tsx`, `backend/app/routers/actions.py`, `backend/app/services/action_registry.py` | These files decide what happens after a tap. |
+| Version history or publish flows | `backend/app/routers/module_versions.py`, `backend/app/routers/app_versions.py`, `backend/app/routers/modules.py` | These are the preferred current versioning paths. |
+| App/device lifecycle or preview broadcasts | `backend/app/routers/apps.py`, `backend/app/routers/devices.py`, `backend/app/routers/app_versions.py`, `backend/app/routers/module_instances.py`, `backend/app/services/websocket_manager.py` | These routes own `app_config_update`, `device_app_assigned`, `preview_session_started`, `preview_session_ended`, and related push events. |
+
+For broader architecture context, start with [backend.md](backend.md) and [frontend.md](frontend.md), then use this file for the wire-level contracts and message shapes.
+
+### Where the files live
+
+| Folder | What lives there | Why you read it |
+|---|---|---|
+| `backend/app/routers/` | HTTP endpoints, WebSocket entry points, version routes, editor routes | This is the transport layer for REST and WS. |
+| `backend/app/services/` | Business rules, SDUI normalization, websocket broadcasting, agent proxy, action registry | This is where the actual backend behavior lives. |
+| `backend/app/mcp/` | MCP server entry point and tool implementations | This is the AI tool surface. |
+| `mobile/src/services/` | API client and shared WebSocket client | This shows how the app talks to the backend. |
+| `mobile/src/types/` | Shared TypeScript contracts | This is the app-side definition of SDUI and action shapes. |
+| `mobile/src/components/sdui/` and `mobile/src/renderer/` | SDUI renderer and component registry | This is how SDUI JSON becomes native UI. |
+| `mobile/src/hooks/` | Action dispatcher, screen hooks, and related helpers | This is where taps and live updates become behavior. |
+
+### Current surface size
+
+- WebSocket: **27** named message types emitted in current backend code paths
+- MCP: **39** tools
+- SDUI action schema: **21** action variants
+- Server action registry: **34** registered backend functions
+- SDUI shapes: **2** accepted screen shapes — legacy V1 sections and preferred V2 rows
+
+## Tier 1: Mental model
+
+Helm uses four communication patterns:
+
+| Channel | Who talks to whom | Why it exists |
+|---|---|---|
+| REST (request/response HTTP) | Mobile app and web admin → FastAPI | One-shot requests: login, lists, create/read/update/delete, validation, versioning. |
+| WebSocket | Mobile app and web admin ↔ FastAPI | Live updates: chat tokens, pushed notifications, screen refreshes, publish events. |
+| MCP (Model Context Protocol) | External AI clients → Helm tool layer | Safe tool calls for the model instead of raw DB or raw URLs. |
+| SDUI (server-driven UI) | Backend → mobile renderer | Screen layout as JSON so the app can draw native UI. |
+
+Plain-English version:
+
+- The **app** talks to the **backend** over REST when it needs a single answer now.
+- The **app** keeps **one shared WebSocket** open so the backend can push things later.
+- The **AI agent** uses **MCP (Model Context Protocol)** to call named tools.
+- The **backend** sends **SDUI (server-driven UI)** JSON when it wants the app to render a screen.
+- The **mobile app never talks to MCP directly**.
+
+The backend normalizes SDUI before it stores or serves it, so the app sees a stable contract even when the model output was messy.
+
+## Tier 2: Channel-by-channel contracts
+
+### 1) REST: request/response HTTP
+
+REST is for ordinary backend work: login, saving data, validating a screen, publishing a version, or fetching a list.
+
+**Auth rule:** every authenticated request uses `Authorization: Bearer <session_token>`.
+
+**Error shape:** HTTP errors return `{"detail": "..."}` with the right status code. A `401` means the token is bad or expired and the client should log out.
+
+#### Identity and session routes
+
+| Route | Who uses it | What it does |
+|---|---|---|
+| `GET /auth/status` | App setup flow | Checks whether the server is already bootstrapped. |
+| `POST /auth/setup` | First-run admin bootstrap | Creates the first admin user. |
+| `POST /auth/login` | Login screen | Returns the session token and user info. |
+| `POST /auth/refresh` | App session refresh | Reissues the current session token. |
+| `POST /auth/logout` | Sign-out flow | Invalidates the current session. |
+
+#### Action bridge routes
+
+| Route | Who uses it | What it does |
+|---|---|---|
+| `POST /api/actions/execute` | SDUI `server_action` and form submits | Runs a whitelisted backend function by name. |
+| `GET /api/actions/functions` | Admin/debug and tooling | Lists the allowed backend function names. |
+
+The action bridge is the preferred way to make the backend do work from SDUI. The old direct-URL escape hatch still exists, but new content should prefer named functions.
+
+#### SDUI editing and readback routes
+
+| Route | Who uses it | What it does |
+|---|---|---|
+| `GET /api/sdui/{module_id}` | App and editor | Reads the current live SDUI screen. |
+| `GET /api/sdui/{module_id}/draft` | App and editor | Reads the pending draft, if one exists. |
+| `POST /api/sdui/{module_id}` | Editor and legacy screen-save path | Saves a screen as a draft by default. |
+| `DELETE /api/sdui/{module_id}` | Editor and legacy screen-clear path | Clears the live screen and its draft. |
+| `POST /api/sdui/validate` | Editor | Checks a screen before saving it. |
+| `GET /api/sdui/modules` | Web admin editor | Lists modules and whether each one has an SDUI screen. |
+| `POST /api/sdui/modules` | Web admin editor | Creates a custom module. |
+| `DELETE /api/sdui/modules/{module_id}` | Web admin editor | Deletes a custom module. |
+
+#### SDUI config and legacy draft routes
+
+| Route | Who uses it | What it does |
+|---|---|---|
+| `GET /api/sdui/{module_id}/config` | Editor | Reads module config, including `auto_approve_drafts`. |
+| `POST /api/sdui/{module_id}/config` | Editor | Updates module config, including `auto_approve_drafts`. |
+| `POST /api/sdui/{module_id}/draft/approve` | Legacy editor flow | Promotes a saved draft to live. |
+| `POST /api/sdui/{module_id}/draft/reject` | Legacy editor flow | Discards a saved draft. |
+
+#### Versioning and preview routes
+
+| Route | Who uses it | What it does |
+|---|---|---|
+| `POST /api/modules/{module_id}/checkpoints` | Versioned module flow | Saves a version checkpoint from the draft or live screen. |
+| `GET /api/modules/{module_id}/versions` | Versioned module flow | Lists version history. |
+| `POST /api/modules/{module_id}/versions/{version_id}/restore-to-draft` | Versioned module flow | Restores an old version into the working draft. |
+| `POST /api/modules/{module_id}/versions/{version_id}/publish` | Versioned module flow | Publishes a version as the live screen. |
+| `POST /api/apps/{app_id}/checkpoints` | App versioning flow | Saves a checkpoint for the app config. |
+| `GET /api/apps/{app_id}/versions` | App versioning flow | Lists app version history. |
+| `POST /api/apps/{app_id}/versions/{version_id}/publish` | App release flow | Publishes a version to assigned devices. |
+| `POST /api/apps/{app_id}/preview/web` | Web preview | Starts a browser preview session. |
+| `POST /api/apps/{app_id}/preview/device` | Mobile preview | Starts a device preview session. |
+
+#### User-content routes that pair with WebSocket updates
+
+| Route | Who uses it | What it does |
+|---|---|---|
+| `GET /api/notifications` | Notification tab | Reads persisted notifications. |
+| `POST /api/notifications/{notification_id}/read` | Notification tab | Marks a notification read. |
+
+#### REST mental model
+
+Use REST when you want:
+
+- a simple request with a single response,
+- a stable URL for create/read/update/delete work,
+- validation before storage,
+- or a publish/version action that should complete once and return.
+
+### 2) WebSocket: live push channel
+
+WebSocket is the live line between the backend and connected clients. The mobile app keeps one shared connection for the whole session, and the backend fans messages out to all of a user’s connected devices.
+
+**Connection URL:** `ws://host/ws?token=<session_token>&device_id=<optional>`
+
+- `token` is required.
+- `device_id` is optional; if it is missing, the backend falls back to the session’s device.
+
+The mobile client validates incoming messages but keeps unknown fields, so adding a new field is usually a backward-compatible change.
+
+#### Client → server messages
+
+| Message | Why the client sends it |
+|---|---|
+| `ping` | Heartbeat. The server answers with `pong`. |
+| `chat_message` | Starts an AI chat turn. |
+| `module_action` | Legacy action bridge for older clients that still send actions over WebSocket. |
+
+`module_action` is still supported, but new code should prefer REST `POST /api/actions/execute` for server-side actions.
+
+#### Server → client message groups
+
+| Category | Message names | What they are for |
+|---|---|---|
+| Connection and heartbeat | `connected`, `pong`, `error` | Connection success, heartbeat reply, and malformed-message feedback. |
+| Chat stream | `chat_start`, `chat_token`, `chat_message_replace`, `chat_complete`, `chat_error` | Live assistant output, including token streaming and final completion. |
+| Tool and action feedback | `tool_result`, `tool_error`, `action_result`, `action_error` | Tool execution and named action execution results. |
+| SDUI and navigation | `sdui_screen_update`, `sdui_draft_update`, `sdui_draft_rejected`, `tabs_updated`, `module_state_update` | Screen refreshes and nav/state changes. `module_state_update` is legacy. |
+| Notifications and app/device state | `notification`, `app_config_update`, `app_version_published`, `preview_session_started`, `preview_session_ended`, `device_app_assigned`, `module.installed`, `module.uninstalled`, `data_update` | Push notifications, app config changes, app release events, previews, and module/device lifecycle events. |
+
+#### Chat flow in plain English
+
+1. The user sends `chat_message`.
+2. The backend saves the user message.
+3. The agent proxy streams `chat_start` and `chat_token` messages back.
+4. If the model uses tools, the backend emits `tool_result` or `tool_error`.
+5. The backend ends the turn with `chat_complete`.
+
+`chat_message_replace` is a cleanup message used when the backend rewrites the streamed text after tool-call stripping.
+
+#### WebSocket mental model
+
+Use WebSocket when the backend must push something later:
+
+- chat tokens while the model is still thinking,
+- notifications as soon as they are created,
+- SDUI changes without polling,
+- publish or preview events,
+- or tab/module updates that should appear instantly.
+
+### 3) MCP (Model Context Protocol): AI tool interface
+
+MCP is how external AI clients call Helm safely. They do not send raw SQL or raw REST calls; they call named tools on the `/mcp` endpoint.
+
+**Endpoint:** `/mcp` using Streamable HTTP
+
+**Auth:** `Authorization: Bearer <token>`
+
+**Extra request scope:** the MCP middleware also reads `X-Module-Instance-Id` when a call should be scoped to a specific installed module.
+
+The same backend tool implementations are reused by the in-app agent stack and by external MCP clients.
+
+#### Current tool groups
+
+- **Calendar tools**
+  - `helm_read_calendar`
+  - `helm_read_all_calendar`
+  - `helm_create_event`
+  - `helm_update_event`
+  - `helm_delete_event`
+  - `helm_delete_all_events`
+
+- **Notifications and chat tools**
+  - `helm_send_notification`
+  - `helm_get_chat_history`
+  - `helm_send_chat_message`
+  - `helm_update_module_state`
+  - `helm_get_form_data`
+
+- **SDUI screen tools**
+  - `helm_set_screen`
+  - `helm_delete_screen`
+  - `helm_list_screens`
+  - `helm_get_screen`
+  - `helm_get_draft`
+  - `helm_approve_draft`
+  - `helm_reject_draft`
+
+- **Versioning tools**
+  - `helm_create_checkpoint`
+  - `helm_list_module_versions`
+  - `helm_restore_version`
+  - `helm_publish_version`
+  - `helm_list_app_versions`
+  - `helm_restore_app_version`
+  - `helm_publish_app`
+  - `helm_list_template_versions`
+  - `helm_create_template_checkpoint`
+
+- **Tab and app management tools**
+  - `helm_hide_tab`
+  - `helm_show_tab`
+  - `helm_rename_tab`
+  - `helm_list_tabs`
+  - `helm_list_apps`
+  - `helm_create_app`
+  - `helm_get_app`
+
+- **Preview and device tools**
+  - `helm_start_app_preview`
+  - `helm_exit_preview`
+  - `helm_start_device_preview`
+  - `helm_exit_device_preview`
+  - `helm_get_device_status`
+
+#### Preferred MCP flows
+
+- For calendar reads, prefer `helm_read_calendar` when you know the date range.
+- Use `helm_read_all_calendar` only when you really need everything.
+- Use `helm_delete_all_events` instead of looping `helm_delete_event`.
+- `helm_send_notification` is for pushed notifications that should also persist.
+- `helm_send_chat_message` is for proactive assistant messages.
+- `helm_set_screen` saves a draft by default.
+- For versioned modules, prefer `helm_set_screen` → `helm_create_checkpoint` → `helm_publish_version`.
+- For tab-based compatibility flows, `helm_approve_draft` and `helm_reject_draft` still exist.
+
+#### MCP mental model
+
+Use MCP when the model needs to *act* on Helm data, not just chat about it. If a human user is driving the UI, REST and WebSocket are the main channels. If an AI agent is driving a backend action, MCP is the safe path.
+
+### 4) SDUI (server-driven UI): screen JSON contract
+
+SDUI is the JSON that tells the app what to draw. The backend does not send HTML; it sends structured screen data, and the app renders native components.
+
+#### Two accepted screen shapes
+
+| Shape | Status | Required top-level shape | Notes |
+|---|---|---|---|
+| `SDUIScreen` | Legacy, still supported | `sections[]` with `component` or `components` | The older section-based shape. Keep it for compatibility only. |
+| `SDUIPage` | Preferred | `rows[]` | The current row-first shape. New authored content should use this. |
+
+A stored V2 payload may omit some metadata such as `schema_version`, `module_id`, `title`, or `generated_at`. The backend/editor/runtime can add those later.
+
+#### Row-first V2 rules
+
+- `rows` is the shape discriminator.
+- Each row owns one layout strip.
+- Each cell owns one component.
+- `compact` applies to phone layouts.
+- `regular` applies to tablet layouts.
+- `scrollable: true` creates a horizontal rail.
+- Prefer `width: 'auto'` or percentage strings like `'50%'`.
+- Numeric flex weights still round-trip for older content, but they are legacy.
+
+#### Canonical V2 component families
+
+| Family | Canonical types | Legacy notes |
+|---|---|---|
+| Atomic | `Text`, `Button`, `Image`, `Icon` | Canonical names are PascalCase. |
+| Structural | `Container`, `Empty` | `Container` may nest children; `Empty` is a layout shell. |
+| Composite | `CalendarModule`, `ChatModule`, `NotesModule`, `InputBar` | These are black-box widgets. |
+| Shared widgets | `Badge`, `Stat`, `List`, `Alert`, `Todo`, `TodoModule`, `RichText`, `RichTextRenderer`, `ArticleCard`, `ArticleCardModule` | Lower-case aliases still round-trip. New content should use the PascalCase names. |
+
+Legacy aliases that still normalize include names like `markdown` → `Text`, `input_bar` → `InputBar`, `rich_text_renderer` → `RichText`, `article_card` → `ArticleCard`, and older lower-case component names such as `text`, `button`, `image`, `calendar`, `chat`, and `notes`.
+
+`divider`/`Divider` is compatibility-only in old content. New V2 screens should use row-level divider behavior instead of authoring a separate divider component.
+
+#### SDUI action contract
+
+| Action family | Current action types | Preferred notes |
+|---|---|---|
+| Client-only | `navigate`, `go_back`, `dismiss`, `open_url`, `copy_text`, `show_notification`, `show_alert`, `haptic`, `share`, `toggle`, `set_component_state`, `refresh_data` | These stay on the device unless they need a server fetch. |
+| Server-backed | `server_action`, `submit_form`, `set_variable` | Preferred path for work that must hit the backend. |
+| Legacy server bridge | `api_call`, `send_to_agent` | Supported for compatibility, but new content should avoid them. |
+| Flow control | `chain`, `conditional`, `delay` | Used to compose or delay other actions. |
+| Reserved / shell only | `open_sheet` | Currently a dispatcher placeholder. Do not rely on it for new flows. |
+
+The current `server_action` bridge uses the backend action registry whitelist at `backend/app/services/action_registry.py`. The client posts the named function to `/api/actions/execute`, and the backend only runs registered names.
+
+`InputBar` and other input-driven components replace `{{input}}` before dispatching `send_to_agent` or `server_action`. If there is no placeholder, the runtime falls back to the raw input value.
+
+#### SDUI storage and normalization
+
+- `backend/app/services/sdui_state.py` normalizes screens before storage and before readback.
+- Legacy `sections[]` payloads can be converted into `rows[]`.
+- Flat model output is rewritten into `props` bags so the frontend renderer sees one consistent shape.
+- The backend keeps draft and live screen rows separate so previews do not overwrite published content.
+
+## Tier 3: Legacy vs preferred at a glance
+
+| Prefer now | Keep only for compatibility |
+|---|---|
+| `rows[]` V2 screens | `sections[]` V1 screens |
+| PascalCase component names | Lower-case aliases and older component names |
+| `server_action` through `/api/actions/execute` | `api_call` and `send_to_agent` |
+| `helm_create_checkpoint` → `helm_publish_version` | `helm_approve_draft` / `helm_reject_draft` for tab-based legacy drafts |
+| `sdui_screen_update` / `sdui_draft_update` | `module_state_update` |
+| Versioned module/app routes | Direct draft-only screen flows when version history matters |
+
+## Common flows
+
+| Scenario | Who talks to whom | Expected path |
+|---|---|---|
+| User logs in | Mobile app → REST → backend | `POST /auth/login` returns a session token. |
+| User chats with the AI | Mobile app → WebSocket → backend agent proxy → model → WebSocket | `chat_message` starts the turn; tokens stream back live. |
+| AI changes a screen | AI client → MCP → backend → WebSocket → app | `helm_set_screen` stores the draft and pushes an update. |
+| User taps a server-backed button | Component → client dispatcher → REST → backend | `server_action` runs a whitelisted backend function. |
+| User previews or publishes a version | Editor or AI client → REST/MCP → backend → WebSocket | Version routes publish the result and notify devices. |
+
+## Quick reminders
+
+- REST is for one request and one answer.
+- WebSocket is for live updates.
+- MCP is for AI tool calls.
+- SDUI is for screen JSON.
+- New work should prefer row-first V2 screens, named backend actions, and versioned publish flows.
+- Legacy paths remain only so old content can still run.

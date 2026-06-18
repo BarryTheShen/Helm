@@ -1,371 +1,280 @@
-# Agents, MCP, Workflows & Additional Systems
+# Agents, MCP, Workflows, Triggers & Related Systems
 
-> Last updated: 2026-05-14 (FF4: new MCP tools, versioning)
+> Last updated: 2026-06-18 (backend-style refresh: folder map up front, current counts, clearer reading order, and simpler legacy-vs-preferred notes)
 
-## Tier 1: TLDR
+## Tier 1: TL;DR
 
-Helm has four "intelligence" systems beyond basic CRUD:
+Think of Helm's agent stack as a shared tool layer with four pieces: the in-app proxy handles mobile chat, the MCP server exposes the same tools to outside agents, the workflow engine automates event-driven work, and the standalone agent runs as a separate process when you want an external assistant.
 
-1. **AI Agent Proxy** (`backend/app/services/agent_proxy.py`) — Connects to any OpenAI-compatible LLM. Streams responses in real-time and can call tools mid-conversation. Handles XML tool-call fallback for non-function-calling models. Fires `MESSAGE_RECEIVED` trigger for workflow automation.
+1. **In-app AI agent proxy** (`backend/app/services/agent_proxy.py`) — the chat path used by the mobile app. It saves each user message, streams the answer from an LLM (large language model), can call tools during the response, and fires workflow triggers. If `EXTERNAL_AGENT_URL` is set, it forwards the chat to the standalone agent instead of calling the LLM directly.
+2. **MCP server** (`backend/app/mcp/`) — the Model Context Protocol (MCP) server mounted at `/mcp`. It exposes Helm tools to external agents and uses the same shared tool implementation layer as the in-app proxy.
+3. **Workflow engine** (`backend/app/services/workflow_engine.py`) — the older React Flow workflow runner. It starts scheduled workflows with APScheduler and also reacts to events such as chat messages, calendar changes, and form submissions.
+4. **Standalone agent** (`agent/`) — a separate process that runs outside the backend. It talks to Helm through MCP over HTTP and can also edit the React Native source tree with local tools limited to `mobile/`.
 
-2. **MCP Server** (`backend/app/mcp/`) — Exposes Helm's tools to external AI agents via the MCP standard protocol. Any MCP-compatible agent (Claude Desktop, custom agents, etc.) can read/write calendar, send notifications, set SDUI screens, etc.
+Shared rule: the real tool logic lives in `backend/app/mcp/tools.py`. Both the in-app proxy and the MCP server use it, so the behavior stays consistent.
 
-3. **Workflow Engine** (`backend/app/services/workflow_engine.py`) — Simple automation: "When X happens → do Y". Supports cron schedules and event triggers. Runs automatically via APScheduler. Event triggers (`EVENT_CREATED`, `EVENT_UPDATED`, `FORM_SUBMITTED`, `MESSAGE_RECEIVED`) are now wired into their respective routers/services.
+## What to read first
 
-4. **Standalone PydanticAI Agent** (`agent/`) — An independent developer/admin agent. Runs outside the backend. Connects to Helm's MCP server over HTTP and can read/write React Native frontend source code. Has two entry points:
-   - `helm_agent.py` — REPL / web UI / one-shot mode via pydantic-ai
-   - `api_server.py` — Standalone HTTP service the backend can forward mobile chat to
+If you want the shortest path through the docs, read them in this order:
 
----
+1. `docs/codebase-explanation/backend.md` — backend wiring, services, routers, and mounted sub-apps
+2. `docs/codebase-explanation/protocol.md` — WebSocket and MCP message shapes
+3. This file — how the agent proxy, MCP server, workflow engine, and standalone agent fit together
+4. `agent/helm_agent.py` and `agent/api_server.py` — if you want to run the standalone agent yourself
 
-## AI Agent Proxy
 
-### Location
-`backend/app/services/agent_proxy.py`
+## Current counts
 
-### Entry point
-```python
-async def handle_chat_message(user_id: str, content: str, conversation_id: str | None) -> None
-```
-Called from the WebSocket handler as a `asyncio.create_task()` background task.
+- **39 MCP tools** are registered in `backend/app/mcp/server.py`
+- **5 files** live in `agent/`
+- **2 automation models** back the two automation systems: `Workflow` and `TriggerDefinition`
 
-### Routing
-1. Saves user message to DB (always, before routing)
-2. If `settings.external_agent_url` is set → `_process_via_external_agent()`
-3. Else → `_process_chat()` (built-in OpenRouter proxy)
+## Legacy vs preferred
 
-### External Agent Path (`_process_via_external_agent`)
-Forwards to `EXTERNAL_AGENT_URL/api/run` via SSE stream:
-```
-POST {EXTERNAL_AGENT_URL}/api/run {"message": content}
-  data: {"type":"token","text":"..."} → ws.send({type:"chat_token",...})
-  data: {"type":"done","text":"..."}  → ws.send({type:"chat_complete",...})
-  data: {"type":"error","text":"..."}  → ws.send({type:"chat_error",...})
-```
+This codebase still has some older paths because the newer systems were added gradually. When both exist, prefer the current path below.
 
-### Built-in LLM Path (`_process_chat`)
+| Legacy or older path | Preferred or current path | Why |
+|---|---|---|
+| `update_module_state(module_type, state)` | `set_screen(module_id, screen)` | `set_screen` stores the row-first SDUI contract and draft flow. |
+| `approve_draft` / `reject_draft` as the main publish path | `create_checkpoint` → `publish_version` | FF4 versioning is the current publish flow for new screens. |
+| Schedule handling in the trigger system | Schedule handling in the workflow engine | Cron jobs belong in one place. |
+| Manual reasoning about tool behavior from docs alone | `backend/app/mcp/server.py` and `backend/app/mcp/tools.py` | Those files are the current source of truth for the tool layer. |
 
-**Config resolution order:**
-1. Per-user `AgentConfig` from DB (Fernet-decrypted `api_key_encrypted`)
-2. `settings.openrouter_api_key` / `openrouter_base_url` / `openrouter_model`
-3. `settings.openai_api_key` / `openai_base_url` / `openai_model`
+## Folder map
 
-**History:** Last 21 messages (desc), reversed, last dropped if matches current msg.
+### Backend control plane
 
-**Agentic loop** (max `_MAX_TOOL_TURNS = 5` iterations):
-```
-for turn in range(5):
-    text, tool_calls, finish_reason = await _stream_one_turn(...)
-    if finish_reason != "tool_calls" or not tool_calls:
-        break
-    # Append assistant turn with tool_calls to message history
-    # Execute each tool via _execute_tool_safe()
-    # Append tool results as role="tool" messages
-    # Continue → next LLM call
-```
+| Path | What it owns | Notes |
+|---|---|---|
+| `backend/app/main.py` | App startup, middleware order, router registration, lifespan hooks, mounted sub-apps | This is the best place to start when you want to see how the backend boots. |
+| `backend/app/routers/websocket.py` | WebSocket entry point for chat and module actions | Hands chat messages to the agent proxy. |
+| `backend/app/services/agent_proxy.py` | In-app chat orchestration | Saves messages, streams model output, routes to external agent when configured, fires workflow triggers. |
+| `backend/app/mcp/server.py` | MCP auth and tool registration | Current count: 39 tools. Mounted at `/mcp`. |
+| `backend/app/mcp/tools.py` | Shared tool implementations | Single source of truth for external agents and the in-app proxy. |
+| `backend/app/services/workflow_engine.py` | Scheduled workflow runner and graph executor | Uses APScheduler and React Flow graphs. |
+| `backend/app/services/trigger_engine.py` | Newer trigger-definition runner | Handles JSON action chains for data-change and server-event style triggers. |
+| `backend/app/services/action_registry.py` | Action dispatch layer | Reuses backend behavior for workflows, triggers, and other automation entry points. |
+| `backend/app/services/websocket_manager.py` | Live connection fan-out | Broadcasts chat tokens, SDUI updates, notifications, and action results. |
+| `backend/app/routers/calendar.py` | Calendar CRUD and calendar-side trigger hooks | Emits workflow events when events change. |
+| `backend/app/routers/actions.py` | Action endpoints | Used by automation and form submission flows. |
+| `backend/app/routers/workflows.py` | Workflow CRUD and import/export | Owns the older workflow editor surface. |
+| `backend/app/routers/triggers.py` | Trigger CRUD and manual execution | Owns the newer trigger-definition surface. |
+| `backend/app/models/workflow.py` | Workflow persistence | Stores the React Flow graph and schedule/event metadata. |
+| `backend/app/models/trigger.py` | Trigger-definition persistence | Stores JSON config and action chains. |
 
-### `_stream_one_turn()` — streaming POST to LLM
+### Standalone agent process
 
-OpenAI-compatible POST to `{base_url}/chat/completions` with `stream: True`, `tools: _get_tool_definitions()`, `tool_choice: "auto"`.
+| Path | What it owns | Notes |
+|---|---|---|
+| `agent/helm_agent.py` | Main standalone-agent entry point | Runs in web, REPL, or one-shot mode. Builds the agent and connects to Helm's MCP server. |
+| `agent/api_server.py` | HTTP wrapper around the agent | Serves the browser UI, exposes `/api/run`, and supports backend forwarding. |
+| `agent/chat_ui.html` | Browser UI shell | Shared by the standalone agent's web mode and the HTTP wrapper. |
+| `agent/send_prompt.py` | Convenience one-shot client | Sends a single prompt to a running `api_server.py` instance. |
+| `agent/README.md` | Local runbook | Setup notes live here, but prefer `helm_agent.py` and `api_server.py` for current runtime behavior. |
 
-**Per SSE chunk:**
-- `delta.content` → send `{type:"chat_token", token}` to WS; accumulate text
-- `delta.reasoning` → forwarded as `chat_token` same as regular content (reasoning tokens appear as visible chat output)
-- `delta.tool_calls[].index` → accumulate into `pending_tool_calls: dict[int, {id, name, arguments}]`; execute only AFTER stream ends
+## Architecture flow
 
-**HTTP headers set:** `Authorization: Bearer <api_key>`, `HTTP-Referer: https://github.com/BarryTheShen/Helm`, `X-Title: Helm`
+```mermaid
+flowchart TD
+    Mobile[Mobile app / WebSocket chat] --> WS[backend/app/routers/websocket.py]
+    WS --> Proxy[backend/app/services/agent_proxy.py]
 
-### XML Tool-Call Fallback (`_parse_xml_tool_calls`)
-For models that don't use OpenAI function-calling (e.g. stepfun): if `finish_reason != "tool_calls"` but `<tool_call>` appears in content:
-1. Regex-strips `<tool_call>JSON</tool_call>` blocks from content
-2. Parses `{name, arguments}` from JSON
-3. Synthesizes `tool_calls` list and processes normally
-4. Sends `{type:"chat_message_replace", message_id, content: cleaned_content}` to strip XML from frontend display
+    Proxy -->|default path| LLM[LLM via OpenRouter or other OpenAI-compatible API]
+    Proxy -->|EXTERNAL_AGENT_URL set| API[agent/api_server.py /api/run]
 
-### Built-in Tool Definitions (`_get_tool_definitions()`)
-18 tools exposed to the LLM (OpenAI function-calling format):
+    Proxy -->|tool calls| Tools
+    API --> Standalone[agent/helm_agent.py]
+    Standalone --> MCP[backend/app/mcp/server.py]
+    MCP --> Tools[backend/app/mcp/tools.py]
 
-| Tool name | Required params | Description |
-|-----------|----------------|-------------|
-| `read_calendar` | `start_date`, `end_date` | Get events (YYYY-MM-DD) |
-| `create_event` | `title`, `start_time`, `end_time` | Create event; optional: `description`, `color`, `location` |
-| `send_notification` | `title`, `message`, `severity` | Push notification (severity: info/warning/error/success) |
-| `update_module_state` | `module_type`, `state` | Write SDUI JSON (legacy; module_type: calendar/alerts/form) |
-| `get_chat_history` | — | Optional `limit` (default 20) |
-| `set_screen` | `module_id`, `screen` | Set SDUI screen on any tab; supports V2 rows (preferred) and legacy sections |
-| `delete_screen` | `module_id` | Clear a tab's SDUI screen |
-| `get_screen` | `module_id` | Get the current live SDUI screen JSON for a module |
-| `list_screens` | — | List all AI-generated screens across all tabs |
-| `get_draft` | `module_id` | Get the pending draft SDUI screen for a module, if one exists |
-| `approve_draft` | `module_id` | Approve and publish a pending draft as the live screen |
-| `reject_draft` | `module_id` | Reject and discard a pending draft; optional `feedback` param |
-| `create_checkpoint` | `module_id` | **NEW (FF4):** Create a version checkpoint from the working draft |
-| `list_module_versions` | `module_id` | **NEW (FF4):** List version history for a module |
-| `restore_version` | `module_id, version_id` | **NEW (FF4):** Restore a version to the working draft |
-| `publish_version` | `module_id` | **NEW (FF4):** Publish a version as live — replaces `approve_draft` for new screens |
-| `hide_tab` | `tab_id` | Hide nav-bar tab; valid: home/chat/modules/calendar/forms/alerts/settings |
-| `show_tab` | `tab_id` | Restore hidden tab |
-| `list_tabs` | — | All tabs + visibility |
-| `rename_tab` | `tab_id` | Optional: `name`, `icon` — renames/re-icons a tab |
+    Proxy -->|message_received| Workflows[backend/app/services/workflow_engine.py]
+    Calendar[backend/app/routers/calendar.py] -->|event_created / event_updated| Workflows
+    Forms[backend/app/services/action_registry.py] -->|form_submitted| Workflows
+    Workflows --> Actions[backend/app/services/action_registry.py]
+    Actions --> Tools
 
-Tools are dispatched via `_execute_tool_safe()` → `execute_tool(name, args, user_id)` from `app/mcp/tools.py`.
-
-### WebSocket Events Emitted by Agent Proxy
-
-| Event `type` | When |
-|-------------|------|
-| `chat_start {message_id}` | Start of any AI response |
-| `chat_token {message_id, token}` | Each streamed text delta |
-| `chat_message_replace {message_id, content}` | When XML tool calls stripped |
-| `tool_result {tool, result}` | After each tool executes successfully |
-| `tool_error {tool, message}` | After tool execution fails |
-| `chat_complete {message_id, content}` | End of turn, full response persisted |
-| `chat_error {message?, code?}` | On any error; `code:"no_api_key"` when unconfigured |
-
----
-
-## MCP Server
-
-### Location
-`backend/app/mcp/server.py` (FastMCP wrapper)
-`backend/app/mcp/tools.py` (all tool logic)
-
-### Architecture
-```
-External Agent (e.g. Claude Desktop)
-        │
-        │  HTTP  Authorization: Bearer <token>
-        ▼
-/mcp  (_MCPAuthMiddleware validates token, sets _current_user_id context var)
-        │
-        ▼
-FastMCP("Helm")  — tool registry
-        │
-        ▼
-tools.py execute_tool(name, args, user_id)  — shared with Agent Proxy
-        │
-        ▼
-SQLAlchemy DB + WebSocket broadcasts
+    Tools --> DB[(Database)]
+    Tools --> WSM[backend/app/services/websocket_manager.py]
 ```
 
-### Auth
-`_MCPAuthMiddleware` (ASGI middleware):
-- Reads `Authorization: Bearer <token>` header
-- Calls `get_session_by_token()` to validate
-- Sets `_current_user_id` context var for tools to read
-- Returns `401 {"error": "Unauthorized"}` for invalid tokens
+### How the flow works
 
-### Tool Implementations (`mcp/tools.py`)
+1. The mobile app sends a `chat_message` over the WebSocket.
+2. `backend/app/routers/websocket.py` passes it to `handle_chat_message()` in `agent_proxy.py`.
+3. The proxy saves the user message first, then fires the `message_received` workflow trigger.
+4. If `EXTERNAL_AGENT_URL` is set, the proxy forwards the message to `agent/api_server.py` with SSE (server-sent events) at `/api/run`.
+5. If `EXTERNAL_AGENT_URL` is not set, the proxy talks to the configured LLM directly and streams the response back to the app.
+6. When the model asks for a tool, the proxy dispatches it through `backend/app/mcp/tools.py`.
+7. Workflow and trigger systems reuse the same backend actions and tool implementations instead of duplicating behavior.
+8. The standalone agent reaches Helm over HTTP through the MCP server and can also edit `mobile/` files with its local filesystem tools.
 
-All functions are `async`. Main `execute_tool(name, args, user_id)` dispatcher.
+## In-app AI agent proxy
 
-| Function | Key behavior |
-|----------|-------------|
-| `set_screen(module_id, screen, user_id, draft=True)` | Normalizes screen JSON via `normalize_sdui_screen()`, stores as draft or live, pushes WS event |
-| `approve_draft(module_id, user_id)` | Copies `sdui__X__draft` → `sdui__X`, deletes draft, pushes `sdui_screen_update` (legacy) |
-| `reject_draft(module_id, user_id, feedback?)` | Deletes draft, pushes `sdui_draft_rejected` (legacy) |
-| `create_checkpoint(module_id, user_id, change_summary?)` | **NEW (FF4):** Creates a version checkpoint from the working draft |
-| `restore_version(module_id, version_id, user_id)` | **NEW (FF4):** Restores a version to the working draft |
-| `publish_version(module_id, user_id, version_id?)` | **NEW (FF4):** Publishes a version as the live screen |
-| `get_draft(module_id, user_id)` | Returns `{screen, has_draft}` |
-| `hide_tab(tab_id, user_id)` | Adds to hidden list in `_tabs_config`, pushes `tabs_updated` |
-| `show_tab(tab_id, user_id)` | Removes from hidden list, pushes `tabs_updated` |
-| `list_tabs(user_id)` | All 7 tabs with visibility (`home, chat, calendar, forms, alerts, modules, settings`) |
+### What it is
 
-**SDUI Normalization:** `normalize_sdui_screen()` and `_normalize_sdui_component()` convert flat AI-generated dicts (e.g. `{type:"text", content:"Hi"}`) to props-based schema (`{type:"text", props:{content:"Hi"}}`). Applied before DB storage and before WS broadcast.
+The agent proxy is not a separate service. It lives inside the backend and handles the chat path used by the mobile app.
 
----
+### Where it lives
 
-## Workflow Engine
+- `backend/app/services/agent_proxy.py`
+- called from `backend/app/routers/websocket.py`
+- shares live updates through `backend/app/services/websocket_manager.py`
 
-### Location
-`backend/app/services/workflow_engine.py`
+### What it does
+
+1. Stores the user message before doing anything else.
+2. Fires the `message_received` workflow trigger.
+3. Chooses one of two paths:
+   - **Default path**: call the configured LLM directly
+   - **External path**: forward to `EXTERNAL_AGENT_URL` and stream the response back
+4. Streams response tokens back to the frontend as they arrive.
+5. Executes tool calls through `backend/app/mcp/tools.py`.
+
+### Why it exists
+
+It keeps the mobile app chat simple. The app only has to send one WebSocket message. The backend decides whether the answer comes from the built-in model or from a separate agent process.
+
+### Main WebSocket events
+
+| Event | Meaning |
+|---|---|
+| `chat_start` | Assistant response has started |
+| `chat_token` | A streamed text chunk arrived |
+| `tool_result` | A tool finished successfully |
+| `tool_error` | A tool failed |
+| `chat_message_replace` | The proxy cleaned up model output, such as XML tool-call wrappers |
+| `chat_complete` | The final message was saved and sent |
+| `chat_error` | Something went wrong |
+
+### Tool-call fallback
+
+Some models do not emit native function calls. For those cases, the proxy can parse XML-style tool-call blocks from the model output, strip them from the visible message, and then run the tool request normally.
+
+## MCP server
+
+### What it is
+
+MCP stands for **Model Context Protocol**. The MCP server is the network-facing tool server that external agents connect to.
+
+### Where it lives
+
+- `backend/app/mcp/server.py` — auth, tool registration, and the FastMCP wrapper
+- `backend/app/mcp/tools.py` — the actual tool implementations
+- mounted at `/mcp` by `backend/app/main.py`
 
 ### How it works
-- Uses `APScheduler` with `AsyncIOScheduler(timezone="UTC")`
-- Started in `main.py` lifespan (`start_scheduler()`)
-- On startup: scans DB for all active onSchedule workflows → registers cron jobs
 
-### Trigger Types
+1. An external agent sends an HTTP request with `Authorization: Bearer <token>`.
+2. The MCP middleware validates the session token and resolves the current user.
+3. `FastMCP("Helm")` exposes the tool registry.
+4. Every tool call is routed to `backend/app/mcp/tools.py`.
+5. Tool code updates the database and broadcasts WebSocket events when needed.
 
-| TriggerType | Config | When it fires |
-|------------|--------|---------------|
-| `SCHEDULE` | `trigger_config.cron` (crontab string) | On cron schedule |
-| `EVENT_CREATED` | — | `fire_trigger()` called from calendar router (POST create event) |
-| `EVENT_UPDATED` | — | `fire_trigger()` called from calendar router (PUT update event) |
-| `FORM_SUBMITTED` | — | `fire_trigger()` called from action registry (`submit_form` handler) |
-| `MESSAGE_RECEIVED` | — | `fire_trigger()` called from agent_proxy (`handle_chat_message`) |
-| `DATA_CHANGED` | — | Exists in enum; not yet wired to a firing site |
-| `SERVER_EVENT` | — | Exists in enum; not yet wired to a firing site |
+### What the MCP server exposes
 
-⚠️ `DATA_CHANGED` and `SERVER_EVENT` exist in the enum but the Workflows page dropdown only shows 5 types (these two are missing from the UI dropdown).
+The current tool set covers these families:
 
-### Workflow Structure (React Flow Graph)
-- `graph` field stores React Flow JSON: `{nodes: [...], edges: [...]}`
-- `trigger_type`: `onSchedule`, `onDataChange`, `onServerEvent`, `manual`
-- `trigger_config`: JSON config (e.g., `{cron: "0 9 * * *"}` for onSchedule)
+- calendar read/write
+- notifications
+- chat history and assistant message sending
+- SDUI screen read/write/delete/list and draft/version flows
+- tab visibility and renaming
+- apps, modules, templates, and preview sessions
+- user and device-facing utility actions
 
-### Node Types
-- `action` — executes MCP tool via `execute_tool()`
-- `condition` — evaluates expression, branches on true/false edges
-- `switch` — multi-way branching based on expression
-- `loop` — iterates over array, executes subgraph for each item
+The exact tool list lives in `backend/app/mcp/server.py`. Trust that file when the count changes.
 
-### Execution
-- Topological sort via in-degree queue
-- Context passing between nodes (`context.results[node_id]`)
-- Branching via edge `sourceHandle` matching condition results
-- Max iterations limit to prevent infinite loops
+### Why it exists
 
-### Workflow Action
-`action_config.tool` + `action_config.params` → `execute_tool(tool, merged_args, user_id)` in `mcp/tools.py`.
+Some agents live outside the backend process. They still need the same Helm actions that the in-app proxy uses, but they need them over a stable network protocol. MCP provides that bridge.
 
----
+## Workflow engine
 
-## Trigger Engine (Session 8)
+### What it is
 
-### Location
-`backend/app/services/trigger_engine.py` + `backend/app/models/trigger.py` + `backend/app/routers/triggers.py`
+The workflow engine is the backend scheduler and graph runner. It is the older automation system and is still active.
 
-### Distinction from Workflow Engine
-The **Workflow Engine** (above) uses APScheduler and the `workflows` table with `TriggerType` enum. The **Trigger Engine** is a newer, more flexible system using `trigger_definitions` table with freeform JSON config and action chains.
+### Where it lives
 
-### Model — `TriggerDefinition`
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | UUID PK | |
-| `user_id` | FK → users | Owner |
-| `name` | string | Human-readable trigger name |
-| `trigger_type` | string | `schedule` \| `data_change` \| `server_event` |
-| `config_json` | JSON text | Type-specific config (e.g. cron expression, data source/field/condition, event name) |
-| `action_chain_json` | JSON text | Array of action steps: `[{"type": "<action>", "params": {...}}, ...]` |
-| `enabled` | boolean | Whether this trigger is active |
+- `backend/app/services/workflow_engine.py`
+- `backend/app/models/workflow.py`
+- `backend/app/routers/workflows.py`
+- event sources live in routers and services such as `calendar.py`, `websocket.py`, and `action_registry.py`
 
-### `fire_trigger(trigger, db)`
-Parses `action_chain_json` and runs each action through `action_registry.execute()`. Returns a list of results, one per step. Errors in individual steps don't halt the chain — each step result is captured independently.
+### How it works
 
-### `register_scheduled_triggers(scheduler)`
-V1 placeholder for hooking schedule-type triggers into APScheduler.
+- Uses APScheduler with `AsyncIOScheduler(timezone="UTC")`
+- Starts during backend lifespan startup
+- Rebuilds scheduled jobs from the database when the backend comes up
+- Stores workflows as React Flow graphs: nodes + edges
+- Executes node types such as `action`, `condition`, `switch`, and `loop`
+- Sends action work through the shared backend action layer
 
----
+### Trigger sources it listens to
 
-## Standalone PydanticAI Agent (`agent/`)
+| Trigger source | Where it comes from |
+|---|---|
+| `onSchedule` workflows | APScheduler cron jobs |
+| `message_received` | `agent_proxy.py` after a chat message is saved |
+| `event_created` / `event_updated` | Calendar router changes |
+| `form_submitted` | Form/action handling in the backend |
 
-### Key distinction
-This is a **separate, independent** external agent — not the same as the Agent Proxy.
+### Workflow engine vs trigger engine
 
-| | Agent Proxy | Standalone Agent |
-|---|---|---|
-| Location | `backend/app/services/agent_proxy.py` | `agent/helm_agent.py` |
-| Triggered by | Mobile app WebSocket messages | Human REPL / browser chat / backend forward |
-| Backend imports | Shares DB + services directly | None — HTTP only |
-| Connects to Helm via | Calls `execute_tool()` in-process | `MCPServerStreamableHTTP → /mcp` |
-| Can edit frontend | No | Yes (`mobile/` filesystem) |
+These are related, but they are not the same system.
 
-### `helm_agent.py` — Three modes
+| System | Best for | Main files | Notes |
+|---|---|---|---|
+| Workflow engine | Cron schedules and React Flow graphs | `workflow_engine.py`, `workflow.py` | This is the older system and still handles schedules. |
+| Trigger engine | Data-change and server-event style JSON action chains | `trigger_engine.py`, `trigger.py` | This is newer and narrower. Use it for trigger-definition flows, not cron jobs. |
 
-```bash
-python helm_agent.py --web           # Browser chat UI at http://localhost:7860
-python helm_agent.py --web --port X  # Custom port
-python helm_agent.py                 # Interactive REPL (conversation history preserved)
-python helm_agent.py "Do a task"     # One-shot
-```
+### Why this split matters
 
-### Agent construction (`_build_agent()`)
-```python
-provider = OpenAIProvider(base_url=OPENROUTER_BASE_URL, api_key=OPENROUTER_API_KEY)
-model = OpenAIChatModel(OPENROUTER_MODEL, provider=provider)
-helm_mcp = MCPServerStreamableHTTP(
-    url=HELM_MCP_URL,   # default: http://localhost:8000/mcp/
-    headers={"Authorization": f"Bearer {HELM_SESSION_TOKEN}"},
-    timeout=30,
-)
-Agent(model=model, mcp_servers=[helm_mcp], tools=[filesystem_tools...], system_prompt=_SYSTEM_PROMPT)
-```
+When you see a scheduled workflow, look in `workflow_engine.py`. When you see a newer trigger definition with JSON action chains, look in `trigger_engine.py`. That keeps cron logic out of the newer trigger path and makes the code easier to follow.
 
-### Local filesystem tools (restricted to `mobile/`)
+## Standalone agent
 
-| Function | Parameters | Returns |
-|----------|-----------|---------|
-| `read_frontend_file(relative_path)` | Path relative to `mobile/` | File text content |
-| `write_frontend_file(relative_path, content)` | Path + full new content | Confirmation string |
-| `list_frontend_files(subdirectory="")` | Optional subdir relative to `mobile/` | Newline-separated paths |
+### What it is
 
-**Security:** `_safe_mobile_path()` rejects absolute paths and `../` traversal via `resolved.relative_to(_MOBILE_ROOT)`. Skips: `node_modules`, `.expo`, `.git`, `__pycache__`, `.cache`, `dist`, `build`, `.venv`.
+The standalone agent is a separate process. It does not import backend Python modules. It talks to Helm over HTTP and uses its own local file tools for `mobile/`.
 
-### `api_server.py` — External Agent HTTP Service
+### Where it lives
 
-Starlette app. Acts as the backend's "external agent" when `EXTERNAL_AGENT_URL=http://localhost:7860` in `.env`.
+- `agent/helm_agent.py` — main entry point
+- `agent/api_server.py` — HTTP service for browser chat and backend forwarding
+- `agent/chat_ui.html` — local browser UI shell
+- `agent/send_prompt.py` — one-shot client
 
-**Route table:**
+### How it connects to Helm
 
-| Method | Path | Handler |
-|--------|------|---------|
-| `GET` | `/` | Serves `chat_ui.html` |
-| `GET` | `/health` | `{"status":"ok","model":"<model>"}` |
-| `POST` | `/api/run` | SSE stream for backend → agent communication |
-| `*` | `/api/*` | pydantic-ai built-in sub-app (`/api/chat`, `/api/configure`, `/api/health`) |
+1. It opens an MCP connection to `backend/app/mcp/server.py` over HTTP.
+2. It authenticates with a Helm session token.
+3. It calls the same Helm tool layer the backend uses.
+4. When the backend is configured with `EXTERNAL_AGENT_URL`, the backend can forward mobile chat to `agent/api_server.py` at `/api/run`.
 
-**`/api/run` SSE format:**
-```
-data: {"type": "token", "text": "<delta>"}
-data: {"type": "done",  "text": "<full response>"}
-data: {"type": "error", "text": "<error>"}
-```
+### Local file tools
 
-**Data flow with `EXTERNAL_AGENT_URL` set:**
-```
-Mobile App ─── WebSocket ──► Backend ──► POST /api/run ──► api_server ──► MCP ──► Backend
-```
+The standalone agent can also read and write files in `mobile/`, but only through a small, folder-limited tool set:
 
-### `chat_ui.html` — Browser Chat Interface
+- `read_frontend_file(relative_path)`
+- `write_frontend_file(relative_path, content)`
+- `list_frontend_files(subdirectory="")`
 
-Self-contained dark-themed HTML/CSS/JS chat UI. Served at `/` by both `helm_agent.py --web` and `api_server.py`.
+Those tools are intentionally narrow. They are there so the agent can help with the React Native app without getting access to the rest of the repository.
 
-**On load:** `fetch('/api/configure')` → reads model name → displays in model badge.
+### Run modes
 
-**SSE events handled from `/api/chat`:**
+- `python helm_agent.py --web` — browser UI
+- `python helm_agent.py` — interactive REPL
+- `python helm_agent.py "task"` — one-shot run
+- `python api_server.py` — standalone HTTP service used by the backend and browser UI
 
-| Event `type` | Action |
-|-------------|--------|
-| `text-delta` | Appends `chunk.delta` to active text bubble; re-renders markdown on seal |
-| `reasoning-start` | Creates `<details class="thinking-block">` — expandable "Thinking..." block |
-| `reasoning-delta` | Appends to thinking text |
-| `reasoning-end` | Collapses block to "Thought" |
-| `tool-input-start` | Creates `<details class="tool-block">` — shows tool name + input |
-| `tool-input-available` | Sets tool input to `JSON.stringify(chunk.input)` |
-| `tool-output-available` | Sets status "✓ done", shows result, auto-collapses |
-| `tool-input-error` / `tool-output-error` | Sets status "✗ error", keeps block open |
-| `error` | Renders error bubble |
+## Short mental model
 
-**Markdown rendering:** Escapes HTML first, then applies patterns for `***`, `**`, `*`, backtick, `###/##/#`, `---`, `- list items`.
+If you only remember one thing, remember this:
 
-**Security:** User input rendered with `textContent` (not innerHTML) — no XSS risk.
-
-### `send_prompt.py` — One-Shot CLI
-
-CLI tool to send a single message to a running `api_server.py` instance and print the streamed response:
-
-```bash
-source backend/.venv/bin/activate
-cd agent
-python send_prompt.py "Set the home screen to a weather dashboard"
-```
-
-POSTs to `http://localhost:7860/api/run` by default. Useful for scripting agent behavior from the command line without opening a browser.
-
----
-
-### System Prompt (`_SYSTEM_PROMPT`)
-
-Key contents:
-- All 7 module IDs: `home | chat | calendar | forms | alerts | modules | settings`
-- SDUI V2 schema with full row/cell/component format (V2-only; no V1 references)
-- All V2 component types (PascalCase) and props, with required/optional field annotations
-- Three few-shot `helm_set_screen` examples and a "NEVER DO" blacklist
-- Common Feather icon names reference
-- All action types and `server_action` function names
-- Workflow (legacy): `helm_set_screen` → `helm_approve_draft`
-- Workflow (FF4 versioning): `helm_set_screen` → `helm_create_checkpoint` → `helm_publish_version`
-- Responsive layout guidance (compact/regular breakpoints)
-- Filesystem tool usage for editing `mobile/` source code directly
+- The **mobile app** talks to the **backend proxy**.
+- The **backend proxy** either talks to an LLM or forwards to the **standalone agent**.
+- The **MCP server** exposes the backend's tools to outside agents.
+- The **workflow engine** and **trigger engine** automate background behavior.
+- The **shared tool layer** keeps the behavior consistent across all of those paths.

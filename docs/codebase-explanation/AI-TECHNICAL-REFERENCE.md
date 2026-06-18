@@ -1,35 +1,37 @@
 # Helm — AI Technical Reference
+ 
+> For AI agents (Claude, Copilot, etc.) working on the Helm codebase.
+> If you're new, read `README.md` first, then `OPERATIONS.md`, `backend.md`, `frontend.md`, `protocol.md`, and `qa.md`.
+> Last updated: 2026-06-18
+> Last audit: 2026-06-18 — live tree checked against backend/tests (32 test modules) and qa/src/tests (33 spec files)
 
-> **This file is for AI agents (Claude, Copilot, etc.) working on the Helm codebase.**
-> Read this FIRST before making any changes. It tells you exactly where everything is,
-> what connects to what, and what the known pitfalls are.
->
-> Last updated: 2026-05-07
-> Last audit: 2026-05-07 — ✅ All systems operational (23 test files, run `cd backend && pytest -q` for current count)
+## If you're new
 
----
-
+Read `README.md` first, then `OPERATIONS.md`, `backend.md`, `frontend.md`, `protocol.md`, and `qa.md`. Use this file when you need a fast path to a current file or gotcha.
+ 
 ## Quick Orientation
-
-Helm is a self-hosted AI super app with three layers:
-
+ 
+Helm is a self-hosted AI super app with four primary areas: backend, mobile, web admin, and QA/tooling.
+ 
 | Layer | Tech | Location | Entry Point |
-|-------|------|----------|------------|
+|---|---|---|---|
+| Docs index | Navigation | `docs/codebase-explanation/README.md` | `README.md` |
+| Repo map | Navigation | `docs/CODEBASE_MAP.md` | `CODEBASE_MAP.md` |
 | Backend | Python FastAPI | `backend/` | `backend/app/main.py` |
 | Frontend | React Native (Expo) | `mobile/` | `mobile/index.ts` → `mobile/app/_layout.tsx` |
 | Web Admin | React + Vite + Tailwind | `web/` | `web/src/main.tsx` |
 | Protocol | WebSocket + REST + MCP | Embedded in backend | `backend/app/routers/websocket.py` |
 | Standalone Agent | PydanticAI | `agent/` | `agent/helm_agent.py` |
 | QA Test Suite | Playwright (TypeScript) | `qa/` | `qa/playwright.config.ts` |
-
+ 
 **To run backend:** `cd backend && uvicorn app.main:app --reload`
 **To run frontend:** `cd mobile && npx expo start`
 **To run web admin:** `cd web && npm run dev`
-**To run backend tests:** `cd backend && pytest`
-**To run QA test suite:** `cd qa && npx playwright test`
+**To run backend tests:** `cd backend && pytest -q`
+**To run QA test suite:** `cd qa && npm run test`
 **To run standalone agent:** `source backend/.venv/bin/activate && cd agent && python helm_agent.py`
 **To run agent web UI:** `source backend/.venv/bin/activate && cd agent && python helm_agent.py --web`
-
+ 
 ---
 
 ## File Map — Where to Find Things
@@ -38,9 +40,9 @@ Helm is a self-hosted AI super app with three layers:
 
 | Need to change... | Edit this file | Notes |
 |-------------------|---------------|-------|
-| API endpoints | `routers/{domain}.py` | Route modules (25 files — see `backend/app/routers/`) |
-| Database models | `models/{model}.py` | 25 model files — see `backend/app/models/` for current list |
-| Request/response types | `schemas/{domain}.py` | 24 schema files — see `backend/app/schemas/` for current list |
+| API endpoints | `routers/{domain}.py` | Route modules (28 files — see `backend/app/routers/`) |
+| Database models | `models/{model}.py` | 33 model files — see `backend/app/models/` for the current registry |
+| Request/response types | `schemas/{domain}.py` | 30 schema files — see `backend/app/schemas/` for the current registry |
 | Auth logic | `services/auth.py` + `utils/security.py` | Session-based with JWT tokens |
 | Admin-only guard | `dependencies.py::require_admin` | Raises 403 if `user.role != "admin"` |
 | AI chat streaming | `services/agent_proxy.py` | Core feature — LLM streaming + tool calls + XML fallback |
@@ -72,8 +74,8 @@ Helm is a self-hosted AI super app with three layers:
 | SDUI templates | `routers/templates.py` | CRUD + apply + import + rows |
 | Admin stats | `routers/admin.py` | System stats, workflow stats, WebSocket stats |
 | Audit service | `services/audit.py` | `log_audit()` helper — wired into auth, calendar, workflows, etc. |
-| Component seed | `services/component_seed.py` | Seeds 14 default components (10 atomic + 4 hardcoded); includes Todo, RichTextRenderer, ArticleCard |
-| Template seed | `services/template_seed.py` | Seeds 5 production templates: Calendar, Chat, News Feed, Weather, Task Manager |
+| Component seed | `services/component_seed.py` | Seeds 16 default components |
+| Template seed | `services/template_seed.py` | Seeds 4 production templates: Home, Chat, Daily Planner, Feed |
 | App service | `services/app_service.py` | Full CRUD for apps, bottom bar config validation (5-slot cap), device assignment |
 | Device service | `services/device_service.py` | Device registration, app assignment, full config retrieval for mobile |
 | Module service | `services/module_service.py` | Module instance management with app-aware operations (enable/disable) |
@@ -100,9 +102,11 @@ Helm is a self-hosted AI super app with three layers:
 |-------------------|---------------|-------|
 | Auth guard / routing | `app/_layout.tsx` | Redirects based on token presence |
 | Auth screens | `app/(auth)/connect.tsx`, `app/(auth)/login.tsx` | Login rewritten to 3 fields only (no signup); default URL: `http://localhost:8000` |
-| Tab screens | `app/(tabs)/{screen}.tsx` | 7 built-in tabs: home, chat, modules, calendar, forms, alerts, settings; plus article.tsx for Article Reader |
-| Modules launcher | `app/(tabs)/modules.tsx` | Module Store with built-ins + custom modules; built-ins jump to tab routes; custom modules open `/template/[id]` |
-| Custom module route | `app/template/[id].tsx` | Dedicated runtime route for custom modules; uses `useSDUIScreen(moduleId)` + `DraftPreview` approval flow |
+| Tab screens | `app/(tabs)/{screen}.tsx` | Built-in tabs: home, chat, modules, calendar, forms, alerts, settings; `article.tsx` is the article reader route |
+| App-level routes | `app/launchpad.tsx`, `app/unassigned.tsx` | Standalone launchpad and unassigned screens |
+| Template detail route | `app/template/[id].tsx` | Template preview/apply flow |
+| Custom module route | `app/module/[moduleId].tsx` | Dedicated runtime route for custom modules; uses `useSDUIScreen(moduleId)` + `DraftPreview` approval flow |
+| Modules launcher | `app/(tabs)/modules.tsx` | Module Store with built-ins + custom modules; built-ins jump to tab routes; templates open `/template/[id]`; custom modules open `/module/[moduleId]` |
 | Tab bar config | `app/(tabs)/_layout.tsx` | Customizable tab bar with AI-controlled visibility via tabsStore; TabsConfigSync here |
 | Home SDUI screen | `app/(tabs)/home.tsx` | Fully AI-driven via `useSDUIScreen('home')` |
 | Forms SDUI screen | `app/(tabs)/forms.tsx` | Purely SDUI — no fallback native UI |
@@ -154,8 +158,7 @@ Helm is a self-hosted AI super app with three layers:
 |-------------------|---------------|-------|
 | App entry / routing | `web/src/App.tsx` | React Router; login guard; `AdminLayout` wrapper; restructured sidebar navigation |
 | Login page | `web/src/pages/LoginPage.tsx` | Authenticates against backend `/auth/login` |
-| User management | `web/src/pages/UsersPage.tsx` | REMOVED in Session 9 — renamed to SettingsPage |
-| Settings page | `web/src/pages/SettingsPage.tsx` | General preferences (renamed from UsersPage in Session 9) |
+| Settings page | `web/src/pages/SettingsPage.tsx` | General preferences; replaces the old Users page in Session 9 |
 | Workflow management | `web/src/pages/WorkflowsPage.tsx` | React Flow visual workflow builder with node inspector; n8n import support |
 | SDUI template management | `web/src/pages/TemplatesPage.tsx` | CRUD + import/export templates; SDUIPreview and AppPreview components |
 | Variables management | `web/src/pages/VariablesPage.tsx` | Variables CRUD with VariablePicker component (@ trigger) |
@@ -190,7 +193,7 @@ Helm is a self-hosted AI super app with three layers:
 | Test fixtures | `qa/src/fixtures.ts` | Extended fixture with `login()` via `addInitScript` auth injection |
 | Path utilities | `qa/src/utils.ts` | `qaPath()` for ESM-safe path resolution (replaces `__dirname`) |
 | Page objects | `qa/src/page-objects/*.ts` | Login, Editor, Templates, Workflows, Connections page locators |
-| Test files | `qa/src/tests/*.spec.ts` | 16 test files — see `docs/codebase-explanation/qa.md` for full list |
+| Test files | `qa/src/tests/*.spec.ts` | 33 test files — see `docs/codebase-explanation/qa.md` for full list |
 | QA credentials | `qa/.qa-env.json` | Backend credentials for QA (username + password). Created at repo root level. |
 | Generated auth | `qa/src/.qa-auth.json` | Generated at runtime by `globalSetup`. NOT committed. |
 | Generated discovery | `qa/src/discovered.json` | Generated by `discover.cjs`. NOT committed. |
@@ -312,7 +315,7 @@ User taps a button in SDUI → SDUIRenderer calls onAction("server_action", {fun
 
 A Playwright-based test suite covering web admin UI, backend API contracts, and cross-layer schema reconciliation. See `docs/codebase-explanation/qa.md` for full details.
 
-- 16 test files across 2 Playwright projects (`backend-only` and `e2e`)
+- 33 test files across 2 Playwright projects (`backend-only` and `e2e`)
 - Auto-starts backend + Vite, handles auth via `addInitScript`
 - Schema reconciliation detects drift between web `COMPONENT_REGISTRY` and backend component registry
 - Template quality tests validate component types and action references
@@ -347,7 +350,7 @@ The following **incomplete features and known issues** exist:
 - ✅ Mobile: Implemented `NotesModule` with `TextInput` + `SDUIMarkdown`
 - ✅ Mobile: Variable resolver now uses `mustache` npm package (Proxy-based view preserves `{{expr}}` for unresolvable paths)
 - ✅ Backend: Variable resolver now uses `chevron` (Python mustache) with placeholder-swap approach
-- ✅ Backend: Mounted SQLAdmin at `/admin/db` with BasicAuth (all 16 models registered)
+- ✅ Backend: Mounted SQLAdmin at `/admin/db` with BasicAuth (19 admin views)
 - ✅ Web: Replaced HTML5 DnD on row drag handles with `@dnd-kit/sortable` in `EditorCanvas`
 - ✅ Web: Added `React Hook Form` + `Zod` to `ConnectionsPage` and `VariablesPage` forms
 - ✅ Mobile: Configured `openapi-ts` SDK generation pipeline (`npm run generate:api`)
@@ -417,7 +420,7 @@ The following **incomplete features and known issues** exist:
 
 **Backend:**
 - SQLAdmin now uses `secret_key` from settings for BasicAuth (updated from hardcoded `admin`/`admin`)
-- All 24 models registered in SQLAdmin
+- All 19 admin views registered in SQLAdmin
 
 **Tests:**
 - `test_apps.py` — App CRUD tests (597 assertions)
@@ -440,7 +443,7 @@ The following **incomplete features and known issues** exist:
 - ✅ Backend: Updated Workflow model for React Flow graph format (nodes, edges)
 - ✅ Backend: Updated workflow engine to execute React Flow graphs with branching/loops
 - ✅ Backend: Added n8n workflow importer endpoint (POST /api/workflows/import/n8n)
-- ✅ Backend: Created 5 production templates (Calendar, Chat, News Feed, Weather, Task Manager)
+- ✅ Backend: Created 4 production templates (Home, Chat, Daily Planner, Feed)
 - ✅ Web Admin: Restructured sidebar (removed Dashboard, Components, Actions & Triggers pages; renamed Users→Settings)
 - ✅ Web Admin: Added ConnectionsPage for OAuth/API key management
 - ✅ Web Admin: Added LogsPage merging Sessions and Audit Logs
@@ -546,8 +549,8 @@ These were evaluated during the modernization branch and deliberately not adopte
 | Action catalog | `backend/app/services/action_registry.py` | Server-side + client-only handlers (includes fetch_rss, fetch_weather, run_workflow, settings.save, todos.*); removed open_sheet, dismiss |
 | Workflow engine | `backend/app/services/workflow_engine.py` | Executes React Flow graph format with nodes, edges, branching, and loops |
 | n8n importer | `backend/app/routers/workflows.py` | POST /api/workflows/import/n8n converts n8n workflows to React Flow format |
-| Template seed | `backend/app/services/template_seed.py` | Seeds 5 production templates: Calendar, Chat, News Feed, Weather, Task Manager |
-| Component seed | `backend/app/services/component_seed.py` | Seeds 14 default components (10 atomic + 4 hardcoded); includes Todo, RichTextRenderer, ArticleCard |
+| Template seed | `backend/app/services/template_seed.py` | Seeds 4 production templates: Home, Chat, Daily Planner, Feed |
+| Component seed | `backend/app/services/component_seed.py` | Seeds 16 default components |
 | Calendar variants | `mobile/src/components/composite/CalendarModule.tsx` + `web/src/editor/componentSchemas.ts` | Uses react-native-calendars; supports month/week/day/agenda views with date navigation |
 | Web admin sidebar | `web/src/components/AdminLayout.tsx` | Restructured: Visual Editor, Templates, Workflows, Variables, Connections, Advanced (Logs), Settings |
 | Percentage widths | `web/src/editor/types.ts` + `EditorCanvas.tsx` + `PropertyInspector.tsx` | Cell widths support percentage-based layout with width toggle |
@@ -557,7 +560,7 @@ These were evaluated during the modernization branch and deliberately not adopte
 | Article Reader | `mobile/app/(tabs)/article.tsx` | New screen for news/content viewing |
 | Module Store | `mobile/app/(tabs)/modules.tsx` | Customizable module launcher with built-ins + custom modules |
 | Tab bar customization | `mobile/app/(tabs)/_layout.tsx` + `src/stores/tabsStore.ts` | AI-controlled tab visibility and configuration |
-| SQLAdmin DB browser | `backend/app/main.py` | Mounted at `/admin/db` with BasicAuth; all 16 models registered; separate from FastAPI auth |
+| SQLAdmin DB browser | `backend/app/main.py` | Mounted at `/admin/db` with BasicAuth; 19 admin views registered; separate from FastAPI auth |
 | Editor DnD | `web/src/editor/EditorCanvas.tsx` | Row reordering uses @dnd-kit/sortable (replaced HTML5 DnD) |
 | Admin forms validation | `web/src/pages/ConnectionsPage.tsx` + `VariablesPage.tsx` | React Hook Form + Zod for form state and validation |
 | NativeWind styling | `mobile/tailwind.config.js` + `mobile/global.css` + `mobile/babel.config.js` | NativeWind v4 configured; use `className` props on components; `nativewind-env.d.ts` for TS support |
@@ -587,8 +590,8 @@ These were evaluated during the modernization branch and deliberately not adopte
 | Module routes constant | `mobile/src/constants/moduleRoutes.ts` | Maps module IDs to tab routes |
 | Launchpad screen | `mobile/app/launchpad.tsx` | App launchpad view |
 | Unassigned screen | `mobile/app/unassigned.tsx` | Unassigned modules view |
-| Backend router registration | `backend/app/main.py` | Apps, devices, settings, todos, articles routers registered |
-| SQLAdmin model registration | `backend/app/main.py` | All 24 models registered; uses `secret_key` from settings for BasicAuth |
+| Backend router registration | `backend/app/main.py` | Current router set registered at startup |
+| SQLAdmin model registration | `backend/app/main.py` | 19 admin views registered; uses `secret_key` from settings for BasicAuth |
 | Session middleware for SQLAdmin | `backend/app/main.py` | `SessionMiddleware` required for SQLAdmin's authentication backend |
 | RichTextRenderer legacy alias | `backend/app/mcp/tools.py` | `_LEGACY_V2_TYPE_MAP` contains `"RichTextRenderer": "RichText"` for backward compat |
 | MIN_ROW_HEIGHT constant | `web/src/editor/useEditorStore.ts` | `export const MIN_ROW_HEIGHT = 48`; store clamps height to `Math.max(MIN_ROW_HEIGHT, height)` |
