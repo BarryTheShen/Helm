@@ -2,6 +2,8 @@
  * App Config Service — fetches and manages app configuration from backend
  */
 
+import { HttpClient } from '@/services/httpClient';
+
 export interface ModuleInstanceConfig {
   module_instance_id: string;
   module_type: string;
@@ -24,21 +26,14 @@ export interface AppConfig {
 }
 
 export class AppConfigService {
-  private baseUrl: string;
-  private token: string;
+  private http: HttpClient;
 
   constructor(baseUrl: string, token: string) {
-    this.baseUrl = baseUrl;
-    this.token = token;
+    this.http = new HttpClient(baseUrl, token);
   }
 
   async fetchAppConfig(deviceId: string): Promise<AppConfig> {
-    const response = await fetch(`${this.baseUrl}/api/devices/${deviceId}/config`, {
-      headers: {
-        'Authorization': `Bearer ${this.token}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await this.http.request(`/api/devices/${deviceId}/config`);
 
     if (!response.ok) {
       if (response.status === 404) {
